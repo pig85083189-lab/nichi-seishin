@@ -354,11 +354,36 @@ function parseAiJson(raw) {
   return JSON.parse(candidate.slice(start, end + 1));
 }
 
+function redactUrl(url) {
+  return String(url || "")
+    .replace(/([?&]key=)[^&]+/gi, "$1***")
+    .replace(/([?&]api_key=)[^&]+/gi, "$1***");
+}
+
+function formatApiError(error, extra) {
+  const name = error?.name || "Error";
+  const message = String(error?.message || error || "未知錯誤");
+  const url = extra?.url ? redactUrl(extra.url) : "";
+  if (name === "AbortError" || /請求逾時/.test(message)) {
+    return `請求逾時（${extra?.timeoutMs || 20000}ms）${url ? `｜${url}` : ""}`;
+  }
+  if (/Failed to fetch|NetworkError|Load failed|fetch 失敗/i.test(message)) {
+    return `網路或 CORS 失敗：瀏覽器沒能連到供應商${url ? `（${url}）` : ""}。原始訊息：${message}`;
+  }
+  return url ? `${message}｜${url}` : message;
+}
+
 async function fetchWithTimeout(url, options, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    console.log("[日精進 API] fetch 送出", options?.method || "GET", redactUrl(url));
     return await fetch(url, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error(`請求逾時（${timeoutMs}ms）：${redactUrl(url)}`);
+    }
+    throw new Error(`fetch 失敗：${error?.message || error}｜${redactUrl(url)}`);
   } finally {
     clearTimeout(timer);
   }
@@ -385,31 +410,44 @@ function extractGeminiText(data) {
 async function callGeminiApi(messages, settings) {
   const system = messages.filter((item) => item.role === "system").map((item) => item.content).join("\n\n");
   const user = messages.filter((item) => item.role !== "system").map((item) => item.content).join("\n\n");
-  const response = await fetchWithTimeout(
-    joinGeminiGenerateUrl(settings.baseUrl, settings.model, settings.apiKey),
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: `${system}\n\n${user}`.trim() }] }],
-        generationConfig: {
-          temperature: 0.7,
-          responseMimeType: "application/json",
-        },
-      }),
-    },
-    8000
-  );
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error((data.error && data.error.message) || `GEMINI_${response.status}`);
-  return parseAiJson(extractGeminiText(data));
+  const url = joinGeminiGenerateUrl(settings.baseUrl, settings.model, settings.apiKey);
+  const timeoutMs = 20000;
+  try {
+    const response = await fetchWithTimeout(
+      url,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: `${system}\n\n${user}`.trim() }] }],
+          generationConfig: {
+            temperature: 0.7,
+            responseMimeType: "application/json",
+          },
+        }),
+      },
+      timeoutMs
+    );
+    const data = await response.json().catch(() => ({}));
+    console.log("[日精進 API] Gemini 回應", response.status, redactUrl(url));
+    if (!response.ok) {
+      const reason = (data.error && (data.error.message || data.error.status)) || `HTTP ${response.status}`;
+      throw new Error(`Gemini 拒絕請求：${reason}`);
+    }
+    return parseAiJson(extractGeminiText(data));
+  } catch (error) {
+    console.error("[日精進 API] Gemini 失敗", formatApiError(error, { url, timeoutMs }), error);
+    throw error;
+  }
 }
 
 async function callStoredKeyApi(messages) {
   const settings = getAiSettings();
-  if (!settings.apiKey) throw new Error("NO_KEY");
+  if (!settings.apiKey) throw new Error("NO_KEY：設定裡沒有 API Key，無法呼叫雲端。");
   if (settings.provider === "gemini") return callGeminiApi(messages, settings);
 
+  const url = joinChatCompletionsUrl(settings.baseUrl);
+  const timeoutMs = 20000;
   const headers = {
     "Content-Type": "application/json",
     Authorization: `Bearer ${settings.apiKey}`,
@@ -418,23 +456,60 @@ async function callStoredKeyApi(messages) {
     headers["HTTP-Referer"] = location.origin || "https://nichi-seishin.local";
     headers["X-Title"] = "日精進";
   }
-  const response = await fetchWithTimeout(
-    joinChatCompletionsUrl(settings.baseUrl),
+  try {
+    const response = await fetchWithTimeout(
+      url,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model: settings.model,
+          temperature: 0.7,
+          response_format: { type: "json_object" },
+          messages,
+        }),
+      },
+      timeoutMs
+    );
+    const data = await response.json().catch(() => ({}));
+    console.log("[日精進 API] 供應商回應", settings.provider, response.status, redactUrl(url));
+    if (!response.ok) {
+      const reason = (data && data.error && (data.error.message || data.error.code)) || `HTTP ${response.status}`;
+      throw new Error(`${settings.provider} 拒絕請求：${reason}`);
+    }
+    return parseAiJson(data?.choices?.[0]?.message?.content || "");
+  } catch (error) {
+    console.error("[日精進 API] 呼叫失敗", formatApiError(error, { url, timeoutMs }), error);
+    throw error;
+  }
+}
+
+async function generateReview(rawText) {
+  const settings = getAiSettings();
+  const providerLabel = PROVIDER_PRESETS[settings.provider]?.label || settings.provider;
+  const targetUrl =
+    settings.provider === "gemini"
+      ? joinGeminiGenerateUrl(settings.baseUrl, settings.model, settings.apiKey)
+      : joinChatCompletionsUrl(settings.baseUrl);
+  console.log("[日精進 API] generateReview 開始", {
+    provider: settings.provider,
+    providerLabel,
+    model: settings.model,
+    baseUrl: settings.baseUrl,
+    targetUrl: redactUrl(targetUrl),
+    hasKey: Boolean(settings.apiKey),
+    keyPreview: maskKey(settings.apiKey),
+  });
+  if (!settings.apiKey) {
+    throw new Error("NO_KEY：沒有 API Key，略過雲端，只使用本地教練。");
+  }
+  return callStoredKeyApi([
     {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        model: settings.model,
-        temperature: 0.7,
-        response_format: { type: "json_object" },
-        messages,
-      }),
+      role: "system",
+      content: ORGANIZE_SYSTEM_PROMPT,
     },
-    8000
-  );
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error((data && data.error && data.error.message) || `API_${response.status}`);
-  return parseAiJson(data?.choices?.[0]?.message?.content || "");
+    { role: "user", content: `復盤日期：${currentIso()}\n\n口語原文：\n${rawText}` },
+  ]);
 }
 
 function normalizeOrganizeResult(remote, rawText) {
@@ -518,26 +593,40 @@ const ORGANIZE_SYSTEM_PROMPT = `你是「日精進」的專業心理教練，也
 只輸出 JSON，繁體中文，不要 markdown。
 需含 themeCategory、themeTitle、themeStars、themeInsight、eventList、reactionList、reflection、conclusion、quotes、thinkGuide、whyNeed、whatFact、howNext、turningPoint、keyWord、keyWordAlt、nextScripts、problems、gratitudeNote、sfm、tags。`;
 
-function maybeEnhanceWithApi(rawText, token) {
+async function maybeEnhanceWithApi(rawText, token) {
   const settings = getAiSettings();
-  if (!settings.apiKey) return;
-  callStoredKeyApi([
-    {
-      role: "system",
-      content: ORGANIZE_SYSTEM_PROMPT,
-    },
-    { role: "user", content: `復盤日期：${currentIso()}\n\n口語原文：\n${rawText}` },
-  ])
-    .then((remote) => {
-      if (runOrganize._token !== token) return;
-      if ((state.think.round || 0) > 1) return;
-      applyOrganizeResult(normalizeOrganizeResult(remote, rawText));
-      applyThinkResult(localThink(state.organize, 1, [], ""), 1, { silent: true });
-      showToast("雲端教練已拆出盲點與修正。");
-    })
-    .catch(() => {
-      /* 金鑰無效、CORS 或逾時：維持本地結果，絕不卡住 */
+  if (!settings.apiKey) {
+    console.log("[日精進 API] 沒有 API Key，略過雲端 fetch，只使用本地教練。");
+    return;
+  }
+  const providerLabel = PROVIDER_PRESETS[settings.provider]?.label || settings.provider;
+  showToast(`正在向 ${providerLabel} 發送復盤請求…`);
+  try {
+    const remote = await generateReview(rawText);
+    if (runOrganize._token !== token) {
+      console.log("[日精進 API] 回應已過期（使用者又按了一次整理），丟棄這次結果。");
+      return;
+    }
+    if ((state.think.round || 0) > 1) {
+      console.log("[日精進 API] 深度思考已進入下一輪，不再覆蓋整理結果。");
+      return;
+    }
+    applyOrganizeResult(normalizeOrganizeResult(remote, rawText));
+    applyThinkResult(localThink(state.organize, 1, [], ""), 1, { silent: true });
+    console.log("[日精進 API] 雲端復盤已套用", settings.provider, settings.model);
+    showToast(`${providerLabel} 復盤已套用。`);
+  } catch (error) {
+    const reason = formatApiError(error, {
+      url:
+        settings.provider === "gemini"
+          ? joinGeminiGenerateUrl(settings.baseUrl, settings.model, settings.apiKey)
+          : joinChatCompletionsUrl(settings.baseUrl),
+      timeoutMs: 20000,
     });
+    console.error("[日精進 API] 雲端復盤失敗，畫面維持本地結果。真正原因：", reason);
+    console.error(error);
+    showToast(`雲端 API 失敗：${reason}`);
+  }
 }
 
 /* =============================================================================
@@ -1389,7 +1478,14 @@ function runOrganize(event) {
 
     applyOrganizeResult(localOrganize(rawText));
     applyThinkResult(localThink(state.organize, 1, [], ""), 1, { silent: true });
-    showToast("整理完成。主題、金句與下一步都在下面。");
+    const settings = getAiSettings();
+    if (settings.apiKey) {
+      console.log("[日精進 API] 本地結果已先上畫面，接著 fetch", settings.provider, settings.baseUrl);
+      showToast("本地結果已出，正在呼叫雲端 API…");
+    } else {
+      console.log("[日精進 API] 未填 API Key，這次只跑本地教練。");
+      showToast("整理完成。主題、金句與下一步都在下面。");
+    }
     maybeEnhanceWithApi(rawText, token);
   } catch {
     try {
@@ -1403,6 +1499,7 @@ function runOrganize(event) {
   }
 }
 window.runOrganize = runOrganize;
+window.generateReview = generateReview;
 
 function normalizeThinkResult(raw, round) {
   const fallback = localThink(state.organize, round, [], "");
@@ -1927,7 +2024,7 @@ function updateApiStatus() {
   const settings = getAiSettings();
   if (settings.apiKey) {
     status.classList.add("is-ready");
-    status.textContent = `已選 ${PROVIDER_PRESETS[settings.provider]?.label || "OpenAI"}，金鑰存在此瀏覽器（${maskKey(settings.apiKey)}）。整理仍會先走本地教練。`;
+    status.textContent = `已選 ${PROVIDER_PRESETS[settings.provider]?.label || "OpenAI"}（${maskKey(settings.apiKey)}）。開始整理會先出本地結果，並立刻 fetch 到該供應商的 Base URL。`;
   } else {
     status.classList.remove("is-ready");
     status.textContent = "目前使用本地教練，點「開始整理」會立刻出結果。";
