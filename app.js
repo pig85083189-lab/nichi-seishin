@@ -970,6 +970,7 @@ function renderAuth() {
       <p class="auth-form__error" id="authError" hidden></p>
       <p class="auth-hint">登入後會讀取你在雲端的復盤與個人紀錄。</p>
     `;
+    if (lastAuthError) setAuthError(lastAuthError);
     return;
   }
   const initial = escapeHtml((user.name || user.email || "我").slice(0, 1));
@@ -1017,8 +1018,10 @@ async function getSupabase() {
         autoRefreshToken: true,
         detectSessionInUrl: true,
         flowType: "pkce",
+        storageKey: "nichi-auth",
       },
     });
+    if (supabaseClient.auth.initialize) await supabaseClient.auth.initialize();
     supabaseClient.auth.onAuthStateChange((_event, session) => {
       const prev = state.user && state.user.id;
       applySession(session);
@@ -1045,12 +1048,14 @@ function applySession(session) {
     : null;
 }
 
+let lastAuthError = "";
+
 function setAuthError(message) {
+  lastAuthError = String(message || "").trim();
   const el = document.getElementById("authError");
   if (!el) return;
-  const text = String(message || "").trim();
-  el.hidden = !text;
-  el.textContent = text;
+  el.hidden = !lastAuthError;
+  el.textContent = lastAuthError;
 }
 
 function translateAuthError(error) {
@@ -1091,17 +1096,23 @@ async function signInWithGoogle() {
     provider: "google",
     options: {
       redirectTo,
-      skipBrowserRedirect: false,
+      skipBrowserRedirect: true,
+      scopes: "openid email profile",
     },
   });
   if (error) {
-    setAuthError(translateAuthError(error));
-    showToast(translateAuthError(error));
+    const message = translateAuthError(error);
+    setAuthError(message);
+    showToast(message);
     return;
   }
-  if (data && data.url) {
-    window.location.assign(data.url);
+  if (!data || !data.url) {
+    const message = "沒有取得 Google 授權網址，請再試一次。";
+    setAuthError(message);
+    showToast(message);
+    return;
   }
+  window.location.assign(data.url);
 }
 
 async function signOutUser() {
@@ -1249,11 +1260,22 @@ function handleAuthQuery() {
     const auth = params.get("auth");
     const pay = params.get("pay");
     const oauthError = params.get("error_description") || params.get("error");
-    if (!auth && !pay && !oauthError) return;
+    let storedAuthError = "";
+    try {
+      storedAuthError = sessionStorage.getItem("nichi.authError") || "";
+      if (storedAuthError) sessionStorage.removeItem("nichi.authError");
+    } catch {
+      storedAuthError = "";
+    }
+    if (!auth && !pay && !oauthError && !storedAuthError) return;
     if (auth === "ok") showToast("已登入，資料會跟著你的帳號備份。");
     if (auth === "out") showToast("已登出。本機草稿仍在這台裝置上。");
-    if (auth === "error") showToast(`登入失敗：${params.get("reason") || "請再試一次"}`);
-    if (oauthError) showToast(`登入失敗：${translateAuthError(oauthError)}`);
+    if (auth === "error" || oauthError || storedAuthError) {
+      const raw = storedAuthError || oauthError || params.get("reason") || "請再試一次";
+      const message = translateAuthError(raw);
+      setAuthError(message);
+      showToast(`登入失敗：${message}`);
+    }
     if (pay === "ok") showToast("付款成功。藍新金流已完成授權。");
     if (pay === "fail") showToast(`付款未完成：${params.get("reason") || "請再試一次"}`);
     if (pay === "error") showToast(`付款結果異常：${params.get("reason") || "請再試一次"}`);

@@ -7,51 +7,97 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   </head>
   <body>
-    <p>正在完成 Google 登入…</p>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.js"></script>
+    <p id="status">正在完成 Google 登入…</p>
+    <pre id="debug" style="white-space: pre-wrap; font-size: 12px; color: #6b5e4e;"></pre>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script>
       (async function () {
         var home = "https://nichi-seishin.vercel.app/";
-        function fail(reason) {
-          location.replace(home + "?auth=error&reason=" + encodeURIComponent(reason || "Google 登入失敗"));
+        var statusEl = document.getElementById("status");
+        var debugEl = document.getElementById("debug");
+        var STORAGE_KEY = "nichi-auth";
+        var AUTH_ERROR_KEY = "nichi.authError";
+
+        function note(text) {
+          if (debugEl) debugEl.textContent = String(text || "");
         }
+
+        function fail(reason) {
+          var message = String(reason || "Google 登入失敗");
+          try {
+            sessionStorage.setItem(AUTH_ERROR_KEY, message);
+          } catch (e) {
+            /* ignore */
+          }
+          if (statusEl) statusEl.textContent = "登入失敗：" + message;
+          note(location.href);
+          window.setTimeout(function () {
+            location.replace(home + "?auth=error&reason=" + encodeURIComponent(message.slice(0, 240)));
+          }, 4000);
+        }
+
+        function query() {
+          var search = new URLSearchParams(location.search);
+          var hash = new URLSearchParams(String(location.hash || "").replace(/^#/, ""));
+          hash.forEach(function (value, key) {
+            if (!search.get(key)) search.set(key, value);
+          });
+          return search;
+        }
+
         try {
-          var params = new URLSearchParams(location.search);
+          var params = query();
           var oauthError = params.get("error_description") || params.get("error");
           if (oauthError) {
             fail(oauthError);
             return;
           }
+
           var code = params.get("code") || "";
           if (!code) {
-            location.replace(home + "?auth=ok");
+            fail("回調網址缺少 code。請再點一次「使用 Google 帳號登入」。");
             return;
           }
           if (code.indexOf("4/") === 0) {
-            fail("Google 把授權碼送回網站了。請把 Google Cloud 的重新導向 URI 設成 https://zmjfbdtwxuawebwnybfp.supabase.co/auth/v1/callback");
+            fail(
+              "Google 把授權碼送到了網站，而不是 Supabase。請到 Google Cloud → 憑證 → 授權重新導向 URI，改成唯一這一列：https://zmjfbdtwxuawebwnybfp.supabase.co/auth/v1/callback"
+            );
             return;
           }
+
           var cfgRes = await fetch("/api/config");
           var cfg = await cfgRes.json();
           if (!cfg.supabaseUrl || !cfg.supabaseAnonKey) {
             fail("尚未設定 Supabase");
             return;
           }
-          var createClient = window.supabase.createClient || (window.supabase.default && window.supabase.default.createClient);
+
+          var createClient =
+            window.supabase.createClient ||
+            (window.supabase.default && window.supabase.default.createClient);
           var client = createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
             auth: {
               persistSession: true,
               autoRefreshToken: true,
               detectSessionInUrl: false,
               flowType: "pkce",
+              storageKey: STORAGE_KEY,
             },
           });
-          var result = await client.auth.exchangeCodeForSession(code);
-          if (result.error) {
-            fail(result.error.message || "授權碼交換失敗");
+          if (client.auth.initialize) await client.auth.initialize();
+
+          var exchanged = await client.auth.exchangeCodeForSession(code);
+          if (exchanged.error) {
+            fail(exchanged.error.message || "授權碼交換失敗");
             return;
           }
-          location.replace(home + "?auth=ok");
+
+          var sessionRes = await client.auth.getSession();
+          if (sessionRes.data && sessionRes.data.session) {
+            location.replace(home + "?auth=ok");
+            return;
+          }
+          fail("沒有取得登入工作階段，請再試一次");
         } catch (error) {
           fail(error && error.message ? error.message : "Google 登入失敗");
         }
