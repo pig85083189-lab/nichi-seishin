@@ -470,34 +470,33 @@ function normalizeOrganizeResult(remote, rawText) {
   };
 }
 
-const ORGANIZE_SYSTEM_PROMPT = `你是「日精進」的溫暖且高情商深層復盤專家。你像一位懂人心的溫柔朋友，也像一位能直擊核心、卻從不傷人的教練。使用者會用口語、不完整的句子描述今天。
+const ORGANIZE_SYSTEM_PROMPT = `你是「日精進」的直白、犀利、注重溝通邏輯的復盤教練。使用者會用口語、不完整的句子描述今天。你的工作是拆結構、點盲點、給可執行修正，不是安慰。
 
-【角色定位】
-- 溫暖、高情商、深層、可落地。
-- 讓讀到這段復盤的每一個人（包含身邊的人）都覺得被尊重、無壓力、看得很舒服。
+【語氣】
+- 冷靜、客觀、直戳核心。句子短、判斷準、不繞。
+- 禁止感性開場與過度安慰，例如：「謝謝你願意面對」「這是一個不容易的對話」「你已經很勇敢了」「先被接住」。
+- 一開場就切入結構性問題：目標落差、資訊有沒有對齊、哪一步跳太快。
+- 可以犀利，但對事不對人。不人身攻擊、不嘲諷人格、不翻舊帳定人罪。
+- 不要「我們一起抱抱這份卡住」這類軟詞。用「落差在這裡」「卡點是這個」「下次改這一步」。
 
-【語氣層次（必須遵守）】
-1. 開場先用「溫柔肯定」。例如：「這是一個不容易的對話，謝謝你願意面對。」看見今天願意說出來，本身就值得被溫柔對待。
-2. 中間剖析用「好奇心取代批判」。幫使用者翻譯事件背後的真實需求。例如：「這背後其實是因為你很在意……」「我們好奇的是，那一刻你最想被接住的是什麼？」
-3. 禁止責怪、批判、嘲諷、審問、犀利定罪、「你應該早就知道」，也不要把卡住當成失敗。
-4. 用「我們」「一起看看」。把卡住當成在乎的訊號。
+【主題與核心結論：強制三塊，依序寫滿】
+1. 核心盲點（whyNeed）：精準點出雙方在「目標」與「資訊對齊」上的落差。
+   - 必須寫清楚：一方在追什麼（例如宏觀規劃、效率、一次到位、最高額度），另一方在追什麼（例如眼前這一件、簡單需求、當下好做完）。
+   - 點破：表面在吵事情，底下是兩套任務定義沒對上。
+2. 溝通誤區（whatFact）：直接點出為什麼會吵／為什麼會卡。
+   - 典型結構：一方的「理性解法」走太快，跳過了對方需要的「確認當前目標＋步驟對齊」，對方因此覺得被塞進沒共識的巨大任務而焦慮、防衛或關機。
+   - 明確指出升溫瞬間，以及哪個關鍵詞（如「為什麼」「你應該」「一次搞定」）把對話從對齊推成對抗。
+3. 實戰修正（howNext）：乾淨俐落、不囉嗦。先對齊目標層級，再給步驟，最後才給完整方案。
 
-【主題與核心結論：強制使用黃金圈法則】
-處理 themeInsight、whyNeed、whatFact、howNext、conclusion 時，必須依序寫：
-1. 為什麼（動機／需求）：先翻譯彼此真正在乎什麼。把盲點轉譯成未被說出口的需求與心意，不是誰做錯了。
-2. 是什麼（事實）：溫和點出發生了什麼、哪一個瞬間情緒開始升溫。
-3. 怎麼做（下一步）：給出下次對話可直接照唸的具體腳本，不是空泛建議。
-
-【關鍵轉折點（必須明確點出）】
-- 明確指出：對話的哪一個瞬間，情緒開始升溫？
-- 明確點出那一個「關鍵詞」（例如「為什麼」），說明它如何瞬間扭轉對話走向。
-- 立刻給出替代的溫柔表達建議（一句可直接說出口的話）。
-- 分別填入 turningPoint、keyWord、keyWordAlt。
+【關鍵轉折點】
+- turningPoint：哪一句、哪一步讓對話從討論變成對抗。
+- keyWord：那個扭轉走向的詞。
+- keyWordAlt：可直接替換的對齊句，要像工具，不要像情話。例如：「先確認：你現在要解的是眼前這一件，還是整套方案？」
 
 【行動指引】
-- nextScripts 必須是 2-3 句「下次對話可直接應用」的具體腳本，用引號寫出完整句子。
-- 不要寫「多溝通」「保持冷靜」「下次注意一點」這類空泛建議。
-- 腳本要讓身邊的人聽了也舒服、無壓力。
+- nextScripts：2-3 句下次對話可直接照唸的腳本，短、準、能對齊目標。
+- 禁止空話：「多溝通」「保持冷靜」「多體諒」「下次注意一點」。
+- 腳本優先做三件事：確認對方當前目標 → 聲明自己的目標層級 → 問要不要展開下一步。
 
 【輸出】
 只輸出 JSON，繁體中文，不要 markdown。
@@ -505,22 +504,20 @@ const ORGANIZE_SYSTEM_PROMPT = `你是「日精進」的溫暖且高情商深層
 
 欄位寫法：
 - themeCategory：事業經營 | 人間關係 | 身心狀態 | 覺察 其中一個
-- themeTitle：溫柔、好懂、直擊核心的一句主題
-- themeInsight：先溫柔肯定開場，再用好奇心翻譯真實需求，最後輕輕接到黃金圈
-- whyNeed：為什麼（動機／彼此的在乎），1-2 句
-- whatFact：是什麼（事實與升溫瞬間），1-2 句
-- howNext：怎麼做（可照唸的下一步），1-2 句
-- turningPoint：情緒開始升溫的那一個瞬間
-- keyWord：扭轉對話走向的關鍵詞，例如「為什麼」
-- keyWordAlt：可直接說出口的溫柔替代句
+- themeTitle：一句直戳核心的主題，點出落差，不要抒情
+- themeInsight：直接講結構性問題，不要感性開場
+- whyNeed：核心盲點＝目標落差＋資訊沒對齊，1-3 句
+- whatFact：溝通誤區＝為什麼會吵，點出跳太快的那一步，1-3 句
+- howNext：實戰修正＝先對齊再給方案，1-2 句
+- turningPoint、keyWord、keyWordAlt：升溫瞬間、關鍵詞、可替換的對齊句
 - nextScripts：2-3 句完整對話腳本
-- problems：1-3 則；用「看見／需要／在乎」的語言，不要指責；stars 為 1-5
-- eventList、reactionList：客觀、溫和，不評對錯
-- reflection：事後反思，帶陪伴感與好奇心
-- conclusion：用黃金圈收束（為什麼 → 是什麼 → 怎麼做），溫柔且直擊核心
-- quotes：2-4 句溫柔金句，每句 12-40 字
-- gratitudeNote：溫柔提醒，不施壓
-- sfm：story / feeling / meaning 各一則，語氣同樣溫暖`;
+- problems：1-3 則，標題要像診斷，不要像安慰；stars 為 1-5
+- eventList、reactionList：客觀拆事件與反應，不評人格
+- reflection：事後邏輯復盤，指出哪一步可以重來
+- conclusion：用「核心盲點 → 溝通誤區 → 實戰修正」收束，短而準
+- quotes：2-4 句，每句 12-40 字，像可帶走的判斷，不要雞湯
+- gratitudeNote：若沒提到就一句帶過，不說教、不煽情
+- sfm：story / feeling / meaning 各一則，同樣直白`;
 
 function maybeEnhanceWithApi(rawText, token) {
   const settings = getAiSettings();
@@ -537,7 +534,7 @@ function maybeEnhanceWithApi(rawText, token) {
       if ((state.think.round || 0) > 1) return;
       applyOrganizeResult(normalizeOrganizeResult(remote, rawText));
       applyThinkResult(localThink(state.organize, 1, [], ""), 1, { silent: true });
-      showToast("雲端教練已把今天拆得更清楚。");
+      showToast("雲端教練已拆出盲點與修正。");
     })
     .catch(() => {
       /* 金鑰無效、CORS 或逾時：維持本地結果，絕不卡住 */
@@ -871,7 +868,7 @@ function renderAiStage() {
     <section class="review-section" aria-labelledby="sec-theme">
       <h2 class="review-section__title" id="sec-theme">【主題與核心結論】</h2>
       <article class="theme-banner">
-        <p class="theme-banner__kicker">溫柔看見彼此的在乎</p>
+        <p class="theme-banner__kicker">直擊溝通落差</p>
         <h3 class="theme-banner__title">【${escapeHtml(ai.themeCategory || "覺察")}】主題：${escapeHtml(ai.themeTitle || "今天的復盤")}</h3>
         ${ai.themeInsight ? `<p class="theme-banner__lead">${escapeHtml(ai.themeInsight)}</p>` : ""}
       </article>
@@ -908,7 +905,7 @@ function renderAiStage() {
       </article>
       <article class="ai-block gratitude-box">
         <h3>今日沒提到了感恩</h3>
-        <p>${escapeHtml(ai.gratitudeNote || "留一句感謝，今天才算被完整接住。")}</p>
+        <p>${escapeHtml(ai.gratitudeNote || "沒提到就略過。要補就補一句具體事實。")}</p>
         <textarea class="textarea" id="gratitudeInput" rows="3" placeholder="今天想感謝的是…">${escapeHtml(state.gratitude)}</textarea>
       </article>
     </section>
@@ -994,11 +991,11 @@ function detectCoachCategory(text) {
 
 function detectTurningWord(text) {
   const pairs = [
-    { re: /為什麼/, word: "為什麼", alt: "我有點擔心，是因為我很在意我們。可以跟我說說你現在的想法嗎？" },
-    { re: /你應該/, word: "你應該", alt: "我比較希望我們可以一起看看……你覺得呢？" },
-    { re: /怎麼又|又是/, word: "怎麼又", alt: "我發現這件事又出現了，我想先聽聽你現在的感受。" },
-    { re: /你都不|都不/, word: "你都不", alt: "我其實很需要被看見，可以請你陪我一下嗎？" },
-    { re: /找麻煩/, word: "找麻煩", alt: "我不是要找麻煩，我是因為在乎我們，才想跟你靠近一點。" },
+    { re: /為什麼/, word: "為什麼", alt: "先確認：你現在要解的是眼前這一件，還是整套方案？" },
+    { re: /你應該/, word: "你應該", alt: "我們先對齊目標：這次要一次到位，還是先把眼前處理完？" },
+    { re: /怎麼又|又是/, word: "怎麼又", alt: "這件事又出現了。先講你現在要我處理哪一步。" },
+    { re: /你都不|都不/, word: "你都不", alt: "我缺的是這一步的確認。你現在要的具體是什麼？" },
+    { re: /找麻煩/, word: "找麻煩", alt: "我不是要加任務。我先對齊：你要的是眼前這件，還是完整規劃？" },
   ];
   return pairs.find((item) => item.re.test(text)) || pairs[0];
 }
@@ -1009,25 +1006,25 @@ function renderGoldenCircle(ai) {
   const circle = [ai.whyNeed, ai.whatFact, ai.howNext].some(Boolean)
     ? `
       <article class="ai-block">
-        <h3>黃金圈：為什麼 → 是什麼 → 怎麼做</h3>
-        ${ai.whyNeed ? `<p><strong>為什麼（動機）</strong><br>${escapeHtml(ai.whyNeed)}</p>` : ""}
-        ${ai.whatFact ? `<p><strong>是什麼（事實）</strong><br>${escapeHtml(ai.whatFact)}</p>` : ""}
-        ${ai.howNext ? `<p><strong>怎麼做（下一步）</strong><br>${escapeHtml(ai.howNext)}</p>` : ""}
+        <h3>核心診斷</h3>
+        ${ai.whyNeed ? `<p><strong>核心盲點</strong><br>${escapeHtml(ai.whyNeed)}</p>` : ""}
+        ${ai.whatFact ? `<p><strong>溝通誤區</strong><br>${escapeHtml(ai.whatFact)}</p>` : ""}
+        ${ai.howNext ? `<p><strong>實戰修正</strong><br>${escapeHtml(ai.howNext)}</p>` : ""}
       </article>`
     : "";
   const turning = ai.turningPoint || ai.keyWord || ai.keyWordAlt
     ? `
       <article class="ai-block">
-        <h3>關鍵轉折點</h3>
+        <h3>升溫轉折</h3>
         ${ai.turningPoint ? `<p>${escapeHtml(ai.turningPoint)}</p>` : ""}
-        ${ai.keyWord ? `<p>扭轉走向的關鍵詞：<strong>「${escapeHtml(ai.keyWord)}」</strong></p>` : ""}
-        ${ai.keyWordAlt ? `<p>下次可以改成：「${escapeHtml(ai.keyWordAlt)}」</p>` : ""}
+        ${ai.keyWord ? `<p>關鍵詞：<strong>「${escapeHtml(ai.keyWord)}」</strong></p>` : ""}
+        ${ai.keyWordAlt ? `<p>改口：「${escapeHtml(ai.keyWordAlt)}」</p>` : ""}
       </article>`
     : "";
   const scriptBlock = scripts.length
     ? `
       <article class="ai-block">
-        <h3>下次對話可直接這樣說</h3>
+        <h3>下次照這句說</h3>
         <ul class="review-list">${scripts.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
       </article>`
     : "";
@@ -1037,29 +1034,29 @@ function renderGoldenCircle(ai) {
 function buildCoachQuotes({ category, hasWhy, otherLabel, keyShort }) {
   const sets = {
     人間關係: [
-      "卡住的地方，常常只是兩邊的在乎還沒被好好聽見。",
-      "先讓對方聽見你在乎，再輕輕說出你的想法。",
-      "複述一遍他的意思，就是在說：我願意站到你旁邊。",
+      "吵的不是態度，是兩邊的目標不在同一層。",
+      "方案走太快，對齊沒做完，再對的解法也會變任務轟炸。",
+      "先確認眼前要解哪一件，再決定要不要展開完整規劃。",
     ],
     事業經營: [
-      "你已經很努力了。下一步只要小到明天做得到，就夠溫柔。",
-      "先對齊自己在乎什麼，再動手，走路會比較不喘。",
-      keyShort ? `記住這句：「${clipPhrase(keyShort, 16)}」——它比完美計畫更靠近你。` : "把今天寫下來，是讓這一天被溫柔地過過。",
+      "卡住通常不是能力，是目標層級沒對上：一次到位，還是先做眼前。",
+      "先對齊要解哪一層，再動手，才不會空轉。",
+      keyShort ? `記住卡點：「${clipPhrase(keyShort, 16)}」——它比完美計畫更接近真相。` : "把今天寫下來，是為了看清哪一步跳太快。",
     ],
     身心狀態: [
-      "身體比嘴巴更早說實話。允許那一口累，今天才算被接住。",
-      "不是懶，是你的系統在請你慢一點。聽見它，就是照顧自己。",
-      "成長很少是一次轉身，比較像每天把下一步放小一點。",
+      "身體先降速，行程還在加碼。落差就在這裡。",
+      "不是懶，是負載已經超過當下能處理的單位。",
+      "先砍到明天做得到的一步，再談完整計畫。",
     ],
     覺察: [
-      hasWhy ? "看懂自己在乎什麼的那天，責備會自己變輕。" : "你已經碰到今天了。差的只是那句還沒被溫柔說出口的話。",
-      "把「我在乎什麼」講出來，今天就會被完整接住。",
-      keyShort ? `記住這句：「${clipPhrase(keyShort, 16)}」——它比完美結論更靠近你。` : "把今天寫下來，是讓這一天被溫柔地過過。",
+      hasWhy ? "原因找到了，就別再把問題定義成個性。" : "卡點不是努力不夠，是任務定義還沒講清楚。",
+      "先對齊要解哪一層，再開口。",
+      keyShort ? `記住卡點：「${clipPhrase(keyShort, 16)}」。` : "把今天寫下來，是為了看清哪一步跳太快。",
     ],
   };
   const quotes = [...(sets[category] || sets["覺察"])];
   if (category === "人間關係" && otherLabel && otherLabel !== "自己") {
-    quotes[1] = `先讓${otherLabel}聽見你在乎，再輕輕說出你的想法。兩邊都會比較舒服。`;
+    quotes[1] = `你給的是完整解法，${otherLabel}要的可能只是眼前這一步。先對齊層級。`;
   }
   return quotes.slice(0, 3);
 }
@@ -1080,77 +1077,79 @@ function localOrganize(rawText) {
   const isComm = COACH_COMM_RE.test(text) || hasPeople;
 
   let themeTitle = {
-    人間關係: "這次裡，我們看見了彼此的在乎",
-    事業經營: "卡住的地方，其實也在說你在乎",
-    身心狀態: "身體先說了實話，我們慢慢聽",
-    覺察: "今天這一段，值得被溫柔接住",
+    人間關係: "目標層級沒對齊，解法就變成壓力",
+    事業經營: "卡在目標層級，不是卡在能力",
+    身心狀態: "負載已經超過當下能處理的單位",
+    覺察: "任務定義沒講清楚，復盤就停在表面",
   }[category];
 
-  if (isComm) themeTitle = "這次裡，我們看見了彼此的在乎";
-  if (/決定/.test(text) && !isComm) themeTitle = "做了決定，也讓自己被溫柔接住";
-  if (isWin && !isComm) themeTitle = "小小做成，也值得被自己看見";
-  if (/卡/.test(text) && !isComm) themeTitle = "今天卡住的，其實是一份還沒被接住的在乎";
+  if (isComm) themeTitle = "目標層級沒對齊，解法就變成壓力";
+  if (/決定/.test(text) && !isComm) themeTitle = "決定做了，執行層級還沒拆";
+  if (isWin && !isComm) themeTitle = "做成了，但成功定義還是模糊";
+  if (/卡/.test(text) && !isComm) themeTitle = "卡住的不是事情，是任務定義";
 
   const turning = detectTurningWord(text);
   const themeInsight = isComm
-    ? `這是一個不容易的對話，謝謝你願意面對。這背後其實是因為你很在意被理解、被當成心意；${otherLabel}可能也很在意自己的節奏被尊重。我們好奇的是：那一刻，兩邊最想被接住的是什麼？`
+    ? `核心問題不是態度，是目標沒對齊。你這邊在推宏觀規劃（效率、一次到位、把路鋪完）；${otherLabel}要的是微觀當下（眼前這一件、步驟清楚、先做完再說）。資訊沒對上，再正確的方案也會被聽成被塞任務。`
     : category === "事業經營"
-      ? "謝謝你願意把這份卡住拿出來看。這背後其實是因為你很在意把事情做好，不是能力不夠。我們好奇的是：你真正想守住的，是成果，還是自己也被看見？"
+      ? `卡點不是能力不夠。是「一次做到位」和「先做眼前能完成的一步」兩套目標疊在一起，資訊沒拆開，行動就空轉。${keyShort ? `停在「${keyShort}」。` : ""}`
       : category === "身心狀態"
-        ? "這是不容易被承認的一天，謝謝你願意面對身體先說出口的累。這背後其實是因為你很在意把生活顧好，嘴巴還在撐。我們好奇的是：那一口累，最想被允許什麼？"
-        : `謝謝你願意把今天說出來。${keyShort ? `「${keyShort}」這句已經碰到心底。` : ""}這背後其實是因為你很在意被接住。我們好奇的是：那句還沒說出口的在乎，是什麼？`;
+        ? "落差很清楚：行程還在加碼，身體已經降速。還用宏觀效率去壓微觀負載，系統就會關機。"
+        : `結構問題：事情說完了，任務定義沒講清。${keyShort ? `「${keyShort}」是卡點。` : ""}先回答「這次要解哪一層」，後面才有下一步。`;
 
   const problems = [];
 
   problems.push({
     title: isComm
-      ? "彼此的在乎，都還差一句被溫柔聽見"
-      : "事情說完了，心底的在乎還想被接住",
+      ? "核心盲點：宏觀規劃 vs 微觀當下"
+      : "核心盲點：任務定義沒對齊",
     stars: 5,
     body: keyShort
-      ? `你寫了「${keyShort}」。事情已經被說出來了，這很好。${isComm ? `接下來我們可以輕輕補上：你在乎什麼，以及${otherLabel}可能也在乎什麼。兩邊都被看見，對話就會從緊繃變成靠近。` : "自己也值得被接住：你明明有做，只是那份心意還沒被溫柔地命名。補一句「我在乎……」，整段話的溫度會不一樣。"}`
-      : "事情可以寫得很完整，這已經很棒。若再補一句「我／我們在乎什麼」，意義就會慢慢浮出來，沒有人需要被責怪。",
+      ? `你寫了「${keyShort}」。${isComm ? `一邊要的是完整解法與最高效率，一邊要的是眼前簡單需求。兩邊都在做事，但目標層級不同，資訊就對不齊。` : "事件有了，成功標準沒寫死：一次到位，還是先做完眼前？沒這句，後面全是空轉。"}`
+      : isComm
+        ? `一方追效率與完整規劃，一方只想處理眼前需求。目標層級不同，對話一定歪。`
+        : "事情可以寫得很完整，但沒定義這次要解哪一層，復盤就只是流水帳。",
   });
 
   if (isComm) {
     problems.push({
-      title: `關鍵轉折：把「${turning.word}」換成更溫柔的一句`,
-      stars: 4,
-      body: `好奇心告訴我們：空氣常在「${turning.word}」出現的那一瞬升溫。不是這個詞不好，是它容易被聽成質問。下次可以直接說：「${turning.alt}」讓${otherLabel}先聽見你的在乎。`,
+      title: "溝通誤區：理性解法跳過步驟對齊",
+      stars: 5,
+      body: `你的解法可能是對的，但走太快。${otherLabel}需要的是先確認「現在只要眼前這一步」，再決定要不要展開。跳過這層，對方會覺得被塞進沒共識的巨大任務，焦慮或關機。升溫常卡在「${turning.word}」。改口：「${turning.alt}」`,
     });
   }
 
   if (vagueHits.length) {
     problems.push({
-      title: `「${vagueHits[0]}」也在保護你，我們可以再靠近一點`,
+      title: `資訊模糊：「${vagueHits[0]}」讓目標對不齊`,
       stars: 3,
-      body: `「${vagueHits.slice(0, 2).join("、")}」不是錯，它在讓你安全一點。若願意，把模糊的詞換成一個更準的感覺或畫面，今天會更立體，也更被自己陪伴。`,
+      body: `「${vagueHits.slice(0, 2).join("、")}」把具體需求蓋住了。對齊前先換成可執行的單位：要解哪一件、做到哪一步算完成。`,
     });
   }
 
   if (problems.length < 2) {
     problems.push({
-      title: "下一步只要小小的、明天做得到就好",
+      title: "實戰修正：先對齊層級，再給方案",
       stars: 4,
-      body: "情緒與事件都被看見了，已經很好。若想把今天接到明天，選一個小到不會有壓力的動作——複述一次、先猜對方在乎什麼、或補一句「我是因為在乎……」。輕輕走就好。",
+      body: "下次先問：這次要一次到位，還是先做眼前？確認完再給步驟。不要一開口就丟完整計畫。",
     });
   }
 
   if (problems.length < 3 && isWin) {
     problems.push({
-      title: "已經有一個小小的做成，也值得被留下來",
+      title: "做成了，但成功定義還可以寫死",
       stars: 3,
       body: keyShort
-        ? `「${keyShort}」你可能自己沒當一回事。把它單獨留下來，它會變成可以再溫柔使用的故事，而不是被「還沒夠好」蓋過去。`
-        : "今天其實有一個小小的做成。寫下來，讓它被看見，而不是被「還沒夠好」蓋過去。",
+        ? `「${keyShort}」是有效動作。把它標成可複用的步驟，而不是「還不夠好」的模糊感覺。`
+        : "今天有一個做成。寫下完成標準，下次才複製得了。",
     });
   }
 
   if (problems.length < 3 && !isComm) {
     problems.push({
-      title: "感受有了，再為它取一個溫柔的名字",
+      title: "下一步還停在抽象",
       stars: 3,
-      body: "你已經碰到今天了。可以再輕輕問一次：這份感覺在提醒你，你在乎什麼？一句就夠。寫成可以帶走的話，心就會鬆一點。",
+      body: "感受有了，執行單位沒有。把下一步收到明天做得到的一個動作，復盤才算收斂。",
     });
   }
 
@@ -1162,63 +1161,63 @@ function localOrganize(rawText) {
 
   const reactionList = hasPeople
     ? [
-        `${otherLabel}當下的反應，比較像「還沒被接住」，不是「不想聽」。兩邊都有在乎。`,
-        "結果：對話停在做法與語氣，彼此的心意都還差一點被聽見。",
-        "若先看見對方的在乎，再輕輕說出自己的，關心就比較容易被聽成心意。",
-        keyShort ? `事後空氣停在「${keyShort}」這一句，還想被溫柔對齊。` : "事後空氣還有一點緊，是因為那句「我在乎……」還沒出場。",
+        `${otherLabel}的反應比較像「被塞了一個沒共識的大任務」，不是「不想聽」。`,
+        "結果：你給的是完整解法，對方停在眼前需求，資訊對不齊。",
+        "理性解法跳過步驟對齊，焦慮就會上來。",
+        keyShort ? `升溫畫面停在「${keyShort}」。` : "升溫發生在方案先於確認出場的那一步。",
       ]
     : [
-        "這次主要是自己與自己的對話。沒有別人在場，也值得被溫柔對待。",
-        "當下你把事情說完了，這已經很好；心底的在乎還可以再被命名一次。",
-        "結果：事件被看見了，意義還可以再靠近一點。",
-        "你怎麼溫柔地對自己說話，之後也會怎麼溫柔地對別人說話。",
+        "這次主要是自己跟自己對齊。",
+        "事情說完了，任務定義還沒寫死。",
+        "結果：復盤停在流水帳，下一步還是抽象。",
+        "對自己也一樣：先定義要解哪一層，再行動。",
       ];
 
   const whyNeed = isComm
-    ? `為什麼：你很在意心意被聽見，${otherLabel}也很在意感受被尊重。兩邊的在乎都是真的。`
+    ? `核心盲點：你追的是宏觀規劃（效率、一次到位、把路鋪完）；${otherLabel}追的是微觀當下（眼前簡單需求、步驟清楚）。目標層級不同，資訊就對不齊。`
     : category === "事業經營"
-      ? "為什麼：你很在意把事情做好，也希望自己的努力被接住，不是被略過。"
+      ? "核心盲點：「一次做到位」和「先做眼前能完成的一步」疊在一起，成功標準沒拆開。"
       : category === "身心狀態"
-        ? "為什麼：你很在意把生活顧好，身體卻先提醒你：被允許休息，也是一種在乎。"
-        : "為什麼：你很在意今天這一段被完整接住，而不是只被當成流水帳。";
+        ? "核心盲點：行程目標是加碼，身體目標是降速。兩套負載標準在搶同一個系統。"
+        : "核心盲點：事件有了，這次要解哪一層還沒定義。";
 
   const whatFact = isComm
-    ? `是什麼：情緒比較容易在「${turning.word}」出現的那一瞬升溫。${keyShort ? `關鍵畫面停在「${keyShort}」。` : ""}這個詞一出口，對方常會聽成被質問，而聽不到你的擔心。`
-    : `是什麼：事情被說完了，${keyShort ? `停在「${keyShort}」` : "真正的在乎"} 還沒被溫柔命名，心就還有一點緊。`;
+    ? `溝通誤區：理性解法走太快，跳過「確認當前目標＋步驟對齊」。${otherLabel}會覺得被塞進沒共識的巨大任務。升溫常卡在「${turning.word}」。${keyShort ? `畫面：「${keyShort}」。` : ""}`
+    : `溝通誤區：先丟完整方案，再補定義。${keyShort ? `卡在「${keyShort}」。` : ""}順序反了，後面全是摩擦。`;
 
   const howNext = isComm
-    ? `怎麼做：下次先把「${turning.word}」換成「${turning.alt}」再開口。讓動機站到語氣前面。`
-    : `怎麼做：下次對自己或對方說：「我想先說，我是因為在乎……才提起這件事。」`;
+    ? `實戰修正：先問「現在只要眼前這一件，還是整套方案？」確認完再給步驟。把「${turning.word}」換成「${turning.alt}」。`
+    : "實戰修正：先寫死這次要解哪一層，再給一個明天做得到的動作。不要一開口就上完整計畫。";
 
   const turningPoint = isComm
-    ? `關鍵轉折點大概發生在「${turning.word}」被說出口、或方案先於心意出場的那一秒。空氣從哪裡開始緊，就從哪裡改口。`
-    : `關鍵轉折點發生在你急著把事情處理完、還沒問自己「我在乎什麼」的那一瞬。先停一秒，再開口。`;
+    ? `轉折發生在方案先於確認出場，或「${turning.word}」把討論推成對抗的那一步。`
+    : "轉折發生在還沒定義任務層級，就直接加速處理的那一步。";
 
   const nextScripts = isComm
     ? [
-        `「我剛剛聽你說……我猜你是因為在乎……對嗎？」`,
+        `「先確認：你現在要解的是眼前這一件，還是整套方案？」`,
         `「${turning.alt}」`,
-        `「我想講的不是對錯，是我很在意我們。你現在方便聽我說一句嗎？」`,
+        `「方案我可以給。你要我現在只處理眼前，還是一起看完整路徑？」`,
       ]
     : [
-        `「我想先說，我是因為在乎……才提起這件事。」`,
-        `「我現在有一點卡住，不是要給你壓力，只是想被理解一下。」`,
-        `「你方便的話，我們可以慢慢說；不方便也沒關係，我先把這句放在這裡。」`,
+        `「這次我先只做眼前這一步，做完再決定要不要展開。」`,
+        `「先對齊：一次到位，還是先完成眼前能做完的單位？」`,
+        `「完整計畫先放著。現在只處理：明天做得到的那一件。」`,
       ];
 
   const reflection = hasWhy
-    ? `當時你急著把事情處理完，其實已經碰到自己在乎什麼了，只是還沒被單獨拿出來抱抱。現在回頭看「${keyShort || "今天這一段"}」，我們好奇的不是誰錯了，而是那一刻你最想被接住的是什麼。責備可以先放下，陪伴可以往前。`
+    ? `回頭看「${keyShort || "今天這一段"}」：原因已經碰到了，缺的是層級對齊。重做那一步——先確認要解哪一層，再給方案。`
     : isComm
-      ? `當時你急著把話說完，來不及先聽懂${otherLabel}的在乎。回頭看「${keyShort || "今天這一段"}」，我們好奇的是：如果先複述他的意思、再把「${turning.word}」換成「${turning.alt}」，走向會不會柔一點？`
-      : `當時你急著處理事情，來不及問自己在乎什麼。回頭看「${keyShort || "今天這一段"}」，我們好奇的是：那句還沒說出口的話，是不是其實在說「請接住我」？`;
+      ? `當時解法走太快，沒先跟${otherLabel}對齊「現在只要哪一步」。回頭看「${keyShort || "今天這一段"}」，可重來的是這句：「${turning.alt}」`
+      : `當時急著處理，沒先定義任務層級。回頭看「${keyShort || "今天這一段"}」，可重來的是：先寫死要解哪一層，再動手。`;
 
   const conclusion = isComm
-    ? `為什麼：彼此都有在乎。是什麼：空氣常在「${turning.word}」那一瞬升溫。怎麼做：下次直接說「${turning.alt}」讓關心被聽成心意。`
+    ? `核心盲點：宏觀規劃 vs 微觀當下。溝通誤區：解法跳過步驟對齊。實戰修正：先問「現在只要眼前這一件，還是整套方案？」再開口。`
     : {
-        事業經營: "為什麼：你很在乎把事情做好。是什麼：下一步還有一點抽象，心就會緊。怎麼做：明天對自己說「我先只做一件小到做得到的事」，再開始。",
-        身心狀態: "為什麼：你很在乎把生活顧好。是什麼：身體先說實話，嘴巴還在撐。怎麼做：對自己說「我允許自己先休息一口，再決定下一步」。",
-        覺察: "為什麼：你很在乎被接住。是什麼：有一句在乎還沒出場。怎麼做：把「我想先說，我是因為在乎……」說出口。",
-      }[category] || "為什麼：你很在乎被接住。是什麼：有一句話還沒出場。怎麼做：把「我在乎什麼」溫柔說出來。";
+        事業經營: "核心盲點：一次到位和眼前一步疊在一起。溝通誤區：先丟大計畫。實戰修正：先寫死這次只解哪一層。",
+        身心狀態: "核心盲點：行程加碼、身體降速。溝通誤區：還用效率邏輯壓負載。實戰修正：先砍到明天做得到的一步。",
+        覺察: "核心盲點：任務定義沒講清。溝通誤區：先說事情再補標準。實戰修正：先回答這次要解哪一層。",
+      }[category] || "核心盲點：任務定義沒講清。實戰修正：先對齊層級，再給方案。";
 
   const quotes = buildCoachQuotes({ category: isComm ? "人間關係" : category, hasWhy, otherLabel, keyShort });
 
@@ -1236,20 +1235,20 @@ function localOrganize(rawText) {
     quotes,
     gratitudeMissing: !hasGratitude,
     gratitudeNote: hasGratitude
-      ? "你已經提到感謝了，這份柔軟很好。若願意，再具體一點：是誰、哪一句、哪一個小動作讓你想說謝謝？"
-      : "今天還沒提到感恩也沒關係。若心裡還有一點空間，可以留一句：哪怕只感謝自己有把這段話講出來。",
+      ? "感恩有提到。補具體：是誰、哪一句、哪個動作。"
+      : "這段沒提到感恩。要補就補一句事實，不補也無妨。",
     sfm: [
       {
         type: "story",
         title: "今天的畫面",
-        body: keyShort ? `有一個畫面我到現在還記得：${clipPhrase(key, 40)}` : "我把今天說出來了，這件事本身就算走了一步。",
+        body: keyShort ? `卡點畫面：${clipPhrase(key, 40)}` : "今天把事件講出來了，接下來要拆的是目標層級。",
       },
       {
         type: "feeling",
         title: "當下的感覺",
         body: isComm
-          ? "不是想贏過對方，是希望自己的在乎被聽見。允許這份卡待一會兒，再輕輕補一句：我是因為在乎。"
-          : "不是懶，是有一塊地方還想被溫柔看見。允許這份卡待一會兒，再輕輕補一句：我在乎什麼。",
+          ? "不是想贏，是方案先出場、對齊還沒做完，雙方都在防衛。"
+          : "不是懶，是任務定義不清楚，系統不知道先做哪一層。",
       },
       {
         type: "meaning",
@@ -1269,69 +1268,69 @@ function localOrganize(rawText) {
 }
 
 function localThink(organize, round, selected, reply) {
-  const theme = organize?.themeTitle || "這次裡，我們看見了彼此的在乎";
-  const problem = organize?.problems?.[0]?.title || "彼此的在乎還想被聽見";
+  const theme = organize?.themeTitle || "目標層級沒對齊，解法就變成壓力";
+  const problem = organize?.problems?.[0]?.title || "宏觀規劃 vs 微觀當下";
   const actionHint = selected?.[0]?.label || "";
   const replyHint = String(reply || "").trim();
   const last = round >= 5;
   const otherFromTheme = /女友/.test(`${theme}${problem}${organize?.conclusion || ""}`) ? "女友" : "對方";
 
   const keyWord = organize?.keyWord || "為什麼";
-  const keyWordAlt = organize?.keyWordAlt || "我有點擔心，是因為我很在意我們。可以跟我說說你現在的想法嗎？";
+  const keyWordAlt = organize?.keyWordAlt || "先確認：你現在要解的是眼前這一件，還是整套方案？";
   const methodActions = [
     {
-      label: "下次可以這樣開場",
-      detail: `「我剛剛聽你說……我猜你是因為在乎……對嗎？我想先聽懂你，再分享我的想法。」`,
+      label: "先對齊目標層級",
+      detail: `「先確認：你現在要解的是眼前這一件，還是整套方案？」`,
     },
     {
-      label: `把「${keyWord}」換成溫柔版`,
+      label: `改掉「${keyWord}」`,
       detail: `「${keyWordAlt}」`,
     },
     {
-      label: "若對方還沒準備好",
-      detail: `「沒關係，你現在如果不方便也沒問題。我想說的只是：我很在意${otherFromTheme === "女友" ? "妳" : "你"}，也在意我們。」`,
+      label: "只處理眼前這一步",
+      detail: `「方案我可以給。你要我現在只處理眼前，還是一起看完整路徑？」`,
     },
   ];
 
   const rounds = [
     {
       title: "深度思考與下一步",
-      question: `圍繞「${clipPhrase(theme, 22)}」：如果只能溫柔補一句「我在乎……」，那一句會是什麼？`,
-      insight: `謝謝你願意再靠近一層。這背後其實是因為「${clipPhrase(problem, 22)}」還想被聽見。關鍵轉折常停在「${keyWord}」——下次改口成「${keyWordAlt}」，走向就會柔下來。`,
+      question: `圍繞「${clipPhrase(theme, 22)}」：你當時給的是完整方案，還是${otherFromTheme}要的眼前一步？`,
+      insight: `盲點是「${clipPhrase(problem, 22)}」。解法走太快，對齊沒做完。升溫詞是「${keyWord}」。下次改口：「${keyWordAlt}」`,
       actions: methodActions,
     },
     {
       title: "用方法走一步",
       question: actionHint
-        ? `你選了「${actionHint}」。做這一步之前，你最希望${otherFromTheme}聽見的是哪一句？`
-        : "如果先用複述法，把對方的話說回去，你猜他最想被聽懂的是哪一句？",
-      insight: `好奇心先於結論：先聽懂，再猜他在乎什麼，最後才說自己的心意。把「${keyWord}」換成「${keyWordAlt}」，同一句話就會從升溫變成靠近。`,
+        ? `你選了「${actionHint}」。開口前先回答：${otherFromTheme}現在的目標是宏觀還是微觀？`
+        : `如果先問${otherFromTheme}「現在只要哪一步」，你猜答案是眼前這件，還是整套方案？`,
+      insight: `誤區通常是理性解法跳步。順序應是：確認當前目標 → 聲明你能給的層級 → 再問要不要展開。把「${keyWord}」換成「${keyWordAlt}」。`,
       actions: methodActions,
     },
     {
-      title: "聽懂之後再開口",
+      title: "對齊之後再給方案",
       question: replyHint
-        ? `你剛說「${clipPhrase(replyHint, 20)}」。這句話裡，哪一個字是真正的需要？`
-        : "這份卡住，有沒有一部分其實是想對自己說：我也值得被理解？",
-      insight: "對外溝通卡住時，內在通常也有一句還沒被允許說出口。對自己溫柔一點，對外才講得輕。複述法也可以用在自己：把今天的情緒用一句話說回去。",
+        ? `你剛說「${clipPhrase(replyHint, 20)}」。這句裡，目標層級是眼前一步，還是一次到位？`
+        : "你自己要的是效率最大化，還是先把眼前需求做完？兩件事不要一次塞。",
+      insight: "對自己也要對齊：先寫死這次只解哪一層。層級清楚，對外才講得準。",
       actions: [
-        { label: "換句話說練習", detail: `把今天最硬的那句，改成：「${keyWordAlt}」` },
-        { label: "先寫再傳", detail: "「我想說的是：我在乎你，也在乎我們。你現在方便聽我說一句嗎？」" },
-        { label: "複述給自己聽", detail: "「我其實是想被理解，也想讓對方知道我不是在指責。」" },
+        { label: "改口練習", detail: `把跳太快的那句，改成：「${keyWordAlt}」` },
+        { label: "先寫再傳", detail: "「我可以給完整方案。你現在要的是眼前這一件，還是整條路徑？」" },
+        { label: "拆成一步", detail: "「我們先只做這一步，做完再決定要不要展開。」" },
       ],
     },
     {
       title: "收到明天做得到的一步",
-      question: "明天最小、一定做得到、也不會給身邊的人壓力的一步是什麼？",
-      insight: "「下次溝通好一點」可以先放下。具體的「複述一次」「先猜他在乎什麼」「補講一次我在乎」就夠了。小到沒有壓力，才走得下去。",
+      question: "明天實際開口時，第一句要用哪一句對齊目標？",
+      insight: "「下次溝通好一點」無效。有效的是第一句先對齊層級，再給步驟。",
       actions: methodActions,
     },
     {
       title: "把這一層帶走",
       question: last
-        ? "如果今天只帶走一句話，你希望未來的自己記得哪一句？"
-        : "走到這裡，你已經比開頭更靠近自己了。還有哪一句想留給明天？",
-      insight: "這些提問不是為了把你問倒，是為了讓那份在乎終於有位置。你可以停在這裡，也可以把勾選的下一步輕輕做一次。",
+        ? "如果只帶走一個判斷，是「目標沒對齊」還是「解法跳太快」？"
+        : "還有哪個步驟你會在下次對話直接改掉？",
+      insight: "收束：先對齊目標層級，再給方案。勾選的腳本下次照唸即可。",
       actions: methodActions,
     },
   ];
