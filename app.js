@@ -546,7 +546,55 @@ function normalizeOrganizeResult(remote, rawText) {
     nextScripts: Array.isArray(remote.nextScripts) && remote.nextScripts.length ? remote.nextScripts : local.nextScripts,
     thinkGuide: remote.thinkGuide || local.thinkGuide,
     assumptionGap: normalizeAssumptionGap(remote, local),
+    paragraphInsights: normalizeParagraphInsights(remote, rawText, local),
   };
+}
+
+function splitReviewParagraphs(text) {
+  const raw = String(text || "").replace(/\r\n/g, "\n").trim();
+  if (!raw) return [];
+  let parts = raw
+    .split(/\n\s*\n+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (parts.length === 1) {
+    const lines = parts[0]
+      .split(/\n+/)
+      .map((item) => item.trim())
+      .filter((item) => item.length >= 6);
+    if (lines.length >= 2) parts = lines;
+  }
+  return parts;
+}
+
+function localParagraphConclusion(paragraph) {
+  const text = String(paragraph || "").trim();
+  if (!text) return "把這一段寫下來，本身就是今天被接住的一步。";
+  const hasWhy = COACH_WHY_RE.test(text);
+  const hasPeople = COACH_PEOPLE_RE.test(text) || COACH_COMM_RE.test(text);
+  const keyShort = clipPhrase(text, 18);
+  if (hasPeople && !hasWhy) return "這一段少的不是方案，是那句還沒被聽見的為什麼。";
+  if (hasPeople) return "這一段兩邊都在乎，只是站在不同的句子上。";
+  if (COACH_BODY_RE.test(text)) return "這一段真正該被聽見的，不是行程，是那一口還沒被允許的累。";
+  if (hasWhy) return `這一段原因已經碰到了，把它單獨留下來：「${keyShort}」。`;
+  return `這一段最重要的，是先看清楚「${keyShort}」真正卡在哪一句。`;
+}
+
+function normalizeParagraphInsights(remote, rawText, local) {
+  const paragraphs = splitReviewParagraphs(rawText);
+  const sources = paragraphs.length ? paragraphs : [String(rawText || "").trim()].filter(Boolean);
+  const remoteList = Array.isArray(remote?.paragraphInsights) ? remote.paragraphInsights : [];
+  const localList = Array.isArray(local?.paragraphInsights) ? local.paragraphInsights : [];
+  return sources.map((source, index) => {
+    const remoteItem = remoteList[index] && typeof remoteList[index] === "object" ? remoteList[index] : {};
+    const localItem = localList[index] && typeof localList[index] === "object" ? localList[index] : {};
+    const conclusion = String(remoteItem.conclusion || localItem.conclusion || "").trim() || localParagraphConclusion(source);
+    return {
+      index: index + 1,
+      source,
+      conclusion,
+    };
+  });
 }
 
 function normalizeAssumptionGap(remote, local) {
@@ -559,7 +607,7 @@ function normalizeAssumptionGap(remote, local) {
   return { mine, theirs, line };
 }
 
-const ORGANIZE_SYSTEM_PROMPT = `你是「日精進」的高階心靈教練。語氣溫柔但銳利，用詞高級、有同理心。核心結論一句直擊痛點；事件拆解必須寫清「我以為……，他以為……」；保留今日金句與下一步引導。繁體中文，只輸出 JSON。`;
+const ORGANIZE_SYSTEM_PROMPT = `你是「日精進」的高階心靈教練。語氣高級、療癒、冷靜客觀。原文有幾段就分析幾段，每段只給一句【核心結論】，不可漏段。繁體中文，只輸出 JSON。`;
 
 function thinkFromOrganize(organize, round = 1) {
   const scripts = Array.isArray(organize?.nextScripts) ? organize.nextScripts.filter(Boolean) : [];
@@ -982,9 +1030,30 @@ function renderConclusionCallout(text) {
   if (!line) return "";
   return `
     <aside class="conclusion-callout">
-      <p class="conclusion-callout__label">核心結論</p>
+      <p class="conclusion-callout__label">【核心結論】</p>
       <p class="conclusion-callout__text">${escapeHtml(line)}</p>
     </aside>
+  `;
+}
+
+function renderParagraphInsights(insights) {
+  const list = Array.isArray(insights) ? insights.filter((item) => item && (item.conclusion || item.source)) : [];
+  if (!list.length) return "";
+  return `
+    <div class="paragraph-insights">
+      ${list
+        .map((item, index) => {
+          const source = String(item.source || "").trim();
+          return `
+            <section class="paragraph-insight">
+              <p class="paragraph-insight__index">第 ${item.index || index + 1} 段</p>
+              ${source ? `<p class="paragraph-insight__source">${escapeHtml(excerptText(source, 72))}</p>` : ""}
+              ${renderConclusionCallout(item.conclusion)}
+            </section>
+          `;
+        })
+        .join("")}
+    </div>
   `;
 }
 
@@ -1163,7 +1232,11 @@ function renderAiStage() {
         body: `
           <p class="rv-card__kicker">${state.organizeSource === "cloud" ? "雲端 AI 復盤" : "本地草稿"}</p>
           <p class="theme-inline">【${escapeHtml(ai.themeCategory || "覺察")}】${escapeHtml(ai.themeTitle || "今天的復盤")} <span class="stars">[${starsText(ai.themeStars)}]</span></p>
-          ${renderConclusionCallout(conclusion)}
+          ${
+            Array.isArray(ai.paragraphInsights) && ai.paragraphInsights.length
+              ? renderParagraphInsights(ai.paragraphInsights)
+              : renderConclusionCallout(conclusion)
+          }
           ${renderSub(
             "今日金句",
             `
@@ -1588,6 +1661,11 @@ function localOrganize(rawText) {
     keyWordAlt: turning.alt,
     nextScripts,
     thinkGuide,
+    paragraphInsights: splitReviewParagraphs(text).map((source, index) => ({
+      index: index + 1,
+      source,
+      conclusion: localParagraphConclusion(source),
+    })),
   };
 }
 
@@ -2111,7 +2189,11 @@ function renderHistoryReport(review) {
   return `
     <div class="history-report">
       <p><strong>【主標題與評等】【${escapeHtml(ai.themeCategory || "")}】</strong>主題：${escapeHtml(ai.themeTitle || "")} [${starsText(ai.themeStars)}]</p>
-      ${renderConclusionCallout(ai.conclusion || ai.themeInsight || "")}
+      ${
+        Array.isArray(ai.paragraphInsights) && ai.paragraphInsights.length
+          ? renderParagraphInsights(ai.paragraphInsights)
+          : renderConclusionCallout(ai.conclusion || ai.themeInsight || "")
+      }
       <p><strong>【深度事件拆解】</strong></p>
       ${ai.assumptionGap?.line ? `<p class="gap-card__line">${escapeHtml(ai.assumptionGap.line)}</p>` : ""}
       ${ai.assumptionGap?.mine ? `<p><strong>我以為是</strong><br>${escapeHtml(ai.assumptionGap.mine)}</p>` : ""}
