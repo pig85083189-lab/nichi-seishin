@@ -1,7 +1,6 @@
-const { getSession, publicUser, authConfigured } = require("../lib/auth");
-const { kvConfigured, loadMembership } = require("../lib/store");
-const { newebpayConfigured } = require("../lib/newebpay");
-const { supabaseConfigured } = require("../lib/supabase");
+const { getSession, publicUser, authConfigured } = require("../../lib/auth");
+const { kvConfigured, loadMembership } = require("../../lib/store");
+const { supabaseConfigured } = require("../../lib/supabase");
 
 module.exports = async function handler(req, res) {
   if (req.method !== "GET") {
@@ -17,7 +16,7 @@ module.exports = async function handler(req, res) {
     ok: true,
     configured: authConfigured(),
     supabaseConfigured: supabaseConfigured(),
-    payConfigured: newebpayConfigured(),
+    payConfigured: false,
     user: publicUser(user),
     membership: membership && membership.paid ? { paid: true, paidAt: membership.paidAt || "", plan: membership.plan || "member" } : null,
   });

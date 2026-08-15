@@ -1,5 +1,5 @@
-const { requireUser } = require("./lib/auth");
-const { kvConfigured, loadUserData, saveUserData } = require("./lib/store");
+const { requireUser } = require("../lib/auth");
+const { kvConfigured, loadUserData, saveUserData } = require("../lib/store");
 
 function readJsonBody(req) {
   const raw = req.body;

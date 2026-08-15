@@ -1,6 +1,6 @@
 const {
   googleConfigured,
-  originFromReq,
+  appOrigin,
   sign,
   verify,
   parseCookies,
@@ -8,11 +8,11 @@ const {
   SESSION_COOKIE,
   STATE_COOKIE,
   SESSION_DAYS,
-} = require("../lib/auth");
-const { registerUser } = require("../lib/store");
+} = require("../../lib/auth");
+const { registerUser } = require("../../lib/store");
 
 module.exports = async function handler(req, res) {
-  const origin = originFromReq(req);
+  const origin = appOrigin();
   const fail = (reason) => {
     res.redirect(302, `${origin}/?auth=error&reason=${encodeURIComponent(reason)}`);
   };
@@ -33,6 +33,8 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    const redirectUri = "https://nichi-seishin.vercel.app/api/auth/callback";
+    console.log("Redirect URI being sent (token exchange):", redirectUri);
     const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -40,7 +42,7 @@ module.exports = async function handler(req, res) {
         code,
         client_id: process.env.GOOGLE_CLIENT_ID,
         client_secret: process.env.GOOGLE_CLIENT_SECRET,
-        redirect_uri: `${origin}/api/auth/callback`,
+        redirect_uri: redirectUri,
         grant_type: "authorization_code",
       }),
     });

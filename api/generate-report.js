@@ -1,6 +1,6 @@
-const { callOpenAI } = require("./lib/openai");
-const { requireUser } = require("./lib/auth");
-const { kvConfigured, listUsers, loadReviews, mergeReviews, loadReport, loadLatestReport, saveReport } = require("./lib/store");
+const { callOpenAI } = require("../lib/openai");
+const { requireUser } = require("../lib/auth");
+const { kvConfigured, listUsers, loadReviews, mergeReviews, loadReport, loadLatestReport, saveReport } = require("../lib/store");
 
 const REPORT_SYSTEM = `你是「日精進」的週月報教練。使用者會給你一段期間內、多天的復盤摘要。請聚合成一份冷靜、精準、可執行的綜合報告。
 

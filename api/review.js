@@ -36,7 +36,7 @@ function readJsonBody(req) {
   return {};
 }
 
-const { requireUser } = require("./lib/auth");
+const { requireUser } = require("../lib/auth");
 
 function getApiKey() {
   return String(process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY || "").trim();
@@ -217,7 +217,7 @@ module.exports = async function handler(req, res) {
     res.status(200).json({
       ok: true,
       configured: Boolean(getApiKey()),
-      auth: require("./lib/auth").authConfigured(),
+      auth: require("../lib/auth").authConfigured(),
       model: String(process.env.OPENAI_MODEL || "gpt-4o-mini"),
     });
     return;
