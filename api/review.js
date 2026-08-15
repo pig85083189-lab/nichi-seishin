@@ -233,10 +233,14 @@ module.exports = async function handler(req, res) {
   if (!user) return;
 
   if (supabaseAdminConfigured()) {
-    const sub = await ensureTrial(user);
-    if (sub && !isEntitled(sub)) {
-      res.status(402).json({ ok: false, error: "試用已結束，請訂閱後繼續使用雲端 AI。" });
-      return;
+    try {
+      const sub = await ensureTrial(user);
+      if (sub && !isEntitled(sub)) {
+        res.status(402).json({ ok: false, error: "試用已結束，請訂閱後繼續使用雲端 AI。" });
+        return;
+      }
+    } catch (error) {
+      console.error("ensureTrial in review:", error && error.message ? error.message : error);
     }
   }
 

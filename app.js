@@ -1283,6 +1283,7 @@ async function refreshAuth() {
       const payload = await response.json().catch(() => ({}));
       state.payConfigured = Boolean(payload.payConfigured);
       state.membership = payload.membership || null;
+      if (payload.membershipError) setAuthError(payload.membershipError);
       if (!state.user && payload.user) state.user = payload.user;
     }
     renderAuth();

@@ -9,12 +9,14 @@ module.exports = async function handler(req, res) {
   }
   const user = await getSession(req);
   let membership = null;
+  let membershipError = "";
   if (user) {
     try {
       const row = await ensureTrial(user);
       membership = publicMembership(row);
     } catch (error) {
-      console.error("ensureTrial failed:", error && error.message ? error.message : error);
+      membershipError = String(error && error.message ? error.message : error);
+      console.error("ensureTrial failed:", membershipError);
     }
   }
   res.status(200).json({
@@ -24,5 +26,6 @@ module.exports = async function handler(req, res) {
     payConfigured: newebpayConfigured(),
     user: publicUser(user),
     membership,
+    membershipError: membershipError || undefined,
   });
 };

@@ -69,9 +69,16 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const sub = await ensureTrial(user);
+  let sub;
+  try {
+    sub = await ensureTrial(user);
+  } catch (error) {
+    const message = String(error && error.message ? error.message : "無法建立試用紀錄");
+    res.status(500).json({ ok: false, error: message });
+    return;
+  }
   if (!sub) {
-    res.status(500).json({ ok: false, error: "無法建立試用紀錄，請確認 SUPABASE_SERVICE_ROLE_KEY" });
+    res.status(500).json({ ok: false, error: "尚未設定 SUPABASE_SERVICE_ROLE_KEY 或 SUPABASE_SECRET_KEY" });
     return;
   }
   if (sub.status === "active") {
