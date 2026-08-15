@@ -953,28 +953,22 @@ function renderAuth() {
   const user = state.user;
   if (top) {
     top.textContent = user ? user.name || user.email || "已登入" : "登入";
-    top.title = user ? "登出" : "Email 登入";
+    top.title = user ? "登出" : "使用 Google 帳號登入";
   }
   if (!side) return;
   if (!user) {
     side.innerHTML = `
-      <form class="auth-form" id="authForm">
-        <p class="auth-form__title">Email 登入</p>
-        <label class="auth-field">
-          <span>Email</span>
-          <input class="input" id="authEmail" name="email" type="email" autocomplete="username" required placeholder="you@email.com" />
-        </label>
-        <label class="auth-field">
-          <span>密碼</span>
-          <input class="input" id="authPassword" name="password" type="password" autocomplete="current-password" required minlength="6" placeholder="至少 6 碼" />
-        </label>
-        <p class="auth-form__error" id="authError" hidden></p>
-        <div class="auth-form__actions">
-          <button class="auth-login" id="btnSignIn" type="submit">登入</button>
-          <button class="auth-signup" id="btnSignUp" type="button">註冊</button>
-        </div>
-        <p class="auth-hint">登入後會讀取你在雲端的復盤與個人紀錄。</p>
-      </form>
+      <button class="auth-login" id="btnGoogleLogin" type="button">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <path fill="#4285F4" d="M22.6 12.25c0-.8-.07-1.57-.2-2.31H12v4.37h5.95a5.08 5.08 0 0 1-2.2 3.34v2.77h3.56c2.08-1.92 3.29-4.75 3.29-8.17Z" />
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.56-2.77c-.99.66-2.26 1.05-3.72 1.05-2.86 0-5.29-1.93-6.16-4.53H2.18v2.85A10.99 10.99 0 0 0 12 23Z" />
+          <path fill="#FBBC05" d="M5.84 14.09A6.6 6.6 0 0 1 5.5 12c0-.72.12-1.43.34-2.09V7.06H2.18A11 11 0 0 0 1 12c0 1.78.43 3.46 1.18 4.94l3.66-2.85Z" />
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.07.56 4.21 1.64l3.16-3.16C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.85C6.71 7.31 9.14 5.38 12 5.38Z" />
+        </svg>
+        <span>使用 Google 帳號登入</span>
+      </button>
+      <p class="auth-form__error" id="authError" hidden></p>
+      <p class="auth-hint">登入後會讀取你在雲端的復盤與個人紀錄。</p>
     `;
     return;
   }
@@ -1054,25 +1048,19 @@ function setAuthError(message) {
   el.textContent = text;
 }
 
-function readAuthForm() {
-  const email = String(document.getElementById("authEmail")?.value || "").trim();
-  const password = String(document.getElementById("authPassword")?.value || "");
-  return { email, password };
-}
-
 function translateAuthError(error) {
   const message = String(error?.message || error || "登入失敗");
-  if (/invalid login credentials/i.test(message)) return "Email 或密碼不正確。";
-  if (/user already registered/i.test(message)) return "這個 Email 已經註冊過，請直接登入。";
-  if (/password/i.test(message) && /at least|6/i.test(message)) return "密碼至少需要 6 碼。";
-  if (/email not confirmed/i.test(message)) return "請先到信箱點擊確認信，再回來登入。";
+  if (/popup|provider is not enabled|unsupported provider/i.test(message)) {
+    return "尚未在 Supabase 開啟 Google 登入。請到 Authentication → Providers 啟用 Google。";
+  }
+  if (/redirect/i.test(message)) return "重新導向網址尚未加入 Supabase Redirect URLs。";
   if (/rate limit|too many/i.test(message)) return "嘗試太多次，請稍後再試。";
   return message;
 }
 
-async function afterAuthSuccess(kind) {
+async function afterAuthSuccess() {
   renderAuth();
-  showToast(kind === "signup" ? "註冊成功，正在讀取你的紀錄…" : "已登入，正在讀取你的紀錄…");
+  showToast("已登入，正在讀取你的紀錄…");
   try {
     await pullCloudData();
     await pushCloudData();
@@ -1082,67 +1070,26 @@ async function afterAuthSuccess(kind) {
   }
 }
 
-async function signInWithPassword() {
-  const { email, password } = readAuthForm();
-  if (!email || !password) {
-    setAuthError("請輸入 Email 與密碼。");
-    return;
-  }
+async function signInWithGoogle() {
   const client = await getSupabase();
   if (!client) {
-    setAuthError("尚未設定 Supabase。請在 Vercel 加上 SUPABASE_URL 與 SUPABASE_ANON_KEY。");
+    const msg = "尚未設定 Supabase。請在 Vercel 加上 SUPABASE_URL 與 SUPABASE_ANON_KEY。";
+    setAuthError(msg);
+    showToast(msg);
     return;
   }
   setAuthError("");
-  const signInBtn = document.getElementById("btnSignIn");
-  const signUpBtn = document.getElementById("btnSignUp");
-  if (signInBtn) signInBtn.disabled = true;
-  if (signUpBtn) signUpBtn.disabled = true;
-  const { data, error } = await client.auth.signInWithPassword({ email, password });
-  if (signInBtn) signInBtn.disabled = false;
-  if (signUpBtn) signUpBtn.disabled = false;
+  const { error } = await client.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: `${location.origin}/`,
+      queryParams: { prompt: "select_account" },
+    },
+  });
   if (error) {
     setAuthError(translateAuthError(error));
-    return;
+    showToast(translateAuthError(error));
   }
-  applySession(data.session);
-  await afterAuthSuccess("signin");
-}
-
-async function signUpWithPassword() {
-  const { email, password } = readAuthForm();
-  if (!email || !password) {
-    setAuthError("請輸入 Email 與密碼。");
-    return;
-  }
-  if (password.length < 6) {
-    setAuthError("密碼至少需要 6 碼。");
-    return;
-  }
-  const client = await getSupabase();
-  if (!client) {
-    setAuthError("尚未設定 Supabase。請在 Vercel 加上 SUPABASE_URL 與 SUPABASE_ANON_KEY。");
-    return;
-  }
-  setAuthError("");
-  const signInBtn = document.getElementById("btnSignIn");
-  const signUpBtn = document.getElementById("btnSignUp");
-  if (signInBtn) signInBtn.disabled = true;
-  if (signUpBtn) signUpBtn.disabled = true;
-  const { data, error } = await client.auth.signUp({ email, password });
-  if (signInBtn) signInBtn.disabled = false;
-  if (signUpBtn) signUpBtn.disabled = false;
-  if (error) {
-    setAuthError(translateAuthError(error));
-    return;
-  }
-  if (!data.session) {
-    setAuthError("註冊成功。請到信箱點擊確認信後再登入。");
-    showToast("請先確認 Email，再回來登入。");
-    return;
-  }
-  applySession(data.session);
-  await afterAuthSuccess("signup");
 }
 
 async function signOutUser() {
@@ -1289,10 +1236,12 @@ function handleAuthQuery() {
     const params = new URLSearchParams(location.search);
     const auth = params.get("auth");
     const pay = params.get("pay");
-    if (!auth && !pay) return;
+    const oauthError = params.get("error_description") || params.get("error");
+    if (!auth && !pay && !oauthError) return;
     if (auth === "ok") showToast("已登入，資料會跟著你的帳號備份。");
     if (auth === "out") showToast("已登出。本機草稿仍在這台裝置上。");
     if (auth === "error") showToast(`登入失敗：${params.get("reason") || "請再試一次"}`);
+    if (oauthError) showToast(`登入失敗：${oauthError}`);
     if (pay === "ok") showToast("付款成功。藍新金流已完成授權。");
     if (pay === "fail") showToast(`付款未完成：${params.get("reason") || "請再試一次"}`);
     if (pay === "error") showToast(`付款結果異常：${params.get("reason") || "請再試一次"}`);
@@ -1301,6 +1250,8 @@ function handleAuthQuery() {
     params.delete("reason");
     params.delete("pay");
     params.delete("order");
+    params.delete("error");
+    params.delete("error_description");
     const next = `${location.pathname}${params.toString() ? `?${params}` : ""}${location.hash}`;
     history.replaceState({}, "", next);
   } catch {
@@ -2901,9 +2852,9 @@ function bindEvents() {
   document.addEventListener("click", (event) => {
     const target = event.target.closest ? event.target : event.target.parentElement;
     if (!target || !target.closest) return;
-    if (target.closest("#btnSignUp")) {
+    if (target.closest("#btnGoogleLogin")) {
       event.preventDefault();
-      signUpWithPassword();
+      signInWithGoogle();
       return;
     }
     if (target.closest("#btnSignOut") || target.closest("#btnGoogleLogout")) {
@@ -2914,12 +2865,6 @@ function bindEvents() {
     if (target.closest("#btnNewebPay")) {
       event.preventDefault();
       startNewebPay();
-    }
-  });
-  document.addEventListener("submit", (event) => {
-    if (event.target && event.target.id === "authForm") {
-      event.preventDefault();
-      signInWithPassword();
     }
   });
 
@@ -3109,11 +3054,8 @@ function bindEvents() {
         signOutUser();
         return;
       }
-      const email = document.getElementById("authEmail");
-      if (email) {
-        if (isMobile()) setSidebarOpen(true);
-        email.focus();
-      }
+      if (isMobile()) setSidebarOpen(true);
+      signInWithGoogle();
     });
   }
 
