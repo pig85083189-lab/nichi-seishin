@@ -1012,7 +1012,12 @@ async function getSupabase() {
     const key = String(cfg.supabaseAnonKey || "").trim();
     if (!url || !key) return null;
     supabaseClient = createClient(url, key, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        flowType: "pkce",
+      },
     });
     supabaseClient.auth.onAuthStateChange((_event, session) => {
       const prev = state.user && state.user.id;
@@ -1053,7 +1058,9 @@ function translateAuthError(error) {
   if (/popup|provider is not enabled|unsupported provider/i.test(message)) {
     return "尚未在 Supabase 開啟 Google 登入。請到 Authentication → Providers 啟用 Google。";
   }
-  if (/redirect/i.test(message)) return "重新導向網址尚未加入 Supabase Redirect URLs。";
+  if (/Unable to exchange external code|invalid_grant|invalid_client/i.test(message)) {
+    return "Google 授權碼交換失敗。請確認 Google Cloud 的重新導向 URI 是 https://zmjfbdtwxuawebwnybfp.supabase.co/auth/v1/callback，且 Client ID / Secret 是同一組網頁應用程式憑證。";
+  }
   if (/rate limit|too many/i.test(message)) return "嘗試太多次，請稍後再試。";
   return message;
 }
@@ -1079,16 +1086,21 @@ async function signInWithGoogle() {
     return;
   }
   setAuthError("");
-  const { error } = await client.auth.signInWithOAuth({
+  const redirectTo = "https://nichi-seishin.vercel.app/auth/callback.html";
+  const { data, error } = await client.auth.signInWithOAuth({
     provider: "google",
     options: {
-      redirectTo: `${location.origin}/`,
-      queryParams: { prompt: "select_account" },
+      redirectTo,
+      skipBrowserRedirect: false,
     },
   });
   if (error) {
     setAuthError(translateAuthError(error));
     showToast(translateAuthError(error));
+    return;
+  }
+  if (data && data.url) {
+    window.location.assign(data.url);
   }
 }
 
@@ -1241,7 +1253,7 @@ function handleAuthQuery() {
     if (auth === "ok") showToast("已登入，資料會跟著你的帳號備份。");
     if (auth === "out") showToast("已登出。本機草稿仍在這台裝置上。");
     if (auth === "error") showToast(`登入失敗：${params.get("reason") || "請再試一次"}`);
-    if (oauthError) showToast(`登入失敗：${oauthError}`);
+    if (oauthError) showToast(`登入失敗：${translateAuthError(oauthError)}`);
     if (pay === "ok") showToast("付款成功。藍新金流已完成授權。");
     if (pay === "fail") showToast(`付款未完成：${params.get("reason") || "請再試一次"}`);
     if (pay === "error") showToast(`付款結果異常：${params.get("reason") || "請再試一次"}`);
@@ -3097,8 +3109,8 @@ function init() {
     setupSpeech();
     setInterval(tickReminder, 20000);
     probeReviewApi();
-    handleAuthQuery();
     refreshAuth();
+    handleAuthQuery();
   } catch {
     /* 其餘初始化失敗也不擋「開始整理」 */
   }

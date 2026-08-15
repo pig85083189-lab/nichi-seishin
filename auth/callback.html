@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>日精進 — 完成登入</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  </head>
+  <body>
+    <p>正在完成 Google 登入…</p>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.js"></script>
+    <script>
+      (async function () {
+        var home = "https://nichi-seishin.vercel.app/";
+        function fail(reason) {
+          location.replace(home + "?auth=error&reason=" + encodeURIComponent(reason || "Google 登入失敗"));
+        }
+        try {
+          var params = new URLSearchParams(location.search);
+          var oauthError = params.get("error_description") || params.get("error");
+          if (oauthError) {
+            fail(oauthError);
+            return;
+          }
+          var code = params.get("code") || "";
+          if (!code) {
+            location.replace(home + "?auth=ok");
+            return;
+          }
+          if (code.indexOf("4/") === 0) {
+            fail("Google 把授權碼送回網站了。請把 Google Cloud 的重新導向 URI 設成 https://zmjfbdtwxuawebwnybfp.supabase.co/auth/v1/callback");
+            return;
+          }
+          var cfgRes = await fetch("/api/config");
+          var cfg = await cfgRes.json();
+          if (!cfg.supabaseUrl || !cfg.supabaseAnonKey) {
+            fail("尚未設定 Supabase");
+            return;
+          }
+          var createClient = window.supabase.createClient || (window.supabase.default && window.supabase.default.createClient);
+          var client = createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
+            auth: {
+              persistSession: true,
+              autoRefreshToken: true,
+              detectSessionInUrl: false,
+              flowType: "pkce",
+            },
+          });
+          var result = await client.auth.exchangeCodeForSession(code);
+          if (result.error) {
+            fail(result.error.message || "授權碼交換失敗");
+            return;
+          }
+          location.replace(home + "?auth=ok");
+        } catch (error) {
+          fail(error && error.message ? error.message : "Google 登入失敗");
+        }
+      })();
+    </script>
+  </body>
+</html>
