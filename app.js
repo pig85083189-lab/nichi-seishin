@@ -374,22 +374,26 @@ function normalizeOrganizeResult(remote, rawText) {
   const local = localOrganize(rawText);
   if (!remote || typeof remote !== "object") return local;
   const problems = Array.isArray(remote.problems) ? remote.problems.filter(Boolean) : [];
-  const quotes = Array.isArray(remote.quotes) ? remote.quotes.filter(Boolean) : [];
+  const quotes = Array.isArray(remote.quotes) ? remote.quotes.filter(Boolean).slice(0, 3) : [];
   const eventList = Array.isArray(remote.eventList) ? remote.eventList.filter(Boolean) : [];
   const reactionList = Array.isArray(remote.reactionList) ? remote.reactionList.filter(Boolean) : [];
+  const mindsetList = Array.isArray(remote.mindsetList) ? remote.mindsetList.filter(Boolean) : [];
+  const gratitudeList = Array.isArray(remote.gratitudeList) ? remote.gratitudeList.filter(Boolean) : [];
   return {
     themeCategory: remote.themeCategory || local.themeCategory,
     themeTitle: remote.themeTitle || local.themeTitle,
     themeStars: remote.themeStars || local.themeStars,
-    themeInsight: remote.themeInsight || local.themeInsight,
+    themeInsight: remote.themeInsight || remote.conclusion || local.themeInsight,
     problems: problems.length ? problems : local.problems,
     eventList: eventList.length ? eventList : local.eventList,
     reactionList: reactionList.length ? reactionList : local.reactionList,
+    mindsetList: mindsetList.length ? mindsetList : local.mindsetList,
     event: remote.event || (eventList.length ? eventList.join("\n") : local.event),
     othersReaction: remote.othersReaction || (reactionList.length ? reactionList.join("\n") : local.othersReaction),
     reflection: remote.reflection || local.reflection,
     conclusion: remote.conclusion || local.conclusion,
     quotes: quotes.length ? quotes : local.quotes,
+    gratitudeList: gratitudeList.length ? gratitudeList : local.gratitudeList,
     gratitudeNote: remote.gratitudeNote || local.gratitudeNote,
     gratitudeMissing: remote.gratitudeMissing ?? local.gratitudeMissing,
     sfm: Array.isArray(remote.sfm) && remote.sfm.length ? remote.sfm : local.sfm,
@@ -405,51 +409,7 @@ function normalizeOrganizeResult(remote, rawText) {
   };
 }
 
-const ORGANIZE_SYSTEM_PROMPT = `你是「日精進」的專業心理教練，也是直白、注重溝通邏輯的復盤教練。使用者會用口語、不完整的句子描述今天。你必須每次都產出同一套條理分明、直擊重點的復盤，不可省略任何一段。
-
-【語氣】
-- 冷靜、客觀、像專業教練在拆個案。句子短、判斷準。
-- 禁止感性開場與過度安慰。對事不對人。
-
-【強制輸出結構（依此順序寫滿，不可缺段）】
-
-1. 主標題與星等
-- themeCategory：事業經營 | 人間關係 | 身心狀態 | 覺察 其中一個
-- themeTitle：一句精煉主題，點出「好意／落差如何變成後果」。例如：「沒講清楚的好意，變成一場誤會的吵架」
-- themeStars：1-5 整數，代表這次議題的衝擊與值得復盤的程度。畫面會顯示成 [★★★★☆]
-- themeInsight：標題下的一句診斷，直戳結構，不要抒情
-
-2. 事件拆解（eventList，恰好 3 條，必須用以下開頭）
-- 「發生了什麼：……」客觀還原事實
-- 「對方的訴求：……」對方當下真正要的是什麼（眼前需求、情緒確認、還是只要一個簡單答案）
-- 「你的解決方案：……」你實際丟出去的做法或規劃
-
-3. 結果與反應（reactionList，恰好 3 條，必須用以下開頭）
-- 「對方的反應：……」
-- 「你的反應：……」
-- 「落差：……」客觀寫雙方目標／資訊／額度沒對上的地方。例如：對方要的額度沒那麼高，對話卻停在做法與語氣。
-
-4. 事後反思（reflection）
-- 點出問題核心：少了哪一句「為什麼／動機／目標層級」，對方接收到的就只剩一個莫名其妙、多此一舉的要求。
-- 2-4 句，具體，不要空話。
-
-5. 核心結論
-- conclusion：只用一句話總結教訓
-- quotes：2-3 句今日金句，每句 12-40 字，可帶走、可實踐
-- thinkGuide：1-2 句思維引導，告訴下次開口前先問什麼、先對齊什麼
-- howNext：實戰修正，乾淨俐落
-- nextScripts：2-3 句下次可直接照唸的對話腳本
-
-【仍需填的輔助欄位】
-- whyNeed：核心盲點（目標落差＋資訊沒對齊）
-- whatFact：溝通誤區（為什麼會吵，哪一步跳太快）
-- turningPoint、keyWord、keyWordAlt：升溫瞬間、關鍵詞、可替換的對齊句
-- problems：1-3 則診斷卡，title 像診斷、stars 1-5、body 2-4 句
-- gratitudeNote、sfm、tags
-
-【輸出】
-只輸出 JSON，繁體中文，不要 markdown。
-需含 themeCategory、themeTitle、themeStars、themeInsight、eventList、reactionList、reflection、conclusion、quotes、thinkGuide、whyNeed、whatFact、howNext、turningPoint、keyWord、keyWordAlt、nextScripts、problems、gratitudeNote、sfm、tags。`;
+const ORGANIZE_SYSTEM_PROMPT = `你是「日精進」的復盤教練。每次只產出同一套四段式復盤：主標題與評等、事件與心態拆解、今日金句、感恩清單。禁止雜記格式。繁體中文，只輸出 JSON。`;
 
 function thinkFromOrganize(organize, round = 1) {
   const scripts = Array.isArray(organize?.nextScripts) ? organize.nextScripts.filter(Boolean) : [];
@@ -726,9 +686,10 @@ function renderAiStage() {
   }
 
   const ai = state.organize;
-  const problems = Array.isArray(ai.problems) ? ai.problems : [];
   const quotes = Array.isArray(ai.quotes) ? ai.quotes : [];
   const sfm = Array.isArray(ai.sfm) ? ai.sfm : [];
+  const gratitudeList = Array.isArray(ai.gratitudeList) ? ai.gratitudeList : [];
+  const mindsetList = Array.isArray(ai.mindsetList) ? ai.mindsetList : [];
   const think = state.think.current;
   const rawText = state.rawText || document.getElementById("reviewText")?.value.trim() || "";
 
@@ -810,48 +771,27 @@ function renderAiStage() {
 
   root.innerHTML = `
     <section class="review-section" aria-labelledby="sec-theme">
-      <h2 class="review-section__title" id="sec-theme">【主題與核心結論】</h2>
+      <h2 class="review-section__title" id="sec-theme">【主標題與評等】</h2>
       <article class="theme-banner">
-        <p class="theme-banner__kicker">${state.organizeSource === "cloud" ? "雲端 AI 復盤" : "本地草稿 · 直擊溝通落差"}</p>
+        <p class="theme-banner__kicker">${state.organizeSource === "cloud" ? "雲端 AI 復盤" : "本地草稿"}</p>
         <h3 class="theme-banner__title">【${escapeHtml(ai.themeCategory || "覺察")}】主題：${escapeHtml(ai.themeTitle || "今天的復盤")} <span class="stars">[${starsText(ai.themeStars)}]</span></h3>
-        ${ai.themeInsight ? `<p class="theme-banner__lead">${escapeHtml(ai.themeInsight)}</p>` : ""}
+        <p class="theme-banner__lead">${escapeHtml(ai.conclusion || ai.themeInsight || "")}</p>
       </article>
-      ${renderGoldenCircle(ai)}
-      ${problems
-        .map((item, index) => {
-          const names = ["一", "二", "三", "四", "五"];
-          return `
-            <article class="problem-card">
-              <div class="problem-card__head">
-                <h3 class="problem-card__title">【${names[index] || index + 1}、${escapeHtml(item.title || "")}】</h3>
-                <span class="stars">[${starsText(item.stars)}]</span>
-              </div>
-              <p class="problem-card__body">${escapeHtml(item.body || "")}</p>
-            </article>
-          `;
-        })
-        .join("")}
+    </section>
+
+    <section class="review-section" aria-labelledby="sec-event">
+      <h2 class="review-section__title" id="sec-event">【事件與心態拆解】</h2>
       <article class="ai-block">
-        <h3>事件拆解</h3>
+        <h3>事件經過</h3>
         ${renderBulletList(ai.eventList, ai.event)}
       </article>
       <article class="ai-block">
-        <h3>結果與反應</h3>
-        ${renderBulletList(ai.reactionList, ai.othersReaction)}
+        <h3>雙方盲點、落差與真實想法</h3>
+        ${renderBulletList(mindsetList.length ? mindsetList : ai.reactionList, ai.othersReaction)}
       </article>
       <article class="ai-block">
         <h3>事後反思</h3>
         <p>${escapeHtml(ai.reflection || "")}</p>
-      </article>
-      <article class="ai-block conclusion-card">
-        <h3>核心結論</h3>
-        <p class="conclusion-card__text">${escapeHtml(ai.conclusion || "")}</p>
-        ${ai.thinkGuide ? `<p class="sfm-hint">${escapeHtml(ai.thinkGuide)}</p>` : ""}
-      </article>
-      <article class="ai-block gratitude-box">
-        <h3>今日沒提到了感恩</h3>
-        <p>${escapeHtml(ai.gratitudeNote || "沒提到就略過。要補就補一句具體事實。")}</p>
-        <textarea class="textarea" id="gratitudeInput" rows="3" placeholder="今天想感謝的是…">${escapeHtml(state.gratitude)}</textarea>
       </article>
     </section>
 
@@ -859,7 +799,7 @@ function renderAiStage() {
       <h2 class="review-section__title" id="sec-quotes">【今日金句】</h2>
       <article class="ai-block gold-block">
         ${quoteCards || `<p class="gold-quote">把今天寫下來，不是給別人看成績，是讓這一天確實被過過。</p>`}
-        <p class="sfm-hint">可直接複製發文或拿去實踐；勾選後，完成今日復盤會加入 SFM 素材庫</p>
+        <p class="sfm-hint">可直接複製當社群或筆記標題；勾選後，完成今日復盤會加入 SFM 素材庫</p>
         <div class="quote-list">${quoteChecks || sfmChecks}</div>
       </article>
       ${
@@ -872,6 +812,15 @@ function renderAiStage() {
       </article>`
           : ""
       }
+    </section>
+
+    <section class="review-section" aria-labelledby="sec-gratitude">
+      <h2 class="review-section__title" id="sec-gratitude">【感恩清單】</h2>
+      <article class="ai-block gratitude-box">
+        ${gratitudeList.length ? renderBulletList(gratitudeList) : `<p>${escapeHtml(ai.gratitudeNote || "從今天這件事裡，先留一句具體的感謝。")}</p>`}
+        ${ai.gratitudeNote && gratitudeList.length ? `<p class="sfm-hint">${escapeHtml(ai.gratitudeNote)}</p>` : ""}
+        <textarea class="textarea" id="gratitudeInput" rows="3" placeholder="你還想補一句感謝的是…">${escapeHtml(state.gratitude)}</textarea>
+      </article>
     </section>
 
     <section class="review-section" aria-labelledby="sec-think">
@@ -979,29 +928,29 @@ function renderGoldenCircle(ai) {
 function buildCoachQuotes({ category, hasWhy, otherLabel, keyShort }) {
   const sets = {
     人間關係: [
-      "吵的不是態度，是兩邊的目標不在同一層。",
-      "方案走太快，對齊沒做完，再對的解法也會變任務轟炸。",
-      "先確認眼前要解哪一件，再決定要不要展開完整規劃。",
+      "好意沒講清楚，解法就變成壓力",
+      "吵的不是態度，是目標不在同一層",
+      "先對齊眼前要解哪一件",
     ],
     事業經營: [
-      "卡住通常不是能力，是目標層級沒對上：一次到位，還是先做眼前。",
-      "先對齊要解哪一層，再動手，才不會空轉。",
-      keyShort ? `記住卡點：「${clipPhrase(keyShort, 16)}」——它比完美計畫更接近真相。` : "把今天寫下來，是為了看清哪一步跳太快。",
+      "卡住的不是能力，是目標層級",
+      "先寫死這次只解哪一層",
+      keyShort ? `卡點標題：${clipPhrase(keyShort, 14)}` : "先做眼前，再談一次到位",
     ],
     身心狀態: [
-      "身體先降速，行程還在加碼。落差就在這裡。",
-      "不是懶，是負載已經超過當下能處理的單位。",
-      "先砍到明天做得到的一步，再談完整計畫。",
+      "身體先降速，行程還在加碼",
+      "不是懶，是負載已經超標",
+      "先砍到明天做得到的一步",
     ],
     覺察: [
-      hasWhy ? "原因找到了，就別再把問題定義成個性。" : "卡點不是努力不夠，是任務定義還沒講清楚。",
-      "先對齊要解哪一層，再開口。",
-      keyShort ? `記住卡點：「${clipPhrase(keyShort, 16)}」。` : "把今天寫下來，是為了看清哪一步跳太快。",
+      hasWhy ? "原因找到了，就別再怪個性" : "卡點不是努力不夠，是定義不清",
+      "先對齊要解哪一層，再開口",
+      keyShort ? `記住卡點：${clipPhrase(keyShort, 14)}` : "把今天寫成一句用得上的標題",
     ],
   };
   const quotes = [...(sets[category] || sets["覺察"])];
   if (category === "人間關係" && otherLabel && otherLabel !== "自己") {
-    quotes[1] = `你給的是完整解法，${otherLabel}要的可能只是眼前這一步。先對齊層級。`;
+    quotes[1] = `你給完整解法，${otherLabel}只要眼前一步`;
   }
   return quotes.slice(0, 3);
 }
@@ -1172,6 +1121,36 @@ function localOrganize(rawText) {
 
   const quotes = buildCoachQuotes({ category: isComm ? "人間關係" : category, hasWhy, otherLabel, keyShort });
 
+  const mindsetList = [
+    isComm
+      ? "你的盲點：以為給完整方案就是在乎，沒先講為什麼，也沒問對方現在只要哪一層。"
+      : "你的盲點：事情說完了，這次要解哪一層還沒定義。",
+    hasPeople
+      ? `對方的盲點：${otherLabel}把你的規劃聽成被塞任務，沒聽到你的好意從哪來。`
+      : "對方的盲點：這次主要是自己對自己。卡住的是任務定義，不是能力。",
+    isComm
+      ? `雙方落差：你在做宏觀規劃，${otherLabel}要的是微觀當下。目標層級不同，資訊就對不齊。`
+      : "雙方落差：事件有了，成功標準沒寫死。一次到位，還是先做眼前？",
+    isComm
+      ? `你的真實想法：不是要找麻煩，是想一次把路鋪完，讓後面少受苦。${keyShort ? `卡在「${keyShort}」。` : ""}`
+      : `你的真實想法：想把今天這件事處理完，但還沒講清楚為什麼要這樣做。${keyShort ? `停在「${keyShort}」。` : ""}`,
+    hasPeople
+      ? `對方的真實想法：${otherLabel}當下要的可能只是眼前好處理完的一步，額度沒有你以為的那麼高。`
+      : "對方的真實想法：當時的自己其實只要一個做得到的單位，不是完整計畫。",
+  ];
+
+  const gratitudeList = hasGratitude
+    ? [
+        "感謝自己有把這段話講出來，落差才看得見。",
+        hasPeople ? `感謝${otherLabel}其實有訴求，只是層級沒對上。` : "感謝今天這段卡住，把任務定義不夠清楚這件事顯影了。",
+        keyShort ? `感謝「${clipPhrase(keyShort, 16)}」把真正要對齊的那一步標出來。` : "感謝這次摩擦，讓「先講為什麼再給方案」變成可帶走的一課。",
+      ]
+    : [
+        "感謝自己願意復盤，而不是把摩擦當成個性問題。",
+        hasPeople ? `感謝${otherLabel}把真實額度露出來，才知道方案走太快。` : "感謝卡住本身：它指出「這次要解哪一層」還沒講清。",
+        "感謝今天這件事，讓「先對齊，再給解法」變成一句用得上的標題。",
+      ];
+
   return {
     themeCategory: category,
     themeTitle,
@@ -1180,15 +1159,17 @@ function localOrganize(rawText) {
     problems: problems.slice(0, 3),
     eventList,
     reactionList,
+    mindsetList,
     event: eventList.join("\n"),
     othersReaction: reactionList.join("\n"),
     reflection,
     conclusion,
     quotes,
+    gratitudeList,
     gratitudeMissing: !hasGratitude,
     gratitudeNote: hasGratitude
-      ? "感恩有提到。補具體：是誰、哪一句、哪個動作。"
-      : "這段沒提到感恩。要補就補一句事實，不補也無妨。",
+      ? "感恩有提到。把具體的人、那一句話、那個動作再補清楚。"
+      : "原文沒提感恩。以上三條是從事件裡提煉的正向轉念，可改可留。",
     sfm: [
       {
         type: "story",
@@ -1748,34 +1729,26 @@ function renderHistory() {
 function renderHistoryReport(review) {
   const ai = review.organize;
   if (!ai) return "";
-  const problems = (ai.problems || [])
-    .map((item, index) => {
-      const names = ["一", "二", "三", "四", "五"];
-      return `<p><strong>【${names[index] || index + 1}、${escapeHtml(item.title || "")}】</strong> [${starsText(item.stars)}]<br>${escapeHtml(item.body || "")}</p>`;
-    })
-    .join("");
   const quotes = (ai.quotes || []).map((quote) => `<p class="gold-quote">${escapeHtml(quote)}</p>`).join("");
   const think = (review.thinkHistory || [])
     .map((round, index) => `<p><strong>第 ${index + 1} 輪</strong> ${escapeHtml(round.question || "")}<br>${escapeHtml(round.insight || "")}</p>`)
     .join("");
   const eventHtml = renderBulletList(ai.eventList, ai.event);
-  const reactionHtml = renderBulletList(ai.reactionList, ai.othersReaction);
+  const gratitudeHtml = renderBulletList(ai.gratitudeList, ai.gratitudeNote);
   return `
     <div class="history-report">
-      <p><strong>【主題與核心結論】【${escapeHtml(ai.themeCategory || "")}】</strong>主題：${escapeHtml(ai.themeTitle || "")} [${starsText(ai.themeStars)}]</p>
-      ${ai.themeInsight ? `<p>${escapeHtml(ai.themeInsight)}</p>` : ""}
-      ${renderGoldenCircle(ai)}
-      ${problems}
-      <p><strong>事件拆解</strong></p>
+      <p><strong>【主標題與評等】【${escapeHtml(ai.themeCategory || "")}】</strong>主題：${escapeHtml(ai.themeTitle || "")} [${starsText(ai.themeStars)}]</p>
+      <p>${escapeHtml(ai.conclusion || ai.themeInsight || "")}</p>
+      <p><strong>【事件與心態拆解】事件經過</strong></p>
       ${eventHtml}
-      <p><strong>結果與反應</strong></p>
-      ${reactionHtml}
+      <p><strong>雙方盲點、落差與真實想法</strong></p>
+      ${ai.mindsetList && ai.mindsetList.length ? renderBulletList(ai.mindsetList) : renderBulletList(ai.reactionList, ai.othersReaction)}
       <p><strong>事後反思</strong><br>${escapeHtml(ai.reflection || "")}</p>
-      <p><strong>核心結論</strong><br>${escapeHtml(ai.conclusion || "")}</p>
-      ${ai.thinkGuide ? `<p><strong>思維引導</strong><br>${escapeHtml(ai.thinkGuide)}</p>` : ""}
       <p><strong>【今日金句】</strong></p>
       ${quotes}
-      ${review.gratitude ? `<p><strong>感恩</strong><br>${escapeHtml(review.gratitude)}</p>` : ""}
+      <p><strong>【感恩清單】</strong></p>
+      ${gratitudeHtml}
+      ${review.gratitude ? `<p><strong>你補的感謝</strong><br>${escapeHtml(review.gratitude)}</p>` : ""}
       ${think ? `<p><strong>【深度思考與下一步】</strong></p>${think}` : ""}
       <p><strong>【原始輸入紀錄】</strong></p>
       <p class="raw-record">${escapeHtml(review.rawText || "")}</p>
