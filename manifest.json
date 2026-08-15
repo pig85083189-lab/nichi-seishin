@@ -1,0 +1,18 @@
+{
+  "name": "日精進",
+  "short_name": "日精進",
+  "description": "每天 10 分鐘，把日子過成復利",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#efeee9",
+  "theme_color": "#1a1a1a",
+  "lang": "zh-Hant",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

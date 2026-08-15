@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate, max-age=0" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>日精進</title>
+    <meta name="description" content="每天 10 分鐘，把日子過成復利" />
+
+    <meta name="theme-color" content="#1a1a1a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="日精進" />
+    <link rel="apple-touch-icon" href="icon.svg" />
+    <link rel="icon" href="icon.svg" />
+
+    <meta property="og:title" content="日精進" />
+    <meta property="og:description" content="每天 10 分鐘，把日子過成復利" />
+    <meta property="og:type" content="website" />
+
+    <link rel="manifest" href="manifest.json" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body>
+    <script>
+      (function () {
+        var closed =
+          localStorage.getItem("rv_sidebar") === "closed" ||
+          localStorage.getItem("nichi.sidebarCollapsed") === "1";
+        if (closed) document.body.classList.add("nav-closed");
+      })();
+    </script>
+
+    <div class="topbar">
+      <div class="topbar-left">
+        <button class="nav-toggle" id="nav-toggle" type="button" aria-label="開啟或收合選單" aria-expanded="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <path d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
+        </button>
+        <span class="logo">日精進</span>
+      </div>
+      <div class="topbar-right">
+        <time class="date" id="headerDate"></time>
+      </div>
+    </div>
+
+    <div class="notice-bar" id="notice-bar">
+      <button class="notice-bar__text" id="reminderCta" type="button">
+        你還沒開啟提醒，可能會忘記復盤 — 點這裡一分鐘設定
+      </button>
+    </div>
+
+    <div class="scrim" id="scrim" hidden></div>
+
+    <div class="layout" id="app">
+      <nav class="sidebar" id="sidebar">
+        <div class="drawer-brand"><span>日精進</span></div>
+
+        <div class="side-nav">
+          <a class="side-item is-active" data-page="today" href="#today">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+            </svg>
+            <span>今日復盤</span>
+          </a>
+          <a class="side-item" data-page="report" href="#reports">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 20.5h18" />
+              <path d="M6.5 20.5v-7M12 20.5V6M17.5 20.5v-10" />
+            </svg>
+            <span>週月報</span>
+          </a>
+          <a class="side-item" data-page="next" href="#actions">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 6.5l2 2 4-4" />
+              <path d="M4 14.5l2 2 4-4" />
+              <path d="M13 6.5h7M13 16.5h7" />
+            </svg>
+            <span>我的下一步</span>
+          </a>
+          <a class="side-item" data-page="sfm" href="#me">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="8" r="3.6" />
+              <path d="M4.5 20.5a7.5 7.5 0 0 1 15 0" />
+            </svg>
+            <span>SFM 素材庫</span>
+          </a>
+          <a class="side-item" data-page="history" href="#history">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4.5" width="18" height="16" rx="2.5" />
+              <path d="M3 9.5h18M8 2.5v4M16 2.5v4" />
+            </svg>
+            <span>歷史紀錄</span>
+          </a>
+        </div>
+
+        <div class="side-account">
+          <button class="side-logout" id="openApiSettings" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+            <span>API 設定</span>
+          </button>
+        </div>
+      </nav>
+
+      <div class="view" id="view">
+        <section class="page is-active" id="page-today" data-page="today">
+          <header class="page__header">
+            <h2 class="page__title">今日復盤</h2>
+            <p class="page__subtitle">今天的自己，是被你一天一天養大的。</p>
+          </header>
+
+          <div class="stats">
+            <article class="stat-card">
+              <p class="stat-card__value" id="statStreak">0</p>
+              <p class="stat-card__label">連續天數</p>
+            </article>
+            <article class="stat-card">
+              <p class="stat-card__value" id="statWeek">0/7</p>
+              <p class="stat-card__label">本週完成</p>
+            </article>
+            <article class="stat-card">
+              <p class="stat-card__value" id="statMonth">0/31</p>
+              <p class="stat-card__label">本月完成</p>
+            </article>
+          </div>
+
+          <section class="panel review-form" aria-labelledby="reviewInputTitle">
+            <label class="field">
+              <span class="field__label">復盤所屬日期</span>
+              <div class="date-field">
+                <input class="input" id="reviewDate" type="date" required />
+                <svg class="date-field__icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="3.5" y="5" width="17" height="15" rx="2" />
+                  <path d="M8 3v4M16 3v4M3.5 10h17" />
+                </svg>
+              </div>
+            </label>
+
+            <div class="speech-field">
+              <div class="speech-field__head">
+                <label class="field__label" for="reviewText" id="reviewInputTitle">今天的復盤</label>
+                <button class="mic-btn" id="micBtn" type="button" aria-pressed="false" aria-label="開始語音輸入">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="9" y="3" width="6" height="11" rx="3" />
+                    <path d="M6 11a6 6 0 0 0 12 0M12 17v4M8 21h8" />
+                  </svg>
+                  <span id="micLabel">語音</span>
+                </button>
+              </div>
+              <textarea
+                class="textarea textarea--hero"
+                id="reviewText"
+                rows="8"
+                placeholder="按鍵盤麥克風，用講的轉成文字就好..."
+              ></textarea>
+            </div>
+
+            <p class="chips-label">快捷引導</p>
+            <div class="chips chips--prompt" id="promptChips"></div>
+
+            <div class="form-actions">
+              <button class="btn btn--ghost" id="clearReview" type="button">清空</button>
+              <button class="btn btn--ai" id="btnOrganize" type="button">開始整理</button>
+            </div>
+          </section>
+
+          <section class="ai-stage" id="aiStage" aria-live="polite"></section>
+        </section>
+
+        <section class="page" id="page-report" data-page="report" hidden>
+          <header class="page__header">
+            <h2 class="page__title">週月報</h2>
+            <p class="page__subtitle">把每天的片段，收成一段看得懂的成長軌跡。</p>
+          </header>
+
+          <div class="tabs" role="tablist" aria-label="報告類型">
+            <button class="tabs__item is-active" data-report="week" type="button" role="tab" aria-selected="true">
+              週報
+            </button>
+            <button class="tabs__item" data-report="month" type="button" role="tab" aria-selected="false">
+              月報
+            </button>
+          </div>
+
+          <div class="report-content" id="reportContent"></div>
+        </section>
+
+        <section class="page" id="page-next" data-page="next" hidden>
+          <header class="page__header">
+            <h2 class="page__title">我的下一步</h2>
+            <p class="page__subtitle">把復盤裡長出來的行動，放在看得見的地方。</p>
+          </header>
+
+          <form class="panel add-task" id="taskForm">
+            <input
+              class="input"
+              id="taskTitle"
+              type="text"
+              placeholder="新增下一步，例如：明天只做一件最小的事"
+              required
+            />
+            <select class="input select" id="taskSource" aria-label="來源">
+              <option value="自行新增">自行新增</option>
+              <option value="今日復盤">今日復盤</option>
+              <option value="週月報">週月報</option>
+              <option value="SFM 素材庫">SFM 素材庫</option>
+            </select>
+            <button class="btn" type="submit">加入</button>
+          </form>
+
+          <div class="chips" role="tablist" aria-label="待辦分類" id="taskFilters">
+            <button class="chip is-active" data-filter="all" type="button">全部</button>
+            <button class="chip" data-filter="doing" type="button">進行中</button>
+            <button class="chip" data-filter="later" type="button">先放著</button>
+            <button class="chip" data-filter="done" type="button">已完成</button>
+          </div>
+
+          <div class="task-list" id="taskList"></div>
+        </section>
+
+        <section class="page" id="page-sfm" data-page="sfm" hidden>
+          <header class="page__header">
+            <h2 class="page__title">SFM 素材庫</h2>
+            <p class="page__subtitle">Story · Feeling · Meaning — 給日後發文與寫作用的故事、感受與意義。</p>
+          </header>
+
+          <div class="chips" role="tablist" aria-label="素材分類" id="sfmFilters">
+            <button class="chip is-active" data-sfm="all" type="button">全部</button>
+            <button class="chip" data-sfm="story" type="button">Story 故事</button>
+            <button class="chip" data-sfm="feeling" type="button">Feeling 感受</button>
+            <button class="chip" data-sfm="meaning" type="button">Meaning 意義</button>
+          </div>
+
+          <div class="sfm-grid" id="sfmGrid"></div>
+        </section>
+
+        <section class="page" id="page-history" data-page="history" hidden>
+          <header class="page__header">
+            <h2 class="page__title">歷史紀錄</h2>
+            <p class="page__subtitle">回頭看，是為了更溫柔地繼續走。</p>
+          </header>
+
+          <div class="history-toolbar">
+            <label class="search-field">
+              <span class="sr-only">搜尋復盤</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="11" cy="11" r="6.5" />
+                <path d="M16 16l4.5 4.5" />
+              </svg>
+              <input class="input" id="historySearch" type="search" placeholder="搜尋人物、事件、日期…" />
+            </label>
+            <div class="chips" id="historyTags" aria-label="標籤篩選">
+              <button class="chip is-active" data-tag="all" type="button">全部</button>
+              <button class="chip" data-tag="事業經營" type="button">事業經營</button>
+              <button class="chip" data-tag="人間關係" type="button">人間關係</button>
+              <button class="chip" data-tag="身心狀態" type="button">身心狀態</button>
+              <button class="chip" data-tag="覺察" type="button">覺察</button>
+            </div>
+          </div>
+
+          <div class="history-list" id="historyList"></div>
+        </section>
+      </div>
+    </div>
+
+    <dialog class="modal" id="reminderModal">
+      <form method="dialog" class="modal__card" id="reminderForm">
+        <h3 class="modal__title">設定復盤提醒</h3>
+        <p class="modal__desc">選一個每天會出現的時間，讓復盤變成習慣而不是負擔。</p>
+        <label class="field">
+          <span class="field__label">提醒時間</span>
+          <input class="input" id="reminderTime" type="time" value="21:30" />
+        </label>
+        <div class="form-actions">
+          <button class="btn btn--ghost" id="disableReminder" value="cancel" type="submit">稍後 / 關閉提醒</button>
+          <button class="btn" id="enableReminder" value="confirm" type="submit">開啟提醒</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="modal" id="apiModal">
+      <form method="dialog" class="modal__card" id="apiForm">
+        <h3 class="modal__title">API 設定</h3>
+        <p class="modal__desc">
+          金鑰只存在這個瀏覽器的 localStorage，不會寫進程式碼，也不會上傳到 GitHub。沒有金鑰時，本地教練仍會立刻整理復盤。
+        </p>
+        <p class="api-status" id="apiStatus">目前使用本地教練，點「開始整理」會立刻出結果。</p>
+        <label class="field">
+          <span class="field__label">供應商</span>
+          <select class="input select" id="apiProvider">
+            <option value="gemini">Google Gemini</option>
+            <option value="openai" selected>OpenAI</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="deepseek">DeepSeek</option>
+            <option value="groq">Groq</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="field__label">API Key</span>
+          <input class="input" id="apiKeyInput" type="password" autocomplete="off" placeholder="只存在此瀏覽器，請勿貼進程式碼" />
+        </label>
+        <label class="field">
+          <span class="field__label">預設模型</span>
+          <input class="input" id="apiModelInput" type="text" placeholder="gpt-4o-mini" />
+        </label>
+        <label class="field" id="apiBaseField">
+          <span class="field__label">Base URL</span>
+          <input class="input" id="apiBaseInput" type="url" placeholder="https://api.openai.com/v1" />
+        </label>
+        <p class="settings-hint">金鑰僅供選擇性加深內容。整理永遠先走本地教練，畫面不會卡在「整理中...」。</p>
+        <div class="form-actions">
+          <button class="btn btn--ghost" id="clearApi" value="clear" type="submit">清除金鑰</button>
+          <button class="btn btn--ghost" value="cancel" type="submit">關閉</button>
+          <button class="btn" id="saveApi" value="confirm" type="submit">儲存</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" hidden></div>
+    <script>
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("service-worker.js").catch(function () {});
+      }
+    </script>
+    <script src="app.js"></script>
+  </body>
+</html>
