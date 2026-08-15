@@ -546,55 +546,7 @@ function normalizeOrganizeResult(remote, rawText) {
     nextScripts: Array.isArray(remote.nextScripts) && remote.nextScripts.length ? remote.nextScripts : local.nextScripts,
     thinkGuide: remote.thinkGuide || local.thinkGuide,
     assumptionGap: normalizeAssumptionGap(remote, local),
-    paragraphInsights: normalizeParagraphInsights(remote, rawText, local),
   };
-}
-
-function splitReviewParagraphs(text) {
-  const raw = String(text || "").replace(/\r\n/g, "\n").trim();
-  if (!raw) return [];
-  let parts = raw
-    .split(/\n\s*\n+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-  if (parts.length === 1) {
-    const lines = parts[0]
-      .split(/\n+/)
-      .map((item) => item.trim())
-      .filter((item) => item.length >= 6);
-    if (lines.length >= 2) parts = lines;
-  }
-  return parts;
-}
-
-function localParagraphConclusion(paragraph) {
-  const text = String(paragraph || "").trim();
-  if (!text) return "把這一段寫下來，本身就是今天被接住的一步。";
-  const hasWhy = COACH_WHY_RE.test(text);
-  const hasPeople = COACH_PEOPLE_RE.test(text) || COACH_COMM_RE.test(text);
-  const keyShort = clipPhrase(text, 18);
-  if (hasPeople && !hasWhy) return "這一段少的不是方案，是那句還沒被聽見的為什麼。";
-  if (hasPeople) return "這一段兩邊都在乎，只是站在不同的句子上。";
-  if (COACH_BODY_RE.test(text)) return "這一段真正該被聽見的，不是行程，是那一口還沒被允許的累。";
-  if (hasWhy) return `這一段原因已經碰到了，把它單獨留下來：「${keyShort}」。`;
-  return `這一段最重要的，是先看清楚「${keyShort}」真正卡在哪一句。`;
-}
-
-function normalizeParagraphInsights(remote, rawText, local) {
-  const paragraphs = splitReviewParagraphs(rawText);
-  const sources = paragraphs.length ? paragraphs : [String(rawText || "").trim()].filter(Boolean);
-  const remoteList = Array.isArray(remote?.paragraphInsights) ? remote.paragraphInsights : [];
-  const localList = Array.isArray(local?.paragraphInsights) ? local.paragraphInsights : [];
-  return sources.map((source, index) => {
-    const remoteItem = remoteList[index] && typeof remoteList[index] === "object" ? remoteList[index] : {};
-    const localItem = localList[index] && typeof localList[index] === "object" ? localList[index] : {};
-    const conclusion = String(remoteItem.conclusion || localItem.conclusion || "").trim() || localParagraphConclusion(source);
-    return {
-      index: index + 1,
-      source,
-      conclusion,
-    };
-  });
 }
 
 function normalizeAssumptionGap(remote, local) {
@@ -607,7 +559,7 @@ function normalizeAssumptionGap(remote, local) {
   return { mine, theirs, line };
 }
 
-const ORGANIZE_SYSTEM_PROMPT = `你是「日精進」的高階心靈教練。語氣高級、療癒、冷靜客觀。原文有幾段就分析幾段，每段只給一句【核心結論】，不可漏段。繁體中文，只輸出 JSON。`;
+const ORGANIZE_SYSTEM_PROMPT = `你是「日精進」的高階心靈教練。語氣高級、療癒、冷靜客觀。整理日記時不要逐段下結論；【核心結論】只留給深度思考的每一個思考點。繁體中文，只輸出 JSON。`;
 
 function thinkFromOrganize(organize, round = 1) {
   const scripts = Array.isArray(organize?.nextScripts) ? organize.nextScripts.filter(Boolean) : [];
@@ -617,11 +569,18 @@ function thinkFromOrganize(organize, round = 1) {
     organize.thinkGuide ||
     (gap.line ? `兩邊以為的是同一件事嗎？「${gap.line}」` : localThink(organize, round, [], "").question);
   const insight = [organize.howNext, organize.whyNeed, organize.whatFact].filter(Boolean).join(" ") || organize.reflection || "";
+  const points = [
+    organize.whyNeed && { title: "看見卡點", conclusion: organize.whyNeed },
+    organize.whatFact && { title: "看見落差", conclusion: organize.whatFact },
+    organize.howNext && { title: "下一步", conclusion: organize.howNext },
+  ].filter(Boolean);
   if (!scripts.length) return localThink(organize, round, [], "");
   return {
-    title: "下一步引導 / 深度思考",
+    title: "深度思考",
     question,
     insight,
+    conclusion: organize.conclusion || points[0]?.conclusion || "",
+    points: points.length ? points : [{ title: "這一層", conclusion: organize.conclusion || insight }],
     actions: scripts.slice(0, 3).map((detail, index) => ({
       label: labels[index] || `對話範例 ${index + 1}`,
       detail: /[「『"]/.test(detail) ? detail : `「${detail}」`,
@@ -1036,22 +995,38 @@ function renderConclusionCallout(text) {
   `;
 }
 
-function renderParagraphInsights(insights) {
-  const list = Array.isArray(insights) ? insights.filter((item) => item && (item.conclusion || item.source)) : [];
-  if (!list.length) return "";
+function thinkPointConclusions(round) {
+  const points = Array.isArray(round?.points)
+    ? round.points
+        .map((item) => ({
+          title: String(item?.title || "").trim(),
+          conclusion: String(item?.conclusion || "").trim(),
+        }))
+        .filter((item) => item.conclusion)
+    : [];
+  if (points.length) return points;
+  const one = String(round?.conclusion || "").trim();
+  if (one) return [{ title: "", conclusion: one }];
+  const insight = String(round?.insight || "").trim();
+  if (!insight) return [];
+  const first = insight.split(/[。！？]/).map((item) => item.trim()).filter(Boolean)[0];
+  return first ? [{ title: "", conclusion: /[。！？]$/.test(first) ? first : `${first}。` }] : [];
+}
+
+function renderThinkConclusions(round) {
+  const points = thinkPointConclusions(round);
+  if (!points.length) return "";
   return `
-    <div class="paragraph-insights">
-      ${list
-        .map((item, index) => {
-          const source = String(item.source || "").trim();
-          return `
-            <section class="paragraph-insight">
-              <p class="paragraph-insight__index">第 ${item.index || index + 1} 段</p>
-              ${source ? `<p class="paragraph-insight__source">${escapeHtml(excerptText(source, 72))}</p>` : ""}
+    <div class="think-conclusions">
+      ${points
+        .map(
+          (item) => `
+            <section class="think-conclusion">
+              ${item.title ? `<p class="think-conclusion__point">${escapeHtml(item.title)}</p>` : ""}
               ${renderConclusionCallout(item.conclusion)}
             </section>
-          `;
-        })
+          `
+        )
         .join("")}
     </div>
   `;
@@ -1181,7 +1156,7 @@ function renderAiStage() {
       <article class="think-panel think-panel--past">
         <p class="think-card__round">已完成　第 ${index + 1}/${state.think.max} 輪</p>
         <h3 class="think-panel__question">${escapeHtml(round.question || "")}</h3>
-        <p class="think-card__q">${escapeHtml(round.insight || "")}</p>
+        ${renderThinkConclusions(round)}
       </article>
     `
     )
@@ -1201,7 +1176,7 @@ function renderAiStage() {
       <div class="think-panel" id="thinkCurrent">
         <p class="think-card__round">深度思考　第 ${state.think.round}/${state.think.max} 輪</p>
         <h3 class="think-panel__question">${escapeHtml(think.question || "")}</h3>
-        <p class="think-card__q">${escapeHtml(think.insight || "")}</p>
+        ${renderThinkConclusions(think)}
         <p class="chips-label">勾選你願意練習或已經說過的句子</p>
         <div class="check-list">${thinkActions}</div>
         <label class="field" style="margin-top:16px">
@@ -1223,7 +1198,6 @@ function renderAiStage() {
       </div>
     `;
 
-  const conclusion = ai.conclusion || ai.themeInsight || "";
   root.innerHTML = `
     <div class="review-board">
       ${renderReviewCard({
@@ -1232,11 +1206,6 @@ function renderAiStage() {
         body: `
           <p class="rv-card__kicker">${state.organizeSource === "cloud" ? "雲端 AI 復盤" : "本地草稿"}</p>
           <p class="theme-inline">【${escapeHtml(ai.themeCategory || "覺察")}】${escapeHtml(ai.themeTitle || "今天的復盤")} <span class="stars">[${starsText(ai.themeStars)}]</span></p>
-          ${
-            Array.isArray(ai.paragraphInsights) && ai.paragraphInsights.length
-              ? renderParagraphInsights(ai.paragraphInsights)
-              : renderConclusionCallout(conclusion)
-          }
           ${renderSub(
             "今日金句",
             `
@@ -1661,11 +1630,6 @@ function localOrganize(rawText) {
     keyWordAlt: turning.alt,
     nextScripts,
     thinkGuide,
-    paragraphInsights: splitReviewParagraphs(text).map((source, index) => ({
-      index: index + 1,
-      source,
-      conclusion: localParagraphConclusion(source),
-    })),
   };
 }
 
@@ -1697,9 +1661,13 @@ function localThink(organize, round, selected, reply) {
 
   const rounds = [
     {
-      title: "下一步引導 / 深度思考",
+      title: "深度思考",
       question: organize?.thinkGuide || `圍繞「${clipPhrase(theme, 18)}」：如果你只能補一句「為什麼」，那一句會是什麼？`,
       insight: `核心是「${clipPhrase(problem, 22)}」。少的通常不是方法，是動機沒被聽見。「${clipPhrase(gapLine, 28)}」——兩邊以為的，是同一件事嗎？`,
+      conclusion: organize?.conclusion || "少的不是方案，是那句還沒被聽見的為什麼。",
+      points: [
+        { title: "這一層", conclusion: organize?.conclusion || "少的不是方案，是那句還沒被聽見的為什麼。" },
+      ],
       actions: methodActions,
     },
     {
@@ -1708,6 +1676,8 @@ function localThink(organize, round, selected, reply) {
         ? `你選了「${actionHint}」。做這件事之前，你最怕${otherFromTheme}聽到的是哪一句？`
         : `如果你把最硬的那句話，換成${otherFromTheme}聽得進去的版本，第一句會怎麼開口？`,
       insight: "找麻煩的感覺，往往來自順序反了：先給方案，再補心意。對調之後，同一句話會變成靠近。",
+      conclusion: "先給方案、再補心意，關心就會被聽成找麻煩。",
+      points: [{ title: "順序", conclusion: "先給方案、再補心意，關心就會被聽成找麻煩。" }],
       actions: methodActions,
     },
     {
@@ -1716,12 +1686,16 @@ function localThink(organize, round, selected, reply) {
         ? `你剛說「${clipPhrase(replyHint, 20)}」。這句話裡，哪一個字是真正的需要？`
         : "這份卡住，有沒有一部分其實是對自己說的，而不只是對別人？",
       insight: "對外溝通卡住時，內在通常也有一句沒被允許說出口。對自己誠實，對外才講得準。",
+      conclusion: "對外卡住之前，先讓那句對自己說的話有位置。",
+      points: [{ title: "對自己", conclusion: "對外卡住之前，先讓那句對自己說的話有位置。" }],
       actions: methodActions,
     },
     {
       title: "收到明天做得到的一步",
       question: "明天最小、一定做得到的一步是什麼？小到不可能失敗的那種。",
       insight: "抽象的「下次溝通好一點」不會發生。具體的「先寫一句再傳」「補講一次為什麼」才會發生。",
+      conclusion: "明天只做一件小到不可能失敗的事：先寫一句為什麼再開口。",
+      points: [{ title: "明天", conclusion: "明天只做一件小到不可能失敗的事：先寫一句為什麼再開口。" }],
       actions: methodActions,
     },
     {
@@ -1730,6 +1704,8 @@ function localThink(organize, round, selected, reply) {
         ? "如果今天只帶走一句話，你希望未來的自己記得哪一句？"
         : "走到這裡，你已經比開頭更靠近自己了。還有哪一句想留給明天？",
       insight: "五輪不是為了把你問倒，是為了讓那句為什麼終於有位置。你可以停在這裡，也可以把勾選的下一步真正做一次。",
+      conclusion: "帶走一句就夠：讓那句為什麼終於有位置。",
+      points: [{ title: "帶走", conclusion: "帶走一句就夠：讓那句為什麼終於有位置。" }],
       actions: methodActions,
     },
   ];
@@ -1739,6 +1715,8 @@ function localThink(organize, round, selected, reply) {
     title: current.title,
     question: current.question,
     insight: current.insight,
+    conclusion: current.conclusion || "",
+    points: current.points || [],
     actions: current.actions || methodActions,
   };
 }
@@ -1807,10 +1785,20 @@ function normalizeThinkResult(raw, round) {
         detail: String(item?.detail || "").trim() || "把這一步寫成明天做得到的一句話。",
       }))
     : fallback.actions;
+  const points = Array.isArray(result.points)
+    ? result.points
+        .map((item) => ({
+          title: String(item?.title || "").trim(),
+          conclusion: String(item?.conclusion || "").trim(),
+        }))
+        .filter((item) => item.conclusion)
+    : fallback.points;
   return {
-    title: String(result.title || "再往前深一層"),
+    title: String(result.title || "深度思考"),
     question: String(result.question || fallback.question),
     insight: String(result.insight || fallback.insight),
+    conclusion: String(result.conclusion || fallback.conclusion || ""),
+    points: points && points.length ? points : fallback.points,
     actions,
   };
 }
@@ -2182,18 +2170,18 @@ function renderHistoryReport(review) {
   if (!ai) return "";
   const quotes = (ai.quotes || []).map((quote) => `<p class="gold-quote">${escapeHtml(quote)}</p>`).join("");
   const think = (review.thinkHistory || [])
-    .map((round, index) => `<p><strong>第 ${index + 1} 輪</strong> ${escapeHtml(round.question || "")}<br>${escapeHtml(round.insight || "")}</p>`)
+    .map((round, index) => {
+      const cards = thinkPointConclusions(round)
+        .map((item) => renderConclusionCallout(item.conclusion))
+        .join("");
+      return `<p><strong>深度思考　第 ${index + 1} 輪</strong> ${escapeHtml(round.question || "")}</p>${cards}`;
+    })
     .join("");
   const eventHtml = renderBulletList(ai.eventList, ai.event);
   const gratitudeHtml = renderBulletList(ai.gratitudeList, ai.gratitudeNote);
   return `
     <div class="history-report">
       <p><strong>【主標題與評等】【${escapeHtml(ai.themeCategory || "")}】</strong>主題：${escapeHtml(ai.themeTitle || "")} [${starsText(ai.themeStars)}]</p>
-      ${
-        Array.isArray(ai.paragraphInsights) && ai.paragraphInsights.length
-          ? renderParagraphInsights(ai.paragraphInsights)
-          : renderConclusionCallout(ai.conclusion || ai.themeInsight || "")
-      }
       <p><strong>【深度事件拆解】</strong></p>
       ${ai.assumptionGap?.line ? `<p class="gap-card__line">${escapeHtml(ai.assumptionGap.line)}</p>` : ""}
       ${ai.assumptionGap?.mine ? `<p><strong>我以為是</strong><br>${escapeHtml(ai.assumptionGap.mine)}</p>` : ""}

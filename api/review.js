@@ -40,32 +40,6 @@ function getApiKey() {
   return String(process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY || "").trim();
 }
 
-function splitReviewParagraphs(text) {
-  const raw = String(text || "").replace(/\r\n/g, "\n").trim();
-  if (!raw) return [];
-  let parts = raw
-    .split(/\n\s*\n+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-  if (parts.length === 1) {
-    const lines = parts[0]
-      .split(/\n+/)
-      .map((item) => item.trim())
-      .filter((item) => item.length >= 6);
-    if (lines.length >= 2) parts = lines;
-  }
-  return parts;
-}
-
-function formatParagraphUserMessage(date, text) {
-  const paragraphs = splitReviewParagraphs(text);
-  const blocks = (paragraphs.length ? paragraphs : [String(text || "").trim() || "（空）"])
-    .map((item, index) => `【第 ${index + 1} 段】\n${item}`)
-    .join("\n\n");
-  const count = paragraphs.length || 1;
-  return `復盤日期：${date || ""}\n原文共 ${count} 段。請把每一段當成獨立思考區塊，paragraphInsights 必須剛好 ${count} 則，順序不可亂、不可漏段、不可把兩段合成一段。\n\n${blocks}`;
-}
-
 const ORGANIZE_SYSTEM = `你是「日精進」的高階心靈教練，也是一位沉穩的專業諮詢師。使用者會用口語、不完整的句子描述今天。你的工作不是寫摘要，也不是上課，而是幫他把真正卡住的那一層說清楚，讓思緒被釐清。
 
 【口吻】
@@ -75,24 +49,20 @@ const ORGANIZE_SYSTEM = `你是「日精進」的高階心靈教練，也是一�
 - 沒有明確對方時，「他」改寫成「當時的自己」或「那個情境」。
 
 【舊版高水準思維（必須依此想完，再填 JSON）】
-1. 先把原文拆成獨立思考區塊：使用者給了幾段，就分析幾段，一段都不能漏、也不能把兩段併成一段。
-2. 每一段都先當獨立個案看完，再寫該段自己的【核心結論】：只能一句，精煉、直擊該段最重要的洞察或行動。
-3. 整篇再找「少了哪一句話」，以及雙方落差：我以為……，他以為……。
-4. 今日金句要有質感，能當標題或筆記，不要口號。
-5. 下一步引導要小、要人性：補講為什麼、先寫再開口、把硬的那句換成人話。
+1. 把日記原文當成完整的一天來看，不要逐段各寫一份結論。
+2. 先聽見今天真正在乎的是什麼，再找「少了哪一句話」，以及雙方落差：我以為……，他以為……。
+3. 今日金句要有質感，能當標題或筆記，不要口號。
+4. 下一步引導要小、要人性：補講為什麼、先寫再開口、把硬的那句換成人話。
+5. 【核心結論】卡片只留給「深度思考」環節，整理階段不要為日記逐段下結論。
 
 【必須寫滿】
 
-一、主標題與逐段核心結論（最重要，不可漏段）
+一、主標題
 - themeCategory：事業經營 | 人間關係 | 身心狀態 | 覺察 其中一個
 - themeTitle：一句有質感的主題，例如「溝通卡關的真正原因」
 - themeStars：1-5
-- paragraphInsights：陣列長度必須等於原文段數，順序與【第 N 段】完全一致。每一項：
-  - index：從 1 起算
-  - source：該段原文（可精簡，但必須對得上）
-  - conclusion：該段自己的核心結論，只能一句
-- conclusion：整篇總結論，一句。可與第一段呼應，但不能拿它取代逐段結論。
 - themeInsight：一句更深的診斷，不要變成長段。
+- conclusion：可留一句總述給後續深度思考使用，畫面不會把它當成日記逐段結論。
 
 二、深度事件拆解
 assumptionGap 必須填滿：
@@ -125,10 +95,6 @@ problems 給 1-3 則，title 要一針見血，例如「少了一句『為什麼
   "themeStars": 5,
   "themeInsight": "少的不是方案，是那句還沒被聽見的為什麼。",
   "conclusion": "方案再好，少了一句為什麼，也會被當成找麻煩。",
-  "paragraphInsights": [
-    { "index": 1, "source": "第 1 段原文", "conclusion": "該段一句核心結論。" },
-    { "index": 2, "source": "第 2 段原文", "conclusion": "該段一句核心結論。" }
-  ],
   "assumptionGap": {
     "line": "我以為是在幫忙，他以為是被找麻煩",
     "mine": "我以為把方案講清楚，就是在乎。",
@@ -158,22 +124,28 @@ problems 給 1-3 則，title 要一針見血，例如「少了一句『為什麼
   "tags": ["人間關係"]
 }`;
 
-const THINK_SYSTEM = `你是同一位高階心靈教練。根據先前整理與使用者勾選的行動，往下拆一層。
-口吻仍然溫柔但銳利，有同理心，不說教、不囉嗦。
+const THINK_SYSTEM = `你是同一位高階心靈教練，正在做「深度思考」。日記原文只當背景，不要再逐段複述或為日記逐段下結論。
+口吻高級、療癒、冷靜客觀。溫柔但銳利，不說教、不囉嗦。
+這一輪只拆思考點。每一個思考點都必須給一句精煉的【核心結論】，這是本輪唯一的視覺錨點。
 每一輪對準：少了哪一句為什麼，以及「我以為／他以為」有沒有對上。
 actions 的 detail 必須是可開口的完整一句，用「」包起來。
 只輸出 JSON：
 {
-  "title": "下一步引導",
-  "question": "一個讓思緒更清楚的問題",
-  "insight": "點出這一層真正卡住的地方，以及可以改口的那一步",
+  "title": "深度思考",
+  "question": "這一個思考點要繼續問的問題",
+  "insight": "這一層的展開，可以兩到三句，不要變成日記摘要",
+  "conclusion": "若只有一個思考點，用這一句當核心結論",
+  "points": [
+    { "title": "思考點一", "conclusion": "該思考點一句核心結論" },
+    { "title": "思考點二", "conclusion": "該思考點一句核心結論" }
+  ],
   "actions": [
     { "label": "補講一次為什麼", "detail": "「我說這件事，是因為我在乎……」" },
     { "label": "提前先寫一句", "detail": "「我不是要找麻煩，我是因為在乎。」" },
     { "label": "換句話說練習", "detail": "「把今天最硬的那句，換成對方聽得進去的版本。」" }
   ]
 }
-actions 給 3 個。若已是最後一輪，question 改成收束。`;
+points 給 1-3 個，每個 conclusion 只能一句。actions 給 3 個。若已是最後一輪，question 改成收束。`;
 
 async function callOpenAI(messages) {
   const apiKey = getApiKey();
@@ -283,7 +255,7 @@ module.exports = async function handler(req, res) {
     } else {
       messages = [
         { role: "system", content: ORGANIZE_SYSTEM },
-        { role: "user", content: formatParagraphUserMessage(body.date || "", text) },
+        { role: "user", content: `復盤日期：${body.date || ""}\n\n口語原文：\n${text}` },
       ];
     }
 

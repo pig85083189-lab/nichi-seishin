@@ -1427,26 +1427,19 @@ body.nav-closed .side-logout {
   letter-spacing: 0.08em;
 }
 
-.paragraph-insights {
+.think-conclusions {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  margin: 10px 0 4px;
+  gap: 12px;
+  margin: 12px 0 4px;
 }
 
-.paragraph-insight__index {
+.think-conclusion__point {
   margin: 0 0 6px;
   color: var(--muted);
   font-size: var(--fs-meta);
   font-weight: 700;
   letter-spacing: 0.08em;
-}
-
-.paragraph-insight__source {
-  margin: 0 0 8px;
-  color: var(--muted);
-  font-size: var(--fs-meta);
-  line-height: var(--lh-body);
 }
 
 .conclusion-callout {
