@@ -689,24 +689,27 @@ function renderReviewCard({ icon, title, body, variant = "", wide = false }) {
   `;
 }
 
+function renderSub(title, body) {
+  if (!String(body || "").trim()) return "";
+  return `<section class="rv-sub"><h4 class="rv-sub__title">${escapeHtml(title)}</h4><div class="rv-sub__body">${body}</div></section>`;
+}
+
 function renderAssumptionGap(ai) {
   const gap = ai?.assumptionGap || {};
   const mine = String(gap.mine || "").trim();
   const theirs = String(gap.theirs || "").trim();
   const line = String(gap.line || "").trim();
   if (!mine && !theirs && !line) return "";
-  return renderReviewCard({
-    icon: "⚖️",
-    title: "我以為是……，他以為是……",
-    wide: true,
-    body: `
+  return renderSub(
+    "⚖️ 我以為是……，他以為是……",
+    `
       ${line ? `<p class="gap-card__line">${escapeHtml(line)}</p>` : ""}
       <div class="gap-split">
         ${mine ? `<div class="gap-split__col"><p class="gap-split__label">我以為是</p><p>${escapeHtml(mine)}</p></div>` : ""}
         ${theirs ? `<div class="gap-split__col"><p class="gap-split__label">他以為是</p><p>${escapeHtml(theirs)}</p></div>` : ""}
       </div>
-    `,
-  });
+    `
+  );
 }
 
 function renderPracticeChecks(scripts, howNext) {
@@ -852,45 +855,30 @@ function renderAiStage() {
     <div class="review-board">
       ${renderReviewCard({
         icon: "💡",
-        title: "核心診斷",
-        variant: "hero",
-        wide: true,
+        title: "核心洞察區",
+        variant: "insight",
         body: `
           <p class="rv-card__kicker">${state.organizeSource === "cloud" ? "雲端 AI 復盤" : "本地草稿"}</p>
-          <p class="rv-card__conclusion">${escapeHtml(conclusion)}</p>
-        `,
-      })}
-      ${renderReviewCard({
-        icon: "🏷️",
-        title: "主標題與評等",
-        wide: true,
-        body: `
           <p class="theme-inline">【${escapeHtml(ai.themeCategory || "覺察")}】${escapeHtml(ai.themeTitle || "今天的復盤")} <span class="stars">[${starsText(ai.themeStars)}]</span></p>
+          <p class="rv-card__conclusion">${escapeHtml(conclusion)}</p>
+          ${renderSub(
+            "✨ 今日金句",
+            `
+              ${quoteCards || `<p class="gold-quote">把今天寫下來，不是給別人看成績，是讓這一天確實被過過。</p>`}
+              <p class="sfm-hint">可直接複製當標題或筆記；勾選後會收入 SFM 素材庫</p>
+              <div class="quote-list">${quoteChecks || ""}</div>
+            `
+          )}
         `,
-      })}
-      ${renderAssumptionGap(ai)}
-      ${renderReviewCard({
-        icon: "🔎",
-        title: "雙方盲點與心態",
-        body: renderBulletList(mindsetList.length ? mindsetList : ai.reactionList, ai.othersReaction),
       })}
       ${renderReviewCard({
         icon: "📋",
-        title: "事件拆解",
-        body: renderBulletList(ai.eventList, ai.event),
-      })}
-      ${renderReviewCard({
-        icon: "🪞",
-        title: "事後反思",
-        body: `<p>${escapeHtml(ai.reflection || "")}</p>`,
-      })}
-      ${renderReviewCard({
-        icon: "✨",
-        title: "今日金句",
+        title: "深度事件拆解",
         body: `
-          ${quoteCards || `<p class="gold-quote">把今天寫下來，不是給別人看成績，是讓這一天確實被過過。</p>`}
-          <p class="sfm-hint">可直接複製當標題或筆記；勾選後，完成今日復盤會加入 SFM 素材庫</p>
-          <div class="quote-list">${quoteChecks || ""}</div>
+          ${renderAssumptionGap(ai)}
+          ${renderSub("🔎 雙方盲點與心態", renderBulletList(mindsetList.length ? mindsetList : ai.reactionList, ai.othersReaction))}
+          ${renderSub("事件經過", renderBulletList(ai.eventList, ai.event))}
+          ${renderSub("🪞 事後反思", `<p>${escapeHtml(ai.reflection || "")}</p>`)}
         `,
       })}
       ${renderReviewCard({
@@ -907,7 +895,6 @@ function renderAiStage() {
           ? renderReviewCard({
               icon: "🧩",
               title: "Story · Feeling · Meaning",
-              wide: true,
               body: `
                 <p class="sfm-hint">也可勾選下面這幾段體悟，一併收入素材庫。</p>
                 <div class="quote-list">${sfmChecks}</div>
@@ -919,13 +906,11 @@ function renderAiStage() {
       ${renderReviewCard({
         icon: "🧭",
         title: "深度思考",
-        wide: true,
         body: thinkBody,
       })}
       ${renderReviewCard({
         icon: "📝",
         title: "原始輸入紀錄",
-        wide: true,
         variant: "muted",
         body: `
           <p class="raw-record">${escapeHtml(rawText || "（尚未留下原文）")}</p>
