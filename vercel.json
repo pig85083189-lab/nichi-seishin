@@ -3,6 +3,25 @@
   "functions": {
     "api/review.js": {
       "maxDuration": 30
+    },
+    "api/generate-report.js": {
+      "maxDuration": 30
+    },
+    "api/generate-report-week.js": {
+      "maxDuration": 30
+    },
+    "api/generate-report-month.js": {
+      "maxDuration": 30
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/generate-report-week",
+      "schedule": "0 0 * * 1"
+    },
+    {
+      "path": "/api/generate-report-month",
+      "schedule": "0 0 1 * *"
+    }
+  ]
 }

@@ -615,7 +615,13 @@ body.nav-closed .side-logout {
 .report-card h3 {
   margin: 0 0 12px;
   font-family: var(--serif);
-  font-size: 20px;
+  font-size: var(--fs-h2);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.report-card--ai .rv-card__conclusion {
+  margin-top: 4px;
 }
 
 .report-range,

@@ -9,6 +9,7 @@ const STORAGE_KEYS = {
   sfm: "nichi.sfm",
   reminder: "nichi.reminder",
   sidebar: "nichi.sidebarCollapsed",
+  reports: "nichi.reports",
 };
 
 const REVIEW_API = "/api/review";
@@ -641,6 +642,170 @@ function buildReport(type) {
   const keywords = extractKeywords(entries.map((item) => item.text));
 
   return { label, fromIso, toIso, days, filledDays, totalChars, keywords, entries };
+}
+
+function getStoredReports() {
+  const saved = loadJson(STORAGE_KEYS.reports, {});
+  return saved && typeof saved === "object" ? saved : {};
+}
+
+function reportCacheKey(type, period) {
+  return `${type}:${period}`;
+}
+
+function readCachedReport(type, period) {
+  return getStoredReports()[reportCacheKey(type, period)] || null;
+}
+
+function readLatestCachedReport(type) {
+  const prefix = `${type}:`;
+  const keys = Object.keys(getStoredReports())
+    .filter((key) => key.startsWith(prefix))
+    .sort();
+  const last = keys[keys.length - 1];
+  return last ? getStoredReports()[last] : null;
+}
+
+function writeCachedReport(type, period, report) {
+  const all = getStoredReports();
+  all[reportCacheKey(type, period)] = report;
+  saveJson(STORAGE_KEYS.reports, all);
+}
+
+function compactReviewsForRange(fromIso, toIso) {
+  const reviews = getReviews();
+  return Object.keys(reviews)
+    .filter((iso) => iso >= fromIso && iso <= toIso && reviewIsComplete(reviews[iso]))
+    .sort()
+    .map((iso) => {
+      const review = reviews[iso];
+      const ai = review.organize || {};
+      return {
+        date: iso,
+        rawText: String(review.rawText || "").slice(0, 800),
+        themeTitle: ai.themeTitle || "",
+        conclusion: ai.conclusion || "",
+        quotes: Array.isArray(ai.quotes) ? ai.quotes.slice(0, 3) : [],
+        gratitude: review.gratitude || ai.gratitudeNote || "",
+        themeCategory: ai.themeCategory || "",
+      };
+    });
+}
+
+async function fetchStoredCloudReport(type, period, latest) {
+  const qs = latest ? "&latest=1" : "";
+  const response = await fetchWithTimeout(
+    `${location.origin}/api/generate-report?type=${encodeURIComponent(type)}&period=${encodeURIComponent(period)}&read=1${qs}`,
+    { method: "GET" },
+    8000
+  );
+  const payload = await response.json().catch(() => ({}));
+  return payload && payload.data && typeof payload.data === "object" ? payload.data : null;
+}
+
+async function generateCloudReport(type, fromIso, toIso, period) {
+  const reviews = compactReviewsForRange(fromIso, toIso);
+  if (!reviews.length) return null;
+  const response = await fetchWithTimeout(
+    `${location.origin}/api/generate-report`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, period, fromIso, toIso, reviews }),
+    },
+    28000
+  );
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.ok === false) {
+    throw new Error(payload.error || `HTTP ${response.status}`);
+  }
+  return payload.data || null;
+}
+
+function syncReviewsToCloud() {
+  if (typeof location === "undefined" || location.protocol === "file:") return;
+  const reviews = compactReviewsForRange("2000-01-01", "2100-01-01");
+  if (!reviews.length) return;
+  fetch(`${location.origin}/api/generate-report`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "week", read: "1", reviews }),
+  }).catch(() => {});
+}
+
+function renderAiReportBlock(ai, status) {
+  if (status === "loading") {
+    return `
+      <article class="report-card report-card--ai">
+        <h3>綜合報告</h3>
+        <p class="report-empty">正在把這段期間的復盤聚合成洞察、軌跡與規劃…</p>
+      </article>
+    `;
+  }
+  if (status === "error") {
+    return `
+      <article class="report-card report-card--ai">
+        <h3>綜合報告</h3>
+        <p class="report-empty">${escapeHtml(ai || "雲端報告暫時不可用。本地摘要仍在上面。")}</p>
+      </article>
+    `;
+  }
+  if (!ai) return "";
+  const list = (items) =>
+    Array.isArray(items) && items.length
+      ? `<ul class="review-list">${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+      : `<p class="report-empty">這一段還沒有足夠的復盤可以聚合。</p>`;
+  const rangeNote =
+    ai.fromIso && ai.toIso
+      ? `${formatDisplayDate(ai.fromIso)} — ${formatDisplayDate(ai.toIso)}`
+      : "";
+  return `
+    <article class="report-card report-card--ai">
+      <h3>${escapeHtml(ai.title || "綜合報告")}</h3>
+      ${rangeNote ? `<p class="report-range">${escapeHtml(rangeNote)}</p>` : ""}
+      ${ai.summary ? `<p class="rv-card__conclusion">${escapeHtml(ai.summary)}</p>` : ""}
+      <p class="sfm-hint">${ai.generatedAt ? `生成於 ${escapeHtml(String(ai.generatedAt).replace("T", " ").slice(0, 16))}` : "雲端 AI 聚合"}</p>
+    </article>
+    <article class="report-card">
+      <h3>本${ai.type === "month" ? "月" : "週"}關鍵洞察</h3>
+      ${list(ai.insights)}
+    </article>
+    <article class="report-card">
+      <h3>進步軌跡</h3>
+      ${list(ai.progress)}
+    </article>
+    <article class="report-card">
+      <h3>${ai.type === "month" ? "下月" : "下週"}規劃</h3>
+      ${list(ai.nextPlan)}
+    </article>
+  `;
+}
+
+async function hydrateAiReport(type, local, token) {
+  const root = document.getElementById("reportAi");
+  if (!root) return;
+  const period = type === "month" ? local.fromIso.slice(0, 7) : local.fromIso;
+  const cached = readCachedReport(type, period) || readLatestCachedReport(type);
+  if (cached) root.innerHTML = renderAiReportBlock(cached);
+  else root.innerHTML = renderAiReportBlock(null, "loading");
+
+  try {
+    let report = await fetchStoredCloudReport(type, period);
+    if (!report) report = await fetchStoredCloudReport(type, period, true);
+    if (!report && local.filledDays) {
+      report = await generateCloudReport(type, local.fromIso, local.toIso, period);
+    }
+    if (token !== renderReport._token) return;
+    if (report) {
+      writeCachedReport(type, report.period || period, report);
+      root.innerHTML = renderAiReportBlock(report);
+    } else if (!cached) {
+      root.innerHTML = renderAiReportBlock("這段期間的復盤還不夠，先寫幾天再回來看綜合報告。", "error");
+    }
+  } catch (error) {
+    if (token !== renderReport._token) return;
+    if (!cached) root.innerHTML = renderAiReportBlock(formatApiError(error), "error");
+  }
 }
 
 /* =============================================================================
@@ -1659,6 +1824,7 @@ function completeToday() {
   });
 
   updateStats();
+  syncReviewsToCloud();
   showToast("今日復盤已完成，筆記、金句與下一步都收好了。");
 }
 
@@ -1688,17 +1854,24 @@ function clearReview() {
 function renderReport() {
   const report = buildReport(state.reportType);
   const root = document.getElementById("reportContent");
+  if (!root) return;
   const rate = report.days ? Math.round((report.filledDays / report.days) * 100) : 0;
+  const token = (renderReport._token || 0) + 1;
+  renderReport._token = token;
+  const period = state.reportType === "month" ? report.fromIso.slice(0, 7) : report.fromIso;
+  const cachedAi = readCachedReport(state.reportType, period) || readLatestCachedReport(state.reportType);
 
   if (!report.filledDays) {
     root.innerHTML = `
       <article class="report-card">
         <div class="empty">
           <p class="empty__title">這個區間還沒有復盤</p>
-          <p class="report-empty">寫下第一篇之後，週月報會自動幫你數天數、算節奏、提煉常出現的字。</p>
+          <p class="report-empty">寫下第一篇之後，週月報會自動幫你數天數、算節奏，並聚合成洞察與規劃。</p>
         </div>
       </article>
+      <div id="reportAi">${renderAiReportBlock(cachedAi, cachedAi ? undefined : "loading")}</div>
     `;
+    hydrateAiReport(state.reportType, report, token);
     return;
   }
 
@@ -1732,6 +1905,7 @@ function renderReport() {
         }
       </div>
     </article>
+    <div id="reportAi">${renderAiReportBlock(cachedAi, cachedAi ? undefined : "loading")}</div>
     <article class="report-card">
       <h3>逐日回顧</h3>
       <ul class="highlight-list">
@@ -1750,6 +1924,8 @@ function renderReport() {
       </ul>
     </article>
   `;
+  hydrateAiReport(state.reportType, report, token);
+  syncReviewsToCloud();
 }
 
 function renderTasks() {
