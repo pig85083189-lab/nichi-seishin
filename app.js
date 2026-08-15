@@ -1,6 +1,6 @@
 /* =============================================================================
- * 日精進 — 本地教練優先。開始整理同步秒出完整復盤，絕不卡在「整理中...」。
- * API 金鑰只從設定介面寫入 localStorage，程式碼中不存放任何密鑰。
+ * 日精進 — 開箱即用。開始整理先出本地復盤，再經 /api/review 用伺服器金鑰加深。
+ * 前端不存放、不收集 API Key。金鑰只存在 Vercel 環境變數。
  * =========================================================================== */
 
 const STORAGE_KEYS = {
@@ -8,33 +8,10 @@ const STORAGE_KEYS = {
   tasks: "nichi.tasks",
   sfm: "nichi.sfm",
   reminder: "nichi.reminder",
-  ai: "nichi.ai",
   sidebar: "nichi.sidebarCollapsed",
 };
 
-const DEFAULT_AI = {
-  provider: "openrouter",
-  apiKey: "",
-  model: "openai/gpt-4o-mini",
-  baseUrl: "https://openrouter.ai/api/v1",
-};
-
-const PROVIDER_PRESETS = {
-  openrouter: { label: "OpenRouter（建議，瀏覽器可直連）", model: "openai/gpt-4o-mini", baseUrl: "https://openrouter.ai/api/v1", browserCors: true },
-  gemini: { label: "Google Gemini", model: "gemini-2.0-flash", baseUrl: "https://generativelanguage.googleapis.com/v1beta", browserCors: true },
-  openai: { label: "OpenAI（瀏覽器會被 CORS 擋，需 /api/review 代理）", model: "gpt-4o-mini", baseUrl: "https://api.openai.com/v1", browserCors: false },
-  deepseek: { label: "DeepSeek（需 /api/review 代理）", model: "deepseek-chat", baseUrl: "https://api.deepseek.com/v1", browserCors: false },
-  groq: { label: "Groq（需 /api/review 代理）", model: "llama-3.3-70b-versatile", baseUrl: "https://api.groq.com/openai/v1", browserCors: false },
-  compatible: { label: "自訂 OpenAI 相容端點", model: "gpt-4o-mini", baseUrl: "https://api.openai.com/v1", browserCors: false },
-};
-
-const CORS_HINT = "OpenAI／DeepSeek／Groq 官方端點不允許瀏覽器直連（CORS）。請改選 OpenRouter，或部署到 Vercel 走 /api/review 代理。";
-
-let sameOriginProxyState = "unknown";
-
-function normalizeProvider(value) {
-  return PROVIDER_PRESETS[value] ? value : "openrouter";
-}
+const REVIEW_API = "/api/review";
 
 const PROMPT_CHIPS = [
   "今天最卡的一件事",
@@ -85,6 +62,8 @@ const state = {
   remindedDate: "",
   recognition: null,
   listening: false,
+  organizeSource: "",
+  apiConfigured: null,
 };
 
 /* =============================================================================
@@ -195,12 +174,6 @@ function isMobile() {
   return window.matchMedia("(max-width: 900px)").matches;
 }
 
-function maskKey(key) {
-  const value = String(key || "");
-  if (value.length < 8) return value ? "已儲存" : "";
-  return `${value.slice(0, 4)}…${value.slice(-4)}`;
-}
-
 /* =============================================================================
  * 資料層
  * =========================================================================== */
@@ -284,104 +257,8 @@ function purgeThinkingUi() {
 }
 
 /* =============================================================================
- * API 設定：只讀 localStorage，絕不寫死金鑰
+ * 雲端復盤：只打同網域 /api/review，金鑰由 Vercel 環境變數提供
  * =========================================================================== */
-
-function readApiField(id) {
-  try {
-    return String(document.getElementById(id)?.value || "").trim();
-  } catch {
-    return "";
-  }
-}
-
-function loadAiSettings() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.ai);
-    if (!raw) return { ...DEFAULT_AI, apiKey: "" };
-    const parsed = JSON.parse(raw);
-    if (typeof parsed === "string") {
-      return { ...DEFAULT_AI, apiKey: parsed.replace(/^Bearer\s+/i, "").trim() };
-    }
-    if (!parsed || typeof parsed !== "object") return { ...DEFAULT_AI, apiKey: "" };
-    return {
-      provider: normalizeProvider(parsed.provider || DEFAULT_AI.provider),
-      apiKey: String(parsed.apiKey || parsed.key || parsed.token || "")
-        .replace(/^Bearer\s+/i, "")
-        .trim(),
-      model: String(parsed.model || DEFAULT_AI.model).trim() || DEFAULT_AI.model,
-      baseUrl: String(parsed.baseUrl || DEFAULT_AI.baseUrl).trim() || DEFAULT_AI.baseUrl,
-    };
-  } catch (error) {
-    console.warn("[日精進 API] 讀取 localStorage nichi.ai 失敗", error);
-    return { ...DEFAULT_AI, apiKey: "" };
-  }
-}
-
-function getAiSettings() {
-  const stored = loadAiSettings();
-  const formKey = readApiField("apiKeyInput").replace(/^Bearer\s+/i, "");
-  const formModel = readApiField("apiModelInput");
-  const formBase = readApiField("apiBaseInput");
-  const formProvider = readApiField("apiProvider");
-  const apiKey = stored.apiKey || formKey;
-  let provider = normalizeProvider(formProvider || stored.provider || DEFAULT_AI.provider);
-  let model = stored.model || formModel || DEFAULT_AI.model;
-  let baseUrl = stored.baseUrl || formBase || DEFAULT_AI.baseUrl;
-  if (formModel) model = formModel;
-  if (formBase) baseUrl = formBase;
-  if (apiKey.startsWith("sk-or-") && (provider === "openai" || /api\.openai\.com/i.test(baseUrl))) {
-    provider = "openrouter";
-    if (/api\.openai\.com/i.test(baseUrl)) baseUrl = PROVIDER_PRESETS.openrouter.baseUrl;
-    if (/^gpt-/.test(model)) model = `openai/${model}`;
-  }
-  return { provider, apiKey, model, baseUrl };
-}
-
-function saveAiSettings(next) {
-  const current = loadAiSettings();
-  const incomingKey = next.apiKey === undefined ? undefined : String(next.apiKey || "").replace(/^Bearer\s+/i, "").trim();
-  const merged = {
-    provider: normalizeProvider(next.provider || current.provider),
-    apiKey: incomingKey ? incomingKey : current.apiKey,
-    model: String(next.model || current.model || DEFAULT_AI.model).trim() || DEFAULT_AI.model,
-    baseUrl: String(next.baseUrl || current.baseUrl || DEFAULT_AI.baseUrl).trim() || DEFAULT_AI.baseUrl,
-  };
-  saveJson(STORAGE_KEYS.ai, merged);
-  console.log("[日精進 API] 金鑰已寫入 localStorage", {
-    provider: merged.provider,
-    hasKey: Boolean(merged.apiKey),
-    keyPreview: maskKey(merged.apiKey),
-    baseUrl: merged.baseUrl,
-  });
-  return merged;
-}
-
-function clearAiSettings() {
-  saveJson(STORAGE_KEYS.ai, { ...DEFAULT_AI, apiKey: "" });
-}
-
-function joinChatCompletionsUrl(baseUrl) {
-  let raw = String(baseUrl || DEFAULT_AI.baseUrl).trim() || DEFAULT_AI.baseUrl;
-  if (!/^https?:\/\//i.test(raw)) raw = `https://${raw}`;
-  try {
-    const url = new URL(raw);
-    let path = (url.pathname || "").replace(/\/+$/, "");
-    if (path === "/") path = "";
-    path = path.replace(/(\/v1)+$/i, "/v1");
-    if (!/\/v1$/i.test(path)) path = `${path}/v1`;
-    if (!/\/chat\/completions$/i.test(path)) path = `${path}/chat/completions`;
-    url.pathname = path.replace(/\/{2,}/g, "/");
-    url.search = "";
-    url.hash = "";
-    return url.toString().replace(/\/+$/, "");
-  } catch {
-    const cleaned = raw.replace(/\/+$/, "").replace(/(\/v1)+/gi, "/v1");
-    if (/\/chat\/completions$/i.test(cleaned)) return cleaned;
-    if (/\/v1$/i.test(cleaned)) return `${cleaned}/chat/completions`;
-    return `${cleaned}/v1/chat/completions`;
-  }
-}
 
 function parseAiJson(raw) {
   const text = String(raw || "").trim();
@@ -393,281 +270,104 @@ function parseAiJson(raw) {
   return JSON.parse(candidate.slice(start, end + 1));
 }
 
-function redactUrl(url) {
-  return String(url || "")
-    .replace(/([?&]key=)[^&]+/gi, "$1***")
-    .replace(/([?&]api_key=)[^&]+/gi, "$1***");
+function reviewApiUrl() {
+  if (typeof location === "undefined" || location.protocol === "file:") {
+    throw new Error("請用 Vercel 網址開啟這個網頁（不要開本機 HTML），前端才能呼叫 /api/review。");
+  }
+  return `${location.origin}${REVIEW_API}`;
 }
 
-function formatApiError(error, extra) {
-  const name = error?.name || "Error";
+function formatApiError(error) {
   const message = String(error?.message || error || "未知錯誤");
-  const url = extra?.url ? redactUrl(extra.url) : "";
-  if (name === "AbortError" || /請求逾時/.test(message)) {
-    return `請求逾時（${extra?.timeoutMs || 20000}ms）${url ? `｜${url}` : ""}`;
+  if (error?.name === "AbortError" || /請求逾時|逾時/.test(message)) return "雲端通道逾時。請確認 Vercel 已 Redeploy，且 OPENAI_API_KEY 設在 Production。";
+  if (/file:|本機 HTML/.test(message)) return message;
+  if (/404|Failed to fetch|fetch 失敗|NetworkError/i.test(message)) {
+    return "找不到 /api/review。請用 Vercel 網址開啟，並重新部署後端函式。";
   }
-  if (/Failed to fetch|NetworkError|Load failed|fetch 失敗|CORS/i.test(message)) {
-    return `CORS／網路失敗：瀏覽器被供應商擋下${url ? `（${url}）` : ""}。${CORS_HINT}`;
-  }
-  return url ? `${message}｜${url}` : message;
+  return message;
 }
 
 async function fetchWithTimeout(url, options, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    console.log("[日精進 API] fetch 送出", options?.method || "GET", redactUrl(url));
+    console.log("[日精進 API] fetch 送出", options?.method || "GET", url);
     return await fetch(url, { ...options, signal: controller.signal });
   } catch (error) {
-    if (error?.name === "AbortError") {
-      throw new Error(`請求逾時（${timeoutMs}ms）：${redactUrl(url)}`);
-    }
-    throw new Error(`fetch 失敗：${error?.message || error}｜${redactUrl(url)}`);
+    if (error?.name === "AbortError") throw new Error(`請求逾時（${timeoutMs}ms）`);
+    throw new Error(`fetch 失敗：${error?.message || error}`);
   } finally {
     clearTimeout(timer);
   }
 }
 
-function joinGeminiGenerateUrl(baseUrl, model, apiKey) {
-  let raw = String(baseUrl || "https://generativelanguage.googleapis.com/v1beta").trim();
-  if (!/^https?:\/\//i.test(raw)) raw = `https://${raw}`;
-  raw = raw.replace(/\/+$/, "");
-  const name = String(model || "gemini-2.0-flash").trim() || "gemini-2.0-flash";
-  if (/generateContent/i.test(raw)) {
-    const joiner = raw.includes("?") ? "&" : "?";
-    return `${raw}${joiner}key=${encodeURIComponent(apiKey)}`;
-  }
-  return `${raw}/models/${name}:generateContent?key=${encodeURIComponent(apiKey)}`;
-}
-
-function extractGeminiText(data) {
-  const parts = data?.candidates?.[0]?.content?.parts;
-  if (!Array.isArray(parts)) return "";
-  return parts.map((part) => String(part?.text || "")).join("").trim();
-}
-
-function canTrySameOriginProxy() {
-  if (sameOriginProxyState === "no") return false;
-  if (typeof location === "undefined" || location.protocol === "file:") {
-    sameOriginProxyState = "no";
-    return false;
-  }
-  return location.protocol === "http:" || location.protocol === "https:";
-}
-
-function isCorsFailure(error) {
-  const message = String(error?.message || error || "");
-  return /Failed to fetch|NetworkError|Load failed|fetch 失敗|CORS/i.test(message);
-}
-
-function lastUserContent(messages) {
-  const user = [...(messages || [])].reverse().find((item) => item.role === "user");
-  return String(user?.content || "").slice(0, 8000);
-}
-
-function buildOpenAiHeaders(settings) {
-  const apiKey = String(settings?.apiKey || loadAiSettings().apiKey || "").replace(/^Bearer\s+/i, "").trim();
-  if (!apiKey) {
-    throw new Error("NO_KEY：localStorage 沒有 API Key，無法帶 Authorization。");
-  }
-  const headers = {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${apiKey}`,
-  };
-  if (settings.provider === "openrouter") {
-    const origin = typeof location !== "undefined" && location.origin && location.origin !== "null"
-      ? location.origin
-      : "https://nichi-seishin.local";
-    headers["HTTP-Referer"] = origin;
-    headers["X-Title"] = "nichi-seishin";
-  }
-  console.log("[日精進 API] 即將送出的 Headers", {
-    hasAuthorization: Boolean(headers.Authorization && headers.Authorization !== "Bearer "),
-    authorizationPrefix: headers.Authorization.slice(0, 10),
-    keyPreview: maskKey(apiKey),
-    contentType: headers["Content-Type"],
-  });
-  return headers;
-}
-
-async function callViaSameOriginProxy(messages, settings) {
-  const apiKey = String(settings?.apiKey || loadAiSettings().apiKey || "").replace(/^Bearer\s+/i, "").trim();
-  if (!apiKey) throw new Error("NO_KEY：localStorage 沒有 API Key，代理無法帶 Authorization。");
-  const url = new URL("/api/review", location.origin).toString();
-  console.log("[日精進 API] 改走同網域代理，避開瀏覽器 CORS", url, settings.provider, maskKey(apiKey));
+async function postReview(body, timeoutMs = 28000) {
+  const url = reviewApiUrl();
+  console.log("[日精進 API] POST", url, body && body.mode);
   const response = await fetchWithTimeout(
     url,
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        mode: "organize",
-        date: currentIso(),
-        text: lastUserContent(messages),
-        messages,
-        provider: settings.provider,
-        model: settings.model,
-        baseUrl: settings.baseUrl,
-        apiKey,
-      }),
-    },
-    20000
-  );
-  if (response.status === 404) {
-    sameOriginProxyState = "no";
-    throw new Error("NO_PROXY");
-  }
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data.ok === false) {
-    throw new Error(data.error || `代理失敗 HTTP ${response.status}`);
-  }
-  sameOriginProxyState = "yes";
-  return data.data;
-}
-
-async function callGeminiApi(messages, settings) {
-  const system = messages.filter((item) => item.role === "system").map((item) => item.content).join("\n\n");
-  const user = messages.filter((item) => item.role !== "system").map((item) => item.content).join("\n\n");
-  const url = joinGeminiGenerateUrl(settings.baseUrl, settings.model, settings.apiKey);
-  const timeoutMs = 20000;
-  try {
-    const response = await fetchWithTimeout(
-      url,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: `${system}\n\n${user}`.trim() }] }],
-          generationConfig: {
-            temperature: 0.7,
-            responseMimeType: "application/json",
-          },
-        }),
-      },
-      timeoutMs
-    );
-    const data = await response.json().catch(() => ({}));
-    console.log("[日精進 API] Gemini 回應", response.status, redactUrl(url));
-    if (!response.ok) {
-      const reason = (data.error && (data.error.message || data.error.status)) || `HTTP ${response.status}`;
-      throw new Error(`Gemini 拒絕請求：${reason}`);
-    }
-    return parseAiJson(extractGeminiText(data));
-  } catch (error) {
-    console.error("[日精進 API] Gemini 失敗", formatApiError(error, { url, timeoutMs }), error);
-    throw error;
-  }
-}
-
-async function callOpenAiCompatible(messages, settings) {
-  const resolved = {
-    ...settings,
-    apiKey: String(settings?.apiKey || loadAiSettings().apiKey || "").replace(/^Bearer\s+/i, "").trim(),
-  };
-  const url = joinChatCompletionsUrl(resolved.baseUrl);
-  const timeoutMs = 20000;
-  const response = await fetchWithTimeout(
-    url,
-    {
-      method: "POST",
-      headers: buildOpenAiHeaders(resolved),
-      body: JSON.stringify({
-        model: resolved.model,
-        temperature: 0.7,
-        response_format: { type: "json_object" },
-        messages,
-      }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
     },
     timeoutMs
   );
-  const data = await response.json().catch(() => ({}));
-  console.log("[日精進 API] 供應商回應", settings.provider, response.status, redactUrl(url));
-  if (!response.ok) {
-    const reason = (data && data.error && (data.error.message || data.error.code)) || `HTTP ${response.status}`;
-    throw new Error(`${settings.provider} 拒絕請求：${reason}`);
+  const payload = await response.json().catch(() => ({}));
+  console.log("[日精進 API] 回應", response.status, payload && payload.ok, payload && payload.error);
+  if (!response.ok || payload.ok === false) {
+    throw new Error(payload.error || `HTTP ${response.status}`);
   }
-  return parseAiJson(data?.choices?.[0]?.message?.content || "");
-}
-
-async function callStoredKeyApi(messages) {
-  const stored = loadAiSettings();
-  const settings = getAiSettings();
-  settings.apiKey = stored.apiKey || settings.apiKey;
-  settings.provider = stored.provider || settings.provider;
-  settings.model = stored.model || settings.model;
-  settings.baseUrl = stored.baseUrl || settings.baseUrl;
-  if (settings.apiKey.startsWith("sk-or-") && (settings.provider === "openai" || /api\.openai\.com/i.test(settings.baseUrl))) {
-    settings.provider = "openrouter";
-    settings.baseUrl = PROVIDER_PRESETS.openrouter.baseUrl;
+  if (!payload.data || typeof payload.data !== "object") {
+    throw new Error("雲端回傳格式不完整");
   }
-  if (!settings.apiKey) throw new Error("NO_KEY：localStorage 沒有 API Key，無法呼叫雲端。");
-
-  const allowsBrowser = Boolean(PROVIDER_PRESETS[settings.provider]?.browserCors);
-  const shouldProxy = !allowsBrowser || sameOriginProxyState === "yes";
-
-  if (shouldProxy && canTrySameOriginProxy()) {
-    try {
-      return await callViaSameOriginProxy(messages, settings);
-    } catch (error) {
-      if (String(error?.message || "") === "NO_PROXY") {
-        console.warn("[日精進 API] 這個環境沒有 /api/review，無法代理 OpenAI。");
-      } else if (!isCorsFailure(error)) {
-        console.error("[日精進 API] 同網域代理失敗", error);
-        throw error;
-      } else {
-        console.warn("[日精進 API] 同網域代理也失敗，改評估瀏覽器直連", error);
-      }
-    }
-  }
-
-  if (settings.provider === "gemini") {
-    return callGeminiApi(messages, settings);
-  }
-
-  if (!allowsBrowser) {
-    const error = new Error(CORS_HINT);
-    console.error("[日精進 API] 已阻止直連會被 CORS 擋住的端點", settings.provider, settings.baseUrl);
-    throw error;
-  }
-
-  try {
-    return await callOpenAiCompatible(messages, settings);
-  } catch (error) {
-    console.error("[日精進 API] 瀏覽器直連失敗", formatApiError(error, { url: joinChatCompletionsUrl(settings.baseUrl), timeoutMs: 20000 }), error);
-    if (isCorsFailure(error)) throw new Error(CORS_HINT);
-    throw error;
-  }
+  return payload.data;
 }
 
 async function generateReview(rawText) {
-  const settings = getAiSettings();
-  const providerLabel = PROVIDER_PRESETS[settings.provider]?.label || settings.provider;
-  const targetUrl =
-    settings.provider === "gemini"
-      ? joinGeminiGenerateUrl(settings.baseUrl, settings.model, settings.apiKey)
-      : joinChatCompletionsUrl(settings.baseUrl);
-  console.log("[日精進 API] generateReview 開始", {
-    provider: settings.provider,
-    providerLabel,
-    model: settings.model,
-    baseUrl: settings.baseUrl,
-    targetUrl: redactUrl(targetUrl),
-    hasKey: Boolean(settings.apiKey),
-    keyPreview: maskKey(settings.apiKey),
+  const remote = await postReview({
+    mode: "organize",
+    date: currentIso(),
+    text: String(rawText || "").slice(0, 8000),
   });
-  if (!settings.apiKey) {
-    throw new Error("NO_KEY：沒有 API Key，略過雲端，只使用本地教練。");
+  if (!(remote.themeTitle || remote.conclusion || remote.themeInsight)) {
+    throw new Error("雲端回傳格式不完整");
   }
-  return callStoredKeyApi([
-    {
-      role: "system",
-      content: ORGANIZE_SYSTEM_PROMPT,
-    },
-    { role: "user", content: `復盤日期：${currentIso()}\n\n口語原文：\n${rawText}` },
-  ]);
+  return remote;
+}
+
+async function generateThink(rawText, organize, round, actions, reply) {
+  const remote = await postReview({
+    mode: "think",
+    date: currentIso(),
+    text: String(rawText || "").slice(0, 8000),
+    organize,
+    round,
+    max: state.think.max || 5,
+    actions: Array.isArray(actions) ? actions : [],
+    reply: String(reply || ""),
+  });
+  if (!(remote.question || remote.insight || remote.title)) {
+    throw new Error("雲端思考回傳格式不完整");
+  }
+  return remote;
+}
+
+async function probeReviewApi() {
+  try {
+    const url = reviewApiUrl();
+    const response = await fetchWithTimeout(url, { method: "GET" }, 8000);
+    const payload = await response.json().catch(() => ({}));
+    state.apiConfigured = Boolean(payload.configured);
+    if (state.apiConfigured) {
+      console.log("[日精進 API] 雲端金鑰已設定", payload.model || "gpt-4o-mini");
+    } else {
+      console.warn("[日精進 API] 伺服器還沒讀到 OPENAI_API_KEY。請在 Vercel → Settings → Environment Variables 設 Production，然後 Redeploy。");
+    }
+  } catch (error) {
+    state.apiConfigured = false;
+    console.warn("[日精進 API] 健康檢查失敗", formatApiError(error), error);
+  }
 }
 
 function normalizeOrganizeResult(remote, rawText) {
@@ -751,39 +451,37 @@ const ORGANIZE_SYSTEM_PROMPT = `你是「日精進」的專業心理教練，也
 只輸出 JSON，繁體中文，不要 markdown。
 需含 themeCategory、themeTitle、themeStars、themeInsight、eventList、reactionList、reflection、conclusion、quotes、thinkGuide、whyNeed、whatFact、howNext、turningPoint、keyWord、keyWordAlt、nextScripts、problems、gratitudeNote、sfm、tags。`;
 
+function thinkFromOrganize(organize, round = 1) {
+  const scripts = Array.isArray(organize?.nextScripts) ? organize.nextScripts.filter(Boolean) : [];
+  const labels = ["先對齊目標層級", "改掉跳太快的詞", "只處理眼前這一步"];
+  if (!scripts.length) return localThink(organize, round, [], "");
+  return {
+    title: "深度思考與下一步",
+    question: organize.thinkGuide || localThink(organize, round, [], "").question,
+    insight: [organize.whyNeed, organize.whatFact, organize.howNext].filter(Boolean).join(" ") || organize.reflection || "",
+    actions: scripts.slice(0, 3).map((detail, index) => ({
+      label: labels[index] || `下一步 ${index + 1}`,
+      detail: /[「『"]/.test(detail) ? detail : `「${detail}」`,
+    })),
+  };
+}
+
 async function maybeEnhanceWithApi(rawText, token) {
-  const settings = getAiSettings();
-  if (!settings.apiKey) {
-    console.log("[日精進 API] 沒有 API Key，略過雲端 fetch，只使用本地教練。");
-    return;
-  }
-  const providerLabel = PROVIDER_PRESETS[settings.provider]?.label || settings.provider;
-  showToast(`正在向 ${providerLabel} 發送復盤請求…`);
+  showToast("正在呼叫雲端 AI…");
   try {
     const remote = await generateReview(rawText);
     if (runOrganize._token !== token) {
       console.log("[日精進 API] 回應已過期（使用者又按了一次整理），丟棄這次結果。");
       return;
     }
-    if ((state.think.round || 0) > 1) {
-      console.log("[日精進 API] 深度思考已進入下一輪，不再覆蓋整理結果。");
-      return;
-    }
-    applyOrganizeResult(normalizeOrganizeResult(remote, rawText));
-    applyThinkResult(localThink(state.organize, 1, [], ""), 1, { silent: true });
-    console.log("[日精進 API] 雲端復盤已套用", settings.provider, settings.model);
-    showToast(`${providerLabel} 復盤已套用。`);
+    applyOrganizeResult(normalizeOrganizeResult(remote, rawText), "cloud");
+    applyThinkResult(thinkFromOrganize(state.organize, 1), 1, { silent: true });
+    console.log("[日精進 API] 雲端復盤已套用", remote.themeTitle);
+    showToast("雲端 AI 復盤已套用。");
   } catch (error) {
-    const reason = formatApiError(error, {
-      url:
-        settings.provider === "gemini"
-          ? joinGeminiGenerateUrl(settings.baseUrl, settings.model, settings.apiKey)
-          : joinChatCompletionsUrl(settings.baseUrl),
-      timeoutMs: 20000,
-    });
-    console.error("[日精進 API] 雲端復盤失敗，畫面維持本地結果。真正原因：", reason);
-    console.error(error);
-    showToast(`雲端 API 失敗：${reason}`);
+    const reason = formatApiError(error);
+    console.error("[日精進 API] 雲端呼叫失敗，畫面維持本地結果。真正原因：", reason, error);
+    showToast(`雲端 AI 失敗：${reason}`);
   }
 }
 
@@ -1114,7 +812,7 @@ function renderAiStage() {
     <section class="review-section" aria-labelledby="sec-theme">
       <h2 class="review-section__title" id="sec-theme">【主題與核心結論】</h2>
       <article class="theme-banner">
-        <p class="theme-banner__kicker">直擊溝通落差</p>
+        <p class="theme-banner__kicker">${state.organizeSource === "cloud" ? "雲端 AI 復盤" : "本地草稿 · 直擊溝通落差"}</p>
         <h3 class="theme-banner__title">【${escapeHtml(ai.themeCategory || "覺察")}】主題：${escapeHtml(ai.themeTitle || "今天的復盤")} <span class="stars">[${starsText(ai.themeStars)}]</span></h3>
         ${ai.themeInsight ? `<p class="theme-banner__lead">${escapeHtml(ai.themeInsight)}</p>` : ""}
       </article>
@@ -1599,9 +1297,10 @@ function localThink(organize, round, selected, reply) {
   };
 }
 
-function applyOrganizeResult(result) {
+function applyOrganizeResult(result, source) {
   const safe = result && typeof result === "object" ? result : localOrganize("");
   state.organize = safe;
+  if (source) state.organizeSource = source;
   state.selectedQuotes = collectQuoteKeys(safe).filter((key) => key.startsWith("quote:"));
   state.selectedSfm = collectQuoteKeys(safe).filter((key) => key.startsWith("sfm:"));
   state.think = { round: 0, max: 5, history: [], current: null };
@@ -1634,22 +1333,15 @@ function runOrganize(event) {
     const token = (runOrganize._token || 0) + 1;
     runOrganize._token = token;
 
-    applyOrganizeResult(localOrganize(rawText));
+    applyOrganizeResult(localOrganize(rawText), "local");
     applyThinkResult(localThink(state.organize, 1, [], ""), 1, { silent: true });
-    const settings = getAiSettings();
-    if (settings.apiKey) {
-      console.log("[日精進 API] 本地結果已先上畫面，接著 fetch", settings.provider, settings.baseUrl);
-      showToast("本地結果已出，正在呼叫雲端 API…");
-    } else {
-      console.log("[日精進 API] 未填 API Key，這次只跑本地教練。");
-      showToast("整理完成。主題、金句與下一步都在下面。");
-    }
+    showToast("先出本地草稿，接著呼叫雲端 AI…");
     maybeEnhanceWithApi(rawText, token);
   } catch {
     try {
       const fallback = document.getElementById("reviewText")?.value.trim() || "今天把這段話講出來了。";
       state.rawText = fallback;
-      applyOrganizeResult(localOrganize(fallback));
+      applyOrganizeResult(localOrganize(fallback), "local");
       applyThinkResult(localThink(state.organize, 1, [], ""), 1, { silent: true });
     } catch {
       purgeThinkingUi();
@@ -1681,7 +1373,11 @@ function applyThinkResult(raw, nextRound, options = {}) {
   state.think.round = nextRound;
   state.think.current = result;
   if (!Array.isArray(state.think.history)) state.think.history = [];
-  state.think.history.push(result);
+  if (options.replace && state.think.history.length) {
+    state.think.history[state.think.history.length - 1] = result;
+  } else {
+    state.think.history.push(result);
+  }
   state.selectedThinkActions = [];
   try {
     upsertReview(currentIso(), {
@@ -1716,7 +1412,10 @@ function runThink(replyText = "") {
     }));
     const reply = String(replyText || "").trim();
     const nextRound = (state.think.round || 0) + 1;
+    const token = (state.thinkToken || 0) + 1;
+    state.thinkToken = token;
     applyThinkResult(localThink(state.organize, nextRound, selected, reply), nextRound);
+    enhanceThinkWithApi(nextRound, selected, reply, token);
   } catch {
     try {
       const nextRound = Math.min((state.think.round || 0) + 1, state.think.max || 5);
@@ -1724,6 +1423,19 @@ function runThink(replyText = "") {
     } catch {
       showToast("深度思考已就緒，請再點一次。");
     }
+  }
+}
+
+async function enhanceThinkWithApi(nextRound, selected, reply, token) {
+  showToast("正在呼叫雲端 AI 深挖…");
+  try {
+    const remote = await generateThink(state.rawText, state.organize, nextRound, selected, reply);
+    if (state.thinkToken !== token) return;
+    applyThinkResult(remote, nextRound, { silent: true, replace: true });
+    showToast("雲端深度思考已套用。");
+  } catch (error) {
+    console.error("[日精進 API] 深度思考雲端失敗，維持本地結果。", formatApiError(error), error);
+    showToast(`雲端思考失敗：${formatApiError(error)}`);
   }
 }
 
@@ -2176,108 +1888,6 @@ function toggleMic() {
   }
 }
 
-function corsHintFor(provider) {
-  if (PROVIDER_PRESETS[provider]?.browserCors) {
-    return "此供應商通常允許瀏覽器直連。Headers 會帶 Content-Type 與 Authorization。";
-  }
-  return "此供應商會擋瀏覽器 CORS。會先走 /api/review 代理；本機沒有代理時請改選 OpenRouter。";
-}
-
-function updateCorsHint(provider) {
-  const hint = document.getElementById("apiCorsHint");
-  if (hint) hint.textContent = corsHintFor(provider || getAiSettings().provider);
-}
-
-function updateApiStatus() {
-  const status = document.getElementById("apiStatus");
-  if (!status) return;
-  const settings = getAiSettings();
-  updateCorsHint(settings.provider);
-  if (settings.apiKey) {
-    status.classList.add("is-ready");
-    const route = PROVIDER_PRESETS[settings.provider]?.browserCors
-      ? "會直連該供應商（支援 CORS）"
-      : "會先走 /api/review 代理，避免 OpenAI CORS";
-    status.textContent = `已選 ${PROVIDER_PRESETS[settings.provider]?.label || settings.provider}（${maskKey(settings.apiKey)}）。${route}。`;
-  } else {
-    status.classList.remove("is-ready");
-    status.textContent = "目前使用本地教練。若要雲端復盤，建議選 OpenRouter 並填金鑰。";
-  }
-}
-
-function syncApiBaseField() {
-  const baseField = document.getElementById("apiBaseField");
-  if (baseField) baseField.hidden = false;
-}
-
-function onProviderChange() {
-  const id = normalizeProvider(document.getElementById("apiProvider")?.value);
-  const preset = PROVIDER_PRESETS[id] || PROVIDER_PRESETS.openrouter;
-  const model = document.getElementById("apiModelInput");
-  const base = document.getElementById("apiBaseInput");
-  if (model) {
-    model.value = preset.model;
-    model.placeholder = preset.model;
-  }
-  if (base) {
-    base.value = preset.baseUrl;
-    base.placeholder = preset.baseUrl;
-    const field = document.getElementById("apiBaseField");
-    if (field) field.hidden = false;
-  }
-  updateCorsHint(id);
-}
-window.onProviderChange = onProviderChange;
-
-function fillApiForm() {
-  const settings = getAiSettings();
-  const provider = document.getElementById("apiProvider");
-  const key = document.getElementById("apiKeyInput");
-  const model = document.getElementById("apiModelInput");
-  const base = document.getElementById("apiBaseInput");
-  if (provider) provider.value = settings.provider;
-  if (key) key.value = settings.apiKey;
-  if (model) {
-    model.value = settings.model;
-    model.placeholder = PROVIDER_PRESETS[settings.provider]?.model || settings.model;
-  }
-  if (base) {
-    base.value = settings.baseUrl;
-    base.placeholder = PROVIDER_PRESETS[settings.provider]?.baseUrl || settings.baseUrl;
-  }
-  syncApiBaseField();
-  updateApiStatus();
-}
-
-function saveApiSettings(event) {
-  const action = event?.submitter?.value || "confirm";
-  if (action === "cancel") return;
-  if (action === "clear") {
-    clearAiSettings();
-    fillApiForm();
-    showToast("已清除此瀏覽器的 API 金鑰。");
-    return;
-  }
-  const provider = normalizeProvider(document.getElementById("apiProvider")?.value);
-  const preset = PROVIDER_PRESETS[provider];
-  const typedKey = String(document.getElementById("apiKeyInput")?.value || "").replace(/^Bearer\s+/i, "").trim();
-  saveAiSettings({
-    provider,
-    apiKey: typedKey || undefined,
-    model: document.getElementById("apiModelInput")?.value || preset.model,
-    baseUrl: document.getElementById("apiBaseInput")?.value || preset.baseUrl,
-  });
-  fillApiForm();
-  updateApiStatus();
-  const saved = loadAiSettings();
-  showToast(
-    saved.apiKey
-      ? PROVIDER_PRESETS[provider]?.browserCors
-        ? "已儲存金鑰到此瀏覽器。開始整理會直連此供應商。"
-        : "已儲存金鑰。OpenAI 類供應商會走 /api/review 代理，避免 CORS。"
-      : "未填金鑰，之後仍用本地教練秒出結果。"
-  );
-}
 
 /* =============================================================================
  * 事件
@@ -2459,13 +2069,6 @@ function bindEvents() {
     saveReminder(Boolean(enable));
   });
 
-  document.getElementById("openApiSettings").addEventListener("click", () => {
-    fillApiForm();
-    document.getElementById("apiModal").showModal();
-    if (isMobile()) setSidebarOpen(false);
-  });
-  document.getElementById("apiProvider")?.addEventListener("change", onProviderChange);
-  document.getElementById("apiForm").addEventListener("submit", saveApiSettings);
 
   window.addEventListener("resize", () => {
     if (!isMobile()) setSidebarOpen(false);
@@ -2495,6 +2098,7 @@ function init() {
     initReminder();
     setupSpeech();
     setInterval(tickReminder, 20000);
+    probeReviewApi();
   } catch {
     /* 其餘初始化失敗也不擋「開始整理」 */
   }

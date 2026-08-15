@@ -1,23 +1,8 @@
-function joinChatCompletionsUrl(baseUrl) {
-  let raw = String(baseUrl || "https://api.openai.com/v1").trim() || "https://api.openai.com/v1";
-  if (!/^https?:\/\//i.test(raw)) raw = `https://${raw}`;
-  try {
-    const url = new URL(raw);
-    let path = (url.pathname || "").replace(/\/+$/, "");
-    if (path === "/") path = "";
-    path = path.replace(/(\/v1)+$/i, "/v1");
-    if (!/\/v1$/i.test(path)) path = `${path}/v1`;
-    if (!/\/chat\/completions$/i.test(path)) path = `${path}/chat/completions`;
-    url.pathname = path.replace(/\/{2,}/g, "/");
-    url.search = "";
-    url.hash = "";
-    return url.toString().replace(/\/+$/, "");
-  } catch {
-    const cleaned = raw.replace(/\/+$/, "").replace(/(\/v1)+/gi, "/v1");
-    if (/\/chat\/completions$/i.test(cleaned)) return cleaned;
-    if (/\/v1$/i.test(cleaned)) return `${cleaned}/chat/completions`;
-    return `${cleaned}/v1/chat/completions`;
-  }
+function chatCompletionsUrl() {
+  const raw = String(process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").trim() || "https://api.openai.com/v1";
+  const base = raw.replace(/\/+$/, "");
+  if (/\/chat\/completions$/i.test(base)) return base;
+  return `${base}/chat/completions`;
 }
 
 function parseAiJson(raw) {
@@ -26,8 +11,33 @@ function parseAiJson(raw) {
   const candidate = (fenced ? fenced[1] : text).trim();
   const start = candidate.indexOf("{");
   const end = candidate.lastIndexOf("}");
-  if (start === -1 || end === -1) throw new Error("AI 回傳不是 JSON");
+  if (start === -1 || end === -1) throw new Error("OpenAI 回傳不是 JSON");
   return JSON.parse(candidate.slice(start, end + 1));
+}
+
+function readJsonBody(req) {
+  const raw = req.body;
+  if (raw == null || raw === "") return {};
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return {};
+    }
+  }
+  if (typeof Buffer !== "undefined" && Buffer.isBuffer(raw)) {
+    try {
+      return JSON.parse(raw.toString("utf8"));
+    } catch {
+      return {};
+    }
+  }
+  if (typeof raw === "object") return raw;
+  return {};
+}
+
+function getApiKey() {
+  return String(process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY || "").trim();
 }
 
 const ORGANIZE_SYSTEM = `你是「日精進」的專業心理教練，也是直白、注重溝通邏輯的復盤教練。使用者會用口語、不完整的句子描述今天。你必須每次都產出同一套條理分明、直擊重點的復盤，不可省略任何一段。
@@ -115,24 +125,24 @@ actions 的 detail 必須是下次可直接照唸、用來對齊目標的完整�
 }
 actions 給 3 個。若已是最後一輪，question 改成收束。`;
 
-async function callOpenAI(messages, options = {}) {
-  const apiKey = String(options.apiKey || process.env.OPENAI_API_KEY || "").trim();
+async function callOpenAI(messages) {
+  const apiKey = getApiKey();
   if (!apiKey) {
-    const error = new Error("缺少 API Key（請在前端設定，或在 Vercel 設 OPENAI_API_KEY）");
+    const error = new Error("伺服器尚未設定 OPENAI_API_KEY");
     error.status = 500;
     throw error;
   }
 
-  const provider = String(options.provider || "openai");
-  const url = joinChatCompletionsUrl(options.baseUrl || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1");
+  const url = chatCompletionsUrl();
+  const model = String(process.env.OPENAI_MODEL || "gpt-4o-mini").trim() || "gpt-4o-mini";
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 18000);
+  const timer = setTimeout(() => controller.abort(), 25000);
 
   const headers = {
     "Content-Type": "application/json",
     Authorization: `Bearer ${apiKey}`,
   };
-  if (provider === "openrouter") {
+  if (/openrouter\.ai/i.test(url)) {
     headers["HTTP-Referer"] = process.env.OPENROUTER_REFERER || "https://nichi-seishin.vercel.app";
     headers["X-Title"] = "nichi-seishin";
   }
@@ -142,7 +152,7 @@ async function callOpenAI(messages, options = {}) {
       method: "POST",
       headers,
       body: JSON.stringify({
-        model: options.model || process.env.OPENAI_MODEL || "gpt-4o-mini",
+        model,
         temperature: 0.7,
         response_format: { type: "json_object" },
         messages,
@@ -152,7 +162,7 @@ async function callOpenAI(messages, options = {}) {
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const error = new Error((data && data.error && data.error.message) || `上游請求失敗（${response.status}）`);
+      const error = new Error((data && data.error && data.error.message) || `OpenAI 請求失敗（${response.status}）`);
       error.status = response.status;
       throw error;
     }
@@ -163,45 +173,29 @@ async function callOpenAI(messages, options = {}) {
   }
 }
 
-function readJsonBody(req) {
-  const raw = req.body;
-  if (raw == null || raw === "") return {};
-  if (typeof raw === "string") {
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return {};
-    }
-  }
-  if (typeof Buffer !== "undefined" && Buffer.isBuffer(raw)) {
-    try {
-      return JSON.parse(raw.toString("utf8"));
-    } catch {
-      return {};
-    }
-  }
-  if (typeof raw === "object") return raw;
-  return {};
-}
-
-function bearerFromHeader(req) {
-  return String(req.headers?.authorization || req.headers?.Authorization || "")
-    .replace(/^Bearer\s+/i, "")
-    .trim();
-}
-
 function setCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
 module.exports = async function handler(req, res) {
   setCors(res);
+
   if (req.method === "OPTIONS") {
     res.status(204).end();
     return;
   }
+
+  if (req.method === "GET") {
+    res.status(200).json({
+      ok: true,
+      configured: Boolean(getApiKey()),
+      model: String(process.env.OPENAI_MODEL || "gpt-4o-mini"),
+    });
+    return;
+  }
+
   if (req.method !== "POST") {
     res.status(405).json({ ok: false, error: "只接受 POST" });
     return;
@@ -243,13 +237,8 @@ module.exports = async function handler(req, res) {
       ];
     }
 
-    const data = await callOpenAI(messages, {
-      apiKey: body.apiKey || bearerFromHeader(req),
-      baseUrl: body.baseUrl,
-      model: body.model,
-      provider: body.provider,
-    });
-    res.status(200).json({ ok: true, data });
+    const data = await callOpenAI(messages);
+    res.status(200).json({ ok: true, source: "openai", data });
   } catch (error) {
     const aborted = error?.name === "AbortError" || /aborted/i.test(String(error?.message || ""));
     res.status(aborted ? 504 : error.status || 500).json({

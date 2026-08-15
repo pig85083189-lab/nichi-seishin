@@ -1,7 +1,7 @@
 {
   "name": "nichi-seishin",
   "private": true,
-  "description": "日精進 — 個人復盤與成長前端 SPA，本地教練優先，金鑰只存在瀏覽器 localStorage",
+  "description": "日精進 — 個人復盤 SPA。前端呼叫 /api/review，金鑰只存在 Vercel OPENAI_API_KEY",
   "engines": {
     "node": ">=18"
   },
