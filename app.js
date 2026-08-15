@@ -286,6 +286,76 @@ function saveSfm(items) {
   saveJson(STORAGE_KEYS.sfm, items);
 }
 
+function sfmGuideKey(kind, index, iso) {
+  return `review:${iso || currentIso()}:${kind}:${index}`;
+}
+
+function refreshSfmIfVisible() {
+  try {
+    renderSfm();
+  } catch {
+    /* 素材庫頁面還沒畫也沒關係 */
+  }
+}
+
+function addSfmFromGuide({ key, body, title, type, date }) {
+  const text = String(body || "").trim();
+  if (!text) return { added: false };
+  const items = getSfm();
+  if (key && items.some((item) => item.sourceKey === key)) return { added: false, exists: true };
+  if (items.some((item) => item.body === text)) return { added: false, exists: true };
+  const resolvedType = ["story", "feeling", "meaning"].includes(type) ? type : inferSfmType(text);
+  items.unshift({
+    id: uid(),
+    type: resolvedType,
+    title: String(title || excerptText(text, 18)).trim() || excerptText(text, 18),
+    body: text,
+    source: "今日復盤",
+    sourceKey: key || "",
+    date: date || currentIso(),
+    createdAt: new Date().toISOString(),
+  });
+  saveSfm(items);
+  refreshSfmIfVisible();
+  return { added: true };
+}
+
+function removeSfmFromGuide(key) {
+  if (!key) return { removed: false };
+  const items = getSfm();
+  const index = items.findIndex((item) => item.sourceKey === key);
+  if (index === -1) return { removed: false, kept: true };
+  items.splice(index, 1);
+  saveSfm(items);
+  refreshSfmIfVisible();
+  return { removed: true };
+}
+
+function syncGuideToSfm(kind, index, checked) {
+  const iso = currentIso();
+  const key = sfmGuideKey(kind, index, iso);
+  let body = "";
+  let title = "";
+  let type = "";
+  if (kind === "quote") {
+    body = String(state.organize?.quotes?.[index] || "").trim();
+  } else {
+    const item = state.organize?.sfm?.[index] || {};
+    body = String(item.body || item.title || "").trim();
+    title = item.title || "";
+    type = item.type || "";
+  }
+  if (checked) {
+    const result = addSfmFromGuide({ key, body, title, type, date: iso });
+    if (result.added) showToast("已存入 1 則到素材庫");
+    else if (result.exists) showToast("這則已在素材庫");
+    return;
+  }
+  const result = removeSfmFromGuide(key);
+  if (result.removed) showToast("已從素材庫拿掉");
+  else if (result.kept) showToast("這則已在素材庫，改由你手動刪除");
+}
+
 function reviewIsComplete(review) {
   return Boolean(review && (review.completedAt || review.organize || String(review.rawText || "").trim()));
 }
@@ -990,13 +1060,6 @@ function renderBulletList(items, fallbackText) {
   return `<ul class="review-list">${list.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
 }
 
-function collectQuoteKeys(organize) {
-  const keys = [];
-  (organize.quotes || []).forEach((quote, index) => keys.push(`quote:${index}`));
-  (organize.sfm || []).forEach((item, index) => keys.push(`sfm:${index}`));
-  return keys;
-}
-
 function renderAiStage() {
   const root = document.getElementById("aiStage");
   if (!root) return;
@@ -1613,8 +1676,8 @@ function applyOrganizeResult(result, source) {
   const safe = result && typeof result === "object" ? result : localOrganize("");
   state.organize = safe;
   if (source) state.organizeSource = source;
-  state.selectedQuotes = collectQuoteKeys(safe).filter((key) => key.startsWith("quote:"));
-  state.selectedSfm = collectQuoteKeys(safe).filter((key) => key.startsWith("sfm:"));
+  state.selectedQuotes = [];
+  state.selectedSfm = [];
   state.selectedPractice = [];
   state.think = { round: 0, max: 5, history: [], current: null };
   try {
@@ -1762,12 +1825,6 @@ function completeToday() {
 
   const gratitude = document.getElementById("gratitudeInput")?.value.trim() || state.gratitude;
   const organize = state.organize;
-  const selectedQuoteTexts = [];
-  if (organize) {
-    (organize.quotes || []).forEach((quote, index) => {
-      if (state.selectedQuotes.includes(`quote:${index}`)) selectedQuoteTexts.push(quote);
-    });
-  }
 
   upsertReview(iso, {
     rawText,
@@ -1780,38 +1837,25 @@ function completeToday() {
     updatedAt: new Date().toISOString(),
   });
 
-  const sfmItems = getSfm();
-  const existingBodies = new Set(sfmItems.map((item) => item.body));
   if (organize) {
     (organize.sfm || []).forEach((item, index) => {
-      const body = String(item.body || "").trim();
-      if (!state.selectedSfm.includes(`sfm:${index}`) || !body || existingBodies.has(body)) return;
-      sfmItems.unshift({
-        id: uid(),
-        type: ["story", "feeling", "meaning"].includes(item.type) ? item.type : inferSfmType(body),
-        title: item.title || excerptText(body, 18),
-        body,
-        source: "今日復盤",
+      if (!state.selectedSfm.includes(`sfm:${index}`)) return;
+      addSfmFromGuide({
+        key: sfmGuideKey("sfm", index, iso),
+        body: item.body || item.title,
+        title: item.title,
+        type: item.type,
         date: iso,
-        createdAt: new Date().toISOString(),
       });
-      existingBodies.add(body);
     });
-    selectedQuoteTexts.forEach((quote) => {
-      if (!quote || existingBodies.has(quote)) return;
-      const type = inferSfmType(quote);
-      sfmItems.unshift({
-        id: uid(),
-        type,
-        title: excerptText(quote, 18),
+    (organize.quotes || []).forEach((quote, index) => {
+      if (!state.selectedQuotes.includes(`quote:${index}`)) return;
+      addSfmFromGuide({
+        key: sfmGuideKey("quote", index, iso),
         body: quote,
-        source: "今日復盤",
         date: iso,
-        createdAt: new Date().toISOString(),
       });
-      existingBodies.add(quote);
     });
-    saveSfm(sfmItems);
   }
 
   const actionInputs = [...document.querySelectorAll("[data-action]:checked, [data-practice]:checked")];
@@ -1989,7 +2033,7 @@ function renderSfm() {
   const grid = document.getElementById("sfmGrid");
   const items = getSfm().filter((item) => state.sfmFilter === "all" || item.type === state.sfmFilter);
   if (!getSfm().length) {
-    grid.innerHTML = `<div class="empty"><p class="empty__title">素材庫還是空的</p>完成今日復盤時，勾選金句就會自動來到這裡，供日後發文或寫作使用。</div>`;
+    grid.innerHTML = `<div class="empty"><p class="empty__title">素材庫還是空的</p>在復盤結果勾選金句，就會立刻存到這裡，重新整理也不會遺失。</div>`;
     return;
   }
   if (!items.length) {
@@ -2000,7 +2044,7 @@ function renderSfm() {
     .map(
       (item) => `
         <article class="sfm-card">
-          <p class="sfm-card__type">${escapeHtml(SFM_TYPE_LABEL[item.type] || item.type)}</p>
+          <p class="sfm-card__type">${escapeHtml(SFM_TYPE_LABEL[item.type] || item.type)}${item.date ? ` · ${escapeHtml(formatDisplayDate(item.date))}` : ""}</p>
           <h3 class="sfm-card__title">${escapeHtml(item.title || "")}</h3>
           <p class="sfm-card__body">${escapeHtml(item.body || "")}</p>
           <div class="sfm-card__actions">
@@ -2271,11 +2315,15 @@ function bindEvents() {
       state.selectedQuotes = event.target.checked
         ? [...new Set([...state.selectedQuotes, quote])]
         : state.selectedQuotes.filter((item) => item !== quote);
+      const index = Number(String(quote).split(":")[1]);
+      if (Number.isFinite(index)) syncGuideToSfm("quote", index, event.target.checked);
     }
     if (sfm) {
       state.selectedSfm = event.target.checked
         ? [...new Set([...state.selectedSfm, sfm])]
         : state.selectedSfm.filter((item) => item !== sfm);
+      const index = Number(String(sfm).split(":")[1]);
+      if (Number.isFinite(index)) syncGuideToSfm("sfm", index, event.target.checked);
     }
     if (action) {
       state.selectedThinkActions = event.target.checked
