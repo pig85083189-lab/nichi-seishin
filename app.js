@@ -447,6 +447,7 @@ function normalizeOrganizeResult(remote, rawText) {
   return {
     themeCategory: remote.themeCategory || local.themeCategory,
     themeTitle: remote.themeTitle || local.themeTitle,
+    themeStars: remote.themeStars || local.themeStars,
     themeInsight: remote.themeInsight || local.themeInsight,
     problems: problems.length ? problems : local.problems,
     eventList: eventList.length ? eventList : local.eventList,
@@ -467,57 +468,55 @@ function normalizeOrganizeResult(remote, rawText) {
     keyWord: remote.keyWord || local.keyWord,
     keyWordAlt: remote.keyWordAlt || local.keyWordAlt,
     nextScripts: Array.isArray(remote.nextScripts) && remote.nextScripts.length ? remote.nextScripts : local.nextScripts,
+    thinkGuide: remote.thinkGuide || local.thinkGuide,
   };
 }
 
-const ORGANIZE_SYSTEM_PROMPT = `你是「日精進」的直白、犀利、注重溝通邏輯的復盤教練。使用者會用口語、不完整的句子描述今天。你的工作是拆結構、點盲點、給可執行修正，不是安慰。
+const ORGANIZE_SYSTEM_PROMPT = `你是「日精進」的專業心理教練，也是直白、注重溝通邏輯的復盤教練。使用者會用口語、不完整的句子描述今天。你必須每次都產出同一套條理分明、直擊重點的復盤，不可省略任何一段。
 
 【語氣】
-- 冷靜、客觀、直戳核心。句子短、判斷準、不繞。
-- 禁止感性開場與過度安慰，例如：「謝謝你願意面對」「這是一個不容易的對話」「你已經很勇敢了」「先被接住」。
-- 一開場就切入結構性問題：目標落差、資訊有沒有對齊、哪一步跳太快。
-- 可以犀利，但對事不對人。不人身攻擊、不嘲諷人格、不翻舊帳定人罪。
-- 不要「我們一起抱抱這份卡住」這類軟詞。用「落差在這裡」「卡點是這個」「下次改這一步」。
+- 冷靜、客觀、像專業教練在拆個案。句子短、判斷準。
+- 禁止感性開場與過度安慰。對事不對人。
 
-【主題與核心結論：強制三塊，依序寫滿】
-1. 核心盲點（whyNeed）：精準點出雙方在「目標」與「資訊對齊」上的落差。
-   - 必須寫清楚：一方在追什麼（例如宏觀規劃、效率、一次到位、最高額度），另一方在追什麼（例如眼前這一件、簡單需求、當下好做完）。
-   - 點破：表面在吵事情，底下是兩套任務定義沒對上。
-2. 溝通誤區（whatFact）：直接點出為什麼會吵／為什麼會卡。
-   - 典型結構：一方的「理性解法」走太快，跳過了對方需要的「確認當前目標＋步驟對齊」，對方因此覺得被塞進沒共識的巨大任務而焦慮、防衛或關機。
-   - 明確指出升溫瞬間，以及哪個關鍵詞（如「為什麼」「你應該」「一次搞定」）把對話從對齊推成對抗。
-3. 實戰修正（howNext）：乾淨俐落、不囉嗦。先對齊目標層級，再給步驟，最後才給完整方案。
+【強制輸出結構（依此順序寫滿，不可缺段）】
 
-【關鍵轉折點】
-- turningPoint：哪一句、哪一步讓對話從討論變成對抗。
-- keyWord：那個扭轉走向的詞。
-- keyWordAlt：可直接替換的對齊句，要像工具，不要像情話。例如：「先確認：你現在要解的是眼前這一件，還是整套方案？」
+1. 主標題與星等
+- themeCategory：事業經營 | 人間關係 | 身心狀態 | 覺察 其中一個
+- themeTitle：一句精煉主題，點出「好意／落差如何變成後果」。例如：「沒講清楚的好意，變成一場誤會的吵架」
+- themeStars：1-5 整數，代表這次議題的衝擊與值得復盤的程度。畫面會顯示成 [★★★★☆]
+- themeInsight：標題下的一句診斷，直戳結構，不要抒情
 
-【行動指引】
-- nextScripts：2-3 句下次對話可直接照唸的腳本，短、準、能對齊目標。
-- 禁止空話：「多溝通」「保持冷靜」「多體諒」「下次注意一點」。
-- 腳本優先做三件事：確認對方當前目標 → 聲明自己的目標層級 → 問要不要展開下一步。
+2. 事件拆解（eventList，恰好 3 條，必須用以下開頭）
+- 「發生了什麼：……」客觀還原事實
+- 「對方的訴求：……」對方當下真正要的是什麼（眼前需求、情緒確認、還是只要一個簡單答案）
+- 「你的解決方案：……」你實際丟出去的做法或規劃
+
+3. 結果與反應（reactionList，恰好 3 條，必須用以下開頭）
+- 「對方的反應：……」
+- 「你的反應：……」
+- 「落差：……」客觀寫雙方目標／資訊／額度沒對上的地方。例如：對方要的額度沒那麼高，對話卻停在做法與語氣。
+
+4. 事後反思（reflection）
+- 點出問題核心：少了哪一句「為什麼／動機／目標層級」，對方接收到的就只剩一個莫名其妙、多此一舉的要求。
+- 2-4 句，具體，不要空話。
+
+5. 核心結論
+- conclusion：只用一句話總結教訓
+- quotes：2-3 句今日金句，每句 12-40 字，可帶走、可實踐
+- thinkGuide：1-2 句思維引導，告訴下次開口前先問什麼、先對齊什麼
+- howNext：實戰修正，乾淨俐落
+- nextScripts：2-3 句下次可直接照唸的對話腳本
+
+【仍需填的輔助欄位】
+- whyNeed：核心盲點（目標落差＋資訊沒對齊）
+- whatFact：溝通誤區（為什麼會吵，哪一步跳太快）
+- turningPoint、keyWord、keyWordAlt：升溫瞬間、關鍵詞、可替換的對齊句
+- problems：1-3 則診斷卡，title 像診斷、stars 1-5、body 2-4 句
+- gratitudeNote、sfm、tags
 
 【輸出】
 只輸出 JSON，繁體中文，不要 markdown。
-需含 themeCategory、themeTitle、themeInsight、whyNeed、whatFact、howNext、turningPoint、keyWord、keyWordAlt、nextScripts、problems、eventList、reactionList、reflection、conclusion、quotes、gratitudeNote、sfm、tags。
-
-欄位寫法：
-- themeCategory：事業經營 | 人間關係 | 身心狀態 | 覺察 其中一個
-- themeTitle：一句直戳核心的主題，點出落差，不要抒情
-- themeInsight：直接講結構性問題，不要感性開場
-- whyNeed：核心盲點＝目標落差＋資訊沒對齊，1-3 句
-- whatFact：溝通誤區＝為什麼會吵，點出跳太快的那一步，1-3 句
-- howNext：實戰修正＝先對齊再給方案，1-2 句
-- turningPoint、keyWord、keyWordAlt：升溫瞬間、關鍵詞、可替換的對齊句
-- nextScripts：2-3 句完整對話腳本
-- problems：1-3 則，標題要像診斷，不要像安慰；stars 為 1-5
-- eventList、reactionList：客觀拆事件與反應，不評人格
-- reflection：事後邏輯復盤，指出哪一步可以重來
-- conclusion：用「核心盲點 → 溝通誤區 → 實戰修正」收束，短而準
-- quotes：2-4 句，每句 12-40 字，像可帶走的判斷，不要雞湯
-- gratitudeNote：若沒提到就一句帶過，不說教、不煽情
-- sfm：story / feeling / meaning 各一則，同樣直白`;
+需含 themeCategory、themeTitle、themeStars、themeInsight、eventList、reactionList、reflection、conclusion、quotes、thinkGuide、whyNeed、whatFact、howNext、turningPoint、keyWord、keyWordAlt、nextScripts、problems、gratitudeNote、sfm、tags。`;
 
 function maybeEnhanceWithApi(rawText, token) {
   const settings = getAiSettings();
@@ -869,7 +868,7 @@ function renderAiStage() {
       <h2 class="review-section__title" id="sec-theme">【主題與核心結論】</h2>
       <article class="theme-banner">
         <p class="theme-banner__kicker">直擊溝通落差</p>
-        <h3 class="theme-banner__title">【${escapeHtml(ai.themeCategory || "覺察")}】主題：${escapeHtml(ai.themeTitle || "今天的復盤")}</h3>
+        <h3 class="theme-banner__title">【${escapeHtml(ai.themeCategory || "覺察")}】主題：${escapeHtml(ai.themeTitle || "今天的復盤")} <span class="stars">[${starsText(ai.themeStars)}]</span></h3>
         ${ai.themeInsight ? `<p class="theme-banner__lead">${escapeHtml(ai.themeInsight)}</p>` : ""}
       </article>
       ${renderGoldenCircle(ai)}
@@ -902,6 +901,7 @@ function renderAiStage() {
       <article class="ai-block conclusion-card">
         <h3>核心結論</h3>
         <p class="conclusion-card__text">${escapeHtml(ai.conclusion || "")}</p>
+        ${ai.thinkGuide ? `<p class="sfm-hint">${escapeHtml(ai.thinkGuide)}</p>` : ""}
       </article>
       <article class="ai-block gratitude-box">
         <h3>今日沒提到了感恩</h3>
@@ -1077,16 +1077,18 @@ function localOrganize(rawText) {
   const isComm = COACH_COMM_RE.test(text) || hasPeople;
 
   let themeTitle = {
-    人間關係: "目標層級沒對齊，解法就變成壓力",
+    人間關係: "沒講清楚的好意，變成一場誤會的吵架",
     事業經營: "卡在目標層級，不是卡在能力",
     身心狀態: "負載已經超過當下能處理的單位",
     覺察: "任務定義沒講清楚，復盤就停在表面",
   }[category];
 
-  if (isComm) themeTitle = "目標層級沒對齊，解法就變成壓力";
+  if (isComm) themeTitle = "沒講清楚的好意，變成一場誤會的吵架";
   if (/決定/.test(text) && !isComm) themeTitle = "決定做了，執行層級還沒拆";
   if (isWin && !isComm) themeTitle = "做成了，但成功定義還是模糊";
   if (/卡/.test(text) && !isComm) themeTitle = "卡住的不是事情，是任務定義";
+
+  const themeStars = isComm ? 4 : category === "身心狀態" ? 4 : isWin ? 3 : 4;
 
   const turning = detectTurningWord(text);
   const themeInsight = isComm
@@ -1153,24 +1155,24 @@ function localOrganize(rawText) {
     });
   }
 
-  const eventList = (sentences.length ? sentences.slice(0, 4) : [text]).map((item, index) => {
-    const labels = ["發生了什麼", "接著", "然後", "停在這裡"];
-    return `${labels[index] || "還有"}：${item}`;
-  });
-  if (keyShort) eventList.push(`關鍵畫面：${clipPhrase(key, 36)}`);
+  const eventList = [
+    `發生了什麼：${sentences[0] || keyShort || text}`,
+    hasPeople
+      ? `對方的訴求：${otherLabel}要的是眼前好處理完的需求，不是一次被塞進完整規劃。`
+      : "對方的訴求：這次主要是自己對自己。要對齊的是「這次只解哪一層」。",
+    `你的解決方案：${sentences[1] || (keyShort ? `你丟出了「${keyShort}」這套做法或規劃。` : "你先給了解法，動機與目標層級還沒講清楚。")}`,
+  ];
 
   const reactionList = hasPeople
     ? [
-        `${otherLabel}的反應比較像「被塞了一個沒共識的大任務」，不是「不想聽」。`,
-        "結果：你給的是完整解法，對方停在眼前需求，資訊對不齊。",
-        "理性解法跳過步驟對齊，焦慮就會上來。",
-        keyShort ? `升溫畫面停在「${keyShort}」。` : "升溫發生在方案先於確認出場的那一步。",
+        `對方的反應：${otherLabel}的額度沒有你以為的那麼高，聽到的是被塞進沒共識的任務，不是好意。`,
+        "你的反應：急著把完整解法一次講完，對話停在做法與語氣。",
+        `落差：一邊在做宏觀規劃，一邊只要微觀當下。${keyShort ? `卡在「${keyShort}」。` : "資訊沒對齊，好意就變成壓力。"}`,
       ]
     : [
-        "這次主要是自己跟自己對齊。",
-        "事情說完了，任務定義還沒寫死。",
-        "結果：復盤停在流水帳，下一步還是抽象。",
-        "對自己也一樣：先定義要解哪一層，再行動。",
+        "對方的反應：沒有外部對象，卡住的是自己對任務層級的判斷。",
+        "你的反應：事情說完了，成功標準還沒寫死。",
+        `落差：事件有了，定義沒有。${keyShort ? `停在「${keyShort}」。` : "下一步因此還是抽象。"}`,
       ];
 
   const whyNeed = isComm
@@ -1205,25 +1207,30 @@ function localOrganize(rawText) {
         `「完整計畫先放著。現在只處理：明天做得到的那一件。」`,
       ];
 
-  const reflection = hasWhy
-    ? `回頭看「${keyShort || "今天這一段"}」：原因已經碰到了，缺的是層級對齊。重做那一步——先確認要解哪一層，再給方案。`
-    : isComm
-      ? `當時解法走太快，沒先跟${otherLabel}對齊「現在只要哪一步」。回頭看「${keyShort || "今天這一段"}」，可重來的是這句：「${turning.alt}」`
-      : `當時急著處理，沒先定義任務層級。回頭看「${keyShort || "今天這一段"}」，可重來的是：先寫死要解哪一層，再動手。`;
+  const reflection = isComm
+    ? `問題核心：少了那個「為什麼」。${otherLabel}接收到的只是一個莫名其妙、多此一舉的要求，聽不到你的好意從哪來。${keyShort ? `回頭看「${keyShort}」，` : ""}解法本身可能沒問題，缺的是先講動機、再對齊對方現在要的額度。`
+    : hasWhy
+      ? `問題核心：原因碰到了，但沒被單獨講清楚。少了「這次要解哪一層」，後面的做法就會像多此一舉。回頭看「${keyShort || "今天這一段"}」，先補定義，再給方案。`
+      : `問題核心：少了那個「為什麼」。事情說完了，對方或自己接收到的只是一個沒有來由的要求。回頭看「${keyShort || "今天這一段"}」，先講動機，再動手。`;
 
   const conclusion = isComm
-    ? `核心盲點：宏觀規劃 vs 微觀當下。溝通誤區：解法跳過步驟對齊。實戰修正：先問「現在只要眼前這一件，還是整套方案？」再開口。`
+    ? "好意要先講清楚為什麼，再給方案，否則再對的解法也會變成一場誤會。"
     : {
-        事業經營: "核心盲點：一次到位和眼前一步疊在一起。溝通誤區：先丟大計畫。實戰修正：先寫死這次只解哪一層。",
-        身心狀態: "核心盲點：行程加碼、身體降速。溝通誤區：還用效率邏輯壓負載。實戰修正：先砍到明天做得到的一步。",
-        覺察: "核心盲點：任務定義沒講清。溝通誤區：先說事情再補標準。實戰修正：先回答這次要解哪一層。",
-      }[category] || "核心盲點：任務定義沒講清。實戰修正：先對齊層級，再給方案。";
+        事業經營: "先寫死這次要解哪一層，再給方案，否則努力會空轉。",
+        身心狀態: "先承認當下負載，再談效率，否則行程會把身體當機器。",
+        覺察: "先講清楚為什麼要做，再決定怎麼做。",
+      }[category] || "先講清楚為什麼，再給方案。";
+
+  const thinkGuide = isComm
+    ? `下次開口前先問兩句：對方現在要的額度有多高？我的「為什麼」講了沒有？沒對齊就不要丟完整方案。`
+    : "下次先回答「這次只解哪一層」，再開始做。思維順序：為什麼 → 是什麼 → 怎麼做。";
 
   const quotes = buildCoachQuotes({ category: isComm ? "人間關係" : category, hasWhy, otherLabel, keyShort });
 
   return {
     themeCategory: category,
     themeTitle,
+    themeStars,
     themeInsight,
     problems: problems.slice(0, 3),
     eventList,
@@ -1264,6 +1271,7 @@ function localOrganize(rawText) {
     keyWord: turning.word,
     keyWordAlt: turning.alt,
     nextScripts,
+    thinkGuide,
   };
 }
 
@@ -1787,7 +1795,7 @@ function renderHistoryReport(review) {
   const reactionHtml = renderBulletList(ai.reactionList, ai.othersReaction);
   return `
     <div class="history-report">
-      <p><strong>【主題與核心結論】【${escapeHtml(ai.themeCategory || "")}】</strong>${escapeHtml(ai.themeTitle || "")}</p>
+      <p><strong>【主題與核心結論】【${escapeHtml(ai.themeCategory || "")}】</strong>主題：${escapeHtml(ai.themeTitle || "")} [${starsText(ai.themeStars)}]</p>
       ${ai.themeInsight ? `<p>${escapeHtml(ai.themeInsight)}</p>` : ""}
       ${renderGoldenCircle(ai)}
       ${problems}
@@ -1797,6 +1805,7 @@ function renderHistoryReport(review) {
       ${reactionHtml}
       <p><strong>事後反思</strong><br>${escapeHtml(ai.reflection || "")}</p>
       <p><strong>核心結論</strong><br>${escapeHtml(ai.conclusion || "")}</p>
+      ${ai.thinkGuide ? `<p><strong>思維引導</strong><br>${escapeHtml(ai.thinkGuide)}</p>` : ""}
       <p><strong>【今日金句】</strong></p>
       ${quotes}
       ${review.gratitude ? `<p><strong>感恩</strong><br>${escapeHtml(review.gratitude)}</p>` : ""}
