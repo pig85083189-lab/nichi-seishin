@@ -58,6 +58,7 @@ const state = {
   selectedQuotes: [],
   selectedSfm: [],
   selectedThinkActions: [],
+  selectedPractice: [],
   gratitude: "",
   remindedDate: "",
   recognition: null,
@@ -651,6 +652,7 @@ function resetAiSession() {
   state.selectedQuotes = [];
   state.selectedSfm = [];
   state.selectedThinkActions = [];
+  state.selectedPractice = [];
   state.gratitude = "";
 }
 
@@ -673,32 +675,64 @@ function loadReviewForDate(iso) {
   renderAiStage();
 }
 
+function renderReviewCard({ icon, title, body, variant = "", wide = false }) {
+  if (!String(body || "").trim()) return "";
+  const extras = [variant ? `rv-card--${variant}` : "", wide ? "rv-card--wide" : ""].filter(Boolean).join(" ");
+  return `
+    <article class="rv-card ${extras}">
+      <header class="rv-card__head">
+        <span class="rv-card__icon" aria-hidden="true">${icon}</span>
+        <h3 class="rv-card__title">${escapeHtml(title)}</h3>
+      </header>
+      <div class="rv-card__body">${body}</div>
+    </article>
+  `;
+}
+
 function renderAssumptionGap(ai) {
   const gap = ai?.assumptionGap || {};
   const mine = String(gap.mine || "").trim();
   const theirs = String(gap.theirs || "").trim();
   const line = String(gap.line || "").trim();
   if (!mine && !theirs && !line) return "";
-  return `
-    <article class="ai-block gap-card">
-      <h3>【我以為是……，他以為是……】</h3>
+  return renderReviewCard({
+    icon: "⚖️",
+    title: "我以為是……，他以為是……",
+    wide: true,
+    body: `
       ${line ? `<p class="gap-card__line">${escapeHtml(line)}</p>` : ""}
-      ${mine ? `<p><strong>我以為是</strong><br>${escapeHtml(mine)}</p>` : ""}
-      ${theirs ? `<p><strong>他以為是</strong><br>${escapeHtml(theirs)}</p>` : ""}
-    </article>
-  `;
+      <div class="gap-split">
+        ${mine ? `<div class="gap-split__col"><p class="gap-split__label">我以為是</p><p>${escapeHtml(mine)}</p></div>` : ""}
+        ${theirs ? `<div class="gap-split__col"><p class="gap-split__label">他以為是</p><p>${escapeHtml(theirs)}</p></div>` : ""}
+      </div>
+    `,
+  });
 }
 
-function renderDialogueScripts(scripts) {
-  const list = (Array.isArray(scripts) ? scripts : []).map((item) => String(item || "").trim()).filter(Boolean);
-  if (!list.length) return "";
-  return `
-    <article class="ai-block">
-      <h3>可以跟對方說的話</h3>
-      <p class="sfm-hint">直接照唸即可，用來對齊「我以為／他以為」。 </p>
-      <ul class="review-list">${list.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
-    </article>
-  `;
+function renderPracticeChecks(scripts, howNext) {
+  const items = [];
+  if (howNext) items.push({ key: "practice:how", label: "實戰修正", detail: howNext });
+  (Array.isArray(scripts) ? scripts : []).forEach((script, index) => {
+    const detail = String(script || "").trim();
+    if (!detail) return;
+    items.push({ key: `practice:script:${index}`, label: `對話練習 ${index + 1}`, detail });
+  });
+  if (!items.length) return "";
+  const rows = items
+    .map((item) => {
+      const checked = state.selectedPractice.includes(item.key) ? "checked" : "";
+      return `<label class="check-row check-row--practice"><input type="checkbox" data-practice="${escapeHtml(item.key)}" ${checked} /><span><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.detail)}</small></span></label>`;
+    })
+    .join("");
+  return renderReviewCard({
+    icon: "✅",
+    title: "下一步引導 / 練習建議",
+    wide: true,
+    body: `
+      <p class="sfm-hint">勾選表示這句你願意去說，或已經練習過。打勾是給自己的完成感，不是給別人看成績。</p>
+      <div class="check-list">${rows}</div>
+    `,
+  });
 }
 
 function renderBulletList(items, fallbackText) {
@@ -768,9 +802,9 @@ function renderAiStage() {
   const pastHtml = pastRounds
     .map(
       (round, index) => `
-      <article class="think-card" style="opacity:.78">
-        <p class="think-card__round">深度思考｜已完成　第 ${index + 1}/${state.think.max} 輪</p>
-        <h3>${escapeHtml(round.question || "")}</h3>
+      <article class="think-panel think-panel--past">
+        <p class="think-card__round">已完成　第 ${index + 1}/${state.think.max} 輪</p>
+        <h3 class="think-panel__question">${escapeHtml(round.question || "")}</h3>
         <p class="think-card__q">${escapeHtml(round.insight || "")}</p>
       </article>
     `
@@ -781,18 +815,18 @@ function renderAiStage() {
     .map((item, index) => {
       const key = `think:${state.think.round}:${index}`;
       const checked = state.selectedThinkActions.includes(key) ? "checked" : "";
-      return `<label class="check-row"><input type="checkbox" data-action="${key}" data-label="${escapeHtml(item.label || "")}" data-detail="${escapeHtml(item.detail || "")}" ${checked} /><span><strong>${escapeHtml(item.label || "下一步")}</strong><small>${escapeHtml(item.detail || "")}</small></span></label>`;
+      return `<label class="check-row check-row--practice"><input type="checkbox" data-action="${key}" data-label="${escapeHtml(item.label || "")}" data-detail="${escapeHtml(item.detail || "")}" ${checked} /><span><strong>${escapeHtml(item.label || "下一步")}</strong><small>${escapeHtml(item.detail || "")}</small></span></label>`;
     })
     .join("");
 
-  const thinkBlock = think
+  const thinkBody = think
     ? `
       ${pastHtml}
-      <article class="think-card" id="thinkCurrent">
-        <p class="think-card__round">下一步引導　第 ${state.think.round}/${state.think.max} 輪</p>
-        <h3>${escapeHtml(think.question || "")}</h3>
+      <div class="think-panel" id="thinkCurrent">
+        <p class="think-card__round">深度思考　第 ${state.think.round}/${state.think.max} 輪</p>
+        <h3 class="think-panel__question">${escapeHtml(think.question || "")}</h3>
         <p class="think-card__q">${escapeHtml(think.insight || "")}</p>
-        <p class="chips-label">選一句可跟對方說的話，或當成明天的下一步</p>
+        <p class="chips-label">勾選你願意練習或已經說過的句子</p>
         <div class="check-list">${thinkActions}</div>
         <label class="field" style="margin-top:16px">
           <span class="field__label">你想接續回覆的（選填）</span>
@@ -801,86 +835,104 @@ function renderAiStage() {
         <div class="ai-actions">
           ${state.think.round < state.think.max ? `<button class="btn btn--ghost" id="btnThinkSubmit" type="button">送出，進入下一輪</button>` : ""}
         </div>
-      </article>
+      </div>
     `
     : `
-      <article class="think-card">
+      <div class="think-panel">
         <p class="think-card__round">引導式互動</p>
         <p>整理完成後會立刻出現可勾選的下一步。若沒看到，再按一次開始整理即可。</p>
         <div class="ai-actions">
           <button class="btn btn--ai-ghost" id="btnThink" type="button">開始深度思考</button>
         </div>
-      </article>
+      </div>
     `;
 
+  const conclusion = ai.conclusion || ai.themeInsight || "";
   root.innerHTML = `
-    <section class="review-section" aria-labelledby="sec-theme">
-      <h2 class="review-section__title" id="sec-theme">【主標題與評等】</h2>
-      <article class="theme-banner">
-        <p class="theme-banner__kicker">${state.organizeSource === "cloud" ? "雲端 AI 復盤" : "本地草稿"}</p>
-        <h3 class="theme-banner__title">【${escapeHtml(ai.themeCategory || "覺察")}】主題：${escapeHtml(ai.themeTitle || "今天的復盤")} <span class="stars">[${starsText(ai.themeStars)}]</span></h3>
-        <p class="theme-banner__lead">${escapeHtml(ai.conclusion || ai.themeInsight || "")}</p>
-      </article>
-    </section>
-
-    <section class="review-section" aria-labelledby="sec-event">
-      <h2 class="review-section__title" id="sec-event">【深度事件拆解】</h2>
+    <div class="review-board">
+      ${renderReviewCard({
+        icon: "💡",
+        title: "核心診斷",
+        variant: "hero",
+        wide: true,
+        body: `
+          <p class="rv-card__kicker">${state.organizeSource === "cloud" ? "雲端 AI 復盤" : "本地草稿"}</p>
+          <p class="rv-card__conclusion">${escapeHtml(conclusion)}</p>
+        `,
+      })}
+      ${renderReviewCard({
+        icon: "🏷️",
+        title: "主標題與評等",
+        wide: true,
+        body: `
+          <p class="theme-inline">【${escapeHtml(ai.themeCategory || "覺察")}】${escapeHtml(ai.themeTitle || "今天的復盤")} <span class="stars">[${starsText(ai.themeStars)}]</span></p>
+        `,
+      })}
       ${renderAssumptionGap(ai)}
-      <article class="ai-block">
-        <h3>雙方盲點與心態</h3>
-        ${renderBulletList(mindsetList.length ? mindsetList : ai.reactionList, ai.othersReaction)}
-      </article>
-      <article class="ai-block">
-        <h3>事件經過</h3>
-        ${renderBulletList(ai.eventList, ai.event)}
-      </article>
-      <article class="ai-block">
-        <h3>事後反思</h3>
-        <p>${escapeHtml(ai.reflection || "")}</p>
-      </article>
-    </section>
-
-    <section class="review-section" aria-labelledby="sec-quotes">
-      <h2 class="review-section__title" id="sec-quotes">【金句與感恩清單】</h2>
-      <article class="ai-block gold-block">
-        <h3>今日金句</h3>
-        ${quoteCards || `<p class="gold-quote">把今天寫下來，不是給別人看成績，是讓這一天確實被過過。</p>`}
-        <p class="sfm-hint">可直接複製當標題或筆記；勾選後，完成今日復盤會加入 SFM 素材庫</p>
-        <div class="quote-list">${quoteChecks || sfmChecks}</div>
-      </article>
+      ${renderReviewCard({
+        icon: "🔎",
+        title: "雙方盲點與心態",
+        body: renderBulletList(mindsetList.length ? mindsetList : ai.reactionList, ai.othersReaction),
+      })}
+      ${renderReviewCard({
+        icon: "📋",
+        title: "事件拆解",
+        body: renderBulletList(ai.eventList, ai.event),
+      })}
+      ${renderReviewCard({
+        icon: "🪞",
+        title: "事後反思",
+        body: `<p>${escapeHtml(ai.reflection || "")}</p>`,
+      })}
+      ${renderReviewCard({
+        icon: "✨",
+        title: "今日金句",
+        body: `
+          ${quoteCards || `<p class="gold-quote">把今天寫下來，不是給別人看成績，是讓這一天確實被過過。</p>`}
+          <p class="sfm-hint">可直接複製當標題或筆記；勾選後，完成今日復盤會加入 SFM 素材庫</p>
+          <div class="quote-list">${quoteChecks || ""}</div>
+        `,
+      })}
+      ${renderReviewCard({
+        icon: "🙏",
+        title: "感恩清單",
+        body: `
+          ${gratitudeList.length ? renderBulletList(gratitudeList) : `<p>${escapeHtml(ai.gratitudeNote || "從今天這件事裡，先留一句具體的感謝。")}</p>`}
+          ${ai.gratitudeNote && gratitudeList.length ? `<p class="sfm-hint">${escapeHtml(ai.gratitudeNote)}</p>` : ""}
+          <textarea class="textarea" id="gratitudeInput" rows="3" placeholder="你還想補一句感謝的是…">${escapeHtml(state.gratitude)}</textarea>
+        `,
+      })}
       ${
         sfmChecks
-          ? `
-      <article class="ai-block">
-        <h3>Story · Feeling · Meaning</h3>
-        <p class="sfm-hint">也可勾選下面這幾段體悟，一併收入素材庫。</p>
-        <div class="quote-list">${sfmChecks}</div>
-      </article>`
+          ? renderReviewCard({
+              icon: "🧩",
+              title: "Story · Feeling · Meaning",
+              wide: true,
+              body: `
+                <p class="sfm-hint">也可勾選下面這幾段體悟，一併收入素材庫。</p>
+                <div class="quote-list">${sfmChecks}</div>
+              `,
+            })
           : ""
       }
-      <article class="ai-block gratitude-box">
-        <h3>感恩清單</h3>
-        ${gratitudeList.length ? renderBulletList(gratitudeList) : `<p>${escapeHtml(ai.gratitudeNote || "從今天這件事裡，先留一句具體的感謝。")}</p>`}
-        ${ai.gratitudeNote && gratitudeList.length ? `<p class="sfm-hint">${escapeHtml(ai.gratitudeNote)}</p>` : ""}
-        <textarea class="textarea" id="gratitudeInput" rows="3" placeholder="你還想補一句感謝的是…">${escapeHtml(state.gratitude)}</textarea>
-      </article>
-    </section>
-
-    <section class="review-section" aria-labelledby="sec-think">
-      <h2 class="review-section__title" id="sec-think">【下一步引導 / 深度思考】</h2>
-      ${renderDialogueScripts(ai.nextScripts)}
-      ${ai.howNext ? `<article class="ai-block"><h3>實戰修正</h3><p>${escapeHtml(ai.howNext)}</p></article>` : ""}
-      ${thinkBlock}
-    </section>
-
-    <section class="review-section" aria-labelledby="sec-raw">
-      <h2 class="review-section__title" id="sec-raw">【原始輸入紀錄】</h2>
-      <article class="ai-block raw-block">
-        <p class="raw-record">${escapeHtml(rawText || "（尚未留下原文）")}</p>
-        <p class="sfm-hint">這段原文會永久保存在本機歷史紀錄，不會被整理結果覆蓋。</p>
-      </article>
-    </section>
-
+      ${renderPracticeChecks(ai.nextScripts, ai.howNext)}
+      ${renderReviewCard({
+        icon: "🧭",
+        title: "深度思考",
+        wide: true,
+        body: thinkBody,
+      })}
+      ${renderReviewCard({
+        icon: "📝",
+        title: "原始輸入紀錄",
+        wide: true,
+        variant: "muted",
+        body: `
+          <p class="raw-record">${escapeHtml(rawText || "（尚未留下原文）")}</p>
+          <p class="sfm-hint">這段原文會永久保存在本機歷史紀錄，不會被整理結果覆蓋。</p>
+        `,
+      })}
+    </div>
     <div class="ai-actions">
       <button class="btn" id="btnComplete" type="button">完成今日復盤</button>
     </div>
@@ -1343,6 +1395,7 @@ function applyOrganizeResult(result, source) {
   if (source) state.organizeSource = source;
   state.selectedQuotes = collectQuoteKeys(safe).filter((key) => key.startsWith("quote:"));
   state.selectedSfm = collectQuoteKeys(safe).filter((key) => key.startsWith("sfm:"));
+  state.selectedPractice = [];
   state.think = { round: 0, max: 5, history: [], current: null };
   try {
     upsertReview(currentIso(), {
@@ -2004,6 +2057,12 @@ function bindEvents() {
       state.selectedThinkActions = event.target.checked
         ? [...new Set([...state.selectedThinkActions, action])]
         : state.selectedThinkActions.filter((item) => item !== action);
+    }
+    const practice = event.target.dataset.practice;
+    if (practice) {
+      state.selectedPractice = event.target.checked
+        ? [...new Set([...(state.selectedPractice || []), practice])]
+        : (state.selectedPractice || []).filter((item) => item !== practice);
     }
     if (event.target.id === "gratitudeInput") state.gratitude = event.target.value;
   });
