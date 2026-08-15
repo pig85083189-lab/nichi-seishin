@@ -675,6 +675,17 @@ function loadReviewForDate(iso) {
   renderAiStage();
 }
 
+function renderConclusionCallout(text) {
+  const line = String(text || "").trim();
+  if (!line) return "";
+  return `
+    <aside class="conclusion-callout">
+      <p class="conclusion-callout__label">核心結論</p>
+      <p class="conclusion-callout__text">${escapeHtml(line)}</p>
+    </aside>
+  `;
+}
+
 function renderReviewCard({ icon, title, body, variant = "", wide = false }) {
   if (!String(body || "").trim()) return "";
   const extras = [variant ? `rv-card--${variant}` : "", wide ? "rv-card--wide" : ""].filter(Boolean).join(" ");
@@ -860,7 +871,7 @@ function renderAiStage() {
         body: `
           <p class="rv-card__kicker">${state.organizeSource === "cloud" ? "雲端 AI 復盤" : "本地草稿"}</p>
           <p class="theme-inline">【${escapeHtml(ai.themeCategory || "覺察")}】${escapeHtml(ai.themeTitle || "今天的復盤")} <span class="stars">[${starsText(ai.themeStars)}]</span></p>
-          <p class="rv-card__conclusion">${escapeHtml(conclusion)}</p>
+          ${renderConclusionCallout(conclusion)}
           ${renderSub(
             "✨ 今日金句",
             `
@@ -1835,7 +1846,7 @@ function renderHistoryReport(review) {
   return `
     <div class="history-report">
       <p><strong>【主標題與評等】【${escapeHtml(ai.themeCategory || "")}】</strong>主題：${escapeHtml(ai.themeTitle || "")} [${starsText(ai.themeStars)}]</p>
-      <p>${escapeHtml(ai.conclusion || ai.themeInsight || "")}</p>
+      ${renderConclusionCallout(ai.conclusion || ai.themeInsight || "")}
       <p><strong>【深度事件拆解】</strong></p>
       ${ai.assumptionGap?.line ? `<p class="gap-card__line">${escapeHtml(ai.assumptionGap.line)}</p>` : ""}
       ${ai.assumptionGap?.mine ? `<p><strong>我以為是</strong><br>${escapeHtml(ai.assumptionGap.mine)}</p>` : ""}

@@ -1407,6 +1407,33 @@ body.nav-closed .side-logout {
   letter-spacing: 0.16em;
 }
 
+.conclusion-callout {
+  margin: 4px 0 0;
+  padding: 16px 18px 16px 20px;
+  background: #f3efe6;
+  border: 1px solid var(--cream-border);
+  border-left: 5px solid var(--header);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.conclusion-callout__label {
+  margin: 0 0 8px;
+  color: var(--header);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+.conclusion-callout__text {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: clamp(17px, 2vw, 21px);
+  font-weight: 700;
+  line-height: 1.65;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
 .rv-card__conclusion {
   margin: 0;
   font-family: var(--serif);
