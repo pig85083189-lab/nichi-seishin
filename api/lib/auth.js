@@ -1,0 +1,109 @@
+const crypto = require("crypto");
+
+const SESSION_COOKIE = "nichi_session";
+const STATE_COOKIE = "nichi_oauth_state";
+const SESSION_DAYS = 30;
+
+function authSecret() {
+  return String(process.env.AUTH_SECRET || "").trim();
+}
+
+function googleConfigured() {
+  return Boolean(String(process.env.GOOGLE_CLIENT_ID || "").trim() && String(process.env.GOOGLE_CLIENT_SECRET || "").trim() && authSecret());
+}
+
+function originFromReq(req) {
+  const proto = String(req.headers["x-forwarded-proto"] || "https").split(",")[0].trim();
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim();
+  return `${proto}://${host}`;
+}
+
+function isHttps(req) {
+  return String(req.headers["x-forwarded-proto"] || "").includes("https");
+}
+
+function sign(payload) {
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const sig = crypto.createHmac("sha256", authSecret()).update(body).digest("base64url");
+  return `${body}.${sig}`;
+}
+
+function verify(token) {
+  if (!token || !authSecret()) return null;
+  const [body, sig] = String(token).split(".");
+  if (!body || !sig) return null;
+  const expected = crypto.createHmac("sha256", authSecret()).update(body).digest("base64url");
+  const left = Buffer.from(sig);
+  const right = Buffer.from(expected);
+  if (left.length !== right.length || !crypto.timingSafeEqual(left, right)) return null;
+  try {
+    const data = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+    if (data.exp && Date.now() > Number(data.exp)) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function parseCookies(req) {
+  const header = String(req.headers.cookie || "");
+  const out = {};
+  header.split(";").forEach((part) => {
+    const trimmed = part.trim();
+    if (!trimmed) return;
+    const index = trimmed.indexOf("=");
+    if (index === -1) return;
+    out[trimmed.slice(0, index)] = decodeURIComponent(trimmed.slice(index + 1));
+  });
+  return out;
+}
+
+function cookieHeader(name, value, req, options = {}) {
+  const parts = [`${name}=${encodeURIComponent(value || "")}`, "Path=/", "HttpOnly", "SameSite=Lax"];
+  if (isHttps(req)) parts.push("Secure");
+  if (options.clear) parts.push("Max-Age=0");
+  else if (options.maxAge) parts.push(`Max-Age=${options.maxAge}`);
+  return parts.join("; ");
+}
+
+function getSession(req) {
+  const token = parseCookies(req)[SESSION_COOKIE];
+  const data = verify(token);
+  if (!data || !data.id) return null;
+  return {
+    id: String(data.id),
+    email: data.email || "",
+    name: data.name || "",
+    picture: data.picture || "",
+  };
+}
+
+function requireUser(req, res) {
+  const user = getSession(req);
+  if (!user) {
+    res.status(401).json({ ok: false, error: "請先使用 Google 帳號登入" });
+    return null;
+  }
+  return user;
+}
+
+function publicUser(user) {
+  if (!user) return null;
+  return { id: user.id, email: user.email, name: user.name, picture: user.picture };
+}
+
+module.exports = {
+  SESSION_COOKIE,
+  STATE_COOKIE,
+  SESSION_DAYS,
+  authSecret,
+  googleConfigured,
+  originFromReq,
+  sign,
+  verify,
+  parseCookies,
+  cookieHeader,
+  getSession,
+  requireUser,
+  publicUser,
+};

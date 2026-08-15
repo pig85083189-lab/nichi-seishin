@@ -33,56 +33,121 @@ async function kvSet(key, value) {
   return response.ok;
 }
 
-const REVIEWS_KEY = "nichi:reviews";
-
-function reportKey(type, period) {
-  return `nichi:report:${type}:${period}`;
+function assertUserId(userId) {
+  const id = String(userId || "").trim();
+  if (!id) throw new Error("缺少 user_id");
+  return id;
 }
 
-async function loadReviews() {
-  const stored = await kvGet(REVIEWS_KEY);
-  return stored && typeof stored === "object" ? stored : {};
+function userKey(userId, name) {
+  return `nichi:user:${assertUserId(userId)}:${name}`;
 }
 
-async function saveReviews(reviews) {
-  return kvSet(REVIEWS_KEY, reviews && typeof reviews === "object" ? reviews : {});
+const USERS_KEY = "nichi:users";
+
+async function listUsers() {
+  const stored = await kvGet(USERS_KEY);
+  return Array.isArray(stored) ? stored.filter((item) => item && item.id) : [];
 }
 
-async function mergeReviews(incoming) {
-  const current = await loadReviews();
+async function registerUser(user) {
+  if (!user || !user.id) return false;
+  const current = await listUsers();
+  const next = current.filter((item) => item.id !== user.id);
+  next.push({
+    id: String(user.id),
+    email: user.email || "",
+    name: user.name || "",
+    updatedAt: new Date().toISOString(),
+  });
+  return kvSet(USERS_KEY, next);
+}
+
+async function loadReviews(userId) {
+  const stored = await kvGet(userKey(userId, "reviews"));
+  return stored && typeof stored === "object" && !Array.isArray(stored) ? stored : {};
+}
+
+async function saveReviews(userId, reviews) {
+  return kvSet(userKey(userId, "reviews"), reviews && typeof reviews === "object" ? reviews : {});
+}
+
+async function mergeReviews(userId, incoming) {
+  const current = await loadReviews(userId);
   const next = { ...current };
   Object.entries(incoming || {}).forEach(([iso, review]) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(iso) || !review || typeof review !== "object") return;
-    next[iso] = { ...(current[iso] || {}), ...review, date: iso };
+    next[iso] = { ...(current[iso] || {}), ...review, date: iso, userId: assertUserId(userId) };
   });
-  await saveReviews(next);
+  await saveReviews(userId, next);
   return next;
 }
 
-function latestKey(type) {
-  return `nichi:report:${type}:latest`;
+function reportKey(userId, type, period) {
+  return userKey(userId, `report:${type}:${period}`);
 }
 
-async function loadReport(type, period) {
-  return kvGet(reportKey(type, period));
+function latestKey(userId, type) {
+  return userKey(userId, `report:${type}:latest`);
 }
 
-async function loadLatestReport(type) {
-  return kvGet(latestKey(type));
+async function loadReport(userId, type, period) {
+  return kvGet(reportKey(userId, type, period));
 }
 
-async function saveReport(type, period, report) {
-  const payload = report && typeof report === "object" ? { ...report, period, type } : report;
-  const ok = await kvSet(reportKey(type, period), payload);
-  await kvSet(latestKey(type), payload);
+async function loadLatestReport(userId, type) {
+  return kvGet(latestKey(userId, type));
+}
+
+async function saveReport(userId, type, period, report) {
+  const payload = report && typeof report === "object" ? { ...report, period, type, userId: assertUserId(userId) } : report;
+  const ok = await kvSet(reportKey(userId, type, period), payload);
+  await kvSet(latestKey(userId, type), payload);
   return ok;
+}
+
+async function loadUserData(userId) {
+  const id = assertUserId(userId);
+  const [reviews, tasks, sfm, reports] = await Promise.all([
+    kvGet(userKey(id, "reviews")),
+    kvGet(userKey(id, "tasks")),
+    kvGet(userKey(id, "sfm")),
+    kvGet(userKey(id, "reports")),
+  ]);
+  return {
+    userId: id,
+    reviews: reviews && typeof reviews === "object" && !Array.isArray(reviews) ? reviews : {},
+    tasks: Array.isArray(tasks) ? tasks : [],
+    sfm: Array.isArray(sfm) ? sfm : [],
+    reports: reports && typeof reports === "object" && !Array.isArray(reports) ? reports : {},
+  };
+}
+
+async function saveUserData(userId, bundle) {
+  const id = assertUserId(userId);
+  const reviews = bundle.reviews && typeof bundle.reviews === "object" && !Array.isArray(bundle.reviews) ? bundle.reviews : {};
+  const tasks = Array.isArray(bundle.tasks) ? bundle.tasks.map((item) => ({ ...item, userId: id })) : [];
+  const sfm = Array.isArray(bundle.sfm) ? bundle.sfm.map((item) => ({ ...item, userId: id })) : [];
+  const reports = bundle.reports && typeof bundle.reports === "object" && !Array.isArray(bundle.reports) ? bundle.reports : {};
+  await Promise.all([
+    kvSet(userKey(id, "reviews"), reviews),
+    kvSet(userKey(id, "tasks"), tasks),
+    kvSet(userKey(id, "sfm"), sfm),
+    kvSet(userKey(id, "reports"), reports),
+  ]);
+  return { userId: id, reviews, tasks, sfm, reports };
 }
 
 module.exports = {
   kvConfigured,
+  listUsers,
+  registerUser,
   loadReviews,
+  saveReviews,
   mergeReviews,
   loadReport,
   loadLatestReport,
   saveReport,
+  loadUserData,
+  saveUserData,
 };

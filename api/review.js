@@ -36,6 +36,8 @@ function readJsonBody(req) {
   return {};
 }
 
+const { requireUser } = require("./lib/auth");
+
 function getApiKey() {
   return String(process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY || "").trim();
 }
@@ -215,6 +217,7 @@ module.exports = async function handler(req, res) {
     res.status(200).json({
       ok: true,
       configured: Boolean(getApiKey()),
+      auth: require("./lib/auth").googleConfigured(),
       model: String(process.env.OPENAI_MODEL || "gpt-4o-mini"),
     });
     return;
@@ -224,6 +227,9 @@ module.exports = async function handler(req, res) {
     res.status(405).json({ ok: false, error: "只接受 POST" });
     return;
   }
+
+  const user = requireUser(req, res);
+  if (!user) return;
 
   try {
     const body = readJsonBody(req);

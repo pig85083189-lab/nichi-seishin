@@ -66,6 +66,9 @@ const state = {
   listening: false,
   organizeSource: "",
   apiConfigured: null,
+  user: null,
+  authConfigured: false,
+  syncing: false,
 };
 
 /* =============================================================================
@@ -81,8 +84,14 @@ function loadJson(key, fallback) {
   }
 }
 
-function saveJson(key, value) {
+function saveJson(key, value, options = {}) {
   localStorage.setItem(key, JSON.stringify(value));
+  if (
+    !options.silent &&
+    [STORAGE_KEYS.reviews, STORAGE_KEYS.tasks, STORAGE_KEYS.sfm, STORAGE_KEYS.reports].includes(key)
+  ) {
+    scheduleCloudSync();
+  }
 }
 
 function uid() {
@@ -420,6 +429,9 @@ function formatApiError(error) {
   const message = String(error?.message || error || "未知錯誤");
   if (error?.name === "AbortError" || /請求逾時|逾時/.test(message)) return "雲端通道逾時。請確認 Vercel 已 Redeploy，且 OPENAI_API_KEY 設在 Production。";
   if (/file:|本機 HTML/.test(message)) return message;
+  if (/401|請先使用 Google|未登入|未授權/i.test(message)) {
+    return "請先使用 Google 帳號登入，才能使用雲端 AI 與同步備份。";
+  }
   if (/404|Failed to fetch|fetch 失敗|NetworkError/i.test(message)) {
     return "找不到 /api/review。請用 Vercel 網址開啟，並重新部署後端函式。";
   }
@@ -431,7 +443,7 @@ async function fetchWithTimeout(url, options, timeoutMs) {
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     console.log("[日精進 API] fetch 送出", options?.method || "GET", url);
-    return await fetch(url, { ...options, signal: controller.signal });
+    return await fetch(url, { credentials: "include", ...options, signal: controller.signal });
   } catch (error) {
     if (error?.name === "AbortError") throw new Error(`請求逾時（${timeoutMs}ms）`);
     throw new Error(`fetch 失敗：${error?.message || error}`);
@@ -591,6 +603,10 @@ function thinkFromOrganize(organize, round = 1) {
 }
 
 async function maybeEnhanceWithApi(rawText, token) {
+  if (!state.user) {
+    showToast("本地草稿已出。登入 Google 後才能使用雲端 AI 與同步備份。");
+    return;
+  }
   showToast("正在呼叫雲端 AI…");
   try {
     const remote = await generateReview(rawText);
@@ -775,6 +791,7 @@ function compactReviewsForRange(fromIso, toIso) {
 }
 
 async function fetchStoredCloudReport(type, period, latest) {
+  if (!state.user) return null;
   const qs = latest ? "&latest=1" : "";
   const response = await fetchWithTimeout(
     `${location.origin}/api/generate-report?type=${encodeURIComponent(type)}&period=${encodeURIComponent(period)}&read=1${qs}`,
@@ -786,6 +803,7 @@ async function fetchStoredCloudReport(type, period, latest) {
 }
 
 async function generateCloudReport(type, fromIso, toIso, period) {
+  if (!state.user) return null;
   const reviews = compactReviewsForRange(fromIso, toIso);
   if (!reviews.length) return null;
   const response = await fetchWithTimeout(
@@ -804,15 +822,184 @@ async function generateCloudReport(type, fromIso, toIso, period) {
   return payload.data || null;
 }
 
-function syncReviewsToCloud() {
-  if (typeof location === "undefined" || location.protocol === "file:") return;
-  const reviews = compactReviewsForRange("2000-01-01", "2100-01-01");
-  if (!reviews.length) return;
-  fetch(`${location.origin}/api/generate-report`, {
-    method: "POST",
+function scheduleCloudSync() {
+  if (!state.user || state.syncing) return;
+  clearTimeout(scheduleCloudSync.timer);
+  scheduleCloudSync.timer = setTimeout(() => {
+    pushCloudData().catch(() => {});
+  }, 900);
+}
+
+function collectCloudBundle() {
+  return {
+    reviews: getReviews(),
+    tasks: getTasks(),
+    sfm: getSfm(),
+    reports: getStoredReports(),
+  };
+}
+
+async function pushCloudData() {
+  if (!state.user || typeof location === "undefined" || location.protocol === "file:") return;
+  const response = await fetch(`${location.origin}/api/sync`, {
+    method: "PUT",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ type: "week", read: "1", reviews }),
-  }).catch(() => {});
+    body: JSON.stringify(collectCloudBundle()),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.ok === false) {
+    throw new Error(payload.error || `HTTP ${response.status}`);
+  }
+}
+
+function newerStamp(left, right) {
+  return String((left && left.updatedAt) || "") >= String((right && right.updatedAt) || "");
+}
+
+function mergeCloudBundle(cloud) {
+  state.syncing = true;
+  try {
+    const localReviews = getReviews();
+    const nextReviews = { ...localReviews };
+    Object.entries(cloud.reviews || {}).forEach(([iso, review]) => {
+      if (!nextReviews[iso] || newerStamp(review, nextReviews[iso])) nextReviews[iso] = review;
+    });
+    saveJson(STORAGE_KEYS.reviews, nextReviews, { silent: true });
+
+    const taskMap = new Map();
+    [...getTasks(), ...(Array.isArray(cloud.tasks) ? cloud.tasks : [])].forEach((task) => {
+      if (!task || !task.id) return;
+      const current = taskMap.get(task.id);
+      if (!current || newerStamp(task, current)) taskMap.set(task.id, task);
+    });
+    saveJson(STORAGE_KEYS.tasks, [...taskMap.values()], { silent: true });
+
+    const sfmMap = new Map();
+    [...getSfm(), ...(Array.isArray(cloud.sfm) ? cloud.sfm : [])].forEach((item) => {
+      if (!item || !item.id) return;
+      const current = sfmMap.get(item.id);
+      if (!current || newerStamp(item, current)) sfmMap.set(item.id, item);
+    });
+    saveJson(STORAGE_KEYS.sfm, [...sfmMap.values()], { silent: true });
+
+    saveJson(STORAGE_KEYS.reports, { ...getStoredReports(), ...(cloud.reports || {}) }, { silent: true });
+  } finally {
+    state.syncing = false;
+  }
+}
+
+async function pullCloudData() {
+  if (!state.user) return;
+  const response = await fetch(`${location.origin}/api/sync`, { method: "GET", credentials: "include" });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.ok === false) {
+    throw new Error(payload.error || `HTTP ${response.status}`);
+  }
+  mergeCloudBundle(payload.data || {});
+  try {
+    loadReviewForDate(currentIso());
+    updateStats();
+    if (state.page === "next") renderTasks();
+    if (state.page === "sfm") renderSfm();
+    if (state.page === "history") renderHistory();
+    if (state.page === "report") renderReport();
+  } catch {
+    /* 畫面重整失敗也不擋同步 */
+  }
+}
+
+function renderAuth() {
+  const side = document.getElementById("sideAuth");
+  const top = document.getElementById("topAuthBtn");
+  const user = state.user;
+  if (top) {
+    top.textContent = user ? user.name || user.email || "已登入" : "登入";
+    top.title = user ? "登出" : "使用 Google 帳號登入";
+  }
+  if (!side) return;
+  if (!user) {
+    side.innerHTML = `
+      <button class="auth-login" id="btnGoogleLogin" type="button">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <path fill="#4285F4" d="M22.6 12.25c0-.8-.07-1.57-.2-2.31H12v4.37h5.95a5.08 5.08 0 0 1-2.2 3.34v2.77h3.56c2.08-1.92 3.29-4.75 3.29-8.17Z" />
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.56-2.77c-.99.66-2.26 1.05-3.72 1.05-2.86 0-5.29-1.93-6.16-4.53H2.18v2.85A10.99 10.99 0 0 0 12 23Z" />
+          <path fill="#FBBC05" d="M5.84 14.09A6.6 6.6 0 0 1 5.5 12c0-.72.12-1.43.34-2.09V7.06H2.18A11 11 0 0 0 1 12c0 1.78.43 3.46 1.18 4.94l3.66-2.85Z" />
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.07.56 4.21 1.64l3.16-3.16C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.85C6.71 7.31 9.14 5.38 12 5.38Z" />
+        </svg>
+        <span>使用 Google 帳號登入</span>
+      </button>
+      <p class="auth-hint" id="authHint">登入後，復盤、素材庫與下一步會跟著你的帳號安全備份。</p>
+    `;
+    return;
+  }
+  const initial = escapeHtml((user.name || user.email || "我").slice(0, 1));
+  const avatar = user.picture
+    ? `<img src="${escapeHtml(user.picture)}" alt="" referrerpolicy="no-referrer" />`
+    : `<span class="auth-avatar">${initial}</span>`;
+  side.innerHTML = `
+    <div class="auth-user">
+      ${avatar}
+      <div class="auth-user__meta">
+        <p class="auth-user__name">${escapeHtml(user.name || "已登入")}</p>
+        <p class="auth-user__email">${escapeHtml(user.email || "")}</p>
+      </div>
+    </div>
+    <button class="auth-logout" id="btnGoogleLogout" type="button"><span>登出</span></button>
+  `;
+}
+
+function startGoogleLogin() {
+  if (typeof location === "undefined" || location.protocol === "file:") {
+    showToast("請用 Vercel 網址開啟，才能使用 Google 登入。");
+    return;
+  }
+  location.href = `${location.origin}/api/auth/google`;
+}
+
+function startGoogleLogout() {
+  location.href = `${location.origin}/api/auth/logout`;
+}
+
+async function refreshAuth() {
+  if (typeof location === "undefined" || location.protocol === "file:") {
+    renderAuth();
+    return;
+  }
+  try {
+    const response = await fetch(`${location.origin}/api/auth/me`, { credentials: "include" });
+    const payload = await response.json().catch(() => ({}));
+    state.authConfigured = Boolean(payload.configured);
+    state.user = payload.user || null;
+    renderAuth();
+    if (state.user) {
+      await pullCloudData();
+      await pushCloudData();
+    }
+  } catch {
+    renderAuth();
+  }
+}
+
+function handleAuthQuery() {
+  try {
+    const params = new URLSearchParams(location.search);
+    const auth = params.get("auth");
+    if (!auth) return;
+    if (auth === "ok") showToast("已用 Google 帳號登入，資料會跟著你的帳號備份。");
+    if (auth === "out") showToast("已登出。本機草稿仍在這台裝置上。");
+    if (auth === "error") showToast(`登入失敗：${params.get("reason") || "請再試一次"}`);
+    params.delete("auth");
+    params.delete("reason");
+    const next = `${location.pathname}${params.toString() ? `?${params}` : ""}${location.hash}`;
+    history.replaceState({}, "", next);
+  } catch {
+    /* ignore */
+  }
+}
+
+function syncReviewsToCloud() {
+  scheduleCloudSync();
 }
 
 function renderAiReportBlock(ai, status) {
@@ -1941,6 +2128,10 @@ function runThink(replyText = "") {
 }
 
 async function enhanceThinkWithApi(nextRound, selected, reply, token) {
+  if (!state.user) {
+    showToast("登入 Google 後，深度思考才會走到雲端。");
+    return;
+  }
   showToast("正在呼叫雲端 AI 深挖…");
   try {
     const remote = await generateThink(state.rawText, state.organize, nextRound, selected, reply);
@@ -2576,6 +2767,21 @@ function bindEvents() {
     }
   });
 
+  const sideAuth = document.getElementById("sideAuth");
+  if (sideAuth) {
+    sideAuth.addEventListener("click", (event) => {
+      if (event.target.closest("#btnGoogleLogin")) startGoogleLogin();
+      if (event.target.closest("#btnGoogleLogout")) startGoogleLogout();
+    });
+  }
+  const topAuth = document.getElementById("topAuthBtn");
+  if (topAuth) {
+    topAuth.addEventListener("click", () => {
+      if (state.user) startGoogleLogout();
+      else startGoogleLogin();
+    });
+  }
+
   document.getElementById("reminderCta").addEventListener("click", () => {
     document.getElementById("reminderModal").showModal();
   });
@@ -2614,6 +2820,8 @@ function init() {
     setupSpeech();
     setInterval(tickReminder, 20000);
     probeReviewApi();
+    handleAuthQuery();
+    refreshAuth();
   } catch {
     /* 其餘初始化失敗也不擋「開始整理」 */
   }

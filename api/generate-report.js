@@ -1,5 +1,6 @@
 const { callOpenAI } = require("./lib/openai");
-const { kvConfigured, loadReviews, mergeReviews, loadReport, loadLatestReport, saveReport } = require("./lib/store");
+const { requireUser } = require("./lib/auth");
+const { kvConfigured, listUsers, loadReviews, mergeReviews, loadReport, loadLatestReport, saveReport } = require("./lib/store");
 
 const REPORT_SYSTEM = `你是「日精進」的週月報教練。使用者會給你一段期間內、多天的復盤摘要。請聚合成一份冷靜、精準、可執行的綜合報告。
 
@@ -202,22 +203,48 @@ async function handler(req, res, forced = {}) {
   const period = String(body.period || req.query?.period || range.period);
 
   try {
+    if (fromCron) {
+      const users = await listUsers();
+      const results = [];
+      for (const account of users) {
+        const entries = reviewsInRange(await loadReviews(account.id), range.fromIso, range.toIso);
+        if (!entries.length) {
+          results.push({ userId: account.id, skipped: true });
+          continue;
+        }
+        const report = await buildAiReport({
+          type: kind,
+          fromIso: range.fromIso,
+          toIso: range.toIso,
+          period,
+          label: range.label,
+          entries,
+        });
+        await saveReport(account.id, kind, period, report);
+        results.push({ userId: account.id, ok: true, period, days: entries.length });
+      }
+      res.status(200).json({ ok: true, cron: true, results, kv: kvConfigured() });
+      return;
+    }
+
+    const user = requireUser(req, res);
+    if (!user) return;
+
     if (req.method === "POST" && Array.isArray(body.reviews) && body.reviews.length) {
-      await mergeReviews(compactMap(body.reviews));
+      await mergeReviews(user.id, compactMap(body.reviews));
     }
 
     const wantLatest = String(req.query?.latest || body.latest || "") === "1";
-    if (readOnly || (req.method === "GET" && !fromCron)) {
-      let stored = await loadReport(kind, period);
-      if (!stored && wantLatest) stored = await loadLatestReport(kind);
-      res.status(200).json({ ok: true, stored: Boolean(stored), data: stored || null, kv: kvConfigured() });
+    if (readOnly || req.method === "GET") {
+      let stored = await loadReport(user.id, kind, period);
+      if (!stored && wantLatest) stored = await loadLatestReport(user.id, kind);
+      res.status(200).json({ ok: true, stored: Boolean(stored), data: stored || null, kv: kvConfigured(), userId: user.id });
       return;
     }
 
     let entries = Array.isArray(body.reviews) ? reviewsInRange(compactMap(body.reviews), range.fromIso, range.toIso) : [];
     if (!entries.length) {
-      const all = await loadReviews();
-      entries = reviewsInRange(all, range.fromIso, range.toIso);
+      entries = reviewsInRange(await loadReviews(user.id), range.fromIso, range.toIso);
     }
 
     if (!entries.length) {
@@ -230,6 +257,7 @@ async function handler(req, res, forced = {}) {
         fromIso: range.fromIso,
         toIso: range.toIso,
         kv: kvConfigured(),
+        userId: user.id,
       });
       return;
     }
@@ -242,8 +270,8 @@ async function handler(req, res, forced = {}) {
       label: range.label,
       entries,
     });
-    await saveReport(kind, period, report);
-    res.status(200).json({ ok: true, data: report, kv: kvConfigured() });
+    await saveReport(user.id, kind, period, report);
+    res.status(200).json({ ok: true, data: report, kv: kvConfigured(), userId: user.id });
   } catch (error) {
     const aborted = error?.name === "AbortError" || /aborted/i.test(String(error?.message || ""));
     res.status(aborted ? 504 : error.status || 500).json({
