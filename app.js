@@ -209,6 +209,73 @@ function saveTasks(tasks) {
   saveJson(STORAGE_KEYS.tasks, tasks);
 }
 
+function taskTitleFromParts(label, detail) {
+  const title = String(label || "").trim();
+  const body = String(detail || "").trim();
+  if (title && body) return `${title}：${body}`;
+  return title || body;
+}
+
+function findTaskBySourceKey(key) {
+  if (!key) return null;
+  return getTasks().find((task) => task.sourceKey === key) || null;
+}
+
+function addTaskFromGuide({ key, label, detail }) {
+  const title = taskTitleFromParts(label, detail);
+  if (!title) return { added: false };
+  const tasks = getTasks();
+  if (tasks.some((task) => task.sourceKey === key || task.title === title)) {
+    return { added: false, exists: true };
+  }
+  tasks.unshift({
+    id: uid(),
+    title,
+    status: "doing",
+    source: "今日復盤",
+    sourceKey: key || "",
+    createdAt: new Date().toISOString(),
+  });
+  saveTasks(tasks);
+  try {
+    renderTasks();
+  } catch {
+    /* 下一步頁面還沒畫也沒關係 */
+  }
+  return { added: true };
+}
+
+function removeTaskFromGuide(key) {
+  if (!key) return { removed: false };
+  const tasks = getTasks();
+  const index = tasks.findIndex((task) => task.sourceKey === key);
+  if (index === -1) return { removed: false };
+  if (tasks[index].status !== "doing") return { removed: false, kept: true };
+  tasks.splice(index, 1);
+  saveTasks(tasks);
+  try {
+    renderTasks();
+  } catch {
+    /* ignore */
+  }
+  return { removed: true };
+}
+
+function syncGuideToNextSteps(input, checked) {
+  const key = input.dataset.practice || input.dataset.action || "";
+  const label = input.dataset.label || "";
+  const detail = input.dataset.detail || "";
+  if (checked) {
+    const result = addTaskFromGuide({ key, label, detail });
+    if (result.added) showToast("已加入『我的下一步』");
+    else if (result.exists) showToast("這項已在『我的下一步』");
+    return;
+  }
+  const result = removeTaskFromGuide(key);
+  if (result.removed) showToast("已從『我的下一步』拿掉");
+  else if (result.kept) showToast("這項已在清單裡，改由你手動管理");
+}
+
 function getSfm() {
   const saved = loadJson(STORAGE_KEYS.sfm, []);
   return Array.isArray(saved) ? saved : [];
@@ -733,8 +800,8 @@ function renderPracticeChecks(scripts, howNext) {
   if (!items.length) return "";
   const rows = items
     .map((item) => {
-      const checked = state.selectedPractice.includes(item.key) ? "checked" : "";
-      return `<label class="check-row check-row--practice"><input type="checkbox" data-practice="${escapeHtml(item.key)}" ${checked} /><span><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.detail)}</small></span></label>`;
+      const checked = state.selectedPractice.includes(item.key) || Boolean(findTaskBySourceKey(item.key)) ? "checked" : "";
+      return `<label class="check-row check-row--practice"><input type="checkbox" data-practice="${escapeHtml(item.key)}" data-label="${escapeHtml(item.label)}" data-detail="${escapeHtml(item.detail)}" ${checked} /><span><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.detail)}</small></span></label>`;
     })
     .join("");
   return renderReviewCard({
@@ -826,7 +893,7 @@ function renderAiStage() {
   const thinkActions = (think?.actions || [])
     .map((item, index) => {
       const key = `think:${state.think.round}:${index}`;
-      const checked = state.selectedThinkActions.includes(key) ? "checked" : "";
+      const checked = state.selectedThinkActions.includes(key) || Boolean(findTaskBySourceKey(key)) ? "checked" : "";
       return `<label class="check-row check-row--practice"><input type="checkbox" data-action="${key}" data-label="${escapeHtml(item.label || "")}" data-detail="${escapeHtml(item.detail || "")}" ${checked} /><span><strong>${escapeHtml(item.label || "下一步")}</strong><small>${escapeHtml(item.detail || "")}</small></span></label>`;
     })
     .join("");
@@ -1582,22 +1649,14 @@ function completeToday() {
     saveSfm(sfmItems);
   }
 
-  const actionInputs = [...document.querySelectorAll("[data-action]:checked")];
-  const tasks = getTasks();
-  const existingTitles = new Set(tasks.map((task) => task.title));
+  const actionInputs = [...document.querySelectorAll("[data-action]:checked, [data-practice]:checked")];
   actionInputs.forEach((input) => {
-    const title = `${input.dataset.label}${input.dataset.detail ? `：${input.dataset.detail}` : ""}`.trim();
-    if (!title || existingTitles.has(title)) return;
-    tasks.unshift({
-      id: uid(),
-      title,
-      status: "doing",
-      source: "今日復盤",
-      createdAt: new Date().toISOString(),
+    addTaskFromGuide({
+      key: input.dataset.practice || input.dataset.action || "",
+      label: input.dataset.label || "",
+      detail: input.dataset.detail || "",
     });
-    existingTitles.add(title);
   });
-  saveTasks(tasks);
 
   updateStats();
   showToast("今日復盤已完成，筆記、金句與下一步都收好了。");
@@ -1695,6 +1754,7 @@ function renderReport() {
 
 function renderTasks() {
   const list = document.getElementById("taskList");
+  if (!list) return;
   const tasks = getTasks().filter((task) => state.taskFilter === "all" || task.status === state.taskFilter);
 
   if (!getTasks().length) {
@@ -2045,12 +2105,14 @@ function bindEvents() {
       state.selectedThinkActions = event.target.checked
         ? [...new Set([...state.selectedThinkActions, action])]
         : state.selectedThinkActions.filter((item) => item !== action);
+      syncGuideToNextSteps(event.target, event.target.checked);
     }
     const practice = event.target.dataset.practice;
     if (practice) {
       state.selectedPractice = event.target.checked
         ? [...new Set([...(state.selectedPractice || []), practice])]
         : (state.selectedPractice || []).filter((item) => item !== practice);
+      syncGuideToNextSteps(event.target, event.target.checked);
     }
     if (event.target.id === "gratitudeInput") state.gratitude = event.target.value;
   });
