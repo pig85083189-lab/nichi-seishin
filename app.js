@@ -577,6 +577,7 @@ function thinkFromOrganize(organize, round = 1) {
   if (!scripts.length) return localThink(organize, round, [], "");
   return {
     title: "深度思考",
+    prompt: defaultThinkPrompt(organize),
     question,
     insight,
     conclusion: organize.conclusion || points[0]?.conclusion || "",
@@ -597,7 +598,10 @@ async function maybeEnhanceWithApi(rawText, token) {
       return;
     }
     applyOrganizeResult(normalizeOrganizeResult(remote, rawText), "cloud");
-    applyThinkResult(thinkFromOrganize(state.organize, 1), 1, { silent: true });
+    applyThinkResult(thinkFromOrganize(state.organize, 1), 1, {
+      silent: true,
+      prompt: defaultThinkPrompt(state.organize),
+    });
     console.log("[日精進 API] 雲端復盤已套用", remote.themeTitle);
     showToast("雲端 AI 復盤已套用。");
   } catch (error) {
@@ -1013,22 +1017,45 @@ function thinkPointConclusions(round) {
   return first ? [{ title: "", conclusion: /[。！？]$/.test(first) ? first : `${first}。` }] : [];
 }
 
-function renderThinkConclusions(round) {
+function defaultThinkPrompt(organize) {
+  return String(organize?.thinkGuide || organize?.themeTitle || "今天這段復盤，真正卡住的是哪一句？").trim();
+}
+
+function thinkPromptText(round, index, history) {
+  if (round?.prompt) return String(round.prompt).trim();
+  if (index > 0) {
+    const prev = history[index - 1] || {};
+    return String(prev.reply || prev.question || "").trim();
+  }
+  return String(round?.question || defaultThinkPrompt(state.organize)).trim();
+}
+
+function renderThoughtUnit(round, index, total, options = {}) {
+  const history = options.history || state.think.history || [];
+  const prompt = thinkPromptText(round, index, history);
   const points = thinkPointConclusions(round);
-  if (!points.length) return "";
-  return `
-    <div class="think-conclusions">
-      ${points
+  const conclusionHtml = points.length
+    ? points
         .map(
           (item) => `
-            <section class="think-conclusion">
-              ${item.title ? `<p class="think-conclusion__point">${escapeHtml(item.title)}</p>` : ""}
-              ${renderConclusionCallout(item.conclusion)}
-            </section>
+            ${item.title && points.length > 1 ? `<p class="thought-unit__point">${escapeHtml(item.title)}</p>` : ""}
+            ${renderConclusionCallout(item.conclusion)}
           `
         )
-        .join("")}
-    </div>
+        .join("")
+    : renderConclusionCallout("這一層還在成形，先把問題看清楚。");
+  const current = Boolean(options.current);
+  return `
+    <article class="thought-unit ${current ? "thought-unit--current" : "thought-unit--past"}">
+      <p class="thought-unit__round">${current ? "深度思考" : "已完成"}　第 ${index + 1}/${total} 輪</p>
+      <div class="thought-unit__question">
+        <p class="thought-unit__label">思考問題</p>
+        <p class="thought-unit__question-text">${escapeHtml(prompt || "（這一輪還沒有留下提問）")}</p>
+      </div>
+      <div class="thought-unit__conclusion">
+        ${conclusionHtml}
+      </div>
+    </article>
   `;
 }
 
@@ -1149,16 +1176,12 @@ function renderAiStage() {
     .join("");
 
   const history = Array.isArray(state.think.history) ? state.think.history : [];
-  const pastRounds = think ? history.slice(0, -1) : [];
-  const pastHtml = pastRounds
-    .map(
-      (round, index) => `
-      <article class="think-panel think-panel--past">
-        <p class="think-card__round">已完成　第 ${index + 1}/${state.think.max} 輪</p>
-        <h3 class="think-panel__question">${escapeHtml(round.question || "")}</h3>
-        ${renderThinkConclusions(round)}
-      </article>
-    `
+  const timelineHtml = history
+    .map((round, index) =>
+      renderThoughtUnit(round, index, state.think.max, {
+        history,
+        current: Boolean(think) && index === history.length - 1,
+      })
     )
     .join("");
 
@@ -1172,11 +1195,9 @@ function renderAiStage() {
 
   const thinkBody = think
     ? `
-      ${pastHtml}
+      <div class="thought-timeline">${timelineHtml}</div>
       <div class="think-panel" id="thinkCurrent">
-        <p class="think-card__round">深度思考　第 ${state.think.round}/${state.think.max} 輪</p>
-        <h3 class="think-panel__question">${escapeHtml(think.question || "")}</h3>
-        ${renderThinkConclusions(think)}
+        ${think.question ? `<p class="sfm-hint">下一層可以接著想：${escapeHtml(think.question)}</p>` : ""}
         <p class="chips-label">勾選你願意練習或已經說過的句子</p>
         <div class="check-list">${thinkActions}</div>
         <label class="field" style="margin-top:16px">
@@ -1713,6 +1734,7 @@ function localThink(organize, round, selected, reply) {
   const current = rounds[Math.max(0, Math.min(4, round - 1))] || rounds[0];
   return {
     title: current.title,
+    prompt: current.question || defaultThinkPrompt(organize),
     question: current.question,
     insight: current.insight,
     conclusion: current.conclusion || "",
@@ -1759,7 +1781,10 @@ function runOrganize(event) {
     runOrganize._token = token;
 
     applyOrganizeResult(localOrganize(rawText), "local");
-    applyThinkResult(localThink(state.organize, 1, [], ""), 1, { silent: true });
+    applyThinkResult(localThink(state.organize, 1, [], ""), 1, {
+      silent: true,
+      prompt: defaultThinkPrompt(state.organize),
+    });
     showToast("先出本地草稿，接著呼叫雲端 AI…");
     maybeEnhanceWithApi(rawText, token);
   } catch {
@@ -1767,7 +1792,10 @@ function runOrganize(event) {
       const fallback = document.getElementById("reviewText")?.value.trim() || "今天把這段話講出來了。";
       state.rawText = fallback;
       applyOrganizeResult(localOrganize(fallback), "local");
-      applyThinkResult(localThink(state.organize, 1, [], ""), 1, { silent: true });
+      applyThinkResult(localThink(state.organize, 1, [], ""), 1, {
+        silent: true,
+        prompt: defaultThinkPrompt(state.organize),
+      });
     } catch {
       purgeThinkingUi();
     }
@@ -1799,12 +1827,17 @@ function normalizeThinkResult(raw, round) {
     insight: String(result.insight || fallback.insight),
     conclusion: String(result.conclusion || fallback.conclusion || ""),
     points: points && points.length ? points : fallback.points,
+    prompt: String(result.prompt || fallback.prompt || "").trim(),
+    reply: String(result.reply || fallback.reply || "").trim(),
     actions,
   };
 }
 
 function applyThinkResult(raw, nextRound, options = {}) {
   const result = normalizeThinkResult(raw, nextRound);
+  const existing = options.replace && state.think.history?.length ? state.think.history[state.think.history.length - 1] : null;
+  result.prompt = String(options.prompt || result.prompt || existing?.prompt || "").trim();
+  result.reply = String(options.reply || result.reply || existing?.reply || "").trim();
   state.think.round = nextRound;
   state.think.current = result;
   if (!Array.isArray(state.think.history)) state.think.history = [];
@@ -1849,12 +1882,18 @@ function runThink(replyText = "") {
     const nextRound = (state.think.round || 0) + 1;
     const token = (state.thinkToken || 0) + 1;
     state.thinkToken = token;
-    applyThinkResult(localThink(state.organize, nextRound, selected, reply), nextRound);
+    const prompt = reply || state.think.current?.question || defaultThinkPrompt(state.organize);
+    if (state.think.current) state.think.current.reply = reply;
+    applyThinkResult(localThink(state.organize, nextRound, selected, reply), nextRound, { prompt, reply });
     enhanceThinkWithApi(nextRound, selected, reply, token);
   } catch {
     try {
       const nextRound = Math.min((state.think.round || 0) + 1, state.think.max || 5);
-      applyThinkResult(localThink(state.organize, nextRound, [], String(replyText || "")), nextRound);
+      const reply = String(replyText || "").trim();
+      applyThinkResult(localThink(state.organize, nextRound, [], reply), nextRound, {
+        prompt: reply || state.think.current?.question || defaultThinkPrompt(state.organize),
+        reply,
+      });
     } catch {
       showToast("深度思考已就緒，請再點一次。");
     }
@@ -2169,13 +2208,9 @@ function renderHistoryReport(review) {
   const ai = review.organize;
   if (!ai) return "";
   const quotes = (ai.quotes || []).map((quote) => `<p class="gold-quote">${escapeHtml(quote)}</p>`).join("");
-  const think = (review.thinkHistory || [])
-    .map((round, index) => {
-      const cards = thinkPointConclusions(round)
-        .map((item) => renderConclusionCallout(item.conclusion))
-        .join("");
-      return `<p><strong>深度思考　第 ${index + 1} 輪</strong> ${escapeHtml(round.question || "")}</p>${cards}`;
-    })
+  const thinkHistory = review.thinkHistory || [];
+  const think = thinkHistory
+    .map((round, index) => renderThoughtUnit(round, index, thinkHistory.length || 5, { history: thinkHistory }))
     .join("");
   const eventHtml = renderBulletList(ai.eventList, ai.event);
   const gratitudeHtml = renderBulletList(ai.gratitudeList, ai.gratitudeNote);
