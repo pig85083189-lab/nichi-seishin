@@ -37,6 +37,7 @@ function readJsonBody(req) {
 }
 
 const { requireUser } = require("../lib/auth");
+const { ensureTrial, isEntitled, supabaseAdminConfigured } = require("../lib/supabase");
 
 function getApiKey() {
   return String(process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY || "").trim();
@@ -230,6 +231,14 @@ module.exports = async function handler(req, res) {
 
   const user = await requireUser(req, res);
   if (!user) return;
+
+  if (supabaseAdminConfigured()) {
+    const sub = await ensureTrial(user);
+    if (sub && !isEntitled(sub)) {
+      res.status(402).json({ ok: false, error: "試用已結束，請訂閱後繼續使用雲端 AI。" });
+      return;
+    }
+  }
 
   try {
     const body = readJsonBody(req);

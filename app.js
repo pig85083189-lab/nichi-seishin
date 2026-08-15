@@ -131,6 +131,12 @@ function formatDisplayDate(iso) {
   return `${y}/${m}/${d}`;
 }
 
+function formatTrialDate(iso) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())}`;
+}
+
 function parseIsoDate(iso) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
   if (!match) return null;
@@ -977,12 +983,21 @@ function renderAuth() {
   const avatar = user.picture
     ? `<img src="${escapeHtml(user.picture)}" alt="" referrerpolicy="no-referrer" />`
     : `<span class="auth-avatar">${initial}</span>`;
-  const paid = Boolean(state.membership && state.membership.paid);
+  const membership = state.membership || {};
+  const status = membership.status || "";
+  const entitled = Boolean(membership.entitled || membership.paid);
   const payBtn = state.payConfigured
-    ? paid
-      ? `<button class="auth-pay is-paid" type="button" disabled><span>已開通</span></button>`
-      : `<button class="auth-pay" id="btnNewebPay" type="button"><span>前往付款</span></button>`
+    ? status === "active"
+      ? `<button class="auth-pay is-paid" type="button" disabled><span>已訂閱</span></button>`
+      : `<button class="auth-pay" id="btnNewebPay" type="button"><span>${status === "trialing" || status === "pending" ? "訂閱" : "訂閱以繼續"}</span></button>`
     : "";
+  const trialHint = membership.trialEndsAt && status === "trialing"
+    ? `<p class="auth-hint">試用至 ${escapeHtml(formatTrialDate(membership.trialEndsAt))}</p>`
+    : entitled && status === "active"
+      ? `<p class="auth-hint">定期定額訂閱已啟用。</p>`
+      : status === "expired" || status === "cancelled" || status === "past_due"
+        ? `<p class="auth-hint">試用已結束，訂閱後可繼續使用雲端 AI。</p>`
+        : `<p class="auth-hint">登入後會讀取你在雲端的復盤與個人紀錄。</p>`;
   side.innerHTML = `
     <div class="auth-user">
       ${avatar}
@@ -993,6 +1008,7 @@ function renderAuth() {
     </div>
     ${payBtn}
     <button class="auth-logout" id="btnSignOut" type="button"><span>登出</span></button>
+    ${trialHint}
   `;
 }
 
@@ -1134,7 +1150,32 @@ function startNewebPay() {
     showToast("請先登入，再前往付款。");
     return;
   }
-  location.href = `${location.origin}/api/pay/create`;
+  showToast("正在前往藍新金流…");
+  fetch(`${location.origin}/api/pay/create`, {
+    method: "POST",
+    credentials: "include",
+    headers: authHeaders({ Accept: "text/html" }),
+  })
+    .then(async (response) => {
+      const text = await response.text();
+      if (!response.ok) {
+        let message = "無法前往藍新金流";
+        try {
+          const payload = JSON.parse(text);
+          if (payload && payload.error) message = payload.error;
+        } catch {
+          /* keep default */
+        }
+        showToast(message);
+        return;
+      }
+      document.open();
+      document.write(text);
+      document.close();
+    })
+    .catch((error) => {
+      showToast(error && error.message ? error.message : "無法前往藍新金流");
+    });
 }
 
 function rowsToReviewMap(rows) {
@@ -1276,7 +1317,7 @@ function handleAuthQuery() {
       setAuthError(message);
       showToast(`登入失敗：${message}`);
     }
-    if (pay === "ok") showToast("付款成功。藍新金流已完成授權。");
+    if (pay === "ok") showToast("訂閱授權已送出。會員狀態會在藍新通知後更新。");
     if (pay === "fail") showToast(`付款未完成：${params.get("reason") || "請再試一次"}`);
     if (pay === "error") showToast(`付款結果異常：${params.get("reason") || "請再試一次"}`);
     if (pay === "back") showToast("已返回商店，尚未完成付款。");
