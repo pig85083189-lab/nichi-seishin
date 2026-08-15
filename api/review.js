@@ -115,27 +115,34 @@ actions 的 detail 必須是下次可直接照唸、用來對齊目標的完整�
 }
 actions 給 3 個。若已是最後一輪，question 改成收束。`;
 
-async function callOpenAI(messages) {
-  const apiKey = String(process.env.OPENAI_API_KEY || "").trim();
+async function callOpenAI(messages, options = {}) {
+  const apiKey = String(options.apiKey || process.env.OPENAI_API_KEY || "").trim();
   if (!apiKey) {
-    const error = new Error("伺服器尚未設定 OPENAI_API_KEY");
+    const error = new Error("缺少 API Key（請在前端設定，或在 Vercel 設 OPENAI_API_KEY）");
     error.status = 500;
     throw error;
   }
 
-  const url = joinChatCompletionsUrl(process.env.OPENAI_BASE_URL || "https://api.openai.com/v1");
+  const provider = String(options.provider || "openai");
+  const url = joinChatCompletionsUrl(options.baseUrl || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1");
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 9000);
+  const timer = setTimeout(() => controller.abort(), 18000);
+
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${apiKey}`,
+  };
+  if (provider === "openrouter") {
+    headers["HTTP-Referer"] = process.env.OPENROUTER_REFERER || "https://nichi-seishin.vercel.app";
+    headers["X-Title"] = "nichi-seishin";
+  }
 
   try {
     const response = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
+      headers,
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+        model: options.model || process.env.OPENAI_MODEL || "gpt-4o-mini",
         temperature: 0.7,
         response_format: { type: "json_object" },
         messages,
@@ -145,7 +152,7 @@ async function callOpenAI(messages) {
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const error = new Error((data && data.error && data.error.message) || `OpenAI 請求失敗（${response.status}）`);
+      const error = new Error((data && data.error && data.error.message) || `上游請求失敗（${response.status}）`);
       error.status = response.status;
       throw error;
     }
@@ -177,7 +184,7 @@ module.exports = async function handler(req, res) {
     const body = req.body && typeof req.body === "object" ? req.body : {};
     const mode = body.mode === "think" ? "think" : "organize";
     const text = String(body.text || "").trim();
-    if (!text && mode === "organize") {
+    if (!text && mode === "organize" && !Array.isArray(body.messages)) {
       res.status(400).json({ ok: false, error: "缺少復盤原文" });
       return;
     }
@@ -187,7 +194,9 @@ module.exports = async function handler(req, res) {
     }
 
     let messages;
-    if (mode === "think") {
+    if (Array.isArray(body.messages) && body.messages.length) {
+      messages = body.messages;
+    } else if (mode === "think") {
       const round = Number(body.round) || 1;
       const max = Number(body.max) || 5;
       const actions = Array.isArray(body.actions) ? body.actions : [];
@@ -207,7 +216,12 @@ module.exports = async function handler(req, res) {
       ];
     }
 
-    const data = await callOpenAI(messages);
+    const data = await callOpenAI(messages, {
+      apiKey: body.apiKey,
+      baseUrl: body.baseUrl,
+      model: body.model,
+      provider: body.provider,
+    });
     res.status(200).json({ ok: true, data });
   } catch (error) {
     const aborted = error?.name === "AbortError" || /aborted/i.test(String(error?.message || ""));

@@ -295,17 +295,17 @@
       <form method="dialog" class="modal__card" id="apiForm">
         <h3 class="modal__title">API 設定</h3>
         <p class="modal__desc">
-          金鑰只存在這個瀏覽器的 localStorage，不會寫進程式碼，也不會上傳到 GitHub。沒有金鑰時，本地教練仍會立刻整理復盤。
+          金鑰只存在這個瀏覽器。瀏覽器無法直連 OpenAI 官方 API（CORS）。建議選 OpenRouter；若選 OpenAI，部署後會走同網域 /api/review 代理。
         </p>
         <p class="api-status" id="apiStatus">目前使用本地教練，點「開始整理」會立刻出結果。</p>
         <label class="field">
           <span class="field__label">供應商</span>
           <select class="input select" id="apiProvider" onchange="onProviderChange()">
+            <option value="openrouter" selected>OpenRouter（建議，瀏覽器可直連）</option>
             <option value="gemini">Google Gemini</option>
-            <option value="openai" selected>OpenAI</option>
-            <option value="openrouter">OpenRouter</option>
-            <option value="deepseek">DeepSeek</option>
-            <option value="groq">Groq</option>
+            <option value="openai">OpenAI（需伺服器代理，否則 CORS）</option>
+            <option value="deepseek">DeepSeek（需伺服器代理）</option>
+            <option value="groq">Groq（需伺服器代理）</option>
           </select>
         </label>
         <label class="field">
@@ -320,7 +320,7 @@
           <span class="field__label">Base URL</span>
           <input class="input" id="apiBaseInput" type="url" placeholder="https://api.openai.com/v1" />
         </label>
-        <p class="settings-hint">金鑰僅供選擇性加深內容。整理永遠先走本地教練，畫面不會卡在「整理中...」。</p>
+        <p class="settings-hint" id="apiCorsHint">OpenRouter 與 Gemini 通常可從瀏覽器直連。OpenAI 官方會被 CORS 擋住。</p>
         <div class="form-actions">
           <button class="btn btn--ghost" id="clearApi" value="clear" type="submit">清除金鑰</button>
           <button class="btn btn--ghost" value="cancel" type="submit">關閉</button>
@@ -335,6 +335,6 @@
         navigator.serviceWorker.register("service-worker.js").catch(function () {});
       }
     </script>
-    <script src="app.js?v=26"></script>
+    <script src="app.js?v=27"></script>
   </body>
 </html>

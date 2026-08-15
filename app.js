@@ -13,23 +13,27 @@ const STORAGE_KEYS = {
 };
 
 const DEFAULT_AI = {
-  provider: "openai",
+  provider: "openrouter",
   apiKey: "",
-  model: "gpt-4o-mini",
-  baseUrl: "https://api.openai.com/v1",
+  model: "openai/gpt-4o-mini",
+  baseUrl: "https://openrouter.ai/api/v1",
 };
 
 const PROVIDER_PRESETS = {
-  gemini: { label: "Google Gemini", model: "gemini-2.0-flash", baseUrl: "https://generativelanguage.googleapis.com/v1beta" },
-  openai: { label: "OpenAI", model: "gpt-4o-mini", baseUrl: "https://api.openai.com/v1" },
-  openrouter: { label: "OpenRouter", model: "openai/gpt-4o-mini", baseUrl: "https://openrouter.ai/api/v1" },
-  deepseek: { label: "DeepSeek", model: "deepseek-chat", baseUrl: "https://api.deepseek.com/v1" },
-  groq: { label: "Groq", model: "llama-3.3-70b-versatile", baseUrl: "https://api.groq.com/openai/v1" },
-  compatible: { label: "自訂 OpenAI 相容端點", model: "gpt-4o-mini", baseUrl: "https://api.openai.com/v1" },
+  openrouter: { label: "OpenRouter（建議，瀏覽器可直連）", model: "openai/gpt-4o-mini", baseUrl: "https://openrouter.ai/api/v1", browserCors: true },
+  gemini: { label: "Google Gemini", model: "gemini-2.0-flash", baseUrl: "https://generativelanguage.googleapis.com/v1beta", browserCors: true },
+  openai: { label: "OpenAI（瀏覽器會被 CORS 擋，需 /api/review 代理）", model: "gpt-4o-mini", baseUrl: "https://api.openai.com/v1", browserCors: false },
+  deepseek: { label: "DeepSeek（需 /api/review 代理）", model: "deepseek-chat", baseUrl: "https://api.deepseek.com/v1", browserCors: false },
+  groq: { label: "Groq（需 /api/review 代理）", model: "llama-3.3-70b-versatile", baseUrl: "https://api.groq.com/openai/v1", browserCors: false },
+  compatible: { label: "自訂 OpenAI 相容端點", model: "gpt-4o-mini", baseUrl: "https://api.openai.com/v1", browserCors: false },
 };
 
+const CORS_HINT = "OpenAI／DeepSeek／Groq 官方端點不允許瀏覽器直連（CORS）。請改選 OpenRouter，或部署到 Vercel 走 /api/review 代理。";
+
+let sameOriginProxyState = "unknown";
+
 function normalizeProvider(value) {
-  return PROVIDER_PRESETS[value] ? value : "openai";
+  return PROVIDER_PRESETS[value] ? value : "openrouter";
 }
 
 const PROMPT_CHIPS = [
@@ -298,12 +302,18 @@ function getAiSettings() {
   const formModel = readApiField("apiModelInput");
   const formBase = readApiField("apiBaseInput");
   const formProvider = readApiField("apiProvider");
-  return {
-    provider: normalizeProvider(formProvider || source.provider || DEFAULT_AI.provider),
-    apiKey: formKey || String(source.apiKey || DEFAULT_AI.apiKey || "").trim(),
-    model: formModel || String(source.model || DEFAULT_AI.model).trim() || DEFAULT_AI.model,
-    baseUrl: formBase || String(source.baseUrl || DEFAULT_AI.baseUrl).trim() || DEFAULT_AI.baseUrl,
-  };
+  const apiKey = formKey || String(source.apiKey || DEFAULT_AI.apiKey || "").trim();
+  let provider = normalizeProvider(formProvider || source.provider || DEFAULT_AI.provider);
+  let model = formModel || String(source.model || DEFAULT_AI.model).trim() || DEFAULT_AI.model;
+  let baseUrl = formBase || String(source.baseUrl || DEFAULT_AI.baseUrl).trim() || DEFAULT_AI.baseUrl;
+  if (apiKey.startsWith("sk-or-") && provider === "openai") {
+    provider = "openrouter";
+    if (/api\.openai\.com/i.test(baseUrl)) {
+      baseUrl = PROVIDER_PRESETS.openrouter.baseUrl;
+      if (/^gpt-/.test(model)) model = `openai/${model}`;
+    }
+  }
+  return { provider, apiKey, model, baseUrl };
 }
 
 function saveAiSettings(next) {
@@ -367,8 +377,8 @@ function formatApiError(error, extra) {
   if (name === "AbortError" || /請求逾時/.test(message)) {
     return `請求逾時（${extra?.timeoutMs || 20000}ms）${url ? `｜${url}` : ""}`;
   }
-  if (/Failed to fetch|NetworkError|Load failed|fetch 失敗/i.test(message)) {
-    return `網路或 CORS 失敗：瀏覽器沒能連到供應商${url ? `（${url}）` : ""}。原始訊息：${message}`;
+  if (/Failed to fetch|NetworkError|Load failed|fetch 失敗|CORS/i.test(message)) {
+    return `CORS／網路失敗：瀏覽器被供應商擋下${url ? `（${url}）` : ""}。${CORS_HINT}`;
   }
   return url ? `${message}｜${url}` : message;
 }
@@ -407,6 +417,70 @@ function extractGeminiText(data) {
   return parts.map((part) => String(part?.text || "")).join("").trim();
 }
 
+function canTrySameOriginProxy() {
+  if (sameOriginProxyState === "no") return false;
+  if (typeof location === "undefined" || location.protocol === "file:") {
+    sameOriginProxyState = "no";
+    return false;
+  }
+  return location.protocol === "http:" || location.protocol === "https:";
+}
+
+function isCorsFailure(error) {
+  const message = String(error?.message || error || "");
+  return /Failed to fetch|NetworkError|Load failed|fetch 失敗|CORS/i.test(message);
+}
+
+function lastUserContent(messages) {
+  const user = [...(messages || [])].reverse().find((item) => item.role === "user");
+  return String(user?.content || "").slice(0, 8000);
+}
+
+function buildOpenAiHeaders(settings) {
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${settings.apiKey}`,
+  };
+  if (settings.provider === "openrouter") {
+    headers["HTTP-Referer"] = (typeof location !== "undefined" && location.origin) || "https://nichi-seishin.local";
+    headers["X-Title"] = "nichi-seishin";
+  }
+  return headers;
+}
+
+async function callViaSameOriginProxy(messages, settings) {
+  const url = new URL("/api/review", location.origin).toString();
+  console.log("[日精進 API] 改走同網域代理，避開瀏覽器 CORS", url, settings.provider);
+  const response = await fetchWithTimeout(
+    url,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode: "organize",
+        date: currentIso(),
+        text: lastUserContent(messages),
+        messages,
+        provider: settings.provider,
+        model: settings.model,
+        baseUrl: settings.baseUrl,
+        apiKey: settings.apiKey,
+      }),
+    },
+    20000
+  );
+  if (response.status === 404) {
+    sameOriginProxyState = "no";
+    throw new Error("NO_PROXY");
+  }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.ok === false) {
+    throw new Error(data.error || `代理失敗 HTTP ${response.status}`);
+  }
+  sameOriginProxyState = "yes";
+  return data.data;
+}
+
 async function callGeminiApi(messages, settings) {
   const system = messages.filter((item) => item.role === "system").map((item) => item.content).join("\n\n");
   const user = messages.filter((item) => item.role !== "system").map((item) => item.content).join("\n\n");
@@ -441,45 +515,69 @@ async function callGeminiApi(messages, settings) {
   }
 }
 
+async function callOpenAiCompatible(messages, settings) {
+  const url = joinChatCompletionsUrl(settings.baseUrl);
+  const timeoutMs = 20000;
+  const response = await fetchWithTimeout(
+    url,
+    {
+      method: "POST",
+      headers: buildOpenAiHeaders(settings),
+      body: JSON.stringify({
+        model: settings.model,
+        temperature: 0.7,
+        response_format: { type: "json_object" },
+        messages,
+      }),
+    },
+    timeoutMs
+  );
+  const data = await response.json().catch(() => ({}));
+  console.log("[日精進 API] 供應商回應", settings.provider, response.status, redactUrl(url));
+  if (!response.ok) {
+    const reason = (data && data.error && (data.error.message || data.error.code)) || `HTTP ${response.status}`;
+    throw new Error(`${settings.provider} 拒絕請求：${reason}`);
+  }
+  return parseAiJson(data?.choices?.[0]?.message?.content || "");
+}
+
 async function callStoredKeyApi(messages) {
   const settings = getAiSettings();
   if (!settings.apiKey) throw new Error("NO_KEY：設定裡沒有 API Key，無法呼叫雲端。");
-  if (settings.provider === "gemini") return callGeminiApi(messages, settings);
 
-  const url = joinChatCompletionsUrl(settings.baseUrl);
-  const timeoutMs = 20000;
-  const headers = {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${settings.apiKey}`,
-  };
-  if (settings.provider === "openrouter") {
-    headers["HTTP-Referer"] = location.origin || "https://nichi-seishin.local";
-    headers["X-Title"] = "日精進";
-  }
-  try {
-    const response = await fetchWithTimeout(
-      url,
-      {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          model: settings.model,
-          temperature: 0.7,
-          response_format: { type: "json_object" },
-          messages,
-        }),
-      },
-      timeoutMs
-    );
-    const data = await response.json().catch(() => ({}));
-    console.log("[日精進 API] 供應商回應", settings.provider, response.status, redactUrl(url));
-    if (!response.ok) {
-      const reason = (data && data.error && (data.error.message || data.error.code)) || `HTTP ${response.status}`;
-      throw new Error(`${settings.provider} 拒絕請求：${reason}`);
+  const allowsBrowser = Boolean(PROVIDER_PRESETS[settings.provider]?.browserCors);
+  const shouldProxy = !allowsBrowser || sameOriginProxyState === "yes";
+
+  if (shouldProxy && canTrySameOriginProxy()) {
+    try {
+      return await callViaSameOriginProxy(messages, settings);
+    } catch (error) {
+      if (String(error?.message || "") === "NO_PROXY") {
+        console.warn("[日精進 API] 這個環境沒有 /api/review，無法代理 OpenAI。");
+      } else if (!isCorsFailure(error)) {
+        console.error("[日精進 API] 同網域代理失敗", error);
+        throw error;
+      } else {
+        console.warn("[日精進 API] 同網域代理也失敗，改評估瀏覽器直連", error);
+      }
     }
-    return parseAiJson(data?.choices?.[0]?.message?.content || "");
+  }
+
+  if (settings.provider === "gemini") {
+    return callGeminiApi(messages, settings);
+  }
+
+  if (!allowsBrowser) {
+    const error = new Error(CORS_HINT);
+    console.error("[日精進 API] 已阻止直連會被 CORS 擋住的端點", settings.provider, settings.baseUrl);
+    throw error;
+  }
+
+  try {
+    return await callOpenAiCompatible(messages, settings);
   } catch (error) {
-    console.error("[日精進 API] 呼叫失敗", formatApiError(error, { url, timeoutMs }), error);
+    console.error("[日精進 API] 瀏覽器直連失敗", formatApiError(error, { url: joinChatCompletionsUrl(settings.baseUrl), timeoutMs: 20000 }), error);
+    if (isCorsFailure(error)) throw new Error(CORS_HINT);
     throw error;
   }
 }
@@ -2018,16 +2116,32 @@ function toggleMic() {
   }
 }
 
+function corsHintFor(provider) {
+  if (PROVIDER_PRESETS[provider]?.browserCors) {
+    return "此供應商通常允許瀏覽器直連。Headers 會帶 Content-Type 與 Authorization。";
+  }
+  return "此供應商會擋瀏覽器 CORS。會先走 /api/review 代理；本機沒有代理時請改選 OpenRouter。";
+}
+
+function updateCorsHint(provider) {
+  const hint = document.getElementById("apiCorsHint");
+  if (hint) hint.textContent = corsHintFor(provider || getAiSettings().provider);
+}
+
 function updateApiStatus() {
   const status = document.getElementById("apiStatus");
   if (!status) return;
   const settings = getAiSettings();
+  updateCorsHint(settings.provider);
   if (settings.apiKey) {
     status.classList.add("is-ready");
-    status.textContent = `已選 ${PROVIDER_PRESETS[settings.provider]?.label || "OpenAI"}（${maskKey(settings.apiKey)}）。開始整理會先出本地結果，並立刻 fetch 到該供應商的 Base URL。`;
+    const route = PROVIDER_PRESETS[settings.provider]?.browserCors
+      ? "會直連該供應商（支援 CORS）"
+      : "會先走 /api/review 代理，避免 OpenAI CORS";
+    status.textContent = `已選 ${PROVIDER_PRESETS[settings.provider]?.label || settings.provider}（${maskKey(settings.apiKey)}）。${route}。`;
   } else {
     status.classList.remove("is-ready");
-    status.textContent = "目前使用本地教練，點「開始整理」會立刻出結果。";
+    status.textContent = "目前使用本地教練。若要雲端復盤，建議選 OpenRouter 並填金鑰。";
   }
 }
 
@@ -2038,7 +2152,7 @@ function syncApiBaseField() {
 
 function onProviderChange() {
   const id = normalizeProvider(document.getElementById("apiProvider")?.value);
-  const preset = PROVIDER_PRESETS[id] || PROVIDER_PRESETS.openai;
+  const preset = PROVIDER_PRESETS[id] || PROVIDER_PRESETS.openrouter;
   const model = document.getElementById("apiModelInput");
   const base = document.getElementById("apiBaseInput");
   if (model) {
@@ -2051,6 +2165,7 @@ function onProviderChange() {
     const field = document.getElementById("apiBaseField");
     if (field) field.hidden = false;
   }
+  updateCorsHint(id);
 }
 window.onProviderChange = onProviderChange;
 
@@ -2092,7 +2207,13 @@ function saveApiSettings(event) {
     baseUrl: document.getElementById("apiBaseInput")?.value || preset.baseUrl,
   });
   updateApiStatus();
-  showToast(getAiSettings().apiKey ? "金鑰已存在此瀏覽器，不會寫進程式碼。" : "未填金鑰，之後仍用本地教練秒出結果。");
+  showToast(
+    getAiSettings().apiKey
+      ? PROVIDER_PRESETS[provider]?.browserCors
+        ? "已儲存。開始整理會直連此供應商。"
+        : "已儲存。OpenAI 類供應商會走 /api/review 代理，避免 CORS。"
+      : "未填金鑰，之後仍用本地教練秒出結果。"
+  );
 }
 
 /* =============================================================================
