@@ -406,21 +406,37 @@ function normalizeOrganizeResult(remote, rawText) {
     keyWordAlt: remote.keyWordAlt || local.keyWordAlt,
     nextScripts: Array.isArray(remote.nextScripts) && remote.nextScripts.length ? remote.nextScripts : local.nextScripts,
     thinkGuide: remote.thinkGuide || local.thinkGuide,
+    assumptionGap: normalizeAssumptionGap(remote, local),
   };
 }
 
-const ORGANIZE_SYSTEM_PROMPT = `你是「日精進」的復盤教練。每次只產出同一套四段式復盤：主標題與評等、事件與心態拆解、今日金句、感恩清單。禁止雜記格式。繁體中文，只輸出 JSON。`;
+function normalizeAssumptionGap(remote, local) {
+  const fallback = local.assumptionGap || {};
+  const nested = remote && typeof remote.assumptionGap === "object" ? remote.assumptionGap : {};
+  const mine = nested.mine || remote.iThought || fallback.mine || "";
+  const theirs = nested.theirs || remote.theyThought || fallback.theirs || "";
+  const line = nested.line || remote.gapLine || fallback.line || "";
+  if (!mine && !theirs && !line) return fallback;
+  return { mine, theirs, line };
+}
+
+const ORGANIZE_SYSTEM_PROMPT = `你是「日精進」的高級深度復盤教練。每次產出：主標題與評等、【我以為是／他以為是】深度事件拆解、金句與感恩清單、下一步引導與可照唸的對話範例。繁體中文，只輸出 JSON。`;
 
 function thinkFromOrganize(organize, round = 1) {
   const scripts = Array.isArray(organize?.nextScripts) ? organize.nextScripts.filter(Boolean) : [];
-  const labels = ["先對齊目標層級", "改掉跳太快的詞", "只處理眼前這一步"];
+  const labels = ["先對齊彼此以為的", "把真實想法講出來", "用這句跟對方開口"];
+  const gap = organize?.assumptionGap || {};
+  const question =
+    organize.thinkGuide ||
+    (gap.line ? `兩邊以為的是同一件事嗎？「${gap.line}」` : localThink(organize, round, [], "").question);
+  const insight = [organize.howNext, organize.whyNeed, organize.whatFact].filter(Boolean).join(" ") || organize.reflection || "";
   if (!scripts.length) return localThink(organize, round, [], "");
   return {
-    title: "深度思考與下一步",
-    question: organize.thinkGuide || localThink(organize, round, [], "").question,
-    insight: [organize.whyNeed, organize.whatFact, organize.howNext].filter(Boolean).join(" ") || organize.reflection || "",
+    title: "下一步引導 / 深度思考",
+    question,
+    insight,
     actions: scripts.slice(0, 3).map((detail, index) => ({
-      label: labels[index] || `下一步 ${index + 1}`,
+      label: labels[index] || `對話範例 ${index + 1}`,
       detail: /[「『"]/.test(detail) ? detail : `「${detail}」`,
     })),
   };
@@ -657,6 +673,34 @@ function loadReviewForDate(iso) {
   renderAiStage();
 }
 
+function renderAssumptionGap(ai) {
+  const gap = ai?.assumptionGap || {};
+  const mine = String(gap.mine || "").trim();
+  const theirs = String(gap.theirs || "").trim();
+  const line = String(gap.line || "").trim();
+  if (!mine && !theirs && !line) return "";
+  return `
+    <article class="ai-block gap-card">
+      <h3>【我以為是……，他以為是……】</h3>
+      ${line ? `<p class="gap-card__line">${escapeHtml(line)}</p>` : ""}
+      ${mine ? `<p><strong>我以為是</strong><br>${escapeHtml(mine)}</p>` : ""}
+      ${theirs ? `<p><strong>他以為是</strong><br>${escapeHtml(theirs)}</p>` : ""}
+    </article>
+  `;
+}
+
+function renderDialogueScripts(scripts) {
+  const list = (Array.isArray(scripts) ? scripts : []).map((item) => String(item || "").trim()).filter(Boolean);
+  if (!list.length) return "";
+  return `
+    <article class="ai-block">
+      <h3>可以跟對方說的話</h3>
+      <p class="sfm-hint">直接照唸即可，用來對齊「我以為／他以為」。 </p>
+      <ul class="review-list">${list.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+    </article>
+  `;
+}
+
 function renderBulletList(items, fallbackText) {
   const list = (Array.isArray(items) ? items : [])
     .map((item) => String(item || "").trim())
@@ -745,10 +789,10 @@ function renderAiStage() {
     ? `
       ${pastHtml}
       <article class="think-card" id="thinkCurrent">
-        <p class="think-card__round">引導式互動　第 ${state.think.round}/${state.think.max} 輪</p>
+        <p class="think-card__round">下一步引導　第 ${state.think.round}/${state.think.max} 輪</p>
         <h3>${escapeHtml(think.question || "")}</h3>
         <p class="think-card__q">${escapeHtml(think.insight || "")}</p>
-        <p class="chips-label">選一個方法繼續深挖，或當成明天的下一步</p>
+        <p class="chips-label">選一句可跟對方說的話，或當成明天的下一步</p>
         <div class="check-list">${thinkActions}</div>
         <label class="field" style="margin-top:16px">
           <span class="field__label">你想接續回覆的（選填）</span>
@@ -780,14 +824,15 @@ function renderAiStage() {
     </section>
 
     <section class="review-section" aria-labelledby="sec-event">
-      <h2 class="review-section__title" id="sec-event">【事件與心態拆解】</h2>
+      <h2 class="review-section__title" id="sec-event">【深度事件拆解】</h2>
+      ${renderAssumptionGap(ai)}
+      <article class="ai-block">
+        <h3>雙方盲點與心態</h3>
+        ${renderBulletList(mindsetList.length ? mindsetList : ai.reactionList, ai.othersReaction)}
+      </article>
       <article class="ai-block">
         <h3>事件經過</h3>
         ${renderBulletList(ai.eventList, ai.event)}
-      </article>
-      <article class="ai-block">
-        <h3>雙方盲點、落差與真實想法</h3>
-        ${renderBulletList(mindsetList.length ? mindsetList : ai.reactionList, ai.othersReaction)}
       </article>
       <article class="ai-block">
         <h3>事後反思</h3>
@@ -796,10 +841,11 @@ function renderAiStage() {
     </section>
 
     <section class="review-section" aria-labelledby="sec-quotes">
-      <h2 class="review-section__title" id="sec-quotes">【今日金句】</h2>
+      <h2 class="review-section__title" id="sec-quotes">【金句與感恩清單】</h2>
       <article class="ai-block gold-block">
+        <h3>今日金句</h3>
         ${quoteCards || `<p class="gold-quote">把今天寫下來，不是給別人看成績，是讓這一天確實被過過。</p>`}
-        <p class="sfm-hint">可直接複製當社群或筆記標題；勾選後，完成今日復盤會加入 SFM 素材庫</p>
+        <p class="sfm-hint">可直接複製當標題或筆記；勾選後，完成今日復盤會加入 SFM 素材庫</p>
         <div class="quote-list">${quoteChecks || sfmChecks}</div>
       </article>
       ${
@@ -812,11 +858,8 @@ function renderAiStage() {
       </article>`
           : ""
       }
-    </section>
-
-    <section class="review-section" aria-labelledby="sec-gratitude">
-      <h2 class="review-section__title" id="sec-gratitude">【感恩清單】</h2>
       <article class="ai-block gratitude-box">
+        <h3>感恩清單</h3>
         ${gratitudeList.length ? renderBulletList(gratitudeList) : `<p>${escapeHtml(ai.gratitudeNote || "從今天這件事裡，先留一句具體的感謝。")}</p>`}
         ${ai.gratitudeNote && gratitudeList.length ? `<p class="sfm-hint">${escapeHtml(ai.gratitudeNote)}</p>` : ""}
         <textarea class="textarea" id="gratitudeInput" rows="3" placeholder="你還想補一句感謝的是…">${escapeHtml(state.gratitude)}</textarea>
@@ -824,7 +867,9 @@ function renderAiStage() {
     </section>
 
     <section class="review-section" aria-labelledby="sec-think">
-      <h2 class="review-section__title" id="sec-think">【深度思考與下一步】</h2>
+      <h2 class="review-section__title" id="sec-think">【下一步引導 / 深度思考】</h2>
+      ${renderDialogueScripts(ai.nextScripts)}
+      ${ai.howNext ? `<article class="ai-block"><h3>實戰修正</h3><p>${escapeHtml(ai.howNext)}</p></article>` : ""}
       ${thinkBlock}
     </section>
 
@@ -1091,13 +1136,13 @@ function localOrganize(rawText) {
 
   const nextScripts = isComm
     ? [
-        `「先確認：你現在要解的是眼前這一件，還是整套方案？」`,
+        `「我想先對齊一下：我以為是在幫忙把路鋪完，你會不會以為我在加任務？」`,
         `「${turning.alt}」`,
         `「方案我可以給。你要我現在只處理眼前，還是一起看完整路徑？」`,
       ]
     : [
+        `「我先講我以為的：我以為卡在執行。你覺得真正卡住的是哪一層？」`,
         `「這次我先只做眼前這一步，做完再決定要不要展開。」`,
-        `「先對齊：一次到位，還是先完成眼前能做完的單位？」`,
         `「完整計畫先放著。現在只處理：明天做得到的那一件。」`,
       ];
 
@@ -1116,10 +1161,24 @@ function localOrganize(rawText) {
       }[category] || "先講清楚為什麼，再給方案。";
 
   const thinkGuide = isComm
-    ? `下次開口前先問兩句：對方現在要的額度有多高？我的「為什麼」講了沒有？沒對齊就不要丟完整方案。`
-    : "下次先回答「這次只解哪一層」，再開始做。思維順序：為什麼 → 是什麼 → 怎麼做。";
+    ? `兩邊以為的是同一件事嗎？你以為在幫忙，${otherLabel}以為在被加任務。先對齊這個，再給方案。`
+    : "先問：我以為卡在哪裡，實際卡住的是不是『兩邊以為的不是同一件事』？";
 
   const quotes = buildCoachQuotes({ category: isComm ? "人間關係" : category, hasWhy, otherLabel, keyShort });
+
+  const assumptionGap = {
+    line: isComm
+      ? `我以為是在幫忙把路鋪完，${otherLabel === "自己" ? "當時的自己" : "他"}以為是被塞進沒共識的任務`
+      : category === "身心狀態"
+        ? "我以為再撐一下就過了，身體以為系統該關機了"
+        : "我以為卡在執行，其實卡在兩邊以為的不是同一件事",
+    mine: isComm
+      ? "我以為給完整方案就是在乎、就是幫忙。"
+      : "我以為事情說清楚了，下一步就會自然發生。",
+    theirs: hasPeople
+      ? `${otherLabel}以為這是找麻煩，或被加進沒講好的工作量。`
+      : "當時的自己以為缺的是更多努力，不是更清楚的定義。",
+  };
 
   const mindsetList = [
     isComm
@@ -1129,14 +1188,11 @@ function localOrganize(rawText) {
       ? `對方的盲點：${otherLabel}把你的規劃聽成被塞任務，沒聽到你的好意從哪來。`
       : "對方的盲點：這次主要是自己對自己。卡住的是任務定義，不是能力。",
     isComm
-      ? `雙方落差：你在做宏觀規劃，${otherLabel}要的是微觀當下。目標層級不同，資訊就對不齊。`
-      : "雙方落差：事件有了，成功標準沒寫死。一次到位，還是先做眼前？",
-    isComm
-      ? `你的真實想法：不是要找麻煩，是想一次把路鋪完，讓後面少受苦。${keyShort ? `卡在「${keyShort}」。` : ""}`
-      : `你的真實想法：想把今天這件事處理完，但還沒講清楚為什麼要這樣做。${keyShort ? `停在「${keyShort}」。` : ""}`,
+      ? "你的心態：想一次把路鋪完，讓後面少受苦。"
+      : "你的心態：想把今天這件事處理完，但還沒講清楚為什麼要這樣做。",
     hasPeople
-      ? `對方的真實想法：${otherLabel}當下要的可能只是眼前好處理完的一步，額度沒有你以為的那麼高。`
-      : "對方的真實想法：當時的自己其實只要一個做得到的單位，不是完整計畫。",
+      ? `對方的心態：${otherLabel}當下要的可能只是眼前好處理完的一步，額度沒有你以為的那麼高。`
+      : "對方的心態：當時的自己其實只要一個做得到的單位，不是完整計畫。",
   ];
 
   const gratitudeList = hasGratitude
@@ -1160,6 +1216,7 @@ function localOrganize(rawText) {
     eventList,
     reactionList,
     mindsetList,
+    assumptionGap,
     event: eventList.join("\n"),
     othersReaction: reactionList.join("\n"),
     reflection,
@@ -1213,24 +1270,26 @@ function localThink(organize, round, selected, reply) {
   const keyWordAlt = organize?.keyWordAlt || "先確認：你現在要解的是眼前這一件，還是整套方案？";
   const methodActions = [
     {
-      label: "先對齊目標層級",
-      detail: `「先確認：你現在要解的是眼前這一件，還是整套方案？」`,
+      label: "先對齊彼此以為的",
+      detail: `「我想先對齊一下：我以為是在幫忙，你會不會以為我在加任務？」`,
     },
     {
-      label: `改掉「${keyWord}」`,
+      label: "把真實想法講出來",
       detail: `「${keyWordAlt}」`,
     },
     {
-      label: "只處理眼前這一步",
+      label: "用這句跟對方開口",
       detail: `「方案我可以給。你要我現在只處理眼前，還是一起看完整路徑？」`,
     },
   ];
 
+  const gapLine = organize?.assumptionGap?.line || `我以為是在幫忙，${otherFromTheme}以為是被加任務`;
+
   const rounds = [
     {
-      title: "深度思考與下一步",
-      question: `圍繞「${clipPhrase(theme, 22)}」：你當時給的是完整方案，還是${otherFromTheme}要的眼前一步？`,
-      insight: `盲點是「${clipPhrase(problem, 22)}」。解法走太快，對齊沒做完。升溫詞是「${keyWord}」。下次改口：「${keyWordAlt}」`,
+      title: "下一步引導 / 深度思考",
+      question: `「${clipPhrase(gapLine, 36)}」——兩邊以為的是同一件事嗎？`,
+      insight: `盲點是「${clipPhrase(problem, 22)}」。先對齊我以為／他以為，再給方案。下次改口：「${keyWordAlt}」`,
       actions: methodActions,
     },
     {
@@ -1739,17 +1798,24 @@ function renderHistoryReport(review) {
     <div class="history-report">
       <p><strong>【主標題與評等】【${escapeHtml(ai.themeCategory || "")}】</strong>主題：${escapeHtml(ai.themeTitle || "")} [${starsText(ai.themeStars)}]</p>
       <p>${escapeHtml(ai.conclusion || ai.themeInsight || "")}</p>
-      <p><strong>【事件與心態拆解】事件經過</strong></p>
-      ${eventHtml}
-      <p><strong>雙方盲點、落差與真實想法</strong></p>
+      <p><strong>【深度事件拆解】</strong></p>
+      ${ai.assumptionGap?.line ? `<p class="gap-card__line">${escapeHtml(ai.assumptionGap.line)}</p>` : ""}
+      ${ai.assumptionGap?.mine ? `<p><strong>我以為是</strong><br>${escapeHtml(ai.assumptionGap.mine)}</p>` : ""}
+      ${ai.assumptionGap?.theirs ? `<p><strong>他以為是</strong><br>${escapeHtml(ai.assumptionGap.theirs)}</p>` : ""}
+      <p><strong>雙方盲點與心態</strong></p>
       ${ai.mindsetList && ai.mindsetList.length ? renderBulletList(ai.mindsetList) : renderBulletList(ai.reactionList, ai.othersReaction)}
+      <p><strong>事件經過</strong></p>
+      ${eventHtml}
       <p><strong>事後反思</strong><br>${escapeHtml(ai.reflection || "")}</p>
-      <p><strong>【今日金句】</strong></p>
+      <p><strong>【金句與感恩清單】今日金句</strong></p>
       ${quotes}
-      <p><strong>【感恩清單】</strong></p>
+      <p><strong>感恩清單</strong></p>
       ${gratitudeHtml}
       ${review.gratitude ? `<p><strong>你補的感謝</strong><br>${escapeHtml(review.gratitude)}</p>` : ""}
-      ${think ? `<p><strong>【深度思考與下一步】</strong></p>${think}` : ""}
+      <p><strong>【下一步引導 / 深度思考】</strong></p>
+      ${Array.isArray(ai.nextScripts) && ai.nextScripts.length ? renderBulletList(ai.nextScripts) : ""}
+      ${ai.howNext ? `<p>${escapeHtml(ai.howNext)}</p>` : ""}
+      ${think ? `${think}` : ""}
       <p><strong>【原始輸入紀錄】</strong></p>
       <p class="raw-record">${escapeHtml(review.rawText || "")}</p>
     </div>
