@@ -576,7 +576,8 @@ function thinkFromOrganize(organize, round = 1) {
   ].filter(Boolean);
   if (!scripts.length) return localThink(organize, round, [], "");
   return {
-    title: "深度思考",
+    title: "先聽見那句為什麼",
+    stars: organize.themeStars || 4,
     prompt: defaultThinkPrompt(organize),
     question,
     insight,
@@ -1030,27 +1031,57 @@ function thinkPromptText(round, index, history) {
   return String(round?.question || defaultThinkPrompt(state.organize)).trim();
 }
 
+const THINK_CHAPTER = ["一", "二", "三", "四", "五"];
+const THINK_THEME_FALLBACK = [
+  "先聽見那句為什麼",
+  "順序反了，心意就聽不見",
+  "先對自己說實話",
+  "收到明天做得到的一步",
+  "先看見，才能改變",
+];
+
+function thinkThemeTitle(round, index) {
+  const raw = String(round?.title || "").trim();
+  const generic = /^(深度思考|下一步引導|下一步引導 \/ 深度思考|再往前深一層)$/;
+  const theme = raw && !generic.test(raw) ? raw.replace(/^[一二三四五六七八九十]+、\s*/, "") : THINK_THEME_FALLBACK[index] || "再往前深一層";
+  const chapter = THINK_CHAPTER[index] || String(index + 1);
+  return `${chapter}、${theme}`;
+}
+
+function thinkStarsOf(round) {
+  const n = Number(round?.stars ?? round?.themeStars);
+  return n >= 1 && n <= 5 ? n : 4;
+}
+
+function thinkObservationText(round, index, history, rawText) {
+  if (index === 0) {
+    const diary = String(rawText || state.rawText || "").trim();
+    if (diary) return diary;
+  }
+  const reply = String(round?.reply || "").trim();
+  if (reply) return reply;
+  const prompt = thinkPromptText(round, index, history);
+  if (prompt) return prompt;
+  return String(round?.insight || "").trim() || "這一輪還沒有留下觀察紀錄。";
+}
+
 function renderThoughtUnit(round, index, total, options = {}) {
   const history = options.history || state.think.history || [];
-  const prompt = thinkPromptText(round, index, history);
+  const rawText = options.rawText || state.rawText || "";
   const points = thinkPointConclusions(round);
   const conclusionHtml = points.length
-    ? points
-        .map(
-          (item) => `
-            ${item.title && points.length > 1 ? `<p class="thought-unit__point">${escapeHtml(item.title)}</p>` : ""}
-            ${renderConclusionCallout(item.conclusion)}
-          `
-        )
-        .join("")
+    ? points.map((item) => renderConclusionCallout(item.conclusion)).join("")
     : renderConclusionCallout("這一層還在成形，先把問題看清楚。");
   const current = Boolean(options.current);
   return `
     <article class="thought-unit ${current ? "thought-unit--current" : "thought-unit--past"}">
-      <p class="thought-unit__round">${current ? "深度思考" : "已完成"}　第 ${index + 1}/${total} 輪</p>
-      <div class="thought-unit__question">
-        <p class="thought-unit__label">思考問題</p>
-        <p class="thought-unit__question-text">${escapeHtml(prompt || "（這一輪還沒有留下提問）")}</p>
+      <header class="thought-unit__head">
+        <h3 class="thought-unit__title">${escapeHtml(thinkThemeTitle(round, index))}</h3>
+        <span class="stars thought-unit__stars">[${starsText(thinkStarsOf(round))}]</span>
+      </header>
+      <div class="thought-unit__body">
+        <p class="thought-unit__label">觀察紀錄</p>
+        <p class="thought-unit__note">${escapeHtml(thinkObservationText(round, index, history, rawText))}</p>
       </div>
       <div class="thought-unit__conclusion">
         ${conclusionHtml}
@@ -1180,6 +1211,7 @@ function renderAiStage() {
     .map((round, index) =>
       renderThoughtUnit(round, index, state.think.max, {
         history,
+        rawText,
         current: Boolean(think) && index === history.length - 1,
       })
     )
@@ -1682,7 +1714,8 @@ function localThink(organize, round, selected, reply) {
 
   const rounds = [
     {
-      title: "深度思考",
+      title: "先聽見那句為什麼",
+      stars: 4,
       question: organize?.thinkGuide || `圍繞「${clipPhrase(theme, 18)}」：如果你只能補一句「為什麼」，那一句會是什麼？`,
       insight: `核心是「${clipPhrase(problem, 22)}」。少的通常不是方法，是動機沒被聽見。「${clipPhrase(gapLine, 28)}」——兩邊以為的，是同一件事嗎？`,
       conclusion: organize?.conclusion || "少的不是方案，是那句還沒被聽見的為什麼。",
@@ -1692,7 +1725,8 @@ function localThink(organize, round, selected, reply) {
       actions: methodActions,
     },
     {
-      title: "再往前深一層",
+      title: "順序反了，心意就聽不見",
+      stars: 4,
       question: actionHint
         ? `你選了「${actionHint}」。做這件事之前，你最怕${otherFromTheme}聽到的是哪一句？`
         : `如果你把最硬的那句話，換成${otherFromTheme}聽得進去的版本，第一句會怎麼開口？`,
@@ -1702,7 +1736,8 @@ function localThink(organize, round, selected, reply) {
       actions: methodActions,
     },
     {
-      title: "再往前深一層",
+      title: "先對自己說實話",
+      stars: 4,
       question: replyHint
         ? `你剛說「${clipPhrase(replyHint, 20)}」。這句話裡，哪一個字是真正的需要？`
         : "這份卡住，有沒有一部分其實是對自己說的，而不只是對別人？",
@@ -1713,6 +1748,7 @@ function localThink(organize, round, selected, reply) {
     },
     {
       title: "收到明天做得到的一步",
+      stars: 5,
       question: "明天最小、一定做得到的一步是什麼？小到不可能失敗的那種。",
       insight: "抽象的「下次溝通好一點」不會發生。具體的「先寫一句再傳」「補講一次為什麼」才會發生。",
       conclusion: "明天只做一件小到不可能失敗的事：先寫一句為什麼再開口。",
@@ -1720,7 +1756,8 @@ function localThink(organize, round, selected, reply) {
       actions: methodActions,
     },
     {
-      title: "把這一層帶走",
+      title: "先看見，才能改變",
+      stars: 5,
       question: last
         ? "如果今天只帶走一句話，你希望未來的自己記得哪一句？"
         : "走到這裡，你已經比開頭更靠近自己了。還有哪一句想留給明天？",
@@ -1734,6 +1771,7 @@ function localThink(organize, round, selected, reply) {
   const current = rounds[Math.max(0, Math.min(4, round - 1))] || rounds[0];
   return {
     title: current.title,
+    stars: current.stars || 4,
     prompt: current.question || defaultThinkPrompt(organize),
     question: current.question,
     insight: current.insight,
@@ -1821,8 +1859,10 @@ function normalizeThinkResult(raw, round) {
         }))
         .filter((item) => item.conclusion)
     : fallback.points;
+  const stars = Number(result.stars ?? fallback.stars);
   return {
-    title: String(result.title || "深度思考"),
+    title: String(result.title || fallback.title || "先聽見那句為什麼"),
+    stars: stars >= 1 && stars <= 5 ? stars : 4,
     question: String(result.question || fallback.question),
     insight: String(result.insight || fallback.insight),
     conclusion: String(result.conclusion || fallback.conclusion || ""),
@@ -2210,7 +2250,12 @@ function renderHistoryReport(review) {
   const quotes = (ai.quotes || []).map((quote) => `<p class="gold-quote">${escapeHtml(quote)}</p>`).join("");
   const thinkHistory = review.thinkHistory || [];
   const think = thinkHistory
-    .map((round, index) => renderThoughtUnit(round, index, thinkHistory.length || 5, { history: thinkHistory }))
+    .map((round, index) =>
+      renderThoughtUnit(round, index, thinkHistory.length || 5, {
+        history: thinkHistory,
+        rawText: review.rawText || "",
+      })
+    )
     .join("");
   const eventHtml = renderBulletList(ai.eventList, ai.event);
   const gratitudeHtml = renderBulletList(ai.gratitudeList, ai.gratitudeNote);

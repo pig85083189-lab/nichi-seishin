@@ -131,7 +131,8 @@ const THINK_SYSTEM = `你是同一位高階心靈教練，正在做「深度思�
 actions 的 detail 必須是可開口的完整一句，用「」包起來。
 只輸出 JSON：
 {
-  "title": "深度思考",
+  "title": "先看見，才能改變",
+  "stars": 4,
   "question": "這一個思考點要繼續問的問題",
   "insight": "這一層的展開，可以兩到三句，不要變成日記摘要",
   "conclusion": "若只有一個思考點，用這一句當核心結論",
@@ -145,6 +146,7 @@ actions 的 detail 必須是可開口的完整一句，用「」包起來。
     { "label": "換句話說練習", "detail": "「把今天最硬的那句，換成對方聽得進去的版本。」" }
   ]
 }
+title 必須是有質感的思考主題，例如「先看見，才能改變」，不要寫「深度思考」。stars 為 1-5。
 points 給 1-3 個，每個 conclusion 只能一句。actions 給 3 個。若已是最後一輪，question 改成收束。`;
 
 async function callOpenAI(messages) {
