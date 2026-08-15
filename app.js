@@ -1788,7 +1788,7 @@ function syncApiBaseField() {
 
 function onProviderChange() {
   const id = normalizeProvider(document.getElementById("apiProvider")?.value);
-  const preset = PROVIDER_PRESETS[id];
+  const preset = PROVIDER_PRESETS[id] || PROVIDER_PRESETS.openai;
   const model = document.getElementById("apiModelInput");
   const base = document.getElementById("apiBaseInput");
   if (model) {
@@ -1798,9 +1798,11 @@ function onProviderChange() {
   if (base) {
     base.value = preset.baseUrl;
     base.placeholder = preset.baseUrl;
+    const field = document.getElementById("apiBaseField");
+    if (field) field.hidden = false;
   }
-  syncApiBaseField();
 }
+window.onProviderChange = onProviderChange;
 
 function fillApiForm() {
   const settings = getAiSettings();
