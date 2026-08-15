@@ -686,13 +686,12 @@ function renderConclusionCallout(text) {
   `;
 }
 
-function renderReviewCard({ icon, title, body, variant = "", wide = false }) {
+function renderReviewCard({ title, body, variant = "", wide = false }) {
   if (!String(body || "").trim()) return "";
   const extras = [variant ? `rv-card--${variant}` : "", wide ? "rv-card--wide" : ""].filter(Boolean).join(" ");
   return `
     <article class="rv-card ${extras}">
       <header class="rv-card__head">
-        <span class="rv-card__icon" aria-hidden="true">${icon}</span>
         <h3 class="rv-card__title">${escapeHtml(title)}</h3>
       </header>
       <div class="rv-card__body">${body}</div>
@@ -712,7 +711,7 @@ function renderAssumptionGap(ai) {
   const line = String(gap.line || "").trim();
   if (!mine && !theirs && !line) return "";
   return renderSub(
-    "⚖️ 我以為是……，他以為是……",
+    "我以為是……，他以為是……",
     `
       ${line ? `<p class="gap-card__line">${escapeHtml(line)}</p>` : ""}
       <div class="gap-split">
@@ -739,7 +738,6 @@ function renderPracticeChecks(scripts, howNext) {
     })
     .join("");
   return renderReviewCard({
-    icon: "✅",
     title: "下一步引導 / 練習建議",
     wide: true,
     body: `
@@ -865,7 +863,6 @@ function renderAiStage() {
   root.innerHTML = `
     <div class="review-board">
       ${renderReviewCard({
-        icon: "💡",
         title: "核心洞察區",
         variant: "insight",
         body: `
@@ -873,7 +870,7 @@ function renderAiStage() {
           <p class="theme-inline">【${escapeHtml(ai.themeCategory || "覺察")}】${escapeHtml(ai.themeTitle || "今天的復盤")} <span class="stars">[${starsText(ai.themeStars)}]</span></p>
           ${renderConclusionCallout(conclusion)}
           ${renderSub(
-            "✨ 今日金句",
+            "今日金句",
             `
               ${quoteCards || `<p class="gold-quote">把今天寫下來，不是給別人看成績，是讓這一天確實被過過。</p>`}
               <p class="sfm-hint">可直接複製當標題或筆記；勾選後會收入 SFM 素材庫</p>
@@ -883,17 +880,15 @@ function renderAiStage() {
         `,
       })}
       ${renderReviewCard({
-        icon: "📋",
         title: "深度事件拆解",
         body: `
           ${renderAssumptionGap(ai)}
-          ${renderSub("🔎 雙方盲點與心態", renderBulletList(mindsetList.length ? mindsetList : ai.reactionList, ai.othersReaction))}
+          ${renderSub("雙方盲點與心態", renderBulletList(mindsetList.length ? mindsetList : ai.reactionList, ai.othersReaction))}
           ${renderSub("事件經過", renderBulletList(ai.eventList, ai.event))}
-          ${renderSub("🪞 事後反思", `<p>${escapeHtml(ai.reflection || "")}</p>`)}
+          ${renderSub("事後反思", `<p>${escapeHtml(ai.reflection || "")}</p>`)}
         `,
       })}
       ${renderReviewCard({
-        icon: "🙏",
         title: "感恩清單",
         body: `
           ${gratitudeList.length ? renderBulletList(gratitudeList) : `<p>${escapeHtml(ai.gratitudeNote || "從今天這件事裡，先留一句具體的感謝。")}</p>`}
@@ -904,7 +899,6 @@ function renderAiStage() {
       ${
         sfmChecks
           ? renderReviewCard({
-              icon: "🧩",
               title: "Story · Feeling · Meaning",
               body: `
                 <p class="sfm-hint">也可勾選下面這幾段體悟，一併收入素材庫。</p>
@@ -915,12 +909,10 @@ function renderAiStage() {
       }
       ${renderPracticeChecks(ai.nextScripts, ai.howNext)}
       ${renderReviewCard({
-        icon: "🧭",
         title: "深度思考",
         body: thinkBody,
       })}
       ${renderReviewCard({
-        icon: "📝",
         title: "原始輸入紀錄",
         variant: "muted",
         body: `
