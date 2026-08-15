@@ -295,36 +295,65 @@ function readApiField(id) {
   }
 }
 
+function loadAiSettings() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.ai);
+    if (!raw) return { ...DEFAULT_AI, apiKey: "" };
+    const parsed = JSON.parse(raw);
+    if (typeof parsed === "string") {
+      return { ...DEFAULT_AI, apiKey: parsed.replace(/^Bearer\s+/i, "").trim() };
+    }
+    if (!parsed || typeof parsed !== "object") return { ...DEFAULT_AI, apiKey: "" };
+    return {
+      provider: normalizeProvider(parsed.provider || DEFAULT_AI.provider),
+      apiKey: String(parsed.apiKey || parsed.key || parsed.token || "")
+        .replace(/^Bearer\s+/i, "")
+        .trim(),
+      model: String(parsed.model || DEFAULT_AI.model).trim() || DEFAULT_AI.model,
+      baseUrl: String(parsed.baseUrl || DEFAULT_AI.baseUrl).trim() || DEFAULT_AI.baseUrl,
+    };
+  } catch (error) {
+    console.warn("[日精進 API] 讀取 localStorage nichi.ai 失敗", error);
+    return { ...DEFAULT_AI, apiKey: "" };
+  }
+}
+
 function getAiSettings() {
-  const saved = loadJson(STORAGE_KEYS.ai, {});
-  const source = saved && typeof saved === "object" ? saved : {};
-  const formKey = readApiField("apiKeyInput");
+  const stored = loadAiSettings();
+  const formKey = readApiField("apiKeyInput").replace(/^Bearer\s+/i, "");
   const formModel = readApiField("apiModelInput");
   const formBase = readApiField("apiBaseInput");
   const formProvider = readApiField("apiProvider");
-  const apiKey = formKey || String(source.apiKey || DEFAULT_AI.apiKey || "").trim();
-  let provider = normalizeProvider(formProvider || source.provider || DEFAULT_AI.provider);
-  let model = formModel || String(source.model || DEFAULT_AI.model).trim() || DEFAULT_AI.model;
-  let baseUrl = formBase || String(source.baseUrl || DEFAULT_AI.baseUrl).trim() || DEFAULT_AI.baseUrl;
-  if (apiKey.startsWith("sk-or-") && provider === "openai") {
+  const apiKey = stored.apiKey || formKey;
+  let provider = normalizeProvider(formProvider || stored.provider || DEFAULT_AI.provider);
+  let model = stored.model || formModel || DEFAULT_AI.model;
+  let baseUrl = stored.baseUrl || formBase || DEFAULT_AI.baseUrl;
+  if (formModel) model = formModel;
+  if (formBase) baseUrl = formBase;
+  if (apiKey.startsWith("sk-or-") && (provider === "openai" || /api\.openai\.com/i.test(baseUrl))) {
     provider = "openrouter";
-    if (/api\.openai\.com/i.test(baseUrl)) {
-      baseUrl = PROVIDER_PRESETS.openrouter.baseUrl;
-      if (/^gpt-/.test(model)) model = `openai/${model}`;
-    }
+    if (/api\.openai\.com/i.test(baseUrl)) baseUrl = PROVIDER_PRESETS.openrouter.baseUrl;
+    if (/^gpt-/.test(model)) model = `openai/${model}`;
   }
   return { provider, apiKey, model, baseUrl };
 }
 
 function saveAiSettings(next) {
-  const current = getAiSettings();
+  const current = loadAiSettings();
+  const incomingKey = next.apiKey === undefined ? undefined : String(next.apiKey || "").replace(/^Bearer\s+/i, "").trim();
   const merged = {
     provider: normalizeProvider(next.provider || current.provider),
-    apiKey: next.apiKey === undefined ? current.apiKey : String(next.apiKey || "").trim(),
+    apiKey: incomingKey ? incomingKey : current.apiKey,
     model: String(next.model || current.model || DEFAULT_AI.model).trim() || DEFAULT_AI.model,
     baseUrl: String(next.baseUrl || current.baseUrl || DEFAULT_AI.baseUrl).trim() || DEFAULT_AI.baseUrl,
   };
   saveJson(STORAGE_KEYS.ai, merged);
+  console.log("[日精進 API] 金鑰已寫入 localStorage", {
+    provider: merged.provider,
+    hasKey: Boolean(merged.apiKey),
+    keyPreview: maskKey(merged.apiKey),
+    baseUrl: merged.baseUrl,
+  });
   return merged;
 }
 
@@ -437,25 +466,43 @@ function lastUserContent(messages) {
 }
 
 function buildOpenAiHeaders(settings) {
+  const apiKey = String(settings?.apiKey || loadAiSettings().apiKey || "").replace(/^Bearer\s+/i, "").trim();
+  if (!apiKey) {
+    throw new Error("NO_KEY：localStorage 沒有 API Key，無法帶 Authorization。");
+  }
   const headers = {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${settings.apiKey}`,
+    Authorization: `Bearer ${apiKey}`,
   };
   if (settings.provider === "openrouter") {
-    headers["HTTP-Referer"] = (typeof location !== "undefined" && location.origin) || "https://nichi-seishin.local";
+    const origin = typeof location !== "undefined" && location.origin && location.origin !== "null"
+      ? location.origin
+      : "https://nichi-seishin.local";
+    headers["HTTP-Referer"] = origin;
     headers["X-Title"] = "nichi-seishin";
   }
+  console.log("[日精進 API] 即將送出的 Headers", {
+    hasAuthorization: Boolean(headers.Authorization && headers.Authorization !== "Bearer "),
+    authorizationPrefix: headers.Authorization.slice(0, 10),
+    keyPreview: maskKey(apiKey),
+    contentType: headers["Content-Type"],
+  });
   return headers;
 }
 
 async function callViaSameOriginProxy(messages, settings) {
+  const apiKey = String(settings?.apiKey || loadAiSettings().apiKey || "").replace(/^Bearer\s+/i, "").trim();
+  if (!apiKey) throw new Error("NO_KEY：localStorage 沒有 API Key，代理無法帶 Authorization。");
   const url = new URL("/api/review", location.origin).toString();
-  console.log("[日精進 API] 改走同網域代理，避開瀏覽器 CORS", url, settings.provider);
+  console.log("[日精進 API] 改走同網域代理，避開瀏覽器 CORS", url, settings.provider, maskKey(apiKey));
   const response = await fetchWithTimeout(
     url,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
       body: JSON.stringify({
         mode: "organize",
         date: currentIso(),
@@ -464,7 +511,7 @@ async function callViaSameOriginProxy(messages, settings) {
         provider: settings.provider,
         model: settings.model,
         baseUrl: settings.baseUrl,
-        apiKey: settings.apiKey,
+        apiKey,
       }),
     },
     20000
@@ -516,15 +563,19 @@ async function callGeminiApi(messages, settings) {
 }
 
 async function callOpenAiCompatible(messages, settings) {
-  const url = joinChatCompletionsUrl(settings.baseUrl);
+  const resolved = {
+    ...settings,
+    apiKey: String(settings?.apiKey || loadAiSettings().apiKey || "").replace(/^Bearer\s+/i, "").trim(),
+  };
+  const url = joinChatCompletionsUrl(resolved.baseUrl);
   const timeoutMs = 20000;
   const response = await fetchWithTimeout(
     url,
     {
       method: "POST",
-      headers: buildOpenAiHeaders(settings),
+      headers: buildOpenAiHeaders(resolved),
       body: JSON.stringify({
-        model: settings.model,
+        model: resolved.model,
         temperature: 0.7,
         response_format: { type: "json_object" },
         messages,
@@ -542,8 +593,17 @@ async function callOpenAiCompatible(messages, settings) {
 }
 
 async function callStoredKeyApi(messages) {
+  const stored = loadAiSettings();
   const settings = getAiSettings();
-  if (!settings.apiKey) throw new Error("NO_KEY：設定裡沒有 API Key，無法呼叫雲端。");
+  settings.apiKey = stored.apiKey || settings.apiKey;
+  settings.provider = stored.provider || settings.provider;
+  settings.model = stored.model || settings.model;
+  settings.baseUrl = stored.baseUrl || settings.baseUrl;
+  if (settings.apiKey.startsWith("sk-or-") && (settings.provider === "openai" || /api\.openai\.com/i.test(settings.baseUrl))) {
+    settings.provider = "openrouter";
+    settings.baseUrl = PROVIDER_PRESETS.openrouter.baseUrl;
+  }
+  if (!settings.apiKey) throw new Error("NO_KEY：localStorage 沒有 API Key，無法呼叫雲端。");
 
   const allowsBrowser = Boolean(PROVIDER_PRESETS[settings.provider]?.browserCors);
   const shouldProxy = !allowsBrowser || sameOriginProxyState === "yes";
@@ -2200,18 +2260,21 @@ function saveApiSettings(event) {
   }
   const provider = normalizeProvider(document.getElementById("apiProvider")?.value);
   const preset = PROVIDER_PRESETS[provider];
+  const typedKey = String(document.getElementById("apiKeyInput")?.value || "").replace(/^Bearer\s+/i, "").trim();
   saveAiSettings({
     provider,
-    apiKey: document.getElementById("apiKeyInput")?.value,
+    apiKey: typedKey || undefined,
     model: document.getElementById("apiModelInput")?.value || preset.model,
     baseUrl: document.getElementById("apiBaseInput")?.value || preset.baseUrl,
   });
+  fillApiForm();
   updateApiStatus();
+  const saved = loadAiSettings();
   showToast(
-    getAiSettings().apiKey
+    saved.apiKey
       ? PROVIDER_PRESETS[provider]?.browserCors
-        ? "已儲存。開始整理會直連此供應商。"
-        : "已儲存。OpenAI 類供應商會走 /api/review 代理，避免 CORS。"
+        ? "已儲存金鑰到此瀏覽器。開始整理會直連此供應商。"
+        : "已儲存金鑰。OpenAI 類供應商會走 /api/review 代理，避免 CORS。"
       : "未填金鑰，之後仍用本地教練秒出結果。"
   );
 }

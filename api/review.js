@@ -163,10 +163,37 @@ async function callOpenAI(messages, options = {}) {
   }
 }
 
+function readJsonBody(req) {
+  const raw = req.body;
+  if (raw == null || raw === "") return {};
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return {};
+    }
+  }
+  if (typeof Buffer !== "undefined" && Buffer.isBuffer(raw)) {
+    try {
+      return JSON.parse(raw.toString("utf8"));
+    } catch {
+      return {};
+    }
+  }
+  if (typeof raw === "object") return raw;
+  return {};
+}
+
+function bearerFromHeader(req) {
+  return String(req.headers?.authorization || req.headers?.Authorization || "")
+    .replace(/^Bearer\s+/i, "")
+    .trim();
+}
+
 function setCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 }
 
 module.exports = async function handler(req, res) {
@@ -181,7 +208,7 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const body = req.body && typeof req.body === "object" ? req.body : {};
+    const body = readJsonBody(req);
     const mode = body.mode === "think" ? "think" : "organize";
     const text = String(body.text || "").trim();
     if (!text && mode === "organize" && !Array.isArray(body.messages)) {
@@ -217,7 +244,7 @@ module.exports = async function handler(req, res) {
     }
 
     const data = await callOpenAI(messages, {
-      apiKey: body.apiKey,
+      apiKey: body.apiKey || bearerFromHeader(req),
       baseUrl: body.baseUrl,
       model: body.model,
       provider: body.provider,
