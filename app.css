@@ -281,7 +281,8 @@ body.nav-closed .side-logout {
 }
 
 .auth-login,
-.auth-logout {
+.auth-logout,
+.auth-pay {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -294,12 +295,37 @@ body.nav-closed .side-logout {
   color: var(--text);
   font-size: 13px;
   text-align: left;
+  text-decoration: none;
+  box-sizing: border-box;
   cursor: pointer;
 }
 
 .auth-login:hover,
-.auth-logout:hover {
+.auth-logout:hover,
+.auth-pay:hover {
   background: var(--cream);
+}
+
+.auth-pay {
+  margin-bottom: 8px;
+  justify-content: center;
+  background: var(--header);
+  border-color: var(--header);
+  color: #fff;
+  font-weight: 600;
+}
+
+.auth-pay:hover {
+  background: #3f4c45;
+  color: #fff;
+}
+
+.auth-pay.is-paid,
+.auth-pay:disabled {
+  background: var(--accent-soft);
+  border-color: var(--cream-border);
+  color: var(--muted);
+  cursor: default;
 }
 
 .auth-user {
@@ -349,6 +375,72 @@ body.nav-closed .side-logout {
   line-height: 1.5;
 }
 
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.auth-form__title {
+  margin: 0 0 2px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.auth-field span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.auth-field .input {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.auth-form__error {
+  margin: 0;
+  color: #9b3d3d;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.auth-form__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.auth-form__actions .auth-login,
+.auth-form__actions .auth-signup {
+  flex: 1;
+  justify-content: center;
+}
+
+.auth-signup {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 12px;
+  border: 1px solid var(--cream-border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.auth-signup:hover {
+  background: var(--cream);
+}
+
 .auth-chip {
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 999px;
@@ -370,16 +462,23 @@ body.nav-closed .side-logout {
 body.nav-closed .auth-hint,
 body.nav-closed .auth-user__meta,
 body.nav-closed .auth-login span,
-body.nav-closed .auth-logout span {
+body.nav-closed .auth-logout span,
+body.nav-closed .auth-pay span,
+body.nav-closed .auth-form {
   display: none;
 }
 
 body.nav-closed .auth-login,
 body.nav-closed .auth-logout,
+body.nav-closed .auth-pay,
 body.nav-closed .auth-user {
   justify-content: center;
   padding-left: 0;
   padding-right: 0;
+}
+
+body.nav-closed .auth-pay {
+  display: none;
 }
 
 .side-account {

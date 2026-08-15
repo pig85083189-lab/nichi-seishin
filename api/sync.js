@@ -28,7 +28,7 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const user = requireUser(req, res);
+  const user = await requireUser(req, res);
   if (!user) return;
 
   if (!kvConfigured()) {

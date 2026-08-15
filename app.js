@@ -67,7 +67,10 @@ const state = {
   organizeSource: "",
   apiConfigured: null,
   user: null,
+  accessToken: "",
   authConfigured: false,
+  payConfigured: false,
+  membership: null,
   syncing: false,
 };
 
@@ -430,7 +433,7 @@ function formatApiError(error) {
   if (error?.name === "AbortError" || /請求逾時|逾時/.test(message)) return "雲端通道逾時。請確認 Vercel 已 Redeploy，且 OPENAI_API_KEY 設在 Production。";
   if (/file:|本機 HTML/.test(message)) return message;
   if (/401|請先使用 Google|未登入|未授權/i.test(message)) {
-    return "請先使用 Google 帳號登入，才能使用雲端 AI 與同步備份。";
+    return "請先登入，才能使用雲端 AI 與同步備份。";
   }
   if (/404|Failed to fetch|fetch 失敗|NetworkError/i.test(message)) {
     return "找不到 /api/review。請用 Vercel 網址開啟，並重新部署後端函式。";
@@ -438,12 +441,23 @@ function formatApiError(error) {
   return message;
 }
 
+function authHeaders(headers = {}) {
+  const next = { ...(headers || {}) };
+  if (state.accessToken) next.Authorization = `Bearer ${state.accessToken}`;
+  return next;
+}
+
 async function fetchWithTimeout(url, options, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     console.log("[日精進 API] fetch 送出", options?.method || "GET", url);
-    return await fetch(url, { credentials: "include", ...options, signal: controller.signal });
+    return await fetch(url, {
+      credentials: "include",
+      ...options,
+      headers: authHeaders(options?.headers),
+      signal: controller.signal,
+    });
   } catch (error) {
     if (error?.name === "AbortError") throw new Error(`請求逾時（${timeoutMs}ms）`);
     throw new Error(`fetch 失敗：${error?.message || error}`);
@@ -604,7 +618,7 @@ function thinkFromOrganize(organize, round = 1) {
 
 async function maybeEnhanceWithApi(rawText, token) {
   if (!state.user) {
-    showToast("本地草稿已出。登入 Google 後才能使用雲端 AI 與同步備份。");
+    showToast("本地草稿已出。登入後才能使用雲端 AI 與同步備份。");
     return;
   }
   showToast("正在呼叫雲端 AI…");
@@ -841,14 +855,32 @@ function collectCloudBundle() {
 
 async function pushCloudData() {
   if (!state.user || typeof location === "undefined" || location.protocol === "file:") return;
+  const bundle = collectCloudBundle();
+  const client = await getSupabase();
+  if (client) {
+    const { error } = await client.from("nichi_user_data").upsert(
+      {
+        user_id: state.user.id,
+        email: state.user.email || "",
+        reviews: bundle.reviews,
+        tasks: bundle.tasks,
+        sfm: bundle.sfm,
+        reports: bundle.reports,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" }
+    );
+    if (error) console.warn("[日精進] Supabase 寫入失敗", error.message);
+  }
   const response = await fetch(`${location.origin}/api/sync`, {
     method: "PUT",
     credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(collectCloudBundle()),
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ ...bundle, email: state.user.email || "" }),
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.ok === false) {
+    if (client) return;
     throw new Error(payload.error || `HTTP ${response.status}`);
   }
 }
@@ -891,12 +923,18 @@ function mergeCloudBundle(cloud) {
 
 async function pullCloudData() {
   if (!state.user) return;
-  const response = await fetch(`${location.origin}/api/sync`, { method: "GET", credentials: "include" });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.ok === false) {
-    throw new Error(payload.error || `HTTP ${response.status}`);
+  const fromSb = await loadSupabaseRecords();
+  if (fromSb) {
+    mergeCloudBundle(fromSb);
+  } else {
+    const response = await fetch(`${location.origin}/api/sync`, {
+      method: "GET",
+      credentials: "include",
+      headers: authHeaders(),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (response.ok && payload.ok !== false) mergeCloudBundle(payload.data || {});
   }
-  mergeCloudBundle(payload.data || {});
   try {
     loadReviewForDate(currentIso());
     updateStats();
@@ -915,21 +953,28 @@ function renderAuth() {
   const user = state.user;
   if (top) {
     top.textContent = user ? user.name || user.email || "已登入" : "登入";
-    top.title = user ? "登出" : "使用 Google 帳號登入";
+    top.title = user ? "登出" : "Email 登入";
   }
   if (!side) return;
   if (!user) {
     side.innerHTML = `
-      <button class="auth-login" id="btnGoogleLogin" type="button">
-        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-          <path fill="#4285F4" d="M22.6 12.25c0-.8-.07-1.57-.2-2.31H12v4.37h5.95a5.08 5.08 0 0 1-2.2 3.34v2.77h3.56c2.08-1.92 3.29-4.75 3.29-8.17Z" />
-          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.56-2.77c-.99.66-2.26 1.05-3.72 1.05-2.86 0-5.29-1.93-6.16-4.53H2.18v2.85A10.99 10.99 0 0 0 12 23Z" />
-          <path fill="#FBBC05" d="M5.84 14.09A6.6 6.6 0 0 1 5.5 12c0-.72.12-1.43.34-2.09V7.06H2.18A11 11 0 0 0 1 12c0 1.78.43 3.46 1.18 4.94l3.66-2.85Z" />
-          <path fill="#EA4335" d="M12 5.38c1.62 0 3.07.56 4.21 1.64l3.16-3.16C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.85C6.71 7.31 9.14 5.38 12 5.38Z" />
-        </svg>
-        <span>使用 Google 帳號登入</span>
-      </button>
-      <p class="auth-hint" id="authHint">登入後，復盤、素材庫與下一步會跟著你的帳號安全備份。</p>
+      <form class="auth-form" id="authForm">
+        <p class="auth-form__title">Email 登入</p>
+        <label class="auth-field">
+          <span>Email</span>
+          <input class="input" id="authEmail" name="email" type="email" autocomplete="username" required placeholder="you@email.com" />
+        </label>
+        <label class="auth-field">
+          <span>密碼</span>
+          <input class="input" id="authPassword" name="password" type="password" autocomplete="current-password" required minlength="6" placeholder="至少 6 碼" />
+        </label>
+        <p class="auth-form__error" id="authError" hidden></p>
+        <div class="auth-form__actions">
+          <button class="auth-login" id="btnSignIn" type="submit">登入</button>
+          <button class="auth-signup" id="btnSignUp" type="button">註冊</button>
+        </div>
+        <p class="auth-hint">登入後會讀取你在雲端的復盤與個人紀錄。</p>
+      </form>
     `;
     return;
   }
@@ -937,6 +982,12 @@ function renderAuth() {
   const avatar = user.picture
     ? `<img src="${escapeHtml(user.picture)}" alt="" referrerpolicy="no-referrer" />`
     : `<span class="auth-avatar">${initial}</span>`;
+  const paid = Boolean(state.membership && state.membership.paid);
+  const payBtn = state.payConfigured
+    ? paid
+      ? `<button class="auth-pay is-paid" type="button" disabled><span>已開通</span></button>`
+      : `<button class="auth-pay" id="btnNewebPay" type="button"><span>前往付款</span></button>`
+    : "";
   side.innerHTML = `
     <div class="auth-user">
       ${avatar}
@@ -945,32 +996,284 @@ function renderAuth() {
         <p class="auth-user__email">${escapeHtml(user.email || "")}</p>
       </div>
     </div>
-    <button class="auth-logout" id="btnGoogleLogout" type="button"><span>登出</span></button>
+    ${payBtn}
+    <button class="auth-logout" id="btnSignOut" type="button"><span>登出</span></button>
   `;
 }
 
-function startGoogleLogin() {
-  if (typeof location === "undefined" || location.protocol === "file:") {
-    showToast("請用 Vercel 網址開啟，才能使用 Google 登入。");
-    return;
-  }
-  location.href = `${location.origin}/api/auth/google`;
+let supabaseClient = null;
+let supabaseInit = null;
+
+async function getSupabase() {
+  if (supabaseClient) return supabaseClient;
+  if (supabaseInit) return supabaseInit;
+  supabaseInit = (async () => {
+    if (typeof window === "undefined" || !window.supabase) return null;
+    const createClient = window.supabase.createClient || (window.supabase.default && window.supabase.default.createClient);
+    if (!createClient) return null;
+    if (typeof location === "undefined" || location.protocol === "file:") return null;
+    const response = await fetch(`${location.origin}/api/config`);
+    const cfg = await response.json().catch(() => ({}));
+    const url = String(cfg.supabaseUrl || "").trim();
+    const key = String(cfg.supabaseAnonKey || "").trim();
+    if (!url || !key) return null;
+    supabaseClient = createClient(url, key, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+    });
+    supabaseClient.auth.onAuthStateChange((_event, session) => {
+      const prev = state.user && state.user.id;
+      applySession(session);
+      const next = state.user && state.user.id;
+      if (prev !== next) renderAuth();
+    });
+    return supabaseClient;
+  })();
+  const client = await supabaseInit;
+  supabaseInit = null;
+  return client;
 }
 
-function startGoogleLogout() {
-  location.href = `${location.origin}/api/auth/logout`;
+function applySession(session) {
+  const user = session && session.user;
+  state.accessToken = (session && session.access_token) || "";
+  state.user = user
+    ? {
+        id: String(user.id),
+        email: String(user.email || "").trim(),
+        name: String((user.user_metadata && (user.user_metadata.name || user.user_metadata.full_name)) || user.email || "").trim(),
+        picture: String((user.user_metadata && (user.user_metadata.avatar_url || user.user_metadata.picture)) || "").trim(),
+      }
+    : null;
+}
+
+function setAuthError(message) {
+  const el = document.getElementById("authError");
+  if (!el) return;
+  const text = String(message || "").trim();
+  el.hidden = !text;
+  el.textContent = text;
+}
+
+function readAuthForm() {
+  const email = String(document.getElementById("authEmail")?.value || "").trim();
+  const password = String(document.getElementById("authPassword")?.value || "");
+  return { email, password };
+}
+
+function translateAuthError(error) {
+  const message = String(error?.message || error || "登入失敗");
+  if (/invalid login credentials/i.test(message)) return "Email 或密碼不正確。";
+  if (/user already registered/i.test(message)) return "這個 Email 已經註冊過，請直接登入。";
+  if (/password/i.test(message) && /at least|6/i.test(message)) return "密碼至少需要 6 碼。";
+  if (/email not confirmed/i.test(message)) return "請先到信箱點擊確認信，再回來登入。";
+  if (/rate limit|too many/i.test(message)) return "嘗試太多次，請稍後再試。";
+  return message;
+}
+
+async function afterAuthSuccess(kind) {
+  renderAuth();
+  showToast(kind === "signup" ? "註冊成功，正在讀取你的紀錄…" : "已登入，正在讀取你的紀錄…");
+  try {
+    await pullCloudData();
+    await pushCloudData();
+    showToast("已載入你的個人紀錄。");
+  } catch (error) {
+    showToast(`紀錄讀取失敗：${error.message || error}`);
+  }
+}
+
+async function signInWithPassword() {
+  const { email, password } = readAuthForm();
+  if (!email || !password) {
+    setAuthError("請輸入 Email 與密碼。");
+    return;
+  }
+  const client = await getSupabase();
+  if (!client) {
+    setAuthError("尚未設定 Supabase。請在 Vercel 加上 SUPABASE_URL 與 SUPABASE_ANON_KEY。");
+    return;
+  }
+  setAuthError("");
+  const signInBtn = document.getElementById("btnSignIn");
+  const signUpBtn = document.getElementById("btnSignUp");
+  if (signInBtn) signInBtn.disabled = true;
+  if (signUpBtn) signUpBtn.disabled = true;
+  const { data, error } = await client.auth.signInWithPassword({ email, password });
+  if (signInBtn) signInBtn.disabled = false;
+  if (signUpBtn) signUpBtn.disabled = false;
+  if (error) {
+    setAuthError(translateAuthError(error));
+    return;
+  }
+  applySession(data.session);
+  await afterAuthSuccess("signin");
+}
+
+async function signUpWithPassword() {
+  const { email, password } = readAuthForm();
+  if (!email || !password) {
+    setAuthError("請輸入 Email 與密碼。");
+    return;
+  }
+  if (password.length < 6) {
+    setAuthError("密碼至少需要 6 碼。");
+    return;
+  }
+  const client = await getSupabase();
+  if (!client) {
+    setAuthError("尚未設定 Supabase。請在 Vercel 加上 SUPABASE_URL 與 SUPABASE_ANON_KEY。");
+    return;
+  }
+  setAuthError("");
+  const signInBtn = document.getElementById("btnSignIn");
+  const signUpBtn = document.getElementById("btnSignUp");
+  if (signInBtn) signInBtn.disabled = true;
+  if (signUpBtn) signUpBtn.disabled = true;
+  const { data, error } = await client.auth.signUp({ email, password });
+  if (signInBtn) signInBtn.disabled = false;
+  if (signUpBtn) signUpBtn.disabled = false;
+  if (error) {
+    setAuthError(translateAuthError(error));
+    return;
+  }
+  if (!data.session) {
+    setAuthError("註冊成功。請到信箱點擊確認信後再登入。");
+    showToast("請先確認 Email，再回來登入。");
+    return;
+  }
+  applySession(data.session);
+  await afterAuthSuccess("signup");
+}
+
+async function signOutUser() {
+  const client = await getSupabase();
+  if (client) await client.auth.signOut();
+  state.user = null;
+  state.accessToken = "";
+  state.membership = null;
+  renderAuth();
+  showToast("已登出。本機草稿仍在這台裝置上。");
+}
+
+function startNewebPay() {
+  if (typeof location === "undefined" || location.protocol === "file:") {
+    showToast("請用 Vercel 網址開啟，才能使用藍新金流付款。");
+    return;
+  }
+  if (!state.user) {
+    showToast("請先登入，再前往付款。");
+    return;
+  }
+  location.href = `${location.origin}/api/pay/create`;
+}
+
+function rowsToReviewMap(rows) {
+  const out = {};
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    if (!row || typeof row !== "object") return;
+    const iso = String(row.date || row.iso || row.review_date || row.day || "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return;
+    out[iso] = {
+      date: iso,
+      rawText: row.raw_text || row.rawText || row.content || row.body || "",
+      organize: row.organize || row.ai || null,
+      think: row.think || null,
+      gratitude: row.gratitude || "",
+      completedAt: row.completed_at || row.completedAt || row.updated_at || "",
+      userId: row.user_id || state.user?.id || "",
+    };
+  });
+  return out;
+}
+
+function normalizeRemoteBundle(row) {
+  if (!row || typeof row !== "object") return null;
+  const nested = row.data && typeof row.data === "object" && !Array.isArray(row.data) ? row.data : null;
+  const reviews = row.reviews || (nested && nested.reviews);
+  const tasks = row.tasks || (nested && nested.tasks);
+  const sfm = row.sfm || (nested && nested.sfm);
+  const reports = row.reports || (nested && nested.reports);
+  if (!reviews && !tasks && !sfm && !reports) return null;
+  return {
+    reviews: reviews && typeof reviews === "object" && !Array.isArray(reviews) ? reviews : {},
+    tasks: Array.isArray(tasks) ? tasks : [],
+    sfm: Array.isArray(sfm) ? sfm : [],
+    reports: reports && typeof reports === "object" && !Array.isArray(reports) ? reports : {},
+  };
+}
+
+async function fetchOwnRow(client, table, user) {
+  const attempts = [
+    () => client.from(table).select("*").eq("user_id", user.id).maybeSingle(),
+    () => client.from(table).select("*").eq("id", user.id).maybeSingle(),
+    () => client.from(table).select("*").eq("email", user.email).maybeSingle(),
+  ];
+  for (const run of attempts) {
+    try {
+      const { data, error } = await run();
+      if (!error && data) return data;
+    } catch {
+      /* 換下一種查法 */
+    }
+  }
+  return null;
+}
+
+async function loadSupabaseRecords() {
+  const client = await getSupabase();
+  const user = state.user;
+  if (!client || !user) return null;
+  const tables = ["nichi_user_data", "user_data", "user_records", "profiles"];
+  for (const table of tables) {
+    const row = await fetchOwnRow(client, table, user);
+    const bundle = normalizeRemoteBundle(row);
+    if (bundle) return bundle;
+  }
+  try {
+    const { data, error } = await client.from("reviews").select("*").eq("user_id", user.id);
+    if (!error && Array.isArray(data) && data.length) {
+      const reviews = rowsToReviewMap(data);
+      let tasks = [];
+      let sfm = [];
+      try {
+        const taskRes = await client.from("tasks").select("*").eq("user_id", user.id);
+        if (!taskRes.error && Array.isArray(taskRes.data)) tasks = taskRes.data;
+      } catch {
+        /* optional */
+      }
+      try {
+        const sfmRes = await client.from("sfm").select("*").eq("user_id", user.id);
+        if (!sfmRes.error && Array.isArray(sfmRes.data)) sfm = sfmRes.data;
+      } catch {
+        /* optional */
+      }
+      return { reviews, tasks, sfm, reports: {} };
+    }
+  } catch {
+    /* 沒有 reviews 表就略過 */
+  }
+  return null;
 }
 
 async function refreshAuth() {
-  if (typeof location === "undefined" || location.protocol === "file:") {
-    renderAuth();
-    return;
-  }
+  renderAuth();
   try {
-    const response = await fetch(`${location.origin}/api/auth/me`, { credentials: "include" });
-    const payload = await response.json().catch(() => ({}));
-    state.authConfigured = Boolean(payload.configured);
-    state.user = payload.user || null;
+    const client = await getSupabase();
+    state.authConfigured = Boolean(client);
+    if (client) {
+      const { data } = await client.auth.getSession();
+      applySession(data.session);
+    }
+    if (typeof location !== "undefined" && location.protocol !== "file:") {
+      const response = await fetch(`${location.origin}/api/auth/me`, {
+        credentials: "include",
+        headers: authHeaders(),
+      });
+      const payload = await response.json().catch(() => ({}));
+      state.payConfigured = Boolean(payload.payConfigured);
+      state.membership = payload.membership || null;
+      if (!state.user && payload.user) state.user = payload.user;
+    }
     renderAuth();
     if (state.user) {
       await pullCloudData();
@@ -985,12 +1288,19 @@ function handleAuthQuery() {
   try {
     const params = new URLSearchParams(location.search);
     const auth = params.get("auth");
-    if (!auth) return;
-    if (auth === "ok") showToast("已用 Google 帳號登入，資料會跟著你的帳號備份。");
+    const pay = params.get("pay");
+    if (!auth && !pay) return;
+    if (auth === "ok") showToast("已登入，資料會跟著你的帳號備份。");
     if (auth === "out") showToast("已登出。本機草稿仍在這台裝置上。");
     if (auth === "error") showToast(`登入失敗：${params.get("reason") || "請再試一次"}`);
+    if (pay === "ok") showToast("付款成功。藍新金流已完成授權。");
+    if (pay === "fail") showToast(`付款未完成：${params.get("reason") || "請再試一次"}`);
+    if (pay === "error") showToast(`付款結果異常：${params.get("reason") || "請再試一次"}`);
+    if (pay === "back") showToast("已返回商店，尚未完成付款。");
     params.delete("auth");
     params.delete("reason");
+    params.delete("pay");
+    params.delete("order");
     const next = `${location.pathname}${params.toString() ? `?${params}` : ""}${location.hash}`;
     history.replaceState({}, "", next);
   } catch {
@@ -2129,7 +2439,7 @@ function runThink(replyText = "") {
 
 async function enhanceThinkWithApi(nextRound, selected, reply, token) {
   if (!state.user) {
-    showToast("登入 Google 後，深度思考才會走到雲端。");
+    showToast("登入後，深度思考才會走到雲端。");
     return;
   }
   showToast("正在呼叫雲端 AI 深挖…");
@@ -2588,6 +2898,31 @@ function toggleMic() {
  * =========================================================================== */
 
 function bindEvents() {
+  document.addEventListener("click", (event) => {
+    const target = event.target.closest ? event.target : event.target.parentElement;
+    if (!target || !target.closest) return;
+    if (target.closest("#btnSignUp")) {
+      event.preventDefault();
+      signUpWithPassword();
+      return;
+    }
+    if (target.closest("#btnSignOut") || target.closest("#btnGoogleLogout")) {
+      event.preventDefault();
+      signOutUser();
+      return;
+    }
+    if (target.closest("#btnNewebPay")) {
+      event.preventDefault();
+      startNewebPay();
+    }
+  });
+  document.addEventListener("submit", (event) => {
+    if (event.target && event.target.id === "authForm") {
+      event.preventDefault();
+      signInWithPassword();
+    }
+  });
+
   const toggle = navToggleEl();
   if (toggle) toggle.addEventListener("click", toggleMenu);
   const scrim = document.getElementById("scrim");
@@ -2767,18 +3102,18 @@ function bindEvents() {
     }
   });
 
-  const sideAuth = document.getElementById("sideAuth");
-  if (sideAuth) {
-    sideAuth.addEventListener("click", (event) => {
-      if (event.target.closest("#btnGoogleLogin")) startGoogleLogin();
-      if (event.target.closest("#btnGoogleLogout")) startGoogleLogout();
-    });
-  }
   const topAuth = document.getElementById("topAuthBtn");
   if (topAuth) {
     topAuth.addEventListener("click", () => {
-      if (state.user) startGoogleLogout();
-      else startGoogleLogin();
+      if (state.user) {
+        signOutUser();
+        return;
+      }
+      const email = document.getElementById("authEmail");
+      if (email) {
+        if (isMobile()) setSidebarOpen(true);
+        email.focus();
+      }
     });
   }
 

@@ -217,7 +217,7 @@ module.exports = async function handler(req, res) {
     res.status(200).json({
       ok: true,
       configured: Boolean(getApiKey()),
-      auth: require("./lib/auth").googleConfigured(),
+      auth: require("./lib/auth").authConfigured(),
       model: String(process.env.OPENAI_MODEL || "gpt-4o-mini"),
     });
     return;
@@ -228,7 +228,7 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const user = requireUser(req, res);
+  const user = await requireUser(req, res);
   if (!user) return;
 
   try {

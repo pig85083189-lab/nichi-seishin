@@ -1,3 +1,5 @@
+const { loadSupabaseUserData, saveSupabaseUserData, listSupabaseUsers } = require("./supabase");
+
 function kvConfigured() {
   return Boolean(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
 }
@@ -46,8 +48,14 @@ function userKey(userId, name) {
 const USERS_KEY = "nichi:users";
 
 async function listUsers() {
+  const fromSb = await listSupabaseUsers();
   const stored = await kvGet(USERS_KEY);
-  return Array.isArray(stored) ? stored.filter((item) => item && item.id) : [];
+  const fromKv = Array.isArray(stored) ? stored.filter((item) => item && item.id) : [];
+  const map = new Map();
+  [...fromKv, ...fromSb].forEach((item) => {
+    if (item && item.id) map.set(String(item.id), { id: String(item.id), email: item.email || "", name: item.name || "" });
+  });
+  return [...map.values()];
 }
 
 async function registerUser(user) {
@@ -64,8 +72,11 @@ async function registerUser(user) {
 }
 
 async function loadReviews(userId) {
-  const stored = await kvGet(userKey(userId, "reviews"));
-  return stored && typeof stored === "object" && !Array.isArray(stored) ? stored : {};
+  const id = assertUserId(userId);
+  const fromSb = await loadSupabaseUserData(id);
+  if (fromSb && fromSb.reviews && Object.keys(fromSb.reviews).length) return fromSb.reviews;
+  const stored = await kvGet(userKey(id, "reviews"));
+  return stored && typeof stored === "object" && !Array.isArray(stored) ? stored : fromSb ? fromSb.reviews : {};
 }
 
 async function saveReviews(userId, reviews) {
@@ -108,19 +119,53 @@ async function saveReport(userId, type, period, report) {
 
 async function loadUserData(userId) {
   const id = assertUserId(userId);
+  const fromSb = await loadSupabaseUserData(id);
   const [reviews, tasks, sfm, reports] = await Promise.all([
     kvGet(userKey(id, "reviews")),
     kvGet(userKey(id, "tasks")),
     kvGet(userKey(id, "sfm")),
     kvGet(userKey(id, "reports")),
   ]);
-  return {
+  const kvBundle = {
     userId: id,
     reviews: reviews && typeof reviews === "object" && !Array.isArray(reviews) ? reviews : {},
     tasks: Array.isArray(tasks) ? tasks : [],
     sfm: Array.isArray(sfm) ? sfm : [],
     reports: reports && typeof reports === "object" && !Array.isArray(reports) ? reports : {},
   };
+  if (!fromSb) return kvBundle;
+  const hasSb =
+    Object.keys(fromSb.reviews || {}).length ||
+    (fromSb.tasks || []).length ||
+    (fromSb.sfm || []).length ||
+    Object.keys(fromSb.reports || {}).length;
+  return hasSb ? fromSb : kvBundle;
+}
+
+function orderKey(orderNo) {
+  return `nichi:order:${String(orderNo || "").trim()}`;
+}
+
+function membershipKey(userId) {
+  return userKey(userId, "membership");
+}
+
+async function saveOrder(order) {
+  if (!order || !order.orderNo) return false;
+  return kvSet(orderKey(order.orderNo), order);
+}
+
+async function loadOrder(orderNo) {
+  if (!orderNo) return null;
+  return kvGet(orderKey(orderNo));
+}
+
+async function loadMembership(userId) {
+  return kvGet(membershipKey(userId));
+}
+
+async function saveMembership(userId, membership) {
+  return kvSet(membershipKey(userId), membership && typeof membership === "object" ? membership : {});
 }
 
 async function saveUserData(userId, bundle) {
@@ -135,6 +180,7 @@ async function saveUserData(userId, bundle) {
     kvSet(userKey(id, "sfm"), sfm),
     kvSet(userKey(id, "reports"), reports),
   ]);
+  await saveSupabaseUserData(id, { reviews, tasks, sfm, reports }, { email: bundle.email || "" });
   return { userId: id, reviews, tasks, sfm, reports };
 }
 
@@ -150,4 +196,8 @@ module.exports = {
   saveReport,
   loadUserData,
   saveUserData,
+  saveOrder,
+  loadOrder,
+  loadMembership,
+  saveMembership,
 };

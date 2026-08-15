@@ -3,6 +3,7 @@ const crypto = require("crypto");
 const SESSION_COOKIE = "nichi_session";
 const STATE_COOKIE = "nichi_oauth_state";
 const SESSION_DAYS = 30;
+const PRODUCTION_ORIGIN = "https://nichi-seishin.vercel.app";
 
 function authSecret() {
   return String(process.env.AUTH_SECRET || "").trim();
@@ -13,9 +14,20 @@ function googleConfigured() {
 }
 
 function originFromReq(req) {
-  const proto = String(req.headers["x-forwarded-proto"] || "https").split(",")[0].trim();
-  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim();
-  return `${proto}://${host}`;
+  const proto = String(req.headers["x-forwarded-proto"] || "https").split(",")[0].trim() || "https";
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim().replace(/:\d+$/, "");
+  if (!host) return PRODUCTION_ORIGIN;
+  return `${proto}://${host}`.replace(/\/+$/, "");
+}
+
+function appOrigin() {
+  const fromEnv = String(process.env.AUTH_URL || process.env.APP_ORIGIN || "").trim().replace(/\/+$/, "");
+  if (fromEnv) return fromEnv;
+  return PRODUCTION_ORIGIN;
+}
+
+function oauthRedirectUri() {
+  return `${PRODUCTION_ORIGIN}/api/auth/callback`;
 }
 
 function isHttps(req) {
@@ -66,9 +78,26 @@ function cookieHeader(name, value, req, options = {}) {
   return parts.join("; ");
 }
 
-function getSession(req) {
-  const token = parseCookies(req)[SESSION_COOKIE];
-  const data = verify(token);
+const { getUserFromAccessToken, supabaseConfigured } = require("./supabase");
+
+function authConfigured() {
+  return supabaseConfigured() || googleConfigured();
+}
+
+function bearerToken(req) {
+  const header = String(req.headers.authorization || req.headers.Authorization || "");
+  if (header.toLowerCase().startsWith("bearer ")) return header.slice(7).trim();
+  return "";
+}
+
+async function getSession(req) {
+  const token = bearerToken(req);
+  if (token) {
+    const user = await getUserFromAccessToken(token);
+    if (user) return user;
+  }
+  const cookieToken = parseCookies(req)[SESSION_COOKIE];
+  const data = verify(cookieToken);
   if (!data || !data.id) return null;
   return {
     id: String(data.id),
@@ -78,10 +107,10 @@ function getSession(req) {
   };
 }
 
-function requireUser(req, res) {
-  const user = getSession(req);
+async function requireUser(req, res) {
+  const user = await getSession(req);
   if (!user) {
-    res.status(401).json({ ok: false, error: "請先使用 Google 帳號登入" });
+    res.status(401).json({ ok: false, error: "請先登入" });
     return null;
   }
   return user;
@@ -98,7 +127,10 @@ module.exports = {
   SESSION_DAYS,
   authSecret,
   googleConfigured,
+  authConfigured,
   originFromReq,
+  appOrigin,
+  oauthRedirectUri,
   sign,
   verify,
   parseCookies,

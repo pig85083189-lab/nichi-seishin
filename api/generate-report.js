@@ -227,7 +227,7 @@ async function handler(req, res, forced = {}) {
       return;
     }
 
-    const user = requireUser(req, res);
+    const user = await requireUser(req, res);
     if (!user) return;
 
     if (req.method === "POST" && Array.isArray(body.reviews) && body.reviews.length) {
