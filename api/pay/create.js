@@ -15,10 +15,10 @@ const {
   notifyUrl,
   returnUrl,
   clientBackUrl,
+  readRequestBody,
 } = require("../../lib/newebpay");
 
-function readJsonBody(req) {
-  const raw = req.body;
+function parseJsonValue(raw) {
   if (raw == null || raw === "") return {};
   if (typeof raw === "string") {
     try {
@@ -36,6 +36,13 @@ function readJsonBody(req) {
   }
   if (typeof raw === "object") return raw;
   return {};
+}
+
+async function readJsonBody(req) {
+  const parsed = parseJsonValue(req.body);
+  if (parsed && Object.keys(parsed).length) return parsed;
+  const raw = await readRequestBody(req);
+  return parseJsonValue(raw);
 }
 
 function wantsJson(req) {
@@ -61,10 +68,11 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const body = req.method === "POST" ? readJsonBody(req) : {};
-  const user = await getSession(req, { accessToken: body.accessToken || body.token });
+  const body = req.method === "POST" ? await readJsonBody(req) : {};
+  const extra = { accessToken: body.accessToken || body.token };
+  const user = await getSession(req, extra);
   if (!user) {
-    const hasToken = Boolean(bearerToken(req, { accessToken: body.accessToken || body.token }));
+    const hasToken = Boolean(bearerToken(req, extra));
     res.status(401).json({
       ok: false,
       error: hasToken ? "登入已過期，請重新登入後再訂閱" : "請先登入",

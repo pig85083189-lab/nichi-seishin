@@ -447,9 +447,30 @@ function formatApiError(error) {
   return message;
 }
 
-function authHeaders(headers = {}) {
+function tokenFromLocalStorage() {
+  try {
+    const raw = localStorage.getItem("nichi-auth");
+    if (!raw) return "";
+    const parsed = JSON.parse(raw);
+    return String(
+      parsed.access_token ||
+      (parsed.currentSession && parsed.currentSession.access_token) ||
+      (parsed.session && parsed.session.access_token) ||
+      ""
+    ).trim();
+  } catch {
+    return "";
+  }
+}
+
+function currentAccessToken() {
+  return String(state.accessToken || tokenFromLocalStorage() || "").trim();
+}
+
+function authHeaders(headers = {}, token) {
   const next = { ...(headers || {}) };
-  if (state.accessToken) next.Authorization = `Bearer ${state.accessToken}`;
+  const access = String(token || currentAccessToken() || "").trim();
+  if (access) next.Authorization = `Bearer ${access}`;
   return next;
 }
 
@@ -1079,6 +1100,10 @@ async function ensureFreshAccessToken() {
     console.warn("ensureFreshAccessToken failed", error && error.message ? error.message : error);
   }
   applySession(session);
+  if (!state.accessToken) {
+    const stored = tokenFromLocalStorage();
+    if (stored) state.accessToken = stored;
+  }
   return state.accessToken;
 }
 
@@ -1203,7 +1228,7 @@ async function startNewebPay() {
     showToast("請用 Vercel 網址開啟，才能使用藍新金流付款。");
     return;
   }
-  let accessToken = state.accessToken || "";
+  let accessToken = currentAccessToken();
   try {
     const fresh = await Promise.race([
       ensureFreshAccessToken(),
@@ -1213,17 +1238,22 @@ async function startNewebPay() {
   } catch (error) {
     console.warn("Subscribe token refresh failed", error && error.message ? error.message : error);
   }
+  if (!accessToken) accessToken = currentAccessToken();
   showToast("正在前往藍新金流…");
   try {
-    console.log("Subscribe fetch /api/pay/create");
+    console.log("Subscribe fetch /api/pay/create", { tokenChars: accessToken.length });
+    const headers = {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    };
+    if (accessToken) {
+      headers.Authorization = `Bearer ${accessToken}`;
+      headers["X-Supabase-Auth"] = accessToken;
+    }
     const response = await fetch(`${location.origin}/api/pay/create`, {
       method: "POST",
       credentials: "include",
-      headers: authHeaders({
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        "X-Supabase-Auth": accessToken,
-      }),
+      headers,
       body: JSON.stringify({ accessToken }),
     });
     const payload = await response.json().catch(() => ({}));
