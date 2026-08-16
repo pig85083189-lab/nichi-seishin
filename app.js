@@ -68,6 +68,14 @@ const state = {
   speechTarget: "",
   journalHydrating: false,
   journalCheckTimer: 0,
+  journalMeta: {
+    awarenessAi: false,
+    executionAi: false,
+    awarenessAiSig: "",
+    executionAiSig: "",
+  },
+  checklistBusy: { awareness: false, execution: false },
+  checklistToken: { awareness: 0, execution: 0 },
   organizeSource: "",
   apiConfigured: null,
   user: null,
@@ -1605,6 +1613,10 @@ function emptyJournal() {
     execution: ["", "", ""],
     executionChecks: [],
     executionCheckItems: [],
+    awarenessAi: false,
+    executionAi: false,
+    awarenessAiSig: "",
+    executionAiSig: "",
     deep: emptyDeep(),
   };
 }
@@ -1735,24 +1747,129 @@ function renderChecklist(rootId, items, checked) {
 
 function refreshJournalChecklists(journal, options = {}) {
   const data = journal || collectJournal();
-  const awareItems =
-    options.useSaved && (data.awarenessCheckItems || []).length
-      ? data.awarenessCheckItems.slice(0, 6)
-      : buildAwarenessCheckItems(data);
-  const execItems =
-    options.useSaved && (data.executionCheckItems || []).length
-      ? data.executionCheckItems.slice(0, 4)
-      : buildExecutionCheckItems(data);
+  const keepAware = !options.forceLocal && (options.useSaved || data.awarenessAi) && (data.awarenessCheckItems || []).length;
+  const keepExec = !options.forceLocal && (options.useSaved || data.executionAi) && (data.executionCheckItems || []).length;
+  const awareItems = keepAware ? data.awarenessCheckItems.slice(0, 6) : buildAwarenessCheckItems(data);
+  const execItems = keepExec ? data.executionCheckItems.slice(0, 4) : buildExecutionCheckItems(data);
   const awareChecked = options.useSaved ? data.awarenessChecks : checkedValues("awareChecks");
   const execChecked = options.useSaved ? data.executionChecks : checkedValues("execChecks");
-  renderChecklist("awareChecks", awareItems, awareChecked);
-  renderChecklist("execChecks", execItems, execChecked);
+  if (!options.skipAware) renderChecklist("awareChecks", awareItems, awareChecked);
+  if (!options.skipExec) renderChecklist("execChecks", execItems, execChecked);
 }
 
 function scheduleJournalChecklists() {
   if (state.journalHydrating) return;
   clearTimeout(state.journalCheckTimer);
-  state.journalCheckTimer = setTimeout(() => refreshJournalChecklists(), 280);
+  state.journalCheckTimer = setTimeout(() => {
+    const data = collectJournal();
+    refreshJournalChecklists(data);
+    maybeAutoGenerateChecklists(data);
+  }, 900);
+}
+
+function threeAnswersFilled(answers) {
+  return (answers || []).filter((item) => String(item || "").trim()).length >= 3;
+}
+
+function checklistSignature(answers) {
+  return (answers || []).map((item) => String(item || "").trim()).join("\n");
+}
+
+function normalizeAiChecklistItems(raw, min, max, fallback) {
+  const list = Array.isArray(raw) ? raw : [];
+  const items = [];
+  list.forEach((item) => {
+    const text = typeof item === "string"
+      ? item.trim()
+      : String(item?.label || item?.text || item?.title || "").trim();
+    if (text && !items.includes(text)) items.push(text);
+  });
+  (fallback || []).forEach((item) => {
+    if (items.length < min) pushUnique(items, item, max);
+  });
+  return items.slice(0, max);
+}
+
+function setChecklistLoading(kind, loading) {
+  const isAware = kind === "awareness";
+  const btn = document.getElementById(isAware ? "btnAwareAi" : "btnExecAi");
+  const loader = document.getElementById(isAware ? "awareLoading" : "execLoading");
+  const list = document.getElementById(isAware ? "awareChecks" : "execChecks");
+  state.checklistBusy[kind] = loading;
+  if (btn) {
+    btn.disabled = loading;
+    btn.textContent = loading ? "分析中…" : "✨ AI 分析並生成勾勾表";
+  }
+  if (loader) loader.hidden = !loading;
+  if (list) list.classList.toggle("is-loading", loading);
+}
+
+function applyGeneratedChecklist(kind, items, sig) {
+  const isAware = kind === "awareness";
+  renderChecklist(isAware ? "awareChecks" : "execChecks", items, []);
+  state.journalMeta[isAware ? "awarenessAi" : "executionAi"] = true;
+  state.journalMeta[isAware ? "awarenessAiSig" : "executionAiSig"] = sig;
+}
+
+async function generateJournalChecklist(kind, options = {}) {
+  const isAware = kind === "awareness";
+  if (state.checklistBusy[kind]) return;
+  const journal = collectJournal();
+  const answers = isAware ? journal.awareness : journal.execution;
+  if (!threeAnswersFilled(answers)) {
+    if (!options.auto) showToast("先把左側三個問題寫完，再請 AI 整理勾勾表。");
+    return;
+  }
+  const sig = checklistSignature(answers);
+  if (options.auto && state.journalMeta[isAware ? "awarenessAiSig" : "executionAiSig"] === sig) return;
+
+  const token = (state.checklistToken[kind] || 0) + 1;
+  state.checklistToken[kind] = token;
+  setChecklistLoading(kind, true);
+
+  const fallback = isAware ? buildAwarenessCheckItems(journal) : buildExecutionCheckItems(journal);
+  const min = isAware ? 4 : 3;
+  const max = isAware ? 6 : 4;
+
+  try {
+    if (!state.user) {
+      throw new Error("請先登入，才能使用雲端 AI 分析。");
+    }
+    const remote = await postReview({
+      mode: "checklist",
+      kind,
+      date: currentIso(),
+      answers,
+      context: {
+        event: journal.event,
+        mood: journal.mood,
+        bodyTags: journal.bodyTags,
+        bodyNote: journal.bodyNote,
+      },
+      text: answers.join("\n"),
+    });
+    if (state.checklistToken[kind] !== token) return;
+    const items = normalizeAiChecklistItems(remote.items, min, max, fallback);
+    if (items.length < min) throw new Error("雲端回傳格式不完整");
+    applyGeneratedChecklist(kind, items, sig);
+    showToast(isAware ? "覺察勾勾表已生成。" : "行動卡點已生成。");
+  } catch (error) {
+    if (state.checklistToken[kind] !== token) return;
+    applyGeneratedChecklist(kind, fallback.slice(0, max), sig);
+    showToast(`雲端分析失敗：${formatApiError(error)}，先用本地整理。`);
+  } finally {
+    if (state.checklistToken[kind] === token) setChecklistLoading(kind, false);
+  }
+}
+
+function maybeAutoGenerateChecklists(journal) {
+  if (state.journalHydrating) return;
+  if (threeAnswersFilled(journal.awareness) && state.journalMeta.awarenessAiSig !== checklistSignature(journal.awareness)) {
+    generateJournalChecklist("awareness", { auto: true });
+  }
+  if (threeAnswersFilled(journal.execution) && state.journalMeta.executionAiSig !== checklistSignature(journal.execution)) {
+    generateJournalChecklist("execution", { auto: true });
+  }
 }
 
 function collectJournal() {
@@ -1768,6 +1885,10 @@ function collectJournal() {
     execution: ["exec1", "exec2", "exec3"].map(journalFieldValue),
     executionChecks: checkedValues("execChecks"),
     executionCheckItems: checklistItems("execChecks"),
+    awarenessAi: Boolean(state.journalMeta.awarenessAi),
+    executionAi: Boolean(state.journalMeta.executionAi),
+    awarenessAiSig: state.journalMeta.awarenessAiSig || "",
+    executionAiSig: state.journalMeta.executionAiSig || "",
     deep: [
       { plain: journalFieldValue("deep1plain"), deep: journalFieldValue("deep1deep") },
       { plain: journalFieldValue("deep2plain"), deep: journalFieldValue("deep2deep") },
@@ -1852,6 +1973,16 @@ function setCheckedValues(rootId, values) {
 function fillJournal(journal) {
   const data = { ...emptyJournal(), ...(journal && typeof journal === "object" ? journal : {}) };
   state.journalHydrating = true;
+  state.checklistToken.awareness += 1;
+  state.checklistToken.execution += 1;
+  setChecklistLoading("awareness", false);
+  setChecklistLoading("execution", false);
+  state.journalMeta = {
+    awarenessAi: Boolean(data.awarenessAi),
+    executionAi: Boolean(data.executionAi),
+    awarenessAiSig: data.awarenessAiSig || "",
+    executionAiSig: data.executionAiSig || "",
+  };
   ["thanks1", "thanks2", "thanks3"].forEach((id, index) => {
     const el = document.getElementById(id);
     if (el) el.value = data.thanks[index] || "";
@@ -3447,6 +3578,8 @@ function bindEvents() {
   document.getElementById("micBtn")?.addEventListener("click", toggleMic);
   document.getElementById("btnCompleteToday")?.addEventListener("click", completeToday);
   document.getElementById("btnSaveDraft")?.addEventListener("click", saveJournalDraft);
+  document.getElementById("btnAwareAi")?.addEventListener("click", () => generateJournalChecklist("awareness"));
+  document.getElementById("btnExecAi")?.addEventListener("click", () => generateJournalChecklist("execution"));
 
   document.getElementById("moodRow")?.addEventListener("click", (event) => {
     const btn = event.target.closest(".mood-btn");

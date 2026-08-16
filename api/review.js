@@ -152,6 +152,74 @@ actions 的 detail 必須是可開口的完整一句，用「」包起來。
 title 必須是有質感的思考主題，例如「先看見，才能改變」，不要寫「深度思考」。stars 為 1-5。
 points 給 1-3 個，每個 conclusion 只能一句。actions 給 3 個。若已是最後一輪，question 改成收束。`;
 
+const CHECKLIST_AWARENESS_SYSTEM = `你是「日精進」的高階心靈教練與諮詢師。使用者剛寫下今天的三個覺察問題。
+請用心理學與教練視角做深層、白話的分析，整理成「今天我覺察到」勾選清單。
+
+規則：
+- 只輸出 JSON：{"items":["..."]}
+- items 必須 4 到 6 條，不可少於 4、不可超過 6
+- 每一條 12-28 字，像一句可勾選的洞察，不要編號、不要句號堆疊
+- 必須貼近使用者原文，指出真正被碰到的層：生命力來源、防衛心在保護什麼、情緒真正在說什麼、還沒說出口的需求、身體訊號、明天可改的小選擇
+- 禁止雞湯、禁止說教、禁止病例腔、禁止空泛「要愛自己」
+- 繁體中文`;
+
+const CHECKLIST_EXECUTION_SYSTEM = `你是「日精進」的高階心靈教練。使用者剛寫下拖延的事、卡住原因，以及明天只要 5 分鐘的一小步。
+請分析真正的行動卡點，整理成「我的行動卡點」勾選清單。
+
+規則：
+- 只輸出 JSON：{"items":["..."]}
+- items 必須 3 到 4 條，不可少於 3、不可超過 4
+- 每一條 12-28 字，具體到這個人今天的卡住，讓他能直接勾選
+- 可涵蓋：任務太大、害怕做不好或被看見、能量不夠、目標不夠清楚、還沒對齊為什麼要做、被打斷、5 分鐘起步點
+- 禁止空泛激勵、禁止「你要更努力」
+- 繁體中文`;
+
+function normalizeChecklistItems(raw, min, max) {
+  const list = Array.isArray(raw)
+    ? raw
+    : Array.isArray(raw?.items)
+      ? raw.items
+      : [];
+  const items = [];
+  list.forEach((item) => {
+    const text = typeof item === "string"
+      ? item.trim()
+      : String(item?.label || item?.text || item?.title || "").trim();
+    if (text && !items.includes(text)) items.push(text.replace(/^[\d.、\-\s]+/, "").slice(0, 48));
+  });
+  return items.slice(0, max);
+}
+
+function checklistUserPrompt(kind, body) {
+  const answers = Array.isArray(body.answers) ? body.answers.map((item) => String(item || "").trim()) : [];
+  const ctx = body.context && typeof body.context === "object" ? body.context : {};
+  const bodyTags = Array.isArray(ctx.bodyTags) ? ctx.bodyTags.join("、") : "";
+  if (kind === "execution") {
+    return `請分析這個人的行動卡點，產出 3 到 4 條勾選項目。
+
+一直拖著沒做的事：${answers[0] || "（未填）"}
+卡住、不想動的原因：${answers[1] || "（未填）"}
+明天只要 5 分鐘的一小步：${answers[2] || "（未填）"}
+
+背景補充：
+心情：${ctx.mood || "未選"}
+今日事件：${ctx.event || "未寫"}
+身體狀態：${bodyTags || "未選"}
+身體提醒：${ctx.bodyNote || "未寫"}`;
+  }
+  return `請分析這個人今天的覺察，產出 4 到 6 條「今天我覺察到」勾選項目。
+
+哪個時刻感受到生命力或平靜：${answers[0] || "（未填）"}
+哪個時刻出現防衛心或情緒波動：${answers[1] || "（未填）"}
+明天會做的不同小選擇：${answers[2] || "（未填）"}
+
+背景補充：
+心情：${ctx.mood || "未選"}
+今日事件：${ctx.event || "未寫"}
+身體狀態：${bodyTags || "未選"}
+身體提醒：${ctx.bodyNote || "未寫"}`;
+}
+
 async function callOpenAI(messages) {
   const apiKey = getApiKey();
   if (!apiKey) {
@@ -203,7 +271,7 @@ async function callOpenAI(messages) {
 function setCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 }
 
 module.exports = async function handler(req, res) {
@@ -246,9 +314,15 @@ module.exports = async function handler(req, res) {
 
   try {
     const body = readJsonBody(req);
-    const mode = body.mode === "think" ? "think" : "organize";
+    const mode = body.mode === "think" ? "think" : body.mode === "checklist" ? "checklist" : "organize";
     const text = String(body.text || "").trim();
-    if (!text && mode === "organize" && !Array.isArray(body.messages)) {
+    if (mode === "checklist") {
+      const answers = Array.isArray(body.answers) ? body.answers.map((item) => String(item || "").trim()) : [];
+      if (answers.filter(Boolean).length < 3) {
+        res.status(400).json({ ok: false, error: "請先寫完左側三個問題" });
+        return;
+      }
+    } else if (!text && mode === "organize" && !Array.isArray(body.messages)) {
       res.status(400).json({ ok: false, error: "缺少復盤原文" });
       return;
     }
@@ -260,6 +334,12 @@ module.exports = async function handler(req, res) {
     let messages;
     if (Array.isArray(body.messages) && body.messages.length) {
       messages = body.messages;
+    } else if (mode === "checklist") {
+      const kind = body.kind === "execution" ? "execution" : "awareness";
+      messages = [
+        { role: "system", content: kind === "execution" ? CHECKLIST_EXECUTION_SYSTEM : CHECKLIST_AWARENESS_SYSTEM },
+        { role: "user", content: checklistUserPrompt(kind, body) },
+      ];
     } else if (mode === "think") {
       const round = Number(body.round) || 1;
       const max = Number(body.max) || 5;
@@ -281,6 +361,18 @@ module.exports = async function handler(req, res) {
     }
 
     const data = await callOpenAI(messages);
+    if (mode === "checklist") {
+      const kind = body.kind === "execution" ? "execution" : "awareness";
+      const min = kind === "execution" ? 3 : 4;
+      const max = kind === "execution" ? 4 : 6;
+      const items = normalizeChecklistItems(data, min, max);
+      if (items.length < min) {
+        res.status(502).json({ ok: false, error: "AI 勾勾表格式不完整，請再試一次" });
+        return;
+      }
+      res.status(200).json({ ok: true, source: "openai", data: { items: items.slice(0, max), kind } });
+      return;
+    }
     res.status(200).json({ ok: true, source: "openai", data });
   } catch (error) {
     const aborted = error?.name === "AbortError" || /aborted/i.test(String(error?.message || ""));

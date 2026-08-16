@@ -2289,6 +2289,53 @@ body.nav-closed .auth-pay {
   accent-color: var(--accent);
 }
 
+.ai-check-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 40px;
+  margin-top: 14px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--cream);
+  color: var(--header);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.ai-check-btn:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.ai-check-btn:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.check-loading {
+  margin: 0 0 12px;
+  padding: 14px 12px 12px;
+  border: 1px solid var(--cream-border);
+  border-radius: var(--radius-sm);
+  background: var(--cream);
+}
+
+.check-loading__label {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--header);
+}
+
+.check-list.is-loading {
+  opacity: 0.38;
+  pointer-events: none;
+}
+
 .deep-list {
   display: flex;
   flex-direction: column;

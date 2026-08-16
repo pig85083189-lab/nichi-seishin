@@ -29,7 +29,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="app.css?v=58" />
+    <link rel="stylesheet" href="app.css?v=59" />
   </head>
   <body>
     <script>
@@ -238,23 +238,30 @@
           <section class="journal-card" id="section-aware">
             <h2 class="journal-card__title"><span>04</span> 覺察力</h2>
             <div class="journal-split">
-              <ol class="journal-qs">
-                <li>
-                  <p>今天，哪個時刻感受到了「生命力」或「平靜」？</p>
-                  <input class="input" id="aware1" type="text" placeholder="寫下那個時刻…" />
-                </li>
-                <li>
-                  <p>今天，哪一個時刻我出現了「防衛心」或「情緒波動」？</p>
-                  <input class="input" id="aware2" type="text" placeholder="寫下那個時刻…" />
-                </li>
-                <li>
-                  <p>如果明天能重來一次，在某個小細節上，我會做哪一個不同的選擇？</p>
-                  <input class="input" id="aware3" type="text" placeholder="一個小到明天做得到的選擇…" />
-                </li>
-              </ol>
+              <div class="journal-col">
+                <ol class="journal-qs">
+                  <li>
+                    <p>今天，哪個時刻感受到了「生命力」或「平靜」？</p>
+                    <input class="input" id="aware1" type="text" placeholder="寫下那個時刻…" />
+                  </li>
+                  <li>
+                    <p>今天，哪一個時刻我出現了「防衛心」或「情緒波動」？</p>
+                    <input class="input" id="aware2" type="text" placeholder="寫下那個時刻…" />
+                  </li>
+                  <li>
+                    <p>如果明天能重來一次，在某個小細節上，我會做哪一個不同的選擇？</p>
+                    <input class="input" id="aware3" type="text" placeholder="一個小到明天做得到的選擇…" />
+                  </li>
+                </ol>
+                <button class="ai-check-btn" id="btnAwareAi" type="button">✨ AI 分析並生成勾勾表</button>
+              </div>
               <div class="journal-col">
                 <p class="journal-label">今天我覺察到</p>
-                <p class="journal-guide journal-guide--tight">會依你的回答自動整理 4 到 6 個面向，勾選今天有看見的就好。</p>
+                <p class="journal-guide journal-guide--tight">寫完左側三題後，AI 會生成 4 到 6 個專屬覺察面向，你再勾選今天有看見的。</p>
+                <div class="check-loading" id="awareLoading" hidden>
+                  <p class="check-loading__label">正在深層分析今天的覺察…</p>
+                  <div class="ai-thinking__bar"><i></i></div>
+                </div>
                 <div class="check-list" id="awareChecks"></div>
               </div>
             </div>
@@ -263,23 +270,30 @@
           <section class="journal-card" id="section-exec">
             <h2 class="journal-card__title"><span>05</span> 執行力</h2>
             <div class="journal-split">
-              <ol class="journal-qs">
-                <li>
-                  <p>今天本來想做，但卻一直拖著沒做的是哪件事？</p>
-                  <input class="input" id="exec1" type="text" placeholder="那件一直被推到明天的事…" />
-                </li>
-                <li>
-                  <p>是什麼原因讓你卡住、不想動？</p>
-                  <input class="input" id="exec2" type="text" placeholder="真正卡住的原因…" />
-                </li>
-                <li>
-                  <p>明天只要花 5 分鐘，哪一小步可以讓你重新開始？</p>
-                  <input class="input" id="exec3" type="text" placeholder="小到不可能失敗的一步…" />
-                </li>
-              </ol>
+              <div class="journal-col">
+                <ol class="journal-qs">
+                  <li>
+                    <p>今天本來想做，但卻一直拖著沒做的是哪件事？</p>
+                    <input class="input" id="exec1" type="text" placeholder="那件一直被推到明天的事…" />
+                  </li>
+                  <li>
+                    <p>是什麼原因讓你卡住、不想動？</p>
+                    <input class="input" id="exec2" type="text" placeholder="真正卡住的原因…" />
+                  </li>
+                  <li>
+                    <p>明天只要花 5 分鐘，哪一小步可以讓你重新開始？</p>
+                    <input class="input" id="exec3" type="text" placeholder="小到不可能失敗的一步…" />
+                  </li>
+                </ol>
+                <button class="ai-check-btn" id="btnExecAi" type="button">✨ AI 分析並生成勾勾表</button>
+              </div>
               <div class="journal-col">
                 <p class="journal-label">我的行動卡點</p>
-                <p class="journal-guide journal-guide--tight">會依卡住的原因，自動整理 3 到 4 個行動卡點，方便你對一下。</p>
+                <p class="journal-guide journal-guide--tight">寫完左側三題後，AI 會生成 3 到 4 個專屬行動卡點，對一下今天真正卡住的地方。</p>
+                <div class="check-loading" id="execLoading" hidden>
+                  <p class="check-loading__label">正在分析你的行動卡點…</p>
+                  <div class="ai-thinking__bar"><i></i></div>
+                </div>
                 <div class="check-list" id="execChecks"></div>
               </div>
             </div>
@@ -466,6 +480,6 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=71"></script>
+    <script src="app.js?v=72"></script>
   </body>
 </html>
