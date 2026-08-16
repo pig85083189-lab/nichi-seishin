@@ -2737,10 +2737,10 @@ function migrateBodyCheckFromTags(tags, note) {
   const noteText = String(note || "").trim();
   list.forEach((tag) => {
     if (tag === "焦慮" || tag === "心悸緊張") next.mood.flags.push(tag === "心悸緊張" ? "焦慮" : tag);
-    else if (tag === "脾氣暴躁" || tag === "不耐煩") next.mood.flags.push(tag);
-    else if (tag === "腸胃不適" || tag === "頭痛" || tag === "全身痠痛") next.body.flags.push(tag);
+    else if (tag === "脾氣暴躁" || tag === "不耐煩" || tag === "普通" || tag === "好心情") next.mood.flags.push(tag);
+    else if (tag === "腸胃不適" || tag === "頭痛" || tag === "全身痠痛" || tag === "身體疲勞") next.body.flags.push(tag);
     else if (tag === "睡眠不足" || tag === "睡不著") next.sleep.flags.push("睡不著");
-    else if (tag === "10:00以前入睡") next.sleep.flags.push(tag);
+    else if (tag === "10:00以前入睡" || tag === "睡得很好") next.sleep.flags.push(tag);
     else if (tag === "心情平穩") next.mood.none = true;
     else if (tag === "身體無不適" || tag === "精力充沛") next.body.none = true;
   });
@@ -3397,29 +3397,45 @@ function setBodyCoachLoading(loading) {
 
 function localBodyCoachFallback(journal) {
   const check = normalizeBodyCheck(journal.bodyCheck, journal.bodyTags, journal.bodyNote);
-  const moodBits = (check.mood.flags || []).length ? `心情出現「${check.mood.flags.join("、")}」` : "心情大致平穩";
-  const bodyBits = (check.body.flags || []).length ? `身體有「${check.body.flags.join("、")}」` : "身體沒有明顯不適";
-  const sleepBits = (check.sleep.flags || []).join("、") || "未特別勾選睡眠狀況";
+  const moodFlags = check.mood.flags || [];
+  const bodyFlags = check.body.flags || [];
+  const sleepFlags = check.sleep.flags || [];
+  const moodBits = moodFlags.length ? `心情是「${moodFlags.join("、")}」` : "心情大致平穩";
+  const bodyBits = bodyFlags.length ? `身體有「${bodyFlags.join("、")}」` : "身體沒有明顯不適";
+  const sleepBits = sleepFlags.join("、") || "未特別勾選睡眠狀況";
+  const moodIssue = moodFlags.includes("焦慮") || moodFlags.includes("脾氣暴躁") || moodFlags.includes("不耐煩");
+  const bodyIssue =
+    bodyFlags.includes("腸胃不適") ||
+    bodyFlags.includes("頭痛") ||
+    bodyFlags.includes("全身痠痛") ||
+    bodyFlags.includes("身體疲勞");
+  const sleepIssue = sleepFlags.includes("睡不著");
   const suggestions = [];
-  if (check.mood.flags.includes("焦慮") || check.sleep.flags.includes("睡不著")) {
+  if (moodIssue || sleepIssue) {
     suggestions.push("今晚先做 8 次「吸 4 秒、吐 6 秒」的腹式呼吸，讓交感神經慢慢降下來。");
   } else {
     suggestions.push("站起來把肩膀繞三圈、再慢慢轉頭，給身體一個明確的換檔訊號。");
   }
-  if (check.body.flags.includes("腸胃不適") || check.body.flags.includes("頭痛")) {
+  if (bodyFlags.includes("腸胃不適") || bodyFlags.includes("頭痛")) {
     suggestions.push("這一小時每 20 分鐘喝一小口水，先不要用咖啡或空腹撐過不適。");
+  } else if (bodyFlags.includes("身體疲勞") || bodyFlags.includes("全身痠痛")) {
+    suggestions.push("接下來 10 分鐘先坐下或躺平，把雙腿抬高或輕輕伸展，不要再硬撐下一件事。");
   } else {
     suggestions.push("現在補一杯溫水，接下來兩小時把飲料換成白開水。");
   }
-  if (check.body.flags.includes("全身痠痛") || check.sleep.flags.includes("睡不著")) {
+  if (bodyFlags.includes("全身痠痛") || bodyFlags.includes("身體疲勞") || sleepIssue) {
     suggestions.push("睡前 10 分鐘先把髖關節與小腿輕輕轉開，讓身體先進入休息，再關燈。");
-  } else if (check.sleep.flags.includes("10:00以前入睡")) {
-    suggestions.push("維持 10 點前躺下的節奏，睡前把明天第一件小事寫在紙上，就不要再滑手機。");
+  } else if (sleepFlags.includes("10:00以前入睡") || sleepFlags.includes("睡得很好")) {
+    suggestions.push("維持今晚的入睡節奏，睡前把明天第一件小事寫在紙上，就不要再滑手機。");
   } else {
     suggestions.push("把睡前 20 分鐘留給伸展或熱水洗手臂，讓大腦有一段明確的下班儀式。");
   }
+  const analysis =
+    moodIssue || bodyIssue || sleepIssue
+      ? `今天是${moodBits}，同時${bodyBits}；睡眠這邊是「${sleepBits}」。身心往往同一條線：情緒一緊，腸胃、頭與入睡就會跟著被拉住。先照顧身體節奏，心情才有地方落地。`
+      : `今天是${moodBits}，同時${bodyBits}；睡眠這邊是「${sleepBits}」。狀態偏穩，就用小動作把這份節奏守住，不必等到緊了才開始照顧自己。`;
   return {
-    analysis: `今天是${moodBits}，同時${bodyBits}；睡眠這邊是「${sleepBits}」。身心往往同一條線：情緒一緊，腸胃、頭與入睡就會跟著被拉住。先照顧身體節奏，心情才有地方落地。`,
+    analysis,
     suggestions: suggestions.slice(0, 3),
     sig: bodyCoachSignature(journal),
   };
