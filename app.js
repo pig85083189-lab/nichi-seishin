@@ -25,7 +25,7 @@ const NEWEBPAY_PLANS = {
   quarter: {
     id: "quarter",
     amount: 1197,
-    url: NEWEBPAY_EPG_URL,
+    url: "https://core.newebpay.com/EPG/SinSpa/1gbSo9",
   },
 };
 
