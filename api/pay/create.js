@@ -157,6 +157,7 @@ module.exports = async function handler(req, res) {
     formKeys: Object.keys(fields),
     hasMerchantId: Boolean(fields.MerchantID),
     hasTradeInfo: Boolean(fields.TradeInfo),
+    tradeInfoChars: fields.TradeInfo ? String(fields.TradeInfo).length : 0,
     hasTradeSha: Boolean(fields.TradeSha),
   });
 

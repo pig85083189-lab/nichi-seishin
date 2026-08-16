@@ -1204,6 +1204,8 @@ function submitNewebPayForm(gateway, fields) {
     input.value = String(fields[name]);
     form.appendChild(input);
   });
+  const tradeInfo = fields && fields.TradeInfo != null ? String(fields.TradeInfo) : "";
+  console.log("MPG form TradeInfo chars", tradeInfo.length, "hasPercent", tradeInfo.includes("%"));
   document.body.appendChild(form);
   form.submit();
 }
