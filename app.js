@@ -73,9 +73,13 @@ const state = {
     executionAi: false,
     awarenessAiSig: "",
     executionAiSig: "",
+    insightSig: "",
   },
   checklistBusy: { awareness: false, execution: false },
   checklistToken: { awareness: 0, execution: 0 },
+  insightBusy: false,
+  insightToken: 0,
+  journalInsight: null,
   organizeSource: "",
   apiConfigured: null,
   user: null,
@@ -1617,6 +1621,7 @@ function emptyJournal() {
     executionAi: false,
     awarenessAiSig: "",
     executionAiSig: "",
+    insight: emptyInsight(),
     deep: emptyDeep(),
   };
 }
@@ -1628,6 +1633,21 @@ function emptyDeep() {
     { plain: "", deep: "" },
     { plain: "", deep: "" },
   ];
+}
+
+function emptyInsight() {
+  return { title: "", conclusion: "", logic: "", bodyLink: "", sig: "" };
+}
+
+function normalizeInsight(insight) {
+  const data = insight && typeof insight === "object" ? insight : {};
+  return {
+    title: String(data.title || "").trim(),
+    conclusion: String(data.conclusion || "").trim(),
+    logic: String(data.logic || "").trim(),
+    bodyLink: String(data.bodyLink || "").trim(),
+    sig: String(data.sig || "").trim(),
+  };
 }
 
 function normalizeDeep(deep) {
@@ -1659,6 +1679,7 @@ function journalHasContent(journal) {
   ];
   if (textBits.some((item) => String(item || "").trim())) return true;
   if (deepHasContent(journal.deep)) return true;
+  if (String(journal.insight?.conclusion || "").trim()) return true;
   return Boolean((journal.bodyTags || []).length || (journal.awarenessChecks || []).length || (journal.executionChecks || []).length);
 }
 
@@ -1764,6 +1785,7 @@ function scheduleJournalChecklists() {
     const data = collectJournal();
     refreshJournalChecklists(data);
     maybeAutoGenerateChecklists(data);
+    maybeAutoGenerateInsight(data);
   }, 900);
 }
 
@@ -1872,6 +1894,117 @@ function maybeAutoGenerateChecklists(journal) {
   }
 }
 
+function insightReady(journal) {
+  const data = journal || collectJournal();
+  return Boolean(
+    String(data.event || "").trim() &&
+      data.mood &&
+      ((data.bodyTags || []).length || String(data.bodyNote || "").trim())
+  );
+}
+
+function insightSignature(journal) {
+  const data = journal || collectJournal();
+  return [String(data.event || "").trim(), data.mood || "", (data.bodyTags || []).join("、"), String(data.bodyNote || "").trim()].join("\n");
+}
+
+function renderInsightCard(insight) {
+  const root = document.getElementById("insightBody");
+  if (!root) return;
+  const data = normalizeInsight(insight);
+  if (!data.conclusion) {
+    root.innerHTML = `<p class="insight-card__empty">先把事件、心情與身體反應寫下來，再點按鈕或等它自動生成。</p>`;
+    return;
+  }
+  root.innerHTML = `
+    <article class="insight-card__result">
+      <p class="insight-card__kicker">【核心結論】</p>
+      ${data.title ? `<h3 class="insight-card__headline">${escapeHtml(data.title)}</h3>` : ""}
+      <p class="insight-card__conclusion">${escapeHtml(data.conclusion)}</p>
+      ${data.logic ? `<p class="insight-card__note">${escapeHtml(data.logic)}</p>` : ""}
+      ${data.bodyLink ? `<p class="insight-card__note">${escapeHtml(data.bodyLink)}</p>` : ""}
+    </article>
+  `;
+}
+
+function setInsightLoading(loading) {
+  const btn = document.getElementById("btnInsightAi");
+  const loader = document.getElementById("insightLoading");
+  const body = document.getElementById("insightBody");
+  state.insightBusy = loading;
+  if (btn) {
+    btn.disabled = loading;
+    btn.textContent = loading ? "分析中…" : "✨ 生成深度洞察";
+  }
+  if (loader) loader.hidden = !loading;
+  if (body) body.classList.toggle("is-loading", loading);
+}
+
+function localInsightFallback(journal) {
+  const mood = journal.mood || "這份情緒";
+  const tags = (journal.bodyTags || []).join("、") || "身體的訊號";
+  return {
+    title: "身體比念頭更早開口",
+    conclusion: `今天這件事碰到你時，心情停在「${mood}」。真正要被看見的，不一定是表面上發生了什麼，而是你當下用什麼方式保護自己。`,
+    logic: "防衛不一定是錯的。它常常是在來不及說清楚之前，先幫你把關係或面子守住。",
+    bodyLink: `${tags} 往往不是多餘的噪音，而是壓力已經先走到身上。`,
+    sig: insightSignature(journal),
+  };
+}
+
+async function generateJournalInsight(options = {}) {
+  if (state.insightBusy) return;
+  const journal = collectJournal();
+  if (!insightReady(journal)) {
+    if (!options.auto) showToast("請先寫下今日事件、選擇心情，並標出身體狀況。");
+    return;
+  }
+  const sig = insightSignature(journal);
+  if (options.auto && state.journalMeta.insightSig === sig) return;
+
+  const token = (state.insightToken || 0) + 1;
+  state.insightToken = token;
+  setInsightLoading(true);
+
+  try {
+    if (!state.user) throw new Error("請先登入，才能使用雲端 AI 分析。");
+    const remote = await postReview({
+      mode: "insight",
+      date: currentIso(),
+      text: journal.event,
+      context: {
+        event: journal.event,
+        mood: journal.mood,
+        bodyTags: journal.bodyTags,
+        bodyNote: journal.bodyNote,
+      },
+    });
+    if (state.insightToken !== token) return;
+    const insight = { ...normalizeInsight(remote), sig };
+    if (!insight.conclusion) throw new Error("雲端回傳格式不完整");
+    state.journalInsight = insight;
+    state.journalMeta.insightSig = sig;
+    renderInsightCard(insight);
+    showToast("今日核心結論已生成。");
+  } catch (error) {
+    if (state.insightToken !== token) return;
+    const fallback = localInsightFallback(journal);
+    state.journalInsight = fallback;
+    state.journalMeta.insightSig = sig;
+    renderInsightCard(fallback);
+    showToast(`雲端分析失敗：${formatApiError(error)}，先留下本地洞察。`);
+  } finally {
+    if (state.insightToken === token) setInsightLoading(false);
+  }
+}
+
+function maybeAutoGenerateInsight(journal) {
+  if (state.journalHydrating) return;
+  if (insightReady(journal) && state.journalMeta.insightSig !== insightSignature(journal)) {
+    generateJournalInsight({ auto: true });
+  }
+}
+
 function collectJournal() {
   const journal = {
     thanks: ["thanks1", "thanks2", "thanks3"].map(journalFieldValue),
@@ -1889,6 +2022,7 @@ function collectJournal() {
     executionAi: Boolean(state.journalMeta.executionAi),
     awarenessAiSig: state.journalMeta.awarenessAiSig || "",
     executionAiSig: state.journalMeta.executionAiSig || "",
+    insight: state.journalInsight || emptyInsight(),
     deep: [
       { plain: journalFieldValue("deep1plain"), deep: journalFieldValue("deep1deep") },
       { plain: journalFieldValue("deep2plain"), deep: journalFieldValue("deep2deep") },
@@ -1910,6 +2044,14 @@ function composeJournalRawText(journal) {
   if (journal.mood) lines.push(`心情：${journal.mood}`);
   if ((journal.bodyTags || []).length) lines.push(`身體狀態：${journal.bodyTags.join("、")}`);
   if (String(journal.bodyNote || "").trim()) lines.push(`身體提醒：${journal.bodyNote.trim()}`);
+  const insight = normalizeInsight(journal.insight);
+  if (insight.conclusion) {
+    lines.push("AI 深度教練洞察");
+    if (insight.title) lines.push(insight.title);
+    lines.push(insight.conclusion);
+    if (insight.logic) lines.push(insight.logic);
+    if (insight.bodyLink) lines.push(insight.bodyLink);
+  }
   const awareQs = [
     "今天，哪個時刻感受到了「生命力」或「平靜」？",
     "今天，哪一個時刻我出現了「防衛心」或「情緒波動」？",
@@ -1975,14 +2117,18 @@ function fillJournal(journal) {
   state.journalHydrating = true;
   state.checklistToken.awareness += 1;
   state.checklistToken.execution += 1;
+  state.insightToken += 1;
   setChecklistLoading("awareness", false);
   setChecklistLoading("execution", false);
+  setInsightLoading(false);
   state.journalMeta = {
     awarenessAi: Boolean(data.awarenessAi),
     executionAi: Boolean(data.executionAi),
     awarenessAiSig: data.awarenessAiSig || "",
     executionAiSig: data.executionAiSig || "",
+    insightSig: data.insight?.sig || "",
   };
+  state.journalInsight = normalizeInsight(data.insight);
   ["thanks1", "thanks2", "thanks3"].forEach((id, index) => {
     const el = document.getElementById(id);
     if (el) el.value = data.thanks[index] || "";
@@ -2009,6 +2155,7 @@ function fillJournal(journal) {
     if (note) note.value = item.deep || "";
   });
   refreshJournalChecklists(data, { useSaved: true });
+  renderInsightCard(state.journalInsight);
   state.journalHydrating = false;
 }
 
@@ -3580,6 +3727,7 @@ function bindEvents() {
   document.getElementById("btnSaveDraft")?.addEventListener("click", saveJournalDraft);
   document.getElementById("btnAwareAi")?.addEventListener("click", () => generateJournalChecklist("awareness"));
   document.getElementById("btnExecAi")?.addEventListener("click", () => generateJournalChecklist("execution"));
+  document.getElementById("btnInsightAi")?.addEventListener("click", () => generateJournalInsight());
 
   document.getElementById("moodRow")?.addEventListener("click", (event) => {
     const btn = event.target.closest(".mood-btn");
@@ -3587,6 +3735,7 @@ function bindEvents() {
     const on = !btn.classList.contains("is-on");
     document.querySelectorAll("#moodRow .mood-btn").forEach((item) => item.classList.toggle("is-on", on && item === btn));
     refreshJournalChecklists();
+    maybeAutoGenerateInsight(collectJournal());
   });
 
   document.getElementById("bodyTags")?.addEventListener("click", (event) => {
@@ -3594,6 +3743,7 @@ function bindEvents() {
     if (!btn) return;
     btn.classList.toggle("is-on");
     refreshJournalChecklists();
+    maybeAutoGenerateInsight(collectJournal());
   });
 
   document.getElementById("page-today")?.addEventListener("input", (event) => {

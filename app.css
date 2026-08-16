@@ -2336,6 +2336,126 @@ body.nav-closed .auth-pay {
   pointer-events: none;
 }
 
+.insight-card {
+  position: relative;
+  margin-bottom: 16px;
+  padding: 22px 24px 20px;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, var(--cream) 100%);
+  border: 1px solid #e4d4c8;
+  border-radius: var(--radius);
+  box-shadow:
+    0 0 0 1px rgba(156, 136, 121, 0.06),
+    0 10px 28px rgba(92, 74, 58, 0.08),
+    0 0 32px rgba(232, 213, 204, 0.45);
+}
+
+.insight-card::before {
+  content: "";
+  position: absolute;
+  top: -40%;
+  right: -12%;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(232, 213, 204, 0.7) 0%, rgba(232, 213, 204, 0) 70%);
+  pointer-events: none;
+}
+
+.insight-card__head {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.insight-card__icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  box-shadow: 0 0 16px rgba(156, 136, 121, 0.28);
+  font-size: 20px;
+}
+
+.insight-card__title {
+  margin: 0 0 4px;
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.insight-card__lead {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.insight-card .ai-check-btn {
+  position: relative;
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+
+.insight-card__body.is-loading {
+  opacity: 0.45;
+}
+
+.insight-card__empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.insight-card__result {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.insight-card__kicker {
+  margin: 0;
+  color: var(--header);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.insight-card__headline {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.insight-card__conclusion {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.7;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.insight-card__note {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
 .deep-list {
   display: flex;
   flex-direction: column;

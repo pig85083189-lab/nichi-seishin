@@ -29,7 +29,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="app.css?v=59" />
+    <link rel="stylesheet" href="app.css?v=60" />
   </head>
   <body>
     <script>
@@ -232,6 +232,24 @@
                 <span class="journal-label">我的身體在提醒我...</span>
                 <textarea class="textarea" id="bodyNote" rows="5" placeholder="它想讓我停下來、補水、還是好好睡一覺？"></textarea>
               </label>
+            </div>
+          </section>
+
+          <section class="insight-card" id="section-insight">
+            <header class="insight-card__head">
+              <span class="insight-card__icon" aria-hidden="true">💡</span>
+              <div>
+                <h2 class="insight-card__title">AI 深度教練洞察</h2>
+                <p class="insight-card__lead">寫完今日事件、選好心情、標出身體狀況後，會為你生成一段今日核心結論。</p>
+              </div>
+            </header>
+            <button class="ai-check-btn" id="btnInsightAi" type="button">✨ 生成深度洞察</button>
+            <div class="check-loading" id="insightLoading" hidden>
+              <p class="check-loading__label">正在為你梳理今天的核心結論…</p>
+              <div class="ai-thinking__bar"><i></i></div>
+            </div>
+            <div class="insight-card__body" id="insightBody">
+              <p class="insight-card__empty">先把事件、心情與身體反應寫下來，再點按鈕或等它自動生成。</p>
             </div>
           </section>
 
@@ -480,6 +498,6 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=72"></script>
+    <script src="app.js?v=73"></script>
   </body>
 </html>

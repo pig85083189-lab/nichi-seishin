@@ -174,6 +174,47 @@ const CHECKLIST_EXECUTION_SYSTEM = `你是「日精進」的高階心靈教練�
 - 禁止空泛激勵、禁止「你要更努力」
 - 繁體中文`;
 
+const INSIGHT_SYSTEM = `你是「日精進」的高階心靈教練：溫柔，但犀利。使用者剛寫下今天的事件、心情，以及身體狀況。
+請根據事件、情緒與身體反應，生成一段有深度思考與邏輯分析的核心結論。
+
+請點出其中一到兩層：
+- 事件背後的心理防衛機制
+- 情緒盲點（我以為／其實在怕什麼）
+- 身體緊繃、疲憊、不適與心理壓力的關聯
+
+規則：
+- 只輸出 JSON
+- 口吻像一對一諮詢：先接住，再點破。禁止雞湯、禁止說教、禁止病例腔
+- 必須貼近使用者原文，不要空泛
+- 繁體中文
+{
+  "title": "一句有質感的洞察標題，12-22字",
+  "conclusion": "核心結論，2到4句。這是今天最該被看見的一句總結。",
+  "logic": "邏輯分析：防衛機制或情緒盲點為什麼會這樣運作，2到3句。",
+  "bodyLink": "身體反應與心理壓力的關聯，1到2句。"
+}`;
+
+function insightUserPrompt(body) {
+  const ctx = body.context && typeof body.context === "object" ? body.context : {};
+  const bodyTags = Array.isArray(ctx.bodyTags) ? ctx.bodyTags.join("、") : "";
+  return `請為這個人生成今日核心結論。
+
+今日事件：${ctx.event || body.text || "（未寫）"}
+心情：${ctx.mood || "未選"}
+身體狀態：${bodyTags || "未選"}
+身體在提醒我：${ctx.bodyNote || "未寫"}`;
+}
+
+function normalizeInsightResult(raw) {
+  const data = raw && typeof raw === "object" ? raw : {};
+  return {
+    title: String(data.title || data.headline || "").trim().slice(0, 48),
+    conclusion: String(data.conclusion || data.summary || data.core || "").trim(),
+    logic: String(data.logic || data.analysis || "").trim(),
+    bodyLink: String(data.bodyLink || data.body || data.link || "").trim(),
+  };
+}
+
 function normalizeChecklistItems(raw, min, max) {
   const list = Array.isArray(raw)
     ? raw
@@ -314,12 +355,28 @@ module.exports = async function handler(req, res) {
 
   try {
     const body = readJsonBody(req);
-    const mode = body.mode === "think" ? "think" : body.mode === "checklist" ? "checklist" : "organize";
+    const mode =
+      body.mode === "think"
+        ? "think"
+        : body.mode === "checklist"
+          ? "checklist"
+          : body.mode === "insight"
+            ? "insight"
+            : "organize";
     const text = String(body.text || "").trim();
     if (mode === "checklist") {
       const answers = Array.isArray(body.answers) ? body.answers.map((item) => String(item || "").trim()) : [];
       if (answers.filter(Boolean).length < 3) {
         res.status(400).json({ ok: false, error: "請先寫完左側三個問題" });
+        return;
+      }
+    } else if (mode === "insight") {
+      const ctx = body.context && typeof body.context === "object" ? body.context : {};
+      const event = String(ctx.event || text || "").trim();
+      const mood = String(ctx.mood || "").trim();
+      const hasBody = (Array.isArray(ctx.bodyTags) && ctx.bodyTags.length) || String(ctx.bodyNote || "").trim();
+      if (!event || !mood || !hasBody) {
+        res.status(400).json({ ok: false, error: "請先寫下今日事件、選擇心情，並標出身體狀況" });
         return;
       }
     } else if (!text && mode === "organize" && !Array.isArray(body.messages)) {
@@ -339,6 +396,11 @@ module.exports = async function handler(req, res) {
       messages = [
         { role: "system", content: kind === "execution" ? CHECKLIST_EXECUTION_SYSTEM : CHECKLIST_AWARENESS_SYSTEM },
         { role: "user", content: checklistUserPrompt(kind, body) },
+      ];
+    } else if (mode === "insight") {
+      messages = [
+        { role: "system", content: INSIGHT_SYSTEM },
+        { role: "user", content: insightUserPrompt(body) },
       ];
     } else if (mode === "think") {
       const round = Number(body.round) || 1;
@@ -371,6 +433,15 @@ module.exports = async function handler(req, res) {
         return;
       }
       res.status(200).json({ ok: true, source: "openai", data: { items: items.slice(0, max), kind } });
+      return;
+    }
+    if (mode === "insight") {
+      const insight = normalizeInsightResult(data);
+      if (!insight.conclusion) {
+        res.status(502).json({ ok: false, error: "AI 洞察格式不完整，請再試一次" });
+        return;
+      }
+      res.status(200).json({ ok: true, source: "openai", data: insight });
       return;
     }
     res.status(200).json({ ok: true, source: "openai", data });
