@@ -29,7 +29,37 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="app.css?v=69" />
+    <link rel="stylesheet" href="app.css?v=70" />
+    <style>
+      .splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: grid;
+        place-items: center;
+        padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right))
+          max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+        background: radial-gradient(ellipse at center, #3a322c 0%, #1a1613 52%, #110e0c 100%);
+        animation: splashOut 2.2s ease forwards;
+        pointer-events: none;
+      }
+      .splash__logo {
+        width: min(72vw, 420px);
+        height: auto;
+        max-height: min(28vh, 220px);
+        object-fit: contain;
+        mix-blend-mode: lighten;
+        animation: splashLogoIn 1.15s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+      }
+      @keyframes splashLogoIn {
+        from { opacity: 0; transform: scale(0.92); }
+        to { opacity: 1; transform: scale(1); }
+      }
+      @keyframes splashOut {
+        0%, 68% { opacity: 1; visibility: visible; }
+        100% { opacity: 0; visibility: hidden; }
+      }
+    </style>
   </head>
   <body>
     <script>
@@ -40,6 +70,12 @@
         if (closed) document.body.classList.add("nav-closed");
       })();
     </script>
+
+    <div class="splash" id="splash" role="img" aria-label="進行式ING">
+      <div class="splash__mark">
+        <img class="splash__logo" src="logo.png?v=3" alt="進行式ING" width="720" height="240" />
+      </div>
+    </div>
 
     <div class="topbar">
       <div class="topbar-left">
@@ -496,6 +532,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=82"></script>
+    <script src="app.js?v=83"></script>
   </body>
 </html>

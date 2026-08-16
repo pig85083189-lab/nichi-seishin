@@ -5673,8 +5673,25 @@ function bindEvents() {
   });
 }
 
+function initSplash() {
+  const splash = document.getElementById("splash");
+  if (!splash) return;
+  const finish = () => {
+    if (!splash.parentNode) return;
+    splash.classList.add("is-gone");
+    splash.setAttribute("aria-hidden", "true");
+    splash.remove();
+  };
+  splash.addEventListener("animationend", (event) => {
+    if (event.target === splash && event.animationName === "splashOut") finish();
+  });
+  const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  window.setTimeout(finish, reduced ? 1000 : 2400);
+}
+
 function init() {
   try {
+    initSplash();
     bindEvents();
   } catch {
     const btn = document.getElementById("btnOrganize");

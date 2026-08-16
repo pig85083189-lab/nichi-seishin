@@ -58,6 +58,86 @@ body {
   height: 100dvh;
 }
 
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right))
+    max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  background: radial-gradient(ellipse at center, #3a322c 0%, #1a1613 52%, #110e0c 100%);
+  animation: splashOut 2.2s ease forwards;
+  pointer-events: none;
+}
+
+.splash__mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: min(72vw, 420px);
+}
+
+.splash__mark::before {
+  content: "";
+  position: absolute;
+  inset: 8% 4%;
+  background: radial-gradient(circle, rgba(156, 136, 121, 0.28), transparent 72%);
+  filter: blur(28px);
+  pointer-events: none;
+}
+
+.splash__logo {
+  position: relative;
+  display: block;
+  width: min(72vw, 420px);
+  height: auto;
+  max-height: min(28vh, 220px);
+  object-fit: contain;
+  mix-blend-mode: lighten;
+  transform-origin: center center;
+  animation: splashLogoIn 1.15s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.splash.is-gone {
+  display: none;
+}
+
+@keyframes splashLogoIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes splashOut {
+  0%,
+  68% {
+    opacity: 1;
+    visibility: visible;
+  }
+  100% {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash {
+    animation: splashOut 0.85s ease forwards;
+  }
+
+  .splash__logo {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .hidden {
   display: none !important;
 }
@@ -2895,6 +2975,10 @@ body.nav-closed .auth-pay {
 }
 
 @media print {
+  .splash {
+    display: none !important;
+  }
+
   body * {
     visibility: hidden !important;
   }
