@@ -215,6 +215,49 @@ function normalizeInsightResult(raw) {
   };
 }
 
+const DEEPEN_SYSTEM = `你是「日精進」的高階心靈教練：有同理心，也有洞察力。使用者剛在一個深度思考主題裡寫下自己的回答。
+請針對他的真實內容，再往下挖，提出至少 3 個更能直指核心的延伸思考問題。
+
+規則：
+- 只輸出 JSON：{"questions":["...","...","..."]}
+- questions 必須 3 到 4 題
+- 每一題是完整問句，12-36 字，貼近他剛寫的人、場面、情緒，不要空泛
+- 像一對一教練追問：溫柔，但問到真正被碰到的那一層
+- 禁止說教、禁止病例腔、禁止重複他已經回答過的原題
+- 繁體中文`;
+
+function deepenUserPrompt(body) {
+  const theme = String(body.theme || "").trim();
+  const plain = String(body.plain || "").trim();
+  const deep = String(body.deep || body.note || "").trim();
+  const ctx = body.context && typeof body.context === "object" ? body.context : {};
+  return `請針對這個主題與回答，再提出 3 到 4 個更深的追問。
+
+主題：${theme || "深度思考"}
+白話想一想：${plain || "（未寫）"}
+深挖一點點：${deep || "（未寫）"}
+心情：${ctx.mood || "未選"}
+今日事件：${ctx.event || "未寫"}`;
+}
+
+function normalizeDeepenQuestions(raw) {
+  const list = Array.isArray(raw)
+    ? raw
+    : Array.isArray(raw?.questions)
+      ? raw.questions
+      : Array.isArray(raw?.items)
+        ? raw.items
+        : [];
+  const questions = [];
+  list.forEach((item) => {
+    const text = typeof item === "string"
+      ? item.trim()
+      : String(item?.question || item?.text || item?.title || "").trim();
+    if (text && !questions.includes(text)) questions.push(text.replace(/^[\d.、\-\s]+/, "").slice(0, 80));
+  });
+  return questions.slice(0, 4);
+}
+
 function normalizeChecklistItems(raw, min, max) {
   const list = Array.isArray(raw)
     ? raw
@@ -362,7 +405,9 @@ module.exports = async function handler(req, res) {
           ? "checklist"
           : body.mode === "insight"
             ? "insight"
-            : "organize";
+            : body.mode === "deepen"
+              ? "deepen"
+              : "organize";
     const text = String(body.text || "").trim();
     if (mode === "checklist") {
       const answers = Array.isArray(body.answers) ? body.answers.map((item) => String(item || "").trim()) : [];
@@ -377,6 +422,13 @@ module.exports = async function handler(req, res) {
       const hasBody = (Array.isArray(ctx.bodyTags) && ctx.bodyTags.length) || String(ctx.bodyNote || "").trim();
       if (!event || !mood || !hasBody) {
         res.status(400).json({ ok: false, error: "請先寫下今日事件、選擇心情，並標出身體狀況" });
+        return;
+      }
+    } else if (mode === "deepen") {
+      const plain = String(body.plain || "").trim();
+      const deep = String(body.deep || body.note || "").trim();
+      if (!plain && !deep) {
+        res.status(400).json({ ok: false, error: "請先在這個主題寫下一點回答" });
         return;
       }
     } else if (!text && mode === "organize" && !Array.isArray(body.messages)) {
@@ -401,6 +453,11 @@ module.exports = async function handler(req, res) {
       messages = [
         { role: "system", content: INSIGHT_SYSTEM },
         { role: "user", content: insightUserPrompt(body) },
+      ];
+    } else if (mode === "deepen") {
+      messages = [
+        { role: "system", content: DEEPEN_SYSTEM },
+        { role: "user", content: deepenUserPrompt(body) },
       ];
     } else if (mode === "think") {
       const round = Number(body.round) || 1;
@@ -442,6 +499,15 @@ module.exports = async function handler(req, res) {
         return;
       }
       res.status(200).json({ ok: true, source: "openai", data: insight });
+      return;
+    }
+    if (mode === "deepen") {
+      const questions = normalizeDeepenQuestions(data);
+      if (questions.length < 3) {
+        res.status(502).json({ ok: false, error: "AI 延伸提問格式不完整，請再試一次" });
+        return;
+      }
+      res.status(200).json({ ok: true, source: "openai", data: { questions } });
       return;
     }
     res.status(200).json({ ok: true, source: "openai", data });

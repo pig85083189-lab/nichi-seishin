@@ -80,6 +80,8 @@ const state = {
   insightBusy: false,
   insightToken: 0,
   journalInsight: null,
+  deepFollowBusy: [false, false, false, false],
+  deepFollowToken: [0, 0, 0, 0],
   organizeSource: "",
   apiConfigured: null,
   user: null,
@@ -1628,10 +1630,10 @@ function emptyJournal() {
 
 function emptyDeep() {
   return [
-    { plain: "", deep: "" },
-    { plain: "", deep: "" },
-    { plain: "", deep: "" },
-    { plain: "", deep: "" },
+    { plain: "", deep: "", followups: [], notes: ["", "", ""] },
+    { plain: "", deep: "", followups: [], notes: ["", "", ""] },
+    { plain: "", deep: "", followups: [], notes: ["", "", ""] },
+    { plain: "", deep: "", followups: [], notes: ["", "", ""] },
   ];
 }
 
@@ -1654,17 +1656,29 @@ function normalizeDeep(deep) {
   return emptyDeep().map((slot, index) => {
     const item = Array.isArray(deep) ? deep[index] : null;
     if (item && typeof item === "object") {
+      const followups = Array.isArray(item.followups)
+        ? item.followups.map((q) => String(q || "").trim()).filter(Boolean).slice(0, 4)
+        : [];
+      const notes = [0, 1, 2, 3].map((i) => String((item.notes || [])[i] || ""));
       return {
         plain: String(item.plain || ""),
         deep: String(item.deep || item.note || ""),
+        followups,
+        notes,
       };
     }
-    return { plain: "", deep: String(item || "") };
+    return { ...slot, deep: String(item || "") };
   });
 }
 
 function deepHasContent(deep) {
-  return normalizeDeep(deep).some((item) => String(item.plain || "").trim() || String(item.deep || "").trim());
+  return normalizeDeep(deep).some(
+    (item) =>
+      String(item.plain || "").trim() ||
+      String(item.deep || "").trim() ||
+      (item.followups || []).length ||
+      (item.notes || []).some((note) => String(note || "").trim())
+  );
 }
 
 function journalHasContent(journal) {
@@ -2005,6 +2019,115 @@ function maybeAutoGenerateInsight(journal) {
   }
 }
 
+const DEEP_THEMES = [
+  "今天哪一刻，我其實超想翻白眼（或超不爽），但還是忍住了？",
+  "今天有沒有哪件事，是我其實可以不要做，但又不好意思拒絕的？",
+  "如果今天可以重來，哪一件事我絕對不要再用老方法處理？",
+  "今天最爽、最讓我覺得「還好我有堅持」的一瞬間是什麼？",
+];
+
+function collectDeepSlot(index) {
+  const followups = [...document.querySelectorAll(`#deep${index}Follow [data-followup]`)].map((el) =>
+    String(el.getAttribute("data-followup") || "").trim()
+  );
+  return {
+    plain: journalFieldValue(`deep${index}plain`),
+    deep: journalFieldValue(`deep${index}deep`),
+    followups,
+    notes: [1, 2, 3, 4].map((n) => journalFieldValue(`deep${index}note${n}`)),
+  };
+}
+
+function renderDeepFollow(index, questions, notes) {
+  const root = document.getElementById(`deep${index}Follow`);
+  if (!root) return;
+  const items = (questions || []).map((q) => String(q || "").trim()).filter(Boolean).slice(0, 4);
+  if (!items.length) {
+    root.innerHTML = "";
+    return;
+  }
+  const saved = notes || [];
+  root.innerHTML = `
+    <p class="deep-follow__head">AI 教練追問</p>
+    ${items
+      .map(
+        (question, i) => `
+          <article class="deep-probe">
+            <p class="deep-probe__q" data-followup="${escapeHtml(question)}">${i + 1}. ${escapeHtml(question)}</p>
+            <textarea class="textarea" id="deep${index}note${i + 1}" rows="3" placeholder="針對這一題，我還想寫下的是…">${escapeHtml(saved[i] || "")}</textarea>
+          </article>
+        `
+      )
+      .join("")}
+  `;
+}
+
+function setDeepFollowLoading(index, loading) {
+  const btn = document.querySelector(`[data-deepen="${index}"]`);
+  const loader = document.getElementById(`deep${index}Loading`);
+  state.deepFollowBusy[index - 1] = loading;
+  if (btn) {
+    btn.disabled = loading;
+    btn.textContent = loading ? "分析中…" : "✨ 讓 AI 帶我再深入思考";
+  }
+  if (loader) loader.hidden = !loading;
+}
+
+function localDeepFollowFallback(index, slot) {
+  const themeFallbacks = [
+    ["那句沒說出口的話，如果說出來，你最怕對方聽見什麼？", "忍住的那一秒，身體哪裡先緊起來？", "如果可以只改一個小動作，你會讓哪一句話被對方聽見？"],
+    ["不好意思拒絕時，你在保護誰的感受？", "如果這次說「這次我沒辦法」，最壞的畫面是什麼？", "這件事如果不是你做，誰其實也可以承擔？"],
+    ["那個老方法曾經幫你逃過什麼？", "新方法只需要改哪一個最小的動作？", "如果明天只用新方法做 5 分鐘，會從哪一步開始？"],
+    ["那一刻讓你覺得『我是這樣的人』的，是哪一個價值？", "明天要複製它，最小的一步是什麼？", "如果把這份堅持說給自己聽，那句話會是什麼？"],
+  ];
+  return themeFallbacks[index - 1] || themeFallbacks[0];
+}
+
+async function generateDeepFollow(index) {
+  const slotIndex = Number(index);
+  if (slotIndex < 1 || slotIndex > 4 || state.deepFollowBusy[slotIndex - 1]) return;
+  const slot = collectDeepSlot(slotIndex);
+  if (!String(slot.plain || "").trim() && !String(slot.deep || "").trim()) {
+    showToast("先在這個主題寫下一點，再請 AI 往下挖。");
+    return;
+  }
+  const details = document.querySelector(`#deep${slotIndex}plain`)?.closest("details");
+  if (details) details.open = true;
+
+  const token = (state.deepFollowToken[slotIndex - 1] || 0) + 1;
+  state.deepFollowToken[slotIndex - 1] = token;
+  setDeepFollowLoading(slotIndex, true);
+
+  const journal = collectJournal();
+  const fallback = localDeepFollowFallback(slotIndex, slot);
+  try {
+    if (!state.user) throw new Error("請先登入，才能使用雲端 AI 分析。");
+    const remote = await postReview({
+      mode: "deepen",
+      date: currentIso(),
+      theme: DEEP_THEMES[slotIndex - 1],
+      plain: slot.plain,
+      deep: slot.deep,
+      text: `${slot.plain}\n${slot.deep}`.trim(),
+      context: {
+        event: journal.event,
+        mood: journal.mood,
+      },
+    });
+    if (state.deepFollowToken[slotIndex - 1] !== token) return;
+    const questions = (remote.questions || []).map((item) => String(item || "").trim()).filter(Boolean).slice(0, 4);
+    if (questions.length < 3) throw new Error("雲端回傳格式不完整");
+    renderDeepFollow(slotIndex, questions, slot.notes);
+    showToast("已生出 3 個更深的追問。");
+  } catch (error) {
+    if (state.deepFollowToken[slotIndex - 1] !== token) return;
+    renderDeepFollow(slotIndex, fallback, slot.notes);
+    showToast(`雲端分析失敗：${formatApiError(error)}，先用本地追問。`);
+  } finally {
+    if (state.deepFollowToken[slotIndex - 1] === token) setDeepFollowLoading(slotIndex, false);
+  }
+}
+
 function collectJournal() {
   const journal = {
     thanks: ["thanks1", "thanks2", "thanks3"].map(journalFieldValue),
@@ -2023,12 +2146,7 @@ function collectJournal() {
     awarenessAiSig: state.journalMeta.awarenessAiSig || "",
     executionAiSig: state.journalMeta.executionAiSig || "",
     insight: state.journalInsight || emptyInsight(),
-    deep: [
-      { plain: journalFieldValue("deep1plain"), deep: journalFieldValue("deep1deep") },
-      { plain: journalFieldValue("deep2plain"), deep: journalFieldValue("deep2deep") },
-      { plain: journalFieldValue("deep3plain"), deep: journalFieldValue("deep3deep") },
-      { plain: journalFieldValue("deep4plain"), deep: journalFieldValue("deep4deep") },
-    ],
+    deep: [1, 2, 3, 4].map(collectDeepSlot),
   };
   return journal;
 }
@@ -2079,10 +2197,16 @@ function composeJournalRawText(journal) {
   normalizeDeep(journal.deep).forEach((item, index) => {
     const plain = String(item.plain || "").trim();
     const deep = String(item.deep || "").trim();
-    if (!plain && !deep) return;
+    if (!plain && !deep && !(item.followups || []).length) return;
     lines.push(deepQs[index]);
     if (plain) lines.push(`白話想一想：${plain}`);
     if (deep) lines.push(`深挖一點點：${deep}`);
+    (item.followups || []).forEach((question, qIndex) => {
+      if (!String(question || "").trim()) return;
+      lines.push(`延伸追問 ${qIndex + 1}：${question}`);
+      const note = String((item.notes || [])[qIndex] || "").trim();
+      if (note) lines.push(`延伸反思：${note}`);
+    });
   });
   return lines.join("\n");
 }
@@ -2118,9 +2242,11 @@ function fillJournal(journal) {
   state.checklistToken.awareness += 1;
   state.checklistToken.execution += 1;
   state.insightToken += 1;
+  state.deepFollowToken = state.deepFollowToken.map((n) => n + 1);
   setChecklistLoading("awareness", false);
   setChecklistLoading("execution", false);
   setInsightLoading(false);
+  [1, 2, 3, 4].forEach((index) => setDeepFollowLoading(index, false));
   state.journalMeta = {
     awarenessAi: Boolean(data.awarenessAi),
     executionAi: Boolean(data.executionAi),
@@ -2153,6 +2279,7 @@ function fillJournal(journal) {
     const note = document.getElementById(`deep${index + 1}deep`);
     if (plain) plain.value = item.plain || "";
     if (note) note.value = item.deep || "";
+    renderDeepFollow(index + 1, item.followups, item.notes);
   });
   refreshJournalChecklists(data, { useSaved: true });
   renderInsightCard(state.journalInsight);
@@ -3728,6 +3855,11 @@ function bindEvents() {
   document.getElementById("btnAwareAi")?.addEventListener("click", () => generateJournalChecklist("awareness"));
   document.getElementById("btnExecAi")?.addEventListener("click", () => generateJournalChecklist("execution"));
   document.getElementById("btnInsightAi")?.addEventListener("click", () => generateJournalInsight());
+  document.getElementById("section-deep")?.addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-deepen]");
+    if (!btn) return;
+    generateDeepFollow(btn.dataset.deepen);
+  });
 
   document.getElementById("moodRow")?.addEventListener("click", (event) => {
     const btn = event.target.closest(".mood-btn");
