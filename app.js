@@ -596,6 +596,9 @@ function formatApiError(error) {
   if (/401|請先使用 Google|未登入|未授權/i.test(message)) {
     return "請先登入，才能使用雲端 AI 與同步備份。";
   }
+  if (/402|試用已結束|免費體驗已結束|paywall/i.test(message)) {
+    return "您的 7 天免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限";
+  }
   if (/404|Failed to fetch|fetch 失敗|NetworkError/i.test(message)) {
     return "找不到 /api/review。請用 Vercel 網址開啟，並重新部署後端函式。";
   }
@@ -649,6 +652,10 @@ async function fetchWithTimeout(url, options, timeoutMs) {
 }
 
 async function postReview(body, timeoutMs = 28000) {
+  if (isAccessLocked()) {
+    applyAccessLock();
+    throw new Error("您的 7 天免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限");
+  }
   const url = reviewApiUrl();
   console.log("[日精進 API] POST", url, body && body.mode);
   const response = await fetchWithTimeout(
@@ -662,7 +669,7 @@ async function postReview(body, timeoutMs = 28000) {
   );
   const payload = await response.json().catch(() => ({}));
   console.log("[日精進 API] 回應", response.status, payload && payload.ok, payload && payload.error);
-  if (!response.ok || payload.ok === false) {
+  if (applyPaywallFromPayload(response, payload) || !response.ok || payload.ok === false) {
     throw new Error(payload.error || `HTTP ${response.status}`);
   }
   if (!payload.data || typeof payload.data !== "object") {
@@ -1152,11 +1159,16 @@ async function fetchStoredCloudReport(type, period, latest) {
     8000
   );
   const payload = await response.json().catch(() => ({}));
+  if (applyPaywallFromPayload(response, payload)) return null;
   return payload && payload.data && typeof payload.data === "object" ? payload.data : null;
 }
 
 async function generateCloudReport(type, fromIso, toIso, period, options = {}) {
   if (!state.user) return null;
+  if (isAccessLocked()) {
+    applyAccessLock();
+    throw new Error("您的 7 天免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限");
+  }
   const reviews = compactReviewsForRange(fromIso, toIso);
   const stats = options.stats || buildGrowthStats(fromIso, toIso);
   if (!reviews.length && !(stats.totals && stats.totals.checked)) return null;
@@ -1181,7 +1193,7 @@ async function generateCloudReport(type, fromIso, toIso, period, options = {}) {
     28000
   );
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.ok === false) {
+  if (applyPaywallFromPayload(response, payload) || !response.ok || payload.ok === false) {
     throw new Error(payload.error || `HTTP ${response.status}`);
   }
   return payload.data || null;
@@ -1197,6 +1209,7 @@ async function fetchArchivedReportList() {
       8000
     );
     const payload = await response.json().catch(() => ({}));
+    applyPaywallFromPayload(response, payload);
     const remote = Array.isArray(payload.data) ? payload.data : [];
     const map = new Map();
     [...local, ...remote.filter((item) => item && item.type !== "week")].forEach((item) => {
@@ -1362,7 +1375,10 @@ function renderAuth() {
     top.textContent = user ? user.name || user.email || "已登入" : "登入";
     top.title = user ? "登出" : "使用 Google 帳號登入";
   }
-  if (!side) return;
+  if (!side) {
+    applyAccessLock();
+    return;
+  }
   if (!user) {
     side.innerHTML = `
       <button class="auth-login" id="btnGoogleLogin" type="button">
@@ -1375,9 +1391,10 @@ function renderAuth() {
         <span>使用 Google 帳號登入</span>
       </button>
       <p class="auth-form__error" id="authError" hidden></p>
-      <p class="auth-hint">登入後會讀取你在雲端的復盤與個人紀錄。</p>
+      <p class="auth-hint">Google 登入後享有 7 天完整功能免費試用。</p>
     `;
     if (lastAuthError) setAuthError(lastAuthError);
+    applyAccessLock();
     return;
   }
   const initial = escapeHtml((user.name || user.email || "我").slice(0, 1));
@@ -1386,17 +1403,17 @@ function renderAuth() {
     : `<span class="auth-avatar">${initial}</span>`;
   const membership = state.membership || {};
   const status = membership.status || "";
-  const entitled = Boolean(membership.entitled || membership.paid);
-  const payBtn = status === "active"
-    ? `<button class="auth-pay is-paid" type="button" disabled><span>已付款</span></button>`
-    : `<a class="auth-pay" id="btnNewebPay" href="${NEWEBPAY_EPG_URL}"><span>${status === "trialing" || status === "pending" ? "一次付清 NT$399" : "付款以繼續 NT$399"}</span></a>`;
-  const trialHint = membership.trialEndsAt && status === "trialing"
-    ? `<p class="auth-hint">試用至 ${escapeHtml(formatTrialDate(membership.trialEndsAt))}</p>`
-    : entitled && status === "active"
-      ? `<p class="auth-hint">一次付清已完成。</p>`
-      : status === "expired" || status === "cancelled" || status === "past_due"
-        ? `<p class="auth-hint">試用已結束，付款 NT$399 後可繼續使用雲端 AI。</p>`
-        : `<p class="auth-hint">登入後會讀取你在雲端的復盤與個人紀錄。</p>`;
+  const entitled = Boolean(membership.entitled || membership.paid || membership.isPaid);
+  const payBtn = entitled && (membership.paid || membership.isPaid || status === "active")
+    ? `<button class="auth-pay is-paid" type="button" disabled><span>已解鎖無限暢用</span></button>`
+    : `<a class="auth-pay" id="btnNewebPay" href="${NEWEBPAY_EPG_URL}" data-newebpay><span>${status === "trialing" || status === "pending" ? "升級解鎖 NT$399" : "付款解鎖 NT$399"}</span></a>`;
+  const trialHint = membership.trialEndsAt && (status === "trialing" || entitled && !membership.paid && !membership.isPaid)
+    ? `<p class="auth-hint">7 天免費試用至 ${escapeHtml(formatTrialDate(membership.trialEndsAt))}${membership.daysLeft != null ? `，還有 ${membership.daysLeft} 天` : ""}。</p>`
+    : entitled && (status === "active" || membership.paid || membership.isPaid)
+      ? `<p class="auth-hint">一次付清已完成，功能已全部解鎖。</p>`
+      : status === "expired" || status === "cancelled" || status === "past_due" || (!entitled && status)
+        ? `<p class="auth-hint">7 天免費體驗已結束，付款 NT$399 後即可無限暢用。</p>`
+        : `<p class="auth-hint">登入後享有 7 天完整功能免費試用。</p>`;
   side.innerHTML = `
     <div class="auth-user">
       ${avatar}
@@ -1410,6 +1427,7 @@ function renderAuth() {
     ${trialHint}
   `;
   bindSubscribeButton();
+  applyAccessLock();
 }
 
 let supabaseClient = null;
@@ -1624,11 +1642,55 @@ function submitNewebPayForm(gateway, fields) {
   form.submit();
 }
 
+function isAccessLocked() {
+  if (!state.user) return false;
+  const membership = state.membership;
+  if (!membership) return false;
+  if (membership.entitled || membership.paid || membership.isPaid) return false;
+  return true;
+}
+
+function applyPaywallFromPayload(response, payload) {
+  if (!(response && (response.status === 402 || (payload && payload.paywall)))) return false;
+  const current = state.membership || {};
+  state.membership = {
+    ...current,
+    entitled: false,
+    paid: false,
+    isPaid: false,
+    status: current.status === "active" || current.status === "past_due" ? current.status : "expired",
+  };
+  applyAccessLock();
+  renderAuth();
+  return true;
+}
+
+function applyAccessLock() {
+  const locked = isAccessLocked();
+  document.body.classList.toggle("is-locked", locked);
+  const paywall = document.getElementById("paywall");
+  if (paywall) {
+    paywall.hidden = !locked;
+    if (locked) {
+      paywall.querySelectorAll("[data-newebpay]").forEach((el) => {
+        el.setAttribute("href", NEWEBPAY_EPG_URL);
+      });
+    }
+  }
+  const view = document.getElementById("view");
+  if (view) {
+    if (locked) view.setAttribute("inert", "");
+    else view.removeAttribute("inert");
+  }
+  bindSubscribeButton();
+}
+
 function bindSubscribeButton() {
-  const btn = document.getElementById("btnNewebPay");
-  if (!btn || btn.dataset.bound === "1") return;
-  btn.dataset.bound = "1";
-  btn.addEventListener("click", onSubscribeClick);
+  document.querySelectorAll("[data-newebpay]").forEach((btn) => {
+    if (btn.dataset.bound === "1") return;
+    btn.dataset.bound = "1";
+    btn.addEventListener("click", onSubscribeClick);
+  });
 }
 
 function onSubscribeClick(event) {
@@ -1760,12 +1822,14 @@ async function refreshAuth() {
       if (!state.user && payload.user) state.user = payload.user;
     }
     renderAuth();
+    applyAccessLock();
     if (state.user) {
       await pullCloudData();
       await pushCloudData();
     }
   } catch {
     renderAuth();
+    applyAccessLock();
   }
 }
 
@@ -5915,6 +5979,18 @@ function bindEvents() {
       signInWithGoogle();
     });
   }
+
+  document.getElementById("view")?.addEventListener(
+    "click",
+    (event) => {
+      if (!isAccessLocked()) return;
+      if (event.target.closest && event.target.closest("[data-newebpay], #paywall")) return;
+      event.preventDefault();
+      event.stopPropagation();
+    },
+    true
+  );
+  bindSubscribeButton();
 
   document.getElementById("reminderCta").addEventListener("click", () => {
     document.getElementById("reminderModal").showModal();

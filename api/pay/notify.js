@@ -4,6 +4,7 @@ const {
   patchSubscription,
   insertBillingEvent,
   isTrialActive,
+  markPaid,
 } = require("../../lib/supabase");
 const { newebpayConfigured, decryptPayNotify, parseFormBody, readRequestBody } = require("../../lib/newebpay");
 
@@ -85,10 +86,14 @@ async function applyNotify(payload) {
     patch.cancelled_at = new Date().toISOString();
   } else if (success) {
     patch.status = "active";
+    patch.is_paid = true;
     if (tradeNo) patch.last_trade_no = tradeNo;
     if (debit || tradeNo) patch.last_charge_at = new Date().toISOString();
     const next = nextChargeDate(result);
     if (next) patch.next_charge_at = next;
+    await markPaid(row.user_id, patch);
+    console.log("NewebPay notify applied:", eventType, orderNo, periodNo, row.user_id);
+    return;
   } else if (row.status === "active" || debit) {
     patch.status = "past_due";
   } else if (row.status === "pending") {

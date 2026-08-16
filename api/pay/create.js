@@ -1,5 +1,5 @@
 const { getSession, bearerToken } = require("../../lib/auth");
-const { ensureTrial, patchSubscription } = require("../../lib/supabase");
+const { ensureTrial, patchSubscription, isPaid } = require("../../lib/supabase");
 const {
   newebpayConfigured,
   newebpayConfigStatus,
@@ -90,7 +90,7 @@ module.exports = async function handler(req, res) {
     res.status(500).json({ ok: false, error: "尚未設定 SUPABASE_SERVICE_ROLE_KEY 或 SUPABASE_SECRET_KEY" });
     return;
   }
-  if (sub.status === "active") {
+  if (isPaid(sub) || sub.status === "active") {
     res.status(409).json({ ok: false, error: "你已經付款完成" });
     return;
   }

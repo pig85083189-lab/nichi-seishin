@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=71" />
+    <link rel="stylesheet" href="app.css?v=72" />
     <style>
       .splash {
         position: fixed;
@@ -176,7 +176,7 @@
             <span>使用 Google 帳號登入</span>
           </button>
           <p class="auth-form__error" id="authError" hidden></p>
-          <p class="auth-hint">登入後會讀取你在雲端的復盤與個人紀錄。</p>
+          <p class="auth-hint">Google 登入後享有 7 天完整功能免費試用。</p>
         </div>
       </nav>
 
@@ -533,6 +533,21 @@
       </div>
     </dialog>
 
+    <div class="paywall" id="paywall" hidden>
+      <div class="paywall__banner" role="status">
+        <p>您的 7 天免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限</p>
+        <a class="paywall__btn" id="paywallBannerPay" href="https://core.newebpay.com/EPG/HTC109030010100/QLBIYc" data-newebpay>前往付款</a>
+      </div>
+      <div class="paywall__veil">
+        <div class="paywall__card" role="dialog" aria-labelledby="paywallTitle" aria-modal="true">
+          <p class="paywall__kicker">免費體驗已結束</p>
+          <h2 class="paywall__title" id="paywallTitle">升級即可無限暢用</h2>
+          <p class="paywall__copy">您的 7 天免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限</p>
+          <a class="paywall__btn paywall__btn--primary" id="paywallCardPay" href="https://core.newebpay.com/EPG/HTC109030010100/QLBIYc" data-newebpay>前往付款解鎖</a>
+        </div>
+      </div>
+    </div>
+
     <div class="toast" id="toast" hidden></div>
     <script>
       if ("serviceWorker" in navigator) {
@@ -543,6 +558,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=84"></script>
+    <script src="app.js?v=85"></script>
   </body>
 </html>

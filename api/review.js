@@ -558,7 +558,7 @@ module.exports = async function handler(req, res) {
     try {
       const sub = await ensureTrial(user);
       if (sub && !isEntitled(sub)) {
-        res.status(402).json({ ok: false, error: "試用已結束，請訂閱後繼續使用雲端 AI。" });
+        res.status(402).json({ ok: false, error: "試用已結束，請升級訂閱後繼續使用。", paywall: true });
         return;
       }
     } catch (error) {

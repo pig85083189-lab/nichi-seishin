@@ -51,6 +51,7 @@ create table if not exists public.nichi_subscriptions (
   last_trade_no text,
   last_message text,
   cancelled_at timestamptz,
+  is_paid boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -88,6 +89,13 @@ grant select on public.nichi_subscriptions to authenticated;
 grant all on public.nichi_subscriptions to service_role;
 grant all on public.nichi_billing_events to service_role;
 notify pgrst, 'reload schema';
+
+alter table public.nichi_subscriptions
+  add column if not exists is_paid boolean not null default false;
+
+update public.nichi_subscriptions
+  set is_paid = true
+  where status in ('active', 'past_due') and is_paid is distinct from true;
 
 drop policy if exists "nichi_subscriptions_select_own" on public.nichi_subscriptions;
 create policy "nichi_subscriptions_select_own"

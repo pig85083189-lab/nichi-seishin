@@ -12,6 +12,7 @@ const {
   listArchivedReports,
   archiveUserReport,
 } = require("../lib/store");
+const { ensureTrial, isEntitled, getSubscription, supabaseAdminConfigured } = require("../lib/supabase");
 
 const REPORT_SYSTEM = `你是「日精進」的成長教練。使用者會給你一段期間內的復盤摘要，以及覺察力、執行力、顯化力的勾選量與完成頻率。
 
@@ -265,6 +266,15 @@ async function handler(req, res, forced = {}) {
       const users = await listUsers();
       const results = [];
       for (const account of users) {
+        try {
+          const sub = await getSubscription(account.id);
+          if (sub && !isEntitled(sub)) {
+            results.push({ userId: account.id, skipped: true, reason: "not entitled" });
+            continue;
+          }
+        } catch {
+          /* 沒有訂閱資料就仍嘗試產報 */
+        }
         const bundle = await loadUserData(account.id);
         const entries = reviewsInRange(bundle.reviews || {}, range.fromIso, range.toIso);
         const stats = buildGrowthStats({
@@ -298,6 +308,17 @@ async function handler(req, res, forced = {}) {
 
     const user = await requireUser(req, res);
     if (!user) return;
+    if (supabaseAdminConfigured()) {
+      try {
+        const sub = await ensureTrial(user);
+        if (sub && !isEntitled(sub)) {
+          res.status(402).json({ ok: false, error: "試用已結束，請升級訂閱後繼續使用。", paywall: true });
+          return;
+        }
+      } catch (error) {
+        console.error("ensureTrial in generate-report:", error && error.message ? error.message : error);
+      }
+    }
 
     if (req.method === "POST" && Array.isArray(body.reviews) && body.reviews.length) {
       await mergeReviews(user.id, compactMap(body.reviews));
