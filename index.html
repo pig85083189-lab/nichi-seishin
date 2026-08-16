@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=77" />
+    <link rel="stylesheet" href="app.css?v=78" />
     <style>
       .splash {
         position: fixed;
@@ -336,20 +336,17 @@
 
           <section class="journal-card" id="section-aware">
             <h2 class="journal-card__title"><span>04</span> 覺察力</h2>
-            <p class="journal-guide">題目每天依今天的輸入與成長進度生成，不是固定題庫。寫完事件、心情與身體狀況後會自動出題。</p>
+            <p class="journal-guide">用一道核心反思題，把今天真正被碰到的層寫下來。寫完後，AI 會依這段深度回答拆成可勾選的覺察面向；勾選後完成復盤，會存進側邊欄「覺察力」。</p>
             <div class="journal-split">
               <div class="journal-col">
-                <div class="check-loading" id="awarePromptLoading" hidden>
-                  <p class="check-loading__label">正在為你生成今天的覺察題目…</p>
-                  <div class="ai-thinking__bar"><i></i></div>
-                </div>
-                <ol class="journal-qs" id="awareQs"></ol>
-                <button class="ai-check-btn" id="btnRefreshPrompts" type="button">換一批今天的題目</button>
+                <p class="journal-label">核心反思</p>
+                <p class="journal-core-q">今天發生了什麼讓你內心波動、有所省思，或看清了自己哪個盲點與核心信念的全盤覺察？</p>
+                <textarea class="textarea textarea--hero" id="aware1" rows="8" placeholder="把今天的場面、內心波動、看見的盲點或核心信念寫下來…"></textarea>
                 <button class="ai-check-btn" id="btnAwareAi" type="button">AI 分析並生成勾勾表</button>
               </div>
               <div class="journal-col">
                 <p class="journal-label">今天我覺察到</p>
-                <p class="journal-guide journal-guide--tight">寫完左側三題後，AI 會生成 4 到 6 個專屬覺察面向，你再勾選今天有看見的。</p>
+                <p class="journal-guide journal-guide--tight">寫完左側這道題後，AI 會生成 4 到 6 個專屬覺察面向，你再勾選今天有看見的。</p>
                 <div class="check-loading" id="awareLoading" hidden>
                   <p class="check-loading__label">正在深層分析今天的覺察…</p>
                   <div class="ai-thinking__bar"><i></i></div>
@@ -361,20 +358,17 @@
 
           <section class="journal-card" id="section-exec">
             <h2 class="journal-card__title"><span>05</span> 執行力</h2>
-            <p class="journal-guide">題目每天依今天的卡點與成長進度生成，不是固定題庫。寫完事件、心情與身體狀況後會自動出題。</p>
+            <p class="journal-guide">用一道核心行動題，把今天的卡點與突破策略一次看清楚。寫完後，AI 會依這段深度回答生成行動卡點勾勾表；勾選後完成復盤，會進入側邊欄「執行力」。</p>
             <div class="journal-split">
               <div class="journal-col">
-                <div class="check-loading" id="execPromptLoading" hidden>
-                  <p class="check-loading__label">正在為你生成今天的執行力題目…</p>
-                  <div class="ai-thinking__bar"><i></i></div>
-                </div>
-                <ol class="journal-qs" id="execQs"></ol>
-                <button class="ai-check-btn" id="btnRefreshExecPrompts" type="button">換一批今天的行動題</button>
+                <p class="journal-label">核心行動</p>
+                <p class="journal-core-q">今天在執行目標時遇到了什麼實質卡點？你打算採取什麼全面性的行動或突破策略來解決它？</p>
+                <textarea class="textarea textarea--hero" id="exec1" rows="8" placeholder="寫下卡點、卡住的真正原因，以及你打算採取的突破策略…"></textarea>
                 <button class="ai-check-btn" id="btnExecAi" type="button">AI 分析並生成勾勾表</button>
               </div>
               <div class="journal-col">
                 <p class="journal-label">我的行動卡點／解法</p>
-                <p class="journal-guide journal-guide--tight">寫完左側三題後，AI 會生成 3 到 4 個專屬行動卡點與解法。勾選後，完成今日復盤就會進到側邊欄執行力清單。</p>
+                <p class="journal-guide journal-guide--tight">寫完左側這道題後，AI 會生成 3 到 4 個專屬行動卡點與解法。勾選後，完成今日復盤就會進到側邊欄執行力清單。</p>
                 <div class="check-loading" id="execLoading" hidden>
                   <p class="check-loading__label">正在分析你的行動卡點與解法…</p>
                   <div class="ai-thinking__bar"><i></i></div>
@@ -629,6 +623,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=92"></script>
+    <script src="app.js?v=93"></script>
   </body>
 </html>

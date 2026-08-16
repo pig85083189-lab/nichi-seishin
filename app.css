@@ -2894,6 +2894,18 @@ body.nav-closed .auth-pay {
   opacity: 0.7;
 }
 
+.journal-core-q {
+  margin: 0 0 12px;
+  color: var(--header);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.7;
+}
+
+.journal-col .textarea--hero {
+  min-height: 220px;
+}
+
 .deep-list.is-waiting {
   min-height: 88px;
 }
