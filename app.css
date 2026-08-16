@@ -2651,6 +2651,10 @@ body.nav-closed .auth-pay {
   align-items: start;
 }
 
+.journal-split--body {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
 .journal-col {
   min-width: 0;
 }
@@ -2756,6 +2760,136 @@ body.nav-closed .auth-pay {
   border-color: var(--accent);
   color: var(--header);
   font-weight: 600;
+}
+
+.body-check {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.body-check-group {
+  padding: 16px 16px 14px;
+  border: 1px solid var(--cream-border);
+  border-radius: var(--radius);
+  background: var(--cream);
+}
+
+.body-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.body-flag-btn {
+  min-height: 34px;
+  height: auto;
+  padding: 6px 12px;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.body-flag-btn--none.is-on {
+  background: var(--header);
+  border-color: var(--header);
+  color: #fff;
+}
+
+.body-reason {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.body-reason[hidden] {
+  display: none;
+}
+
+.body-coach {
+  padding: 18px 18px 16px;
+  border: 1px solid #e4d4c8;
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, #fffdf9 0%, var(--cream) 100%);
+  box-shadow: 0 8px 24px rgba(92, 74, 58, 0.06);
+}
+
+.body-coach__head {
+  margin-bottom: 12px;
+}
+
+.body-coach__kicker {
+  margin: 0 0 6px;
+  color: var(--header);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.body-coach__title {
+  margin: 0 0 8px;
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.body-coach__lead {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.body-coach .ai-check-btn {
+  width: 100%;
+  margin: 0 0 12px;
+}
+
+.body-coach__body.is-loading {
+  opacity: 0.38;
+}
+
+.body-coach__analysis {
+  margin: 0 0 14px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.body-coach__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.body-coach__list li {
+  position: relative;
+  padding: 12px 14px 12px 42px;
+  border: 1px solid var(--cream-border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.body-coach__list li::before {
+  content: attr(data-step);
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--header);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .journal-qs {

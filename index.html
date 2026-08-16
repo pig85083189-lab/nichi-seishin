@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=73" />
+    <link rel="stylesheet" href="app.css?v=74" />
     <style>
       .splash {
         position: fixed;
@@ -257,25 +257,62 @@
 
           <section class="journal-card" id="section-body">
             <h2 class="journal-card__title"><span>03</span> 身體覺察</h2>
-            <p class="journal-guide">觀察身體狀況引發深度思考。身體往往比腦袋更早知道你累了、緊了、或被碰到了。</p>
-            <div class="journal-split">
-              <div class="journal-col">
-                <p class="journal-label">身體狀態 (可多選)</p>
-                <div class="body-tags" id="bodyTags">
-                  <button class="tag-btn" type="button" data-body-tag="精力充沛">精力充沛</button>
-                  <button class="tag-btn" type="button" data-body-tag="有點疲憊">有點疲憊</button>
-                  <button class="tag-btn" type="button" data-body-tag="肩膀緊繃">肩膀緊繃</button>
-                  <button class="tag-btn" type="button" data-body-tag="腸胃不適">腸胃不適</button>
-                  <button class="tag-btn" type="button" data-body-tag="頭痛">頭痛</button>
-                  <button class="tag-btn" type="button" data-body-tag="心悸緊張">心悸緊張</button>
-                  <button class="tag-btn" type="button" data-body-tag="睡眠不足">睡眠不足</button>
-                  <button class="tag-btn" type="button" data-body-tag="其他">… 其他</button>
+            <p class="journal-guide">用三個具體檢核，把心情、身體與睡眠連起來看。勾選「有」的狀況後，再寫下原因；右側會給你可實踐的照顧建議。</p>
+            <div class="journal-split journal-split--body">
+              <div class="journal-col body-check">
+                <div class="body-check-group" data-body-group="mood">
+                  <p class="journal-label">① 今日的心情</p>
+                  <div class="body-flags">
+                    <button class="tag-btn body-flag-btn" type="button" data-body-group="mood" data-body-flag="焦慮">是否有出現焦慮</button>
+                    <button class="tag-btn body-flag-btn" type="button" data-body-group="mood" data-body-flag="脾氣暴躁">是否有脾氣暴躁</button>
+                    <button class="tag-btn body-flag-btn" type="button" data-body-group="mood" data-body-flag="不耐煩">是否有不耐煩</button>
+                    <button class="tag-btn body-flag-btn body-flag-btn--none" type="button" data-body-group="mood" data-body-none="1">沒有（一切都很好）</button>
+                  </div>
+                  <label class="body-reason" data-body-reason="mood" hidden>
+                    <span class="journal-label">原因是什麼？</span>
+                    <textarea class="textarea" id="bodyMoodReason" rows="3" placeholder="是什麼人、事、念頭把這份心情勾出來？"></textarea>
+                  </label>
+                </div>
+                <div class="body-check-group" data-body-group="body">
+                  <p class="journal-label">② 今日的身體狀況</p>
+                  <div class="body-flags">
+                    <button class="tag-btn body-flag-btn" type="button" data-body-group="body" data-body-flag="腸胃不適">是否腸胃不適</button>
+                    <button class="tag-btn body-flag-btn" type="button" data-body-group="body" data-body-flag="頭痛">是否有頭痛</button>
+                    <button class="tag-btn body-flag-btn" type="button" data-body-group="body" data-body-flag="全身痠痛">是否有全身痠痛</button>
+                    <button class="tag-btn body-flag-btn body-flag-btn--none" type="button" data-body-group="body" data-body-none="1">沒有（一切都很好）</button>
+                  </div>
+                  <label class="body-reason" data-body-reason="body" hidden>
+                    <span class="journal-label">原因是什麼？</span>
+                    <textarea class="textarea" id="bodyBodyReason" rows="3" placeholder="從什麼時候開始、吃了什麼、還是緊了很久？"></textarea>
+                  </label>
+                </div>
+                <div class="body-check-group" data-body-group="sleep">
+                  <p class="journal-label">③ 昨日的睡眠時間 / 品質</p>
+                  <div class="body-flags">
+                    <button class="tag-btn body-flag-btn" type="button" data-body-group="sleep" data-body-flag="10:00以前入睡">是否有 10:00 以前入睡</button>
+                    <button class="tag-btn body-flag-btn" type="button" data-body-group="sleep" data-body-flag="睡不著">是否睡不著</button>
+                  </div>
+                  <label class="body-reason" data-body-reason="sleep" hidden>
+                    <span class="journal-label">針對狀況填寫或說明原因</span>
+                    <textarea class="textarea" id="bodySleepReason" rows="3" placeholder="幾點躺下、中間有沒有醒、腦子還在轉什麼？"></textarea>
+                  </label>
                 </div>
               </div>
-              <label class="journal-col">
-                <span class="journal-label">我的身體在提醒我...</span>
-                <textarea class="textarea" id="bodyNote" rows="5" placeholder="它想讓我停下來、補水、還是好好睡一覺？"></textarea>
-              </label>
+              <aside class="journal-col body-coach" id="bodyCoachCard">
+                <header class="body-coach__head">
+                  <p class="body-coach__kicker">AI 智慧分析</p>
+                  <h3 class="body-coach__title">身心串聯建議</h3>
+                  <p class="body-coach__lead">勾完左側狀態後，會把心情、身體與睡眠連起來看，並給你 3 個今晚做得到的照顧動作。</p>
+                </header>
+                <button class="ai-check-btn" id="btnBodyCoach" type="button">生成身心建議</button>
+                <div class="check-loading" id="bodyCoachLoading" hidden>
+                  <p class="check-loading__label">正在串聯今天的身心訊號…</p>
+                  <div class="ai-thinking__bar"><i></i></div>
+                </div>
+                <div class="body-coach__body" id="bodyCoachBody">
+                  <p class="insight-card__empty">先勾選心情、身體與睡眠，再點按鈕或等它自動生成。</p>
+                </div>
+              </aside>
             </div>
           </section>
 
@@ -598,6 +635,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=87"></script>
+    <script src="app.js?v=88"></script>
   </body>
 </html>

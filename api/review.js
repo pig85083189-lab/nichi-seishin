@@ -223,13 +223,11 @@ const INSIGHT_SYSTEM = `你是「日精進」的高階心靈教練：溫柔，�
 
 function insightUserPrompt(body) {
   const ctx = body.context && typeof body.context === "object" ? body.context : {};
-  const bodyTags = Array.isArray(ctx.bodyTags) ? ctx.bodyTags.join("、") : "";
   return `請為這個人生成今日核心結論。
 
 今日事件：${ctx.event || body.text || "（未寫）"}
 心情：${ctx.mood || "未選"}
-身體狀態：${bodyTags || "未選"}
-身體在提醒我：${ctx.bodyNote || "未寫"}`;
+${formatBodyCheckPrompt(ctx)}`;
 }
 
 function normalizeInsightResult(raw) {
@@ -239,6 +237,61 @@ function normalizeInsightResult(raw) {
     conclusion: String(data.conclusion || data.summary || data.core || "").trim(),
     logic: String(data.logic || data.analysis || "").trim(),
     bodyLink: String(data.bodyLink || data.body || data.link || "").trim(),
+  };
+}
+
+function formatBodyCheckPrompt(ctx) {
+  const check = ctx && ctx.bodyCheck && typeof ctx.bodyCheck === "object" ? ctx.bodyCheck : null;
+  if (!check) {
+    const tags = Array.isArray(ctx.bodyTags) ? ctx.bodyTags.join("、") : "";
+    return `身體狀態：${tags || "未選"}
+身體在提醒我：${ctx.bodyNote || "未寫"}`;
+  }
+  const groupLine = (label, group) => {
+    const data = group && typeof group === "object" ? group : {};
+    const flags = Array.isArray(data.flags) ? data.flags.filter(Boolean).join("、") : "";
+    if (data.none) return `${label}：沒有（一切都很好）${data.reason ? `；原因：${data.reason}` : ""}`;
+    if (flags) return `${label}：${flags}${data.reason ? `；原因：${data.reason}` : ""}`;
+    return `${label}：未選${data.reason ? `；說明：${data.reason}` : ""}`;
+  };
+  return `${groupLine("今日心情檢核", check.mood)}
+${groupLine("今日身體檢核", check.body)}
+${groupLine("昨日睡眠檢核", check.sleep)}`;
+}
+
+const BODY_COACH_SYSTEM = `你是「日精進」的專業身心健康與教練顧問。使用者剛勾選今天的心情、身體與睡眠狀況，並可能寫下原因。
+
+請把這三件事做邏輯串聯分析：例如焦慮如何牽動腸胃或頭痛、睡不著如何讓脾氣更薄、提早入睡又如何保護身體。然後給 3 個具體、今晚就做得到的照顧建議。
+
+規則：
+- 只輸出 JSON
+- 口吻溫暖、清楚、可執行。禁止雞湯、禁止說教、禁止診斷疾病或開藥
+- 建議必須是實際動作，例如調整呼吸、補充水分、伸展、提早放鬆、放下手機、溫水洗手臂
+- suggestions 必須剛好 3 條，每條 18-42 字
+- 繁體中文
+{
+  "analysis": "2到4句。把心情、身體、睡眠串成一條因果線。",
+  "suggestions": ["建議1", "建議2", "建議3"]
+}`;
+
+function bodyCoachUserPrompt(body) {
+  const ctx = body.context && typeof body.context === "object" ? body.context : {};
+  return `請針對這個人今天的身心狀態做串聯分析，並給 3 個可實踐建議。
+
+今日事件：${ctx.event || body.text || "（未寫）"}
+心情標籤：${ctx.mood || "未選"}
+${formatBodyCheckPrompt(ctx)}`;
+}
+
+function normalizeBodyCoachResult(raw) {
+  const data = raw && typeof raw === "object" ? raw : {};
+  const suggestions = (Array.isArray(data.suggestions) ? data.suggestions : Array.isArray(data.tips) ? data.tips : [])
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+    .slice(0, 3);
+  return {
+    analysis: String(data.analysis || data.summary || data.logic || "").trim(),
+    suggestions,
   };
 }
 
@@ -581,7 +634,9 @@ module.exports = async function handler(req, res) {
                 ? "prompts"
                 : body.mode === "manifest"
                   ? "manifest"
-                  : "organize";
+                  : body.mode === "bodycoach"
+                    ? "bodycoach"
+                    : "organize";
     const text = String(body.text || "").trim();
     if (mode === "checklist") {
       const answers = Array.isArray(body.answers) ? body.answers.map((item) => String(item || "").trim()) : [];
@@ -618,6 +673,18 @@ module.exports = async function handler(req, res) {
       const vision = String(body.vision || text || "").trim();
       if (vision.length < 4) {
         res.status(400).json({ ok: false, error: "請先寫下明天想顯化的事情" });
+        return;
+      }
+    } else if (mode === "bodycoach") {
+      const ctx = body.context && typeof body.context === "object" ? body.context : {};
+      const check = ctx.bodyCheck && typeof ctx.bodyCheck === "object" ? ctx.bodyCheck : {};
+      const moodOk = Boolean(check.mood && (check.mood.none || (Array.isArray(check.mood.flags) && check.mood.flags.length)));
+      const bodyOk = Boolean(check.body && (check.body.none || (Array.isArray(check.body.flags) && check.body.flags.length)));
+      const sleepOk = Boolean(
+        check.sleep && ((Array.isArray(check.sleep.flags) && check.sleep.flags.length) || String(check.sleep.reason || "").trim())
+      );
+      if (!moodOk || !bodyOk || !sleepOk) {
+        res.status(400).json({ ok: false, error: "請先勾選今日心情、身體狀況，以及昨日睡眠" });
         return;
       }
     } else if (!text && mode === "organize" && !Array.isArray(body.messages)) {
@@ -657,6 +724,11 @@ module.exports = async function handler(req, res) {
       messages = [
         { role: "system", content: CHECKLIST_MANIFEST_SYSTEM },
         { role: "user", content: manifestUserPrompt(body) },
+      ];
+    } else if (mode === "bodycoach") {
+      messages = [
+        { role: "system", content: BODY_COACH_SYSTEM },
+        { role: "user", content: bodyCoachUserPrompt(body) },
       ];
     } else if (mode === "think") {
       const round = Number(body.round) || 1;
@@ -725,6 +797,15 @@ module.exports = async function handler(req, res) {
         return;
       }
       res.status(200).json({ ok: true, source: "openai", data: { items: items.slice(0, 5), kind: "manifest" } });
+      return;
+    }
+    if (mode === "bodycoach") {
+      const coach = normalizeBodyCoachResult(data);
+      if (!coach.analysis || coach.suggestions.length < 3) {
+        res.status(502).json({ ok: false, error: "AI 身心建議格式不完整，請再試一次" });
+        return;
+      }
+      res.status(200).json({ ok: true, source: "openai", data: coach });
       return;
     }
     res.status(200).json({ ok: true, source: "openai", data });

@@ -95,6 +95,7 @@ const state = {
     manifestAi: false,
     manifestAiSig: "",
     insightSig: "",
+    bodyCoachSig: "",
     promptsSig: "",
     promptsAi: false,
   },
@@ -103,6 +104,9 @@ const state = {
   insightBusy: false,
   insightToken: 0,
   journalInsight: null,
+  bodyCoachBusy: false,
+  bodyCoachToken: 0,
+  journalBodyCoach: null,
   promptsBusy: false,
   promptsToken: 0,
   awarenessPrompts: [],
@@ -2449,7 +2453,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "03 身體覺察",
-        description: "勾選身體狀態，也可寫它在提醒你什麼。身體訊號會一起進到 AI 深度洞察。",
+        description: "用心情、身體、睡眠三個檢核看今天的狀態。勾選異常後寫下原因，右側會生成 3 個可實踐的照顧建議。",
         side: "bottom",
       },
     },
@@ -2669,6 +2673,8 @@ function emptyJournal() {
     mood: "",
     bodyTags: [],
     bodyNote: "",
+    bodyCheck: emptyBodyCheck(),
+    bodyCoach: emptyBodyCoach(),
     awareness: ["", "", ""],
     awarenessChecks: [],
     awarenessCheckItems: [],
@@ -2705,6 +2711,170 @@ function emptyDeep() {
 
 function emptyInsight() {
   return { title: "", conclusion: "", logic: "", bodyLink: "", sig: "" };
+}
+
+function emptyBodyCheck() {
+  return {
+    mood: { flags: [], none: false, reason: "" },
+    body: { flags: [], none: false, reason: "" },
+    sleep: { flags: [], none: false, reason: "" },
+  };
+}
+
+function emptyBodyCoach() {
+  return { analysis: "", suggestions: [], sig: "" };
+}
+
+function normalizeBodyGroup(group) {
+  const data = group && typeof group === "object" ? group : {};
+  return {
+    flags: Array.isArray(data.flags) ? data.flags.map((item) => String(item || "").trim()).filter(Boolean) : [],
+    none: Boolean(data.none),
+    reason: String(data.reason || "").trim(),
+  };
+}
+
+function migrateBodyCheckFromTags(tags, note) {
+  const next = emptyBodyCheck();
+  const list = Array.isArray(tags) ? tags.map((item) => String(item || "").trim()) : [];
+  const noteText = String(note || "").trim();
+  list.forEach((tag) => {
+    if (tag === "焦慮" || tag === "心悸緊張") next.mood.flags.push(tag === "心悸緊張" ? "焦慮" : tag);
+    else if (tag === "脾氣暴躁" || tag === "不耐煩") next.mood.flags.push(tag);
+    else if (tag === "腸胃不適" || tag === "頭痛" || tag === "全身痠痛") next.body.flags.push(tag);
+    else if (tag === "睡眠不足" || tag === "睡不著") next.sleep.flags.push("睡不著");
+    else if (tag === "10:00以前入睡") next.sleep.flags.push(tag);
+    else if (tag === "心情平穩") next.mood.none = true;
+    else if (tag === "身體無不適" || tag === "精力充沛") next.body.none = true;
+  });
+  next.mood.flags = [...new Set(next.mood.flags)];
+  next.body.flags = [...new Set(next.body.flags)];
+  next.sleep.flags = [...new Set(next.sleep.flags)];
+  if (!next.mood.flags.length && !next.mood.none && /焦慮|暴躁|不耐/.test(noteText)) next.mood.reason = noteText;
+  if (!next.body.reason && noteText) next.body.reason = noteText;
+  if (next.mood.flags.length) next.mood.none = false;
+  if (next.body.flags.length) next.body.none = false;
+  return next;
+}
+
+function normalizeBodyCheck(raw, tags, note) {
+  if (raw && typeof raw === "object" && (raw.mood || raw.body || raw.sleep)) {
+    const next = {
+      mood: normalizeBodyGroup(raw.mood),
+      body: normalizeBodyGroup(raw.body),
+      sleep: normalizeBodyGroup(raw.sleep),
+    };
+    if (next.mood.flags.length) next.mood.none = false;
+    if (next.body.flags.length) next.body.none = false;
+    return next;
+  }
+  return migrateBodyCheckFromTags(tags, note);
+}
+
+function deriveBodyTags(check) {
+  const data = normalizeBodyCheck(check);
+  const tags = [];
+  if (data.mood.none) tags.push("心情平穩");
+  else tags.push(...data.mood.flags);
+  if (data.body.none) tags.push("身體無不適");
+  else tags.push(...data.body.flags);
+  tags.push(...data.sleep.flags);
+  return tags;
+}
+
+function deriveBodyNote(check) {
+  const data = normalizeBodyCheck(check);
+  const parts = [];
+  if (data.mood.reason) parts.push(`心情原因：${data.mood.reason}`);
+  if (data.body.reason) parts.push(`身體原因：${data.body.reason}`);
+  if (data.sleep.reason) parts.push(`睡眠說明：${data.sleep.reason}`);
+  return parts.join("\n");
+}
+
+function collectBodyCheck() {
+  const readGroup = (name, reasonId) => {
+    const root = document.querySelector(`[data-body-group="${name}"]`);
+    const noneBtn = root?.querySelector("[data-body-none]");
+    const flags = [...(root?.querySelectorAll(".body-flag-btn.is-on:not([data-body-none])") || [])]
+      .map((btn) => btn.dataset.bodyFlag)
+      .filter(Boolean);
+    return {
+      flags,
+      none: Boolean(noneBtn && noneBtn.classList.contains("is-on") && !flags.length),
+      reason: journalFieldValue(reasonId),
+    };
+  };
+  return {
+    mood: readGroup("mood", "bodyMoodReason"),
+    body: readGroup("body", "bodyBodyReason"),
+    sleep: readGroup("sleep", "bodySleepReason"),
+  };
+}
+
+function syncBodyReasonVisibility(check) {
+  const data = check || collectBodyCheck();
+  ["mood", "body", "sleep"].forEach((name) => {
+    const reason = document.querySelector(`[data-body-reason="${name}"]`);
+    if (!reason) return;
+    const group = data[name] || {};
+    const show = name === "sleep" ? Boolean((group.flags || []).length) : Boolean((group.flags || []).length);
+    reason.hidden = !show;
+  });
+}
+
+function fillBodyCheck(check) {
+  const data = normalizeBodyCheck(check);
+  ["mood", "body", "sleep"].forEach((name) => {
+    const root = document.querySelector(`[data-body-group="${name}"]`);
+    if (!root) return;
+    const group = data[name];
+    const flagSet = new Set(group.flags || []);
+    root.querySelectorAll(".body-flag-btn").forEach((btn) => {
+      if (btn.hasAttribute("data-body-none")) btn.classList.toggle("is-on", Boolean(group.none) && !flagSet.size);
+      else btn.classList.toggle("is-on", flagSet.has(btn.dataset.bodyFlag));
+    });
+  });
+  const moodReason = document.getElementById("bodyMoodReason");
+  const bodyReason = document.getElementById("bodyBodyReason");
+  const sleepReason = document.getElementById("bodySleepReason");
+  if (moodReason) moodReason.value = data.mood.reason || "";
+  if (bodyReason) bodyReason.value = data.body.reason || "";
+  if (sleepReason) sleepReason.value = data.sleep.reason || "";
+  syncBodyReasonVisibility(data);
+}
+
+function bodyGroupChosen(group) {
+  if (!group) return false;
+  return Boolean(group.none || (group.flags && group.flags.length));
+}
+
+function bodyCoachReady(journal) {
+  const check = (journal && journal.bodyCheck) || collectBodyCheck();
+  return bodyGroupChosen(check.mood) && bodyGroupChosen(check.body) && Boolean((check.sleep.flags || []).length || String(check.sleep.reason || "").trim());
+}
+
+function bodyCoachSignature(journal) {
+  const data = journal || collectJournal();
+  const check = normalizeBodyCheck(data.bodyCheck);
+  return JSON.stringify({
+    mood: check.mood,
+    body: check.body,
+    sleep: check.sleep,
+    event: String(data.event || "").trim(),
+  });
+}
+
+function normalizeBodyCoach(raw) {
+  const data = raw && typeof raw === "object" ? raw : {};
+  const suggestions = (Array.isArray(data.suggestions) ? data.suggestions : [])
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+    .slice(0, 3);
+  return {
+    analysis: String(data.analysis || data.summary || "").trim(),
+    suggestions,
+    sig: String(data.sig || "").trim(),
+  };
 }
 
 function normalizeInsight(insight) {
@@ -2874,6 +3044,7 @@ function scheduleJournalChecklists() {
     maybeAutoGenerateChecklists(data);
     maybeAutoGenerateManifest(data);
     maybeAutoGenerateInsight(data);
+    maybeAutoGenerateBodyCoach(data);
     maybeAutoGeneratePrompts(data);
   }, 900);
 }
@@ -3166,6 +3337,7 @@ async function generateJournalInsight(options = {}) {
         mood: journal.mood,
         bodyTags: journal.bodyTags,
         bodyNote: journal.bodyNote,
+        bodyCheck: journal.bodyCheck,
       },
     });
     if (state.insightToken !== token) return;
@@ -3191,6 +3363,122 @@ function maybeAutoGenerateInsight(journal) {
   if (state.journalHydrating) return;
   if (insightReady(journal) && state.journalMeta.insightSig !== insightSignature(journal)) {
     generateJournalInsight({ auto: true });
+  }
+}
+
+function renderBodyCoachCard(coach) {
+  const root = document.getElementById("bodyCoachBody");
+  if (!root) return;
+  const data = normalizeBodyCoach(coach);
+  if (!data.analysis && !data.suggestions.length) {
+    root.innerHTML = `<p class="insight-card__empty">先勾選心情、身體與睡眠，再點按鈕或等它自動生成。</p>`;
+    return;
+  }
+  const tips = data.suggestions
+    .map((item, index) => `<li data-step="${index + 1}">${escapeHtml(item)}</li>`)
+    .join("");
+  root.innerHTML = `
+    ${data.analysis ? `<p class="body-coach__analysis">${escapeHtml(data.analysis)}</p>` : ""}
+    ${tips ? `<ol class="body-coach__list">${tips}</ol>` : ""}
+  `;
+}
+
+function setBodyCoachLoading(loading) {
+  const btn = document.getElementById("btnBodyCoach");
+  const loader = document.getElementById("bodyCoachLoading");
+  const body = document.getElementById("bodyCoachBody");
+  state.bodyCoachBusy = loading;
+  if (btn) {
+    btn.disabled = loading;
+    btn.textContent = loading ? "分析中…" : "生成身心建議";
+  }
+  if (loader) loader.hidden = !loading;
+  if (body) body.classList.toggle("is-loading", loading);
+}
+
+function localBodyCoachFallback(journal) {
+  const check = normalizeBodyCheck(journal.bodyCheck, journal.bodyTags, journal.bodyNote);
+  const moodBits = check.mood.none ? "心情大致平穩" : `心情出現「${(check.mood.flags || []).join("、") || "波動"}」`;
+  const bodyBits = check.body.none ? "身體沒有明顯不適" : `身體有「${(check.body.flags || []).join("、") || "訊號"}」`;
+  const sleepBits = (check.sleep.flags || []).join("、") || "睡眠狀況未明";
+  const suggestions = [];
+  if (check.mood.flags.includes("焦慮") || check.sleep.flags.includes("睡不著")) {
+    suggestions.push("今晚先做 8 次「吸 4 秒、吐 6 秒」的腹式呼吸，讓交感神經慢慢降下來。");
+  } else {
+    suggestions.push("站起來把肩膀繞三圈、再慢慢轉頭，給身體一個明確的換檔訊號。");
+  }
+  if (check.body.flags.includes("腸胃不適") || check.body.flags.includes("頭痛")) {
+    suggestions.push("這一小時每 20 分鐘喝一小口水，先不要用咖啡或空腹撐過不適。");
+  } else {
+    suggestions.push("現在補一杯溫水，接下來兩小時把飲料換成白開水。");
+  }
+  if (check.body.flags.includes("全身痠痛") || check.sleep.flags.includes("睡不著")) {
+    suggestions.push("睡前 10 分鐘先把髖關節與小腿輕輕轉開，讓身體先進入休息，再關燈。");
+  } else if (check.sleep.flags.includes("10:00以前入睡")) {
+    suggestions.push("維持 10 點前躺下的節奏，睡前把明天第一件小事寫在紙上，就不要再滑手機。");
+  } else {
+    suggestions.push("把睡前 20 分鐘留給伸展或熱水洗手臂，讓大腦有一段明確的下班儀式。");
+  }
+  return {
+    analysis: `今天是${moodBits}，同時${bodyBits}；睡眠這邊是「${sleepBits}」。身心往往同一條線：情緒一緊，腸胃、頭與入睡就會跟著被拉住。先照顧身體節奏，心情才有地方落地。`,
+    suggestions: suggestions.slice(0, 3),
+    sig: bodyCoachSignature(journal),
+  };
+}
+
+async function generateBodyCoach(options = {}) {
+  if (state.bodyCoachBusy) return;
+  const journal = collectJournal();
+  if (!bodyCoachReady(journal)) {
+    if (!options.auto) showToast("請先勾選今日心情、身體狀況，以及昨日睡眠。");
+    return;
+  }
+  const sig = bodyCoachSignature(journal);
+  if (options.auto && state.journalMeta.bodyCoachSig === sig) return;
+
+  const token = (state.bodyCoachToken || 0) + 1;
+  state.bodyCoachToken = token;
+  setBodyCoachLoading(true);
+
+  try {
+    if (!state.user) throw new Error("請先登入，才能使用雲端 AI 分析。");
+    const remote = await postReview({
+      mode: "bodycoach",
+      date: currentIso(),
+      text: deriveBodyNote(journal.bodyCheck) || journal.event || "身體覺察",
+      context: {
+        event: journal.event,
+        mood: journal.mood,
+        bodyCheck: journal.bodyCheck,
+        bodyTags: journal.bodyTags,
+        bodyNote: journal.bodyNote,
+      },
+    });
+    if (state.bodyCoachToken !== token) return;
+    const coach = { ...normalizeBodyCoach(remote), sig };
+    if (!coach.analysis || coach.suggestions.length < 3) throw new Error("雲端回傳格式不完整");
+    state.journalBodyCoach = coach;
+    state.journalMeta.bodyCoachSig = sig;
+    renderBodyCoachCard(coach);
+    persistJournalQuietly();
+    showToast("身心建議已生成。");
+  } catch (error) {
+    if (state.bodyCoachToken !== token) return;
+    const fallback = localBodyCoachFallback(journal);
+    state.journalBodyCoach = fallback;
+    state.journalMeta.bodyCoachSig = sig;
+    renderBodyCoachCard(fallback);
+    persistJournalQuietly();
+    showToast(`雲端分析失敗：${formatApiError(error)}，先留下本地建議。`);
+  } finally {
+    if (state.bodyCoachToken === token) setBodyCoachLoading(false);
+  }
+}
+
+function maybeAutoGenerateBodyCoach(journal) {
+  if (state.journalHydrating) return;
+  if (bodyCoachReady(journal) && state.journalMeta.bodyCoachSig !== bodyCoachSignature(journal)) {
+    generateBodyCoach({ auto: true });
   }
 }
 
@@ -3822,12 +4110,15 @@ async function generateDeepFollow(index) {
 }
 
 function collectJournal() {
+  const bodyCheck = collectBodyCheck();
   const journal = {
     thanks: ["thanks1", "thanks2", "thanks3"].map(journalFieldValue),
     event: journalFieldValue("eventText"),
     mood: document.querySelector("#moodRow .mood-btn.is-on")?.dataset.mood || "",
-    bodyTags: [...document.querySelectorAll("#bodyTags .tag-btn.is-on")].map((btn) => btn.dataset.bodyTag),
-    bodyNote: journalFieldValue("bodyNote"),
+    bodyCheck,
+    bodyTags: deriveBodyTags(bodyCheck),
+    bodyNote: deriveBodyNote(bodyCheck),
+    bodyCoach: state.journalBodyCoach || emptyBodyCoach(),
     awareness: ["aware1", "aware2", "aware3"].map(journalFieldValue),
     awarenessChecks: checkedValues("awareChecks"),
     awarenessCheckItems: checklistItems("awareChecks"),
@@ -3863,8 +4154,21 @@ function composeJournalRawText(journal) {
   }
   if (String(journal.event || "").trim()) lines.push(`今日事件：${journal.event.trim()}`);
   if (journal.mood) lines.push(`心情：${journal.mood}`);
-  if ((journal.bodyTags || []).length) lines.push(`身體狀態：${journal.bodyTags.join("、")}`);
-  if (String(journal.bodyNote || "").trim()) lines.push(`身體提醒：${journal.bodyNote.trim()}`);
+  const check = normalizeBodyCheck(journal.bodyCheck, journal.bodyTags, journal.bodyNote);
+  if (check.mood.none) lines.push("今日心情檢核：沒有（一切都很好）");
+  else if (check.mood.flags.length) lines.push(`今日心情檢核：${check.mood.flags.join("、")}`);
+  if (check.mood.reason) lines.push(`心情原因：${check.mood.reason}`);
+  if (check.body.none) lines.push("今日身體檢核：沒有（一切都很好）");
+  else if (check.body.flags.length) lines.push(`今日身體檢核：${check.body.flags.join("、")}`);
+  if (check.body.reason) lines.push(`身體原因：${check.body.reason}`);
+  if (check.sleep.flags.length) lines.push(`昨日睡眠檢核：${check.sleep.flags.join("、")}`);
+  if (check.sleep.reason) lines.push(`睡眠說明：${check.sleep.reason}`);
+  const bodyCoach = normalizeBodyCoach(journal.bodyCoach);
+  if (bodyCoach.analysis) {
+    lines.push("身心智慧分析");
+    lines.push(bodyCoach.analysis);
+    bodyCoach.suggestions.forEach((item, index) => lines.push(`建議 ${index + 1}：${item}`));
+  }
   const insight = normalizeInsight(journal.insight);
   if (insight.conclusion) {
     lines.push("AI 深度教練洞察");
@@ -3935,12 +4239,14 @@ function fillJournal(journal) {
   state.checklistToken.execution += 1;
   state.checklistToken.manifest += 1;
   state.insightToken += 1;
+  state.bodyCoachToken += 1;
   state.promptsToken += 1;
   state.deepFollowToken = state.deepFollowToken.map((n) => n + 1);
   setChecklistLoading("awareness", false);
   setChecklistLoading("execution", false);
   setChecklistLoading("manifest", false);
   setInsightLoading(false);
+  setBodyCoachLoading(false);
   setPromptsLoading(false);
   [1, 2, 3, 4].forEach((index) => setDeepFollowLoading(index, false));
   state.journalMeta = {
@@ -3951,10 +4257,12 @@ function fillJournal(journal) {
     manifestAi: Boolean(data.manifestAi),
     manifestAiSig: data.manifestAiSig || "",
     insightSig: data.insight?.sig || "",
+    bodyCoachSig: data.bodyCoach?.sig || "",
     promptsSig: data.promptsSig || "",
     promptsAi: Boolean(data.promptsAi),
   };
   state.journalInsight = normalizeInsight(data.insight);
+  state.journalBodyCoach = normalizeBodyCoach(data.bodyCoach);
   state.awarenessPrompts = normalizeAwarenessPrompts(data.awarenessPrompts);
   state.executionPrompts = normalizeExecutionPrompts(data.executionPrompts);
   state.deepPrompts = normalizeDeepPrompts(data.deepPrompts);
@@ -3971,9 +4279,7 @@ function fillJournal(journal) {
   const eventText = document.getElementById("eventText");
   if (eventText) eventText.value = data.event || "";
   setActiveButtons("moodRow", ".mood-btn", data.mood ? [data.mood] : []);
-  setActiveButtons("bodyTags", ".tag-btn", data.bodyTags);
-  const bodyNote = document.getElementById("bodyNote");
-  if (bodyNote) bodyNote.value = data.bodyNote || "";
+  fillBodyCheck(normalizeBodyCheck(data.bodyCheck, data.bodyTags, data.bodyNote));
   const manifestVision = document.getElementById("manifestVision");
   if (manifestVision) manifestVision.value = data.manifest || "";
   renderAwarenessQuestions(state.awarenessPrompts, { answers: data.awareness });
@@ -3981,6 +4287,7 @@ function fillJournal(journal) {
   renderDeepThemes(state.deepPrompts, { deep: normalizeDeep(data.deep) });
   refreshJournalChecklists(data, { useSaved: true });
   renderInsightCard(state.journalInsight);
+  renderBodyCoachCard(state.journalBodyCoach);
   state.journalHydrating = false;
 }
 
@@ -5770,6 +6077,7 @@ function bindEvents() {
   document.getElementById("btnExecAi")?.addEventListener("click", () => generateJournalChecklist("execution"));
   document.getElementById("btnManifestAi")?.addEventListener("click", () => generateJournalChecklist("manifest"));
   document.getElementById("btnInsightAi")?.addEventListener("click", () => generateJournalInsight());
+  document.getElementById("btnBodyCoach")?.addEventListener("click", () => generateBodyCoach());
   document.getElementById("btnRefreshPrompts")?.addEventListener("click", () => generateJournalPrompts({ force: true, scope: "awareness" }));
   document.getElementById("btnRefreshExecPrompts")?.addEventListener("click", () => generateJournalPrompts({ force: true, scope: "execution" }));
   document.getElementById("section-deep")?.addEventListener("click", (event) => {
@@ -5789,19 +6097,36 @@ function bindEvents() {
     maybeAutoGeneratePrompts(journal);
   });
 
-  document.getElementById("bodyTags")?.addEventListener("click", (event) => {
-    const btn = event.target.closest(".tag-btn");
+  document.getElementById("section-body")?.addEventListener("click", (event) => {
+    const btn = event.target.closest(".body-flag-btn");
     if (!btn) return;
-    btn.classList.toggle("is-on");
+    const root = btn.closest("[data-body-group]");
+    if (!root) return;
+    const isNone = btn.hasAttribute("data-body-none");
+    if (isNone) {
+      const on = !btn.classList.contains("is-on");
+      root.querySelectorAll(".body-flag-btn").forEach((item) => item.classList.toggle("is-on", on && item === btn));
+    } else {
+      btn.classList.toggle("is-on");
+      if (btn.classList.contains("is-on")) {
+        root.querySelector("[data-body-none]")?.classList.remove("is-on");
+      }
+    }
+    syncBodyReasonVisibility();
+    persistJournalQuietly();
     refreshJournalChecklists();
     const journal = collectJournal();
     maybeAutoGenerateInsight(journal);
+    maybeAutoGenerateBodyCoach(journal);
     maybeAutoGeneratePrompts(journal);
   });
 
   document.getElementById("page-today")?.addEventListener("input", (event) => {
     const id = event.target && event.target.id;
-    if (/^(aware|exec)\d$|^eventText$|^bodyNote$|^manifestVision$/.test(id || "")) scheduleJournalChecklists();
+    if (/^(aware|exec)\d$|^eventText$|^bodyNote$|^bodyMoodReason$|^bodyBodyReason$|^bodySleepReason$|^manifestVision$/.test(id || "")) {
+      if (/^body(Mood|Body|Sleep)Reason$/.test(id || "")) persistJournalQuietly();
+      scheduleJournalChecklists();
+    }
   });
 
   document.getElementById("page-today")?.addEventListener("change", (event) => {
