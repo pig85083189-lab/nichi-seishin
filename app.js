@@ -16,6 +16,18 @@ const STORAGE_KEYS = {
 
 const REVIEW_API = "/api/review";
 const NEWEBPAY_EPG_URL = "https://core.newebpay.com/EPG/HTC109030010100/QLBIYc";
+const NEWEBPAY_PLANS = {
+  monthly: {
+    id: "monthly",
+    amount: 599,
+    url: NEWEBPAY_EPG_URL,
+  },
+  quarter: {
+    id: "quarter",
+    amount: 1197,
+    url: NEWEBPAY_EPG_URL,
+  },
+};
 
 const PROMPT_CHIPS = [
   "今天最卡的一件事",
@@ -1406,13 +1418,13 @@ function renderAuth() {
   const entitled = Boolean(membership.entitled || membership.paid || membership.isPaid);
   const payBtn = entitled && (membership.paid || membership.isPaid || status === "active")
     ? `<button class="auth-pay is-paid" type="button" disabled><span>已解鎖無限暢用</span></button>`
-    : `<a class="auth-pay" id="btnNewebPay" href="${NEWEBPAY_EPG_URL}" data-newebpay><span>${status === "trialing" || status === "pending" ? "升級解鎖 NT$399" : "付款解鎖 NT$399"}</span></a>`;
+    : `<button class="auth-pay" id="btnNewebPay" type="button" data-open-pricing><span>${status === "trialing" || status === "pending" ? "選擇方案升級" : "選擇方案解鎖"}</span></button>`;
   const trialHint = membership.trialEndsAt && (status === "trialing" || entitled && !membership.paid && !membership.isPaid)
     ? `<p class="auth-hint">7 天免費試用至 ${escapeHtml(formatTrialDate(membership.trialEndsAt))}${membership.daysLeft != null ? `，還有 ${membership.daysLeft} 天` : ""}。</p>`
     : entitled && (status === "active" || membership.paid || membership.isPaid)
       ? `<p class="auth-hint">一次付清已完成，功能已全部解鎖。</p>`
       : status === "expired" || status === "cancelled" || status === "past_due" || (!entitled && status)
-        ? `<p class="auth-hint">7 天免費體驗已結束，付款 NT$399 後即可無限暢用。</p>`
+        ? `<p class="auth-hint">7 天免費體驗已結束，可選月繳 $599 或季繳 $1,197 解鎖暢用。</p>`
         : `<p class="auth-hint">登入後享有 7 天完整功能免費試用。</p>`;
   side.innerHTML = `
     <div class="auth-user">
@@ -1683,10 +1695,11 @@ function applyAccessLock() {
     else view.removeAttribute("inert");
   }
   bindSubscribeButton();
+  syncPricingModal();
 }
 
 function bindSubscribeButton() {
-  document.querySelectorAll("[data-newebpay]").forEach((btn) => {
+  document.querySelectorAll("[data-newebpay], [data-plan-cta]").forEach((btn) => {
     if (btn.dataset.bound === "1") return;
     btn.dataset.bound = "1";
     btn.addEventListener("click", onSubscribeClick);
@@ -1699,11 +1712,63 @@ function onSubscribeClick(event) {
     event.preventDefault();
     event.stopPropagation();
   }
-  startNewebPay();
+  const trigger = event && event.currentTarget ? event.currentTarget : event && event.target;
+  const plan = trigger && trigger.closest ? trigger.closest("[data-plan]") : null;
+  startNewebPay(plan && plan.dataset.plan);
 }
 
-function startNewebPay() {
-  window.location.assign(NEWEBPAY_EPG_URL);
+function startNewebPay(planId) {
+  if (!state.user) {
+    closePricingModal();
+    showToast("請先用 Google 登入，即可享有 7 天完整試用。");
+    signInWithGoogle();
+    return;
+  }
+  const plan = NEWEBPAY_PLANS[planId] || NEWEBPAY_PLANS.quarter;
+  window.location.assign(plan.url || NEWEBPAY_EPG_URL);
+}
+
+function openPricingModal() {
+  const modal = document.getElementById("pricingModal");
+  if (!modal) return;
+  syncPricingModal();
+  bindSubscribeButton();
+  if (typeof modal.showModal === "function") {
+    if (!modal.open) modal.showModal();
+  } else {
+    modal.setAttribute("open", "");
+  }
+}
+
+function closePricingModal() {
+  const modal = document.getElementById("pricingModal");
+  if (!modal) return;
+  if (typeof modal.close === "function" && modal.open) modal.close();
+  else modal.removeAttribute("open");
+}
+
+function syncPricingModal() {
+  const membership = state.membership || {};
+  const paid = Boolean(membership.paid || membership.isPaid || membership.status === "active");
+  const loggedIn = Boolean(state.user);
+  document.querySelectorAll("[data-plan-cta]").forEach((btn) => {
+    const plan = btn.dataset.plan;
+    if (paid) {
+      btn.disabled = true;
+      btn.textContent = "已解鎖暢用";
+      return;
+    }
+    btn.disabled = false;
+    if (!loggedIn) {
+      btn.textContent = plan === "quarter" ? "登入並立即升級" : "登入開始試用";
+      return;
+    }
+    if (isAccessLocked()) {
+      btn.textContent = "立即升級";
+      return;
+    }
+    btn.textContent = plan === "quarter" ? "立即升級" : "開始試用";
+  });
 }
 
 function rowsToReviewMap(rows) {
@@ -5632,10 +5697,11 @@ function bindEvents() {
       signOutUser();
       return;
     }
-    if (target.closest("#btnNewebPay") || target.closest(".auth-pay:not(:disabled)")) {
-      console.log("Subscribe button clicked");
+    if (target.closest("#btnNewebPay") || target.closest(".auth-pay:not(:disabled)") || target.closest("[data-open-pricing]")) {
+      console.log("Pricing modal opened");
       event.preventDefault();
-      startNewebPay();
+      openPricingModal();
+      return;
     }
   });
 
@@ -5658,6 +5724,17 @@ function bindEvents() {
   document.getElementById("topGuideBtn")?.addEventListener("click", (event) => {
     event.preventDefault();
     startOnboardingTour();
+  });
+  document.getElementById("topPlanBtn")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    openPricingModal();
+  });
+  document.getElementById("pricingClose")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    closePricingModal();
+  });
+  document.getElementById("pricingModal")?.addEventListener("click", (event) => {
+    if (event.target === event.currentTarget) closePricingModal();
   });
 
   const promptChips = document.getElementById("promptChips");

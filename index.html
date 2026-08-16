@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=72" />
+    <link rel="stylesheet" href="app.css?v=73" />
     <style>
       .splash {
         position: fixed;
@@ -91,6 +91,7 @@
       </div>
       <div class="topbar-right">
         <time class="date" id="headerDate"></time>
+        <button class="plan-chip" id="topPlanBtn" type="button">方案</button>
         <button class="guide-chip" id="topGuideBtn" type="button">使用說明</button>
         <button class="auth-chip" id="topAuthBtn" type="button">登入</button>
       </div>
@@ -505,6 +506,45 @@
       </div>
     </div>
 
+    <dialog class="modal pricing-modal" id="pricingModal" aria-labelledby="pricingTitle">
+      <div class="pricing-modal__card">
+        <button class="pricing-modal__close" id="pricingClose" type="button" aria-label="關閉方案視窗">×</button>
+        <header class="pricing-modal__head">
+          <p class="pricing-modal__kicker">日精進方案</p>
+          <h2 class="pricing-modal__title" id="pricingTitle">選擇適合你的節奏</h2>
+          <p class="pricing-modal__lead">Google 登入後享有 7 天完整功能免費試用。到期後可月繳或一次訂滿一季，隨時都能升級。</p>
+        </header>
+        <div class="pricing-grid">
+          <article class="pricing-card" data-plan-card="monthly">
+            <p class="pricing-card__name">標準版</p>
+            <h3 class="pricing-card__plan">月訂閱</h3>
+            <p class="pricing-card__price"><span>$599</span> <small>/ 月</small></p>
+            <p class="pricing-card__desc">不綁約，隨時可取消，享有 7 天免費完整體驗。</p>
+            <ul class="pricing-card__list">
+              <li>每日復盤無限暢用</li>
+              <li>AI 動態生成（覺察力、執行力、顯化力）</li>
+              <li>週月報與個人資料庫</li>
+            </ul>
+            <button class="pricing-card__cta" type="button" data-plan="monthly" data-plan-cta>開始試用</button>
+          </article>
+          <article class="pricing-card pricing-card--featured" data-plan-card="quarter">
+            <p class="pricing-card__badge">超值省本 · 最多人選</p>
+            <p class="pricing-card__name">進階超值版</p>
+            <h3 class="pricing-card__plan">季訂閱</h3>
+            <p class="pricing-card__price"><span>$1,197</span> <small>/ 季</small></p>
+            <p class="pricing-card__eq">相當於每月 $399，比月繳省 $600</p>
+            <p class="pricing-card__desc">一次訂閱三個月，深度扎根成長習慣。</p>
+            <ul class="pricing-card__list">
+              <li>標準版全部功能</li>
+              <li>優先享有新功能體驗權</li>
+              <li>週月報與個人資料庫無限暢用</li>
+            </ul>
+            <button class="pricing-card__cta pricing-card__cta--primary" type="button" data-plan="quarter" data-plan-cta>立即升級</button>
+          </article>
+        </div>
+      </div>
+    </dialog>
+
     <dialog class="modal" id="reminderModal">
       <form method="dialog" class="modal__card" id="reminderForm">
         <h3 class="modal__title">設定復盤提醒</h3>
@@ -536,14 +576,14 @@
     <div class="paywall" id="paywall" hidden>
       <div class="paywall__banner" role="status">
         <p>您的 7 天免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限</p>
-        <a class="paywall__btn" id="paywallBannerPay" href="https://core.newebpay.com/EPG/HTC109030010100/QLBIYc" data-newebpay>前往付款</a>
+        <button class="paywall__btn" id="paywallBannerPay" type="button" data-open-pricing>選擇方案</button>
       </div>
       <div class="paywall__veil">
         <div class="paywall__card" role="dialog" aria-labelledby="paywallTitle" aria-modal="true">
           <p class="paywall__kicker">免費體驗已結束</p>
           <h2 class="paywall__title" id="paywallTitle">升級即可無限暢用</h2>
           <p class="paywall__copy">您的 7 天免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限</p>
-          <a class="paywall__btn paywall__btn--primary" id="paywallCardPay" href="https://core.newebpay.com/EPG/HTC109030010100/QLBIYc" data-newebpay>前往付款解鎖</a>
+          <button class="paywall__btn paywall__btn--primary" id="paywallCardPay" type="button" data-open-pricing>選擇方案並解鎖</button>
         </div>
       </div>
     </div>
@@ -558,6 +598,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=85"></script>
+    <script src="app.js?v=86"></script>
   </body>
 </html>
