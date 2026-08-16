@@ -1834,7 +1834,7 @@ function setChecklistLoading(kind, loading) {
   state.checklistBusy[kind] = loading;
   if (btn) {
     btn.disabled = loading;
-    btn.textContent = loading ? "分析中…" : "✨ AI 分析並生成勾勾表";
+    btn.textContent = loading ? "分析中…" : "AI 分析並生成勾勾表";
   }
   if (loader) loader.hidden = !loading;
   if (list) list.classList.toggle("is-loading", loading);
@@ -1948,7 +1948,7 @@ function setInsightLoading(loading) {
   state.insightBusy = loading;
   if (btn) {
     btn.disabled = loading;
-    btn.textContent = loading ? "分析中…" : "✨ 生成深度洞察";
+    btn.textContent = loading ? "分析中…" : "生成深度洞察";
   }
   if (loader) loader.hidden = !loading;
   if (body) body.classList.toggle("is-loading", loading);
@@ -2068,7 +2068,7 @@ function setDeepFollowLoading(index, loading) {
   state.deepFollowBusy[index - 1] = loading;
   if (btn) {
     btn.disabled = loading;
-    btn.textContent = loading ? "分析中…" : "✨ 讓 AI 帶我再深入思考";
+    btn.textContent = loading ? "分析中…" : "讓 AI 帶我再深入思考";
   }
   if (loader) loader.hidden = !loading;
 }
