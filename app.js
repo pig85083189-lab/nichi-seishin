@@ -66,6 +66,8 @@ const state = {
   recognition: null,
   listening: false,
   speechTarget: "",
+  journalHydrating: false,
+  journalCheckTimer: 0,
   organizeSource: "",
   apiConfigured: null,
   user: null,
@@ -1599,10 +1601,38 @@ function emptyJournal() {
     bodyNote: "",
     awareness: ["", "", ""],
     awarenessChecks: [],
+    awarenessCheckItems: [],
     execution: ["", "", ""],
     executionChecks: [],
-    deep: ["", "", "", ""],
+    executionCheckItems: [],
+    deep: emptyDeep(),
   };
+}
+
+function emptyDeep() {
+  return [
+    { plain: "", deep: "" },
+    { plain: "", deep: "" },
+    { plain: "", deep: "" },
+    { plain: "", deep: "" },
+  ];
+}
+
+function normalizeDeep(deep) {
+  return emptyDeep().map((slot, index) => {
+    const item = Array.isArray(deep) ? deep[index] : null;
+    if (item && typeof item === "object") {
+      return {
+        plain: String(item.plain || ""),
+        deep: String(item.deep || item.note || ""),
+      };
+    }
+    return { plain: "", deep: String(item || "") };
+  });
+}
+
+function deepHasContent(deep) {
+  return normalizeDeep(deep).some((item) => String(item.plain || "").trim() || String(item.deep || "").trim());
 }
 
 function journalHasContent(journal) {
@@ -1614,14 +1644,115 @@ function journalHasContent(journal) {
     journal.bodyNote,
     ...(journal.awareness || []),
     ...(journal.execution || []),
-    ...(journal.deep || []),
   ];
   if (textBits.some((item) => String(item || "").trim())) return true;
+  if (deepHasContent(journal.deep)) return true;
   return Boolean((journal.bodyTags || []).length || (journal.awarenessChecks || []).length || (journal.executionChecks || []).length);
 }
 
 function checkedValues(rootId) {
   return [...document.querySelectorAll(`#${rootId} input[type="checkbox"]:checked`)].map((input) => input.value);
+}
+
+function checklistItems(rootId) {
+  return [...document.querySelectorAll(`#${rootId} input[type="checkbox"]`)].map((input) => input.value);
+}
+
+function pushUnique(list, item, max) {
+  const text = String(item || "").trim();
+  if (!text || list.includes(text) || list.length >= max) return list;
+  list.push(text);
+  return list;
+}
+
+function journalBlob(journal) {
+  return [
+    ...(journal.thanks || []),
+    journal.event,
+    journal.mood,
+    journal.bodyNote,
+    ...(journal.awareness || []),
+    ...(journal.execution || []),
+  ]
+    .map((item) => String(item || ""))
+    .join("\n");
+}
+
+function buildAwarenessCheckItems(journal) {
+  const items = [];
+  const blob = journalBlob(journal);
+  const aware = journal.awareness || [];
+  const mood = journal.mood || "";
+  const bodyTags = journal.bodyTags || [];
+  if (String(aware[0] || "").trim()) pushUnique(items, "生命力或平靜是從哪個時刻來的", 6);
+  if (String(aware[1] || "").trim()) pushUnique(items, "防衛心或情緒波動真正在保護什麼", 6);
+  if (String(aware[2] || "").trim()) pushUnique(items, "明天可以改的那個小細節", 6);
+  if (mood === "生氣" || mood === "難過") pushUnique(items, "這份情緒想讓我看見什麼", 6);
+  if (mood === "開心" || mood === "平靜") pushUnique(items, "今天真正被滋養到的是", 6);
+  if (bodyTags.length || String(journal.bodyNote || "").trim()) pushUnique(items, "身體現在最想被照顧的地方", 6);
+  if (/他|她|對方|同事|家人|朋友|老闆|客戶|伴侶/.test(blob)) pushUnique(items, "關係裡我真正在意的是", 6);
+  ["情緒被觸發的原因", "身體發出的訊號", "真實需求還沒被說出來", "防衛心其實在保護什麼", "我對自己重複的一句話"].forEach(
+    (item) => {
+      if (items.length < 4) pushUnique(items, item, 6);
+    }
+  );
+  return items.slice(0, 6);
+}
+
+function buildExecutionCheckItems(journal) {
+  const items = [];
+  const task = String((journal.execution || [])[0] || "");
+  const stuck = String((journal.execution || [])[1] || "");
+  const step = String((journal.execution || [])[2] || "");
+  const body = `${stuck}\n${task}\n${(journal.bodyTags || []).join(" ")}\n${journal.bodyNote || ""}`;
+  if (/累|疲|睡|沒力|能量|頭痛|緊繃/.test(body)) pushUnique(items, "能量或睡眠不夠", 4);
+  if (/打斷|忙|臨時|別人|訊息|會議/.test(stuck)) pushUnique(items, "被其他事情打斷", 4);
+  if (/完美|失敗|丟臉|被看|焦慮|怕/.test(stuck)) pushUnique(items, "害怕做不好或被看見", 4);
+  if (/大|不知|從哪|複雜|太多/.test(`${stuck}\n${task}`)) pushUnique(items, "任務太大，不知道從哪開始", 4);
+  if (/為什麼|意義|不想|沒動力|提不起/.test(stuck)) pushUnique(items, "還沒對齊為什麼要做", 4);
+  if (step.trim()) pushUnique(items, "先做那 5 分鐘的一小步", 4);
+  ["目標不夠清楚", "任務太大，不知道從哪開始", "害怕做不好或被看見", "還沒對齊為什麼要做"].forEach((item) => {
+    if (items.length < 3) pushUnique(items, item, 4);
+  });
+  return items.slice(0, 4);
+}
+
+function renderChecklist(rootId, items, checked) {
+  const root = document.getElementById(rootId);
+  if (!root) return;
+  const set = new Set(checked || []);
+  root.innerHTML = (items || [])
+    .map(
+      (label) => `
+        <label class="check-line">
+          <input type="checkbox" value="${escapeHtml(label)}" ${set.has(label) ? "checked" : ""} />
+          <span>${escapeHtml(label)}</span>
+        </label>
+      `
+    )
+    .join("");
+}
+
+function refreshJournalChecklists(journal, options = {}) {
+  const data = journal || collectJournal();
+  const awareItems =
+    options.useSaved && (data.awarenessCheckItems || []).length
+      ? data.awarenessCheckItems.slice(0, 6)
+      : buildAwarenessCheckItems(data);
+  const execItems =
+    options.useSaved && (data.executionCheckItems || []).length
+      ? data.executionCheckItems.slice(0, 4)
+      : buildExecutionCheckItems(data);
+  const awareChecked = options.useSaved ? data.awarenessChecks : checkedValues("awareChecks");
+  const execChecked = options.useSaved ? data.executionChecks : checkedValues("execChecks");
+  renderChecklist("awareChecks", awareItems, awareChecked);
+  renderChecklist("execChecks", execItems, execChecked);
+}
+
+function scheduleJournalChecklists() {
+  if (state.journalHydrating) return;
+  clearTimeout(state.journalCheckTimer);
+  state.journalCheckTimer = setTimeout(() => refreshJournalChecklists(), 280);
 }
 
 function collectJournal() {
@@ -1633,9 +1764,16 @@ function collectJournal() {
     bodyNote: journalFieldValue("bodyNote"),
     awareness: ["aware1", "aware2", "aware3"].map(journalFieldValue),
     awarenessChecks: checkedValues("awareChecks"),
+    awarenessCheckItems: checklistItems("awareChecks"),
     execution: ["exec1", "exec2", "exec3"].map(journalFieldValue),
     executionChecks: checkedValues("execChecks"),
-    deep: ["deep1", "deep2", "deep3", "deep4"].map(journalFieldValue),
+    executionCheckItems: checklistItems("execChecks"),
+    deep: [
+      { plain: journalFieldValue("deep1plain"), deep: journalFieldValue("deep1deep") },
+      { plain: journalFieldValue("deep2plain"), deep: journalFieldValue("deep2deep") },
+      { plain: journalFieldValue("deep3plain"), deep: journalFieldValue("deep3deep") },
+      { plain: journalFieldValue("deep4plain"), deep: journalFieldValue("deep4deep") },
+    ],
   };
   return journal;
 }
@@ -1652,31 +1790,36 @@ function composeJournalRawText(journal) {
   if ((journal.bodyTags || []).length) lines.push(`身體狀態：${journal.bodyTags.join("、")}`);
   if (String(journal.bodyNote || "").trim()) lines.push(`身體提醒：${journal.bodyNote.trim()}`);
   const awareQs = [
-    "今天，哪個時刻讓我感受到生命力或平靜？",
-    "今天，哪個時刻出現了防衛心或情緒波動？",
-    "如果明天重來一次，我會做哪個不同的選擇？",
+    "今天，哪個時刻感受到了「生命力」或「平靜」？",
+    "今天，哪一個時刻我出現了「防衛心」或「情緒波動」？",
+    "如果明天能重來一次，在某個小細節上，我會做哪一個不同的選擇？",
   ];
   (journal.awareness || []).forEach((item, index) => {
     if (String(item || "").trim()) lines.push(`${awareQs[index]} ${item.trim()}`);
   });
   if ((journal.awarenessChecks || []).length) lines.push(`今天我覺察到：${journal.awarenessChecks.join("、")}`);
   const execQs = [
-    "今天本來想做，卻一直拖著沒做的是哪件事？",
-    "是什麼原因讓我卡住、不想動？",
-    "明天只花 5 分鐘，我可以先做哪一步？",
+    "今天本來想做，但卻一直拖著沒做的是哪件事？",
+    "是什麼原因讓你卡住、不想動？",
+    "明天只要花 5 分鐘，哪一小步可以讓你重新開始？",
   ];
   (journal.execution || []).forEach((item, index) => {
     if (String(item || "").trim()) lines.push(`${execQs[index]} ${item.trim()}`);
   });
   if ((journal.executionChecks || []).length) lines.push(`我的行動卡點：${journal.executionChecks.join("、")}`);
   const deepQs = [
-    "今天哪一刻，我超想翻白眼，但還是忍住了？",
-    "今天哪句話，其實不是說給對方聽，是說給自己聽？",
-    "今天哪件事，我表面上沒反應，心裡其實有聲音？",
-    "如果把今天濃縮成一句話，我會對明天的自己說什麼？",
+    "今天哪一刻，我其實超想翻白眼（或超不爽），但還是忍住了？",
+    "今天有沒有哪件事，是我其實可以不要做，但又不好意思拒絕的？",
+    "如果今天可以重來，哪一件事我絕對不要再用老方法處理？",
+    "今天最爽、最讓我覺得「還好我有堅持」的一瞬間是什麼？",
   ];
-  (journal.deep || []).forEach((item, index) => {
-    if (String(item || "").trim()) lines.push(`${deepQs[index]} ${item.trim()}`);
+  normalizeDeep(journal.deep).forEach((item, index) => {
+    const plain = String(item.plain || "").trim();
+    const deep = String(item.deep || "").trim();
+    if (!plain && !deep) return;
+    lines.push(deepQs[index]);
+    if (plain) lines.push(`白話想一想：${plain}`);
+    if (deep) lines.push(`深挖一點點：${deep}`);
   });
   return lines.join("\n");
 }
@@ -1708,6 +1851,7 @@ function setCheckedValues(rootId, values) {
 
 function fillJournal(journal) {
   const data = { ...emptyJournal(), ...(journal && typeof journal === "object" ? journal : {}) };
+  state.journalHydrating = true;
   ["thanks1", "thanks2", "thanks3"].forEach((id, index) => {
     const el = document.getElementById(id);
     if (el) el.value = data.thanks[index] || "";
@@ -1722,16 +1866,19 @@ function fillJournal(journal) {
     const el = document.getElementById(id);
     if (el) el.value = data.awareness[index] || "";
   });
-  setCheckedValues("awareChecks", data.awarenessChecks);
   ["exec1", "exec2", "exec3"].forEach((id, index) => {
     const el = document.getElementById(id);
     if (el) el.value = data.execution[index] || "";
   });
-  setCheckedValues("execChecks", data.executionChecks);
-  ["deep1", "deep2", "deep3", "deep4"].forEach((id, index) => {
-    const el = document.getElementById(id);
-    if (el) el.value = data.deep[index] || "";
+  const deep = normalizeDeep(data.deep);
+  deep.forEach((item, index) => {
+    const plain = document.getElementById(`deep${index + 1}plain`);
+    const note = document.getElementById(`deep${index + 1}deep`);
+    if (plain) plain.value = item.plain || "";
+    if (note) note.value = item.deep || "";
   });
+  refreshJournalChecklists(data, { useSaved: true });
+  state.journalHydrating = false;
 }
 
 function updateJournalDateLabel(iso) {
@@ -3306,12 +3453,19 @@ function bindEvents() {
     if (!btn) return;
     const on = !btn.classList.contains("is-on");
     document.querySelectorAll("#moodRow .mood-btn").forEach((item) => item.classList.toggle("is-on", on && item === btn));
+    refreshJournalChecklists();
   });
 
   document.getElementById("bodyTags")?.addEventListener("click", (event) => {
     const btn = event.target.closest(".tag-btn");
     if (!btn) return;
     btn.classList.toggle("is-on");
+    refreshJournalChecklists();
+  });
+
+  document.getElementById("page-today")?.addEventListener("input", (event) => {
+    const id = event.target && event.target.id;
+    if (/^(aware|exec)\d$|^eventText$|^bodyNote$/.test(id || "")) scheduleJournalChecklists();
   });
 
   document.getElementById("page-today")?.addEventListener("focusin", (event) => {

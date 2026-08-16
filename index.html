@@ -29,7 +29,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="app.css?v=57" />
+    <link rel="stylesheet" href="app.css?v=58" />
   </head>
   <body>
     <script>
@@ -171,20 +171,21 @@
 
           <section class="journal-card" id="section-thanks">
             <h2 class="journal-card__title"><span>01</span> 今日感謝</h2>
+            <p class="journal-guide">寫下今天想感謝的人、事、物，三件就好，不用寫得很完整。</p>
             <div class="thanks-list">
               <div class="thanks-row">
-                <span>1</span>
-                <input class="input" id="thanks1" type="text" placeholder="今天想感謝的一件事…" data-journal="thanks" />
+                <span>人</span>
+                <input class="input" id="thanks1" type="text" placeholder="今天想感謝的一個人…" data-journal="thanks" />
                 <button class="mic-mini" type="button" aria-label="語音輸入" data-voice-ui>🎤</button>
               </div>
               <div class="thanks-row">
-                <span>2</span>
-                <input class="input" id="thanks2" type="text" placeholder="再一件讓你覺得被支持的事…" data-journal="thanks" />
+                <span>事</span>
+                <input class="input" id="thanks2" type="text" placeholder="今天想感謝的一件事…" data-journal="thanks" />
                 <button class="mic-mini" type="button" aria-label="語音輸入" data-voice-ui>🎤</button>
               </div>
               <div class="thanks-row">
-                <span>3</span>
-                <input class="input" id="thanks3" type="text" placeholder="也可以感謝自己今天有做成的小事…" data-journal="thanks" />
+                <span>物</span>
+                <input class="input" id="thanks3" type="text" placeholder="今天想感謝的一個物、空間或片刻…" data-journal="thanks" />
                 <button class="mic-mini" type="button" aria-label="語音輸入" data-voice-ui>🎤</button>
               </div>
             </div>
@@ -192,9 +193,10 @@
 
           <section class="journal-card" id="section-event">
             <h2 class="journal-card__title"><span>02</span> 今日事件</h2>
+            <p class="journal-guide">透過這些事件引發深度思考。先把開心、生氣、難過的那件事寫下來就好。</p>
             <div class="journal-split">
               <label class="journal-col">
-                <span class="journal-label">寫下今天發生的事</span>
+                <span class="journal-label">寫下今天發生的事（開心、生氣、難過）</span>
                 <textarea class="textarea" id="eventText" rows="5" placeholder="今天真正卡住、或真正被碰到的那件事是…"></textarea>
               </label>
               <div class="journal-col">
@@ -211,6 +213,7 @@
 
           <section class="journal-card" id="section-body">
             <h2 class="journal-card__title"><span>03</span> 身體覺察</h2>
+            <p class="journal-guide">觀察身體狀況引發深度思考。身體往往比腦袋更早知道你累了、緊了、或被碰到了。</p>
             <div class="journal-split">
               <div class="journal-col">
                 <p class="journal-label">身體狀態 (可多選)</p>
@@ -237,28 +240,22 @@
             <div class="journal-split">
               <ol class="journal-qs">
                 <li>
-                  <p>今天，哪個時刻讓我感受到生命力或平靜？</p>
+                  <p>今天，哪個時刻感受到了「生命力」或「平靜」？</p>
                   <input class="input" id="aware1" type="text" placeholder="寫下那個時刻…" />
                 </li>
                 <li>
-                  <p>今天，哪個時刻出現了防衛心或情緒波動？</p>
+                  <p>今天，哪一個時刻我出現了「防衛心」或「情緒波動」？</p>
                   <input class="input" id="aware2" type="text" placeholder="寫下那個時刻…" />
                 </li>
                 <li>
-                  <p>如果明天重來一次，我會做哪個不同的選擇？</p>
+                  <p>如果明天能重來一次，在某個小細節上，我會做哪一個不同的選擇？</p>
                   <input class="input" id="aware3" type="text" placeholder="一個小到明天做得到的選擇…" />
                 </li>
               </ol>
               <div class="journal-col">
                 <p class="journal-label">今天我覺察到</p>
-                <div class="check-list" id="awareChecks">
-                  <label class="check-line"><input type="checkbox" value="情緒被觸發的原因" /><span>情緒被觸發的原因</span></label>
-                  <label class="check-line"><input type="checkbox" value="身體發出的訊號" /><span>身體發出的訊號</span></label>
-                  <label class="check-line"><input type="checkbox" value="真實需求還沒被說出來" /><span>真實需求還沒被說出來</span></label>
-                  <label class="check-line"><input type="checkbox" value="防衛心其實在保護什麼" /><span>防衛心其實在保護什麼</span></label>
-                  <label class="check-line"><input type="checkbox" value="我對自己重複的一句話" /><span>我對自己重複的一句話</span></label>
-                  <label class="check-line"><input type="checkbox" value="關係裡我真正在意的是" /><span>關係裡我真正在意的是</span></label>
-                </div>
+                <p class="journal-guide journal-guide--tight">會依你的回答自動整理 4 到 6 個面向，勾選今天有看見的就好。</p>
+                <div class="check-list" id="awareChecks"></div>
               </div>
             </div>
           </section>
@@ -268,54 +265,73 @@
             <div class="journal-split">
               <ol class="journal-qs">
                 <li>
-                  <p>今天本來想做，卻一直拖著沒做的是哪件事？</p>
+                  <p>今天本來想做，但卻一直拖著沒做的是哪件事？</p>
                   <input class="input" id="exec1" type="text" placeholder="那件一直被推到明天的事…" />
                 </li>
                 <li>
-                  <p>是什麼原因讓我卡住、不想動？</p>
+                  <p>是什麼原因讓你卡住、不想動？</p>
                   <input class="input" id="exec2" type="text" placeholder="真正卡住的原因…" />
                 </li>
                 <li>
-                  <p>明天只花 5 分鐘，我可以先做哪一步？</p>
+                  <p>明天只要花 5 分鐘，哪一小步可以讓你重新開始？</p>
                   <input class="input" id="exec3" type="text" placeholder="小到不可能失敗的一步…" />
                 </li>
               </ol>
               <div class="journal-col">
                 <p class="journal-label">我的行動卡點</p>
-                <div class="check-list" id="execChecks">
-                  <label class="check-line"><input type="checkbox" value="目標不夠清楚" /><span>目標不夠清楚</span></label>
-                  <label class="check-line"><input type="checkbox" value="任務太大，不知道從哪開始" /><span>任務太大，不知道從哪開始</span></label>
-                  <label class="check-line"><input type="checkbox" value="害怕做不好或被看見" /><span>害怕做不好或被看見</span></label>
-                  <label class="check-line"><input type="checkbox" value="被其他事情打斷" /><span>被其他事情打斷</span></label>
-                  <label class="check-line"><input type="checkbox" value="能量或睡眠不夠" /><span>能量或睡眠不夠</span></label>
-                  <label class="check-line"><input type="checkbox" value="還沒對齊為什麼要做" /><span>還沒對齊為什麼要做</span></label>
-                </div>
+                <p class="journal-guide journal-guide--tight">會依卡住的原因，自動整理 3 到 4 個行動卡點，方便你對一下。</p>
+                <div class="check-list" id="execChecks"></div>
               </div>
             </div>
           </section>
 
           <section class="journal-card" id="section-deep">
             <h2 class="journal-card__title"><span>06</span> 深度思考</h2>
+            <p class="journal-guide">先用白話把場面講清楚，再往下挖一點點。點開卡片即可書寫。</p>
             <div class="deep-list">
               <details class="deep-item">
-                <summary>今天哪一刻，我超想翻白眼，但還是忍住了？</summary>
-                <label class="journal-label" for="deep1">深化：真正觸發我的是什麼？</label>
-                <textarea class="textarea" id="deep1" rows="3" placeholder="寫下那個瞬間背後，真正被碰到的是…"></textarea>
+                <summary>今天哪一刻，我其實超想翻白眼（或超不爽），但還是忍住了？</summary>
+                <div class="deep-block">
+                  <p class="deep-guide"><strong>白話想一想</strong>先不用分析。那一刻是誰、什麼場面、你心裡那句沒說出口的話是什麼？</p>
+                  <textarea class="textarea" id="deep1plain" rows="3" placeholder="那一刻發生了什麼…"></textarea>
+                </div>
+                <div class="deep-block">
+                  <p class="deep-guide"><strong>深挖一點點</strong>你忍住的背後，真正被碰到的是什麼？是不被尊重、被誤解，還是怕關係破掉？</p>
+                  <textarea class="textarea" id="deep1deep" rows="3" placeholder="真正觸發我的是…"></textarea>
+                </div>
               </details>
               <details class="deep-item">
-                <summary>今天哪句話，其實不是說給對方聽，是說給自己聽？</summary>
-                <label class="journal-label" for="deep2">深化：真正觸發我的是什麼？</label>
-                <textarea class="textarea" id="deep2" rows="3" placeholder="我真正想保護或證明的是…"></textarea>
+                <summary>今天有沒有哪件事，是我其實可以不要做，但又不好意思拒絕的？</summary>
+                <div class="deep-block">
+                  <p class="deep-guide"><strong>白話想一想</strong>那件「算了，我來」的事是什麼？如果可以重來，你其實想說什麼？</p>
+                  <textarea class="textarea" id="deep2plain" rows="3" placeholder="那件不好意思拒絕的事是…"></textarea>
+                </div>
+                <div class="deep-block">
+                  <p class="deep-guide"><strong>深挖一點點</strong>不好意思拒絕，通常在保護什麼？是怕被覺得不夠好，還是怕讓對方失望？</p>
+                  <textarea class="textarea" id="deep2deep" rows="3" placeholder="我真正在保護的是…"></textarea>
+                </div>
               </details>
               <details class="deep-item">
-                <summary>今天哪件事，我表面上沒反應，心裡其實有聲音？</summary>
-                <label class="journal-label" for="deep3">深化：真正觸發我的是什麼？</label>
-                <textarea class="textarea" id="deep3" rows="3" placeholder="那個沒有被說出來的句子是…"></textarea>
+                <summary>如果今天可以重來，哪一件事我絕對不要再用老方法處理？</summary>
+                <div class="deep-block">
+                  <p class="deep-guide"><strong>白話想一想</strong>那個老方法是什麼？重來一次，你會改哪一個小動作就好？</p>
+                  <textarea class="textarea" id="deep3plain" rows="3" placeholder="那個老方法，以及我想改的小動作…"></textarea>
+                </div>
+                <div class="deep-block">
+                  <p class="deep-guide"><strong>深挖一點點</strong>老方法曾經保護過你。這次你想換成什麼新方法，才比較像現在的自己？</p>
+                  <textarea class="textarea" id="deep3deep" rows="3" placeholder="我想換成的新方法是…"></textarea>
+                </div>
               </details>
               <details class="deep-item">
-                <summary>如果把今天濃縮成一句話，我會對明天的自己說什麼？</summary>
-                <label class="journal-label" for="deep4">深化：真正觸發我的是什麼？</label>
-                <textarea class="textarea" id="deep4" rows="3" placeholder="給明天的自己一句話…"></textarea>
+                <summary>今天最爽、最讓我覺得「還好我有堅持」的一瞬間是什麼？</summary>
+                <div class="deep-block">
+                  <p class="deep-guide"><strong>白話想一想</strong>那個瞬間發生了什麼？你當時做了哪件「有點難，但還是做了」的事？</p>
+                  <textarea class="textarea" id="deep4plain" rows="3" placeholder="那個還好我有堅持的瞬間是…"></textarea>
+                </div>
+                <div class="deep-block">
+                  <p class="deep-guide"><strong>深挖一點點</strong>這件事碰觸到你的哪一個價值觀？明天要怎麼複製這個成功經驗，再小一步也行。</p>
+                  <textarea class="textarea" id="deep4deep" rows="3" placeholder="我想留下來、明天再複製的是…"></textarea>
+                </div>
               </details>
             </div>
           </section>
@@ -450,6 +466,6 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=70"></script>
+    <script src="app.js?v=71"></script>
   </body>
 </html>

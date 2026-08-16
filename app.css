@@ -2098,6 +2098,17 @@ body.nav-closed .auth-pay {
   line-height: 1;
 }
 
+.journal-guide {
+  margin: -8px 0 16px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.journal-guide--tight {
+  margin: -4px 0 12px;
+}
+
 .journal-label {
   display: block;
   margin: 0 0 10px;
@@ -2319,11 +2330,23 @@ body.nav-closed .auth-pay {
   transform: rotate(-90deg);
 }
 
-.deep-item .journal-label {
-  margin: 14px 0 8px;
+.deep-block {
+  margin-top: 12px;
+}
+
+.deep-guide {
+  margin: 0 0 8px;
   color: var(--muted);
-  font-weight: 500;
   font-size: 13px;
+  font-weight: 500;
+  line-height: 1.6;
+}
+
+.deep-guide strong {
+  display: inline-block;
+  margin-right: 6px;
+  color: var(--header);
+  font-weight: 700;
 }
 
 .journal-footer {
