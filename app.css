@@ -3638,3 +3638,77 @@ body.nav-closed .auth-pay {
     display: none;
   }
 }
+
+/* --- 針對手機版（螢幕寬度小於 768px）的排版優化 --- */
+@media (max-width: 768px) {
+  .journal-split,
+  .journal-split--body,
+  .journal-top,
+  .journal-footer__actions,
+  .pricing-grid,
+  .growth-metrics,
+  .chart-grid,
+  .add-task,
+  .task-card,
+  .archive-card {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .form-actions,
+  .ai-actions,
+  .journal-footer__actions,
+  .archive-modal__head,
+  .archive-modal__actions {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .view {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .journal-card,
+  .insight-card,
+  .body-check-group,
+  .body-coach,
+  .pricing-modal__card,
+  .pricing-card,
+  .paywall__card {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .journal-card .input,
+  .journal-card .textarea,
+  .journal-card .ai-check-btn,
+  .body-coach .ai-check-btn,
+  .pricing-card__cta,
+  .paywall__btn,
+  .paywall__btn--primary,
+  .journal-footer .btn,
+  .form-actions .btn,
+  .ai-actions .btn {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .body-flags,
+  .mood-row,
+  .pricing-grid,
+  .journal-split,
+  .journal-split--body {
+    gap: 0.75rem;
+  }
+
+  .body-flag-btn {
+    display: inline-flex;
+    flex: 1 1 calc(50% - 0.4rem);
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    text-align: center;
+  }
+}
