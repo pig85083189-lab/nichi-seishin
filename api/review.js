@@ -163,14 +163,16 @@ const CHECKLIST_AWARENESS_SYSTEM = `你是「日精進」的高階心靈教練�
 - 禁止雞湯、禁止說教、禁止病例腔、禁止空泛「要愛自己」
 - 繁體中文`;
 
-const CHECKLIST_EXECUTION_SYSTEM = `你是「日精進」的高階心靈教練。使用者剛寫下拖延的事、卡住原因，以及明天只要 5 分鐘的一小步。
-請分析真正的行動卡點，整理成「我的行動卡點」勾選清單。
+const CHECKLIST_EXECUTION_SYSTEM = `你是「日精進」的高階心靈教練。使用者剛回答今天的執行力題目（題目每天動態生成，不是固定題庫）。
+請依他的卡點、拖延原因與今天的處境，整理成「行動卡點／解法」勾選清單。勾選後會進入他的個人行動清單。
 
 規則：
 - 只輸出 JSON：{"items":["..."]}
 - items 必須 3 到 4 條，不可少於 3、不可超過 4
-- 每一條 12-28 字，具體到這個人今天的卡住，讓他能直接勾選
-- 可涵蓋：任務太大、害怕做不好或被看見、能量不夠、目標不夠清楚、還沒對齊為什麼要做、被打斷、5 分鐘起步點
+- 每一條 12-28 字，必須是今天專屬、可勾選的行動或卡點解法，不要空泛分類
+- 至少 2 條是明天做得到的最小解法（具體動作），其餘可以是真正卡住的點
+- 必須貼近他剛寫的回答與今日事件，不要重複他已經列在「尚未完成的行動」裡的句子
+- 禁止固定題庫口吻（例如只寫「任務太大」「害怕被看見」「先做 5 分鐘」這種萬用句）
 - 禁止空泛激勵、禁止「你要更努力」
 - 繁體中文`;
 
@@ -280,17 +282,23 @@ function checklistUserPrompt(kind, body) {
   const ctx = body.context && typeof body.context === "object" ? body.context : {};
   const bodyTags = Array.isArray(ctx.bodyTags) ? ctx.bodyTags.join("、") : "";
   if (kind === "execution") {
-    return `請分析這個人的行動卡點，產出 3 到 4 條勾選項目。
+    const questions = Array.isArray(body.questions) ? body.questions.map((item) => String(item || "").trim()) : [];
+    const openActions = Array.isArray(ctx.openActions) ? ctx.openActions.filter(Boolean) : [];
+    return `請依這個人今天的執行力回答，產出 3 到 4 條「行動卡點／解法」勾選項目。勾選後會進入行動清單，所以解法要具體、明天做得到。
 
-一直拖著沒做的事：${answers[0] || "（未填）"}
-卡住、不想動的原因：${answers[1] || "（未填）"}
-明天只要 5 分鐘的一小步：${answers[2] || "（未填）"}
+題目一：${questions[0] || "今天的第一個執行題"}
+回答一：${answers[0] || "（未填）"}
+題目二：${questions[1] || "今天的第二個執行題"}
+回答二：${answers[1] || "（未填）"}
+題目三：${questions[2] || "今天的第三個執行題"}
+回答三：${answers[2] || "（未填）"}
 
 背景補充：
 心情：${ctx.mood || "未選"}
 今日事件：${ctx.event || "未寫"}
 身體狀態：${bodyTags || "未選"}
-身體提醒：${ctx.bodyNote || "未寫"}`;
+身體提醒：${ctx.bodyNote || "未寫"}
+尚未完成的行動：${openActions.slice(0, 6).join("、") || "尚無"}`;
   }
   const questions = Array.isArray(body.questions) ? body.questions.map((item) => String(item || "").trim()) : [];
   return `請分析這個人今天的覺察，產出 4 到 6 條「今天我覺察到」勾選項目。
@@ -309,24 +317,31 @@ function checklistUserPrompt(kind, body) {
 身體提醒：${ctx.bodyNote || "未寫"}`;
 }
 
-const PROMPTS_SYSTEM = `你是「日精進」的高階心靈教練。請依這個人今天的真實輸入，以及近期成長進度，動態生成全新的覺察題與深度思考主題。
+const PROMPTS_SYSTEM = `你是「日精進」的高階心靈教練。請依這個人今天的真實輸入，以及近期成長進度，動態生成全新的覺察題、執行力題與深度思考主題。
 
 【任務】
 - awareness：3 道覺察力題目，讓他寫短答。
+- execution：3 道執行力題目，幫他看清今天的卡點、拖延原因，以及明天做得到的一小步。
 - deep：4 個深度思考主題。每個主題含標題、白話引導、深挖引導。
 
 【必須遵守】
 - 只輸出 JSON
-- 題目必須貼近今天的事件、心情、身體訊號、感恩與近期洞察，讓他覺得「這題是為我今天出的」
-- 每天視角都要不同：可從關係、身體、價值、界線、未說出口的話、想保護的東西、小小的堅持等切入，但不要重複使用者最近已經問過的題
+- 題目必須貼近今天的事件、心情、身體訊號、感恩、近期洞察與未完成行動，讓他覺得「這題是為我今天出的」
+- 每天視角都要不同：可從關係、身體、價值、界線、未說出口的話、想保護的東西、卡住的任務、小小的堅持等切入，但不要重複使用者最近已經問過的題
 - 禁止使用固定題庫口吻。尤其禁止出現或改寫這些死題：
   「生命力或平靜」「防衛心或情緒波動」「翻白眼」「不好意思拒絕」「老方法處理」「還好我有堅持」
-- 禁止雞湯、禁止說教、禁止病例腔、禁止空泛「你真正的感受是什麼」
+  「本來想做卻一直拖著」「卡住不想動」「明天只要花 5 分鐘」
+- 禁止雞湯、禁止說教、禁止病例腔、禁止空泛「你真正的感受是什麼」「你要更努力」
 - 題目要具體、有畫面、有啟發，像一對一教練今天才想出來的
 - 繁體中文
 
 {
   "awareness": [
+    { "question": "完整問句，18-36字", "placeholder": "8-16字的作答提示" },
+    { "question": "完整問句", "placeholder": "作答提示" },
+    { "question": "完整問句", "placeholder": "作答提示" }
+  ],
+  "execution": [
     { "question": "完整問句，18-36字", "placeholder": "8-16字的作答提示" },
     { "question": "完整問句", "placeholder": "作答提示" },
     { "question": "完整問句", "placeholder": "作答提示" }
@@ -341,7 +356,7 @@ const PROMPTS_SYSTEM = `你是「日精進」的高階心靈教練。請依這�
     }
   ]
 }
-awareness 必須剛好 3 題。deep 必須剛好 4 題。`;
+awareness 必須剛好 3 題。execution 必須剛好 3 題。deep 必須剛好 4 題。`;
 
 function compactLine(value, max) {
   return String(value || "").replace(/\s+/g, " ").trim().slice(0, max || 160);
@@ -360,10 +375,11 @@ function promptsUserPrompt(body) {
     .slice(0, 7)
     .map((item) => {
       const checks = Array.isArray(item.awareness) ? item.awareness.join("、") : "";
-      return `- ${item.date || ""}｜心情 ${item.mood || "未記"}｜${compactLine(item.event, 80)}${item.insight ? `｜洞察：${compactLine(item.insight, 60)}` : ""}${checks ? `｜已覺察：${compactLine(checks, 80)}` : ""}`;
+      const actions = Array.isArray(item.actions) ? item.actions.join("、") : "";
+      return `- ${item.date || ""}｜心情 ${item.mood || "未記"}｜${compactLine(item.event, 80)}${item.insight ? `｜洞察：${compactLine(item.insight, 60)}` : ""}${checks ? `｜已覺察：${compactLine(checks, 80)}` : ""}${actions ? `｜行動：${compactLine(actions, 80)}` : ""}`;
     })
     .join("\n");
-  return `請為這個人生成「今天才有」的覺察題 3 題，以及深度思考主題 4 題。
+  return `請為這個人生成「今天才有」的覺察題 3 題、執行力題 3 題，以及深度思考主題 4 題。
 
 日期：${body.date || ""}
 連續復盤天數：${progress.streak || 0}
@@ -385,6 +401,7 @@ ${recentText || "（還沒有歷史復盤）"}
 【請避開、不要再出相近的題】
 ${avoid.length ? avoid.slice(0, 16).map((item) => `- ${compactLine(item, 60)}`).join("\n") : "（無）"}
 
+執行力三題請分別靠近：今天真正沒動的那件事、卡住的真正原因、明天最小可做的一步。但用今天的語言來問，不要套固定句式。
 請讓今天的題目承接他的進度：看見重複模式就換新視角，看見新突破就往下挖一層。`;
 }
 
@@ -421,11 +438,15 @@ function normalizePromptsResult(raw) {
     .map(normalizePromptItem)
     .filter(Boolean)
     .slice(0, 3);
+  const execution = (Array.isArray(data.execution) ? data.execution : [])
+    .map(normalizePromptItem)
+    .filter(Boolean)
+    .slice(0, 3);
   const deep = (Array.isArray(data.deep) ? data.deep : [])
     .map(normalizeDeepPromptItem)
     .filter(Boolean)
     .slice(0, 4);
-  return { awareness, deep };
+  return { awareness, execution, deep };
 }
 
 async function callOpenAI(messages, options = {}) {
@@ -652,7 +673,7 @@ module.exports = async function handler(req, res) {
     }
     if (mode === "prompts") {
       const prompts = normalizePromptsResult(data);
-      if (prompts.awareness.length < 3 || prompts.deep.length < 4) {
+      if (prompts.awareness.length < 3 || prompts.execution.length < 3 || prompts.deep.length < 4) {
         res.status(502).json({ ok: false, error: "AI 題目格式不完整，請再試一次" });
         return;
       }

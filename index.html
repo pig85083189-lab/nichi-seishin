@@ -277,29 +277,22 @@
 
           <section class="journal-card" id="section-exec">
             <h2 class="journal-card__title"><span>05</span> 執行力</h2>
+            <p class="journal-guide">題目每天依今天的卡點與成長進度生成，不是固定題庫。寫完事件、心情與身體狀況後會自動出題。</p>
             <div class="journal-split">
               <div class="journal-col">
-                <ol class="journal-qs">
-                  <li>
-                    <p>今天本來想做，但卻一直拖著沒做的是哪件事？</p>
-                    <input class="input" id="exec1" type="text" placeholder="那件一直被推到明天的事…" />
-                  </li>
-                  <li>
-                    <p>是什麼原因讓你卡住、不想動？</p>
-                    <input class="input" id="exec2" type="text" placeholder="真正卡住的原因…" />
-                  </li>
-                  <li>
-                    <p>明天只要花 5 分鐘，哪一小步可以讓你重新開始？</p>
-                    <input class="input" id="exec3" type="text" placeholder="小到不可能失敗的一步…" />
-                  </li>
-                </ol>
+                <div class="check-loading" id="execPromptLoading" hidden>
+                  <p class="check-loading__label">正在為你生成今天的執行力題目…</p>
+                  <div class="ai-thinking__bar"><i></i></div>
+                </div>
+                <ol class="journal-qs" id="execQs"></ol>
+                <button class="ai-check-btn" id="btnRefreshExecPrompts" type="button">換一批今天的行動題</button>
                 <button class="ai-check-btn" id="btnExecAi" type="button">AI 分析並生成勾勾表</button>
               </div>
               <div class="journal-col">
-                <p class="journal-label">我的行動卡點</p>
-                <p class="journal-guide journal-guide--tight">寫完左側三題後，AI 會生成 3 到 4 個專屬行動卡點，對一下今天真正卡住的地方。</p>
+                <p class="journal-label">我的行動卡點／解法</p>
+                <p class="journal-guide journal-guide--tight">寫完左側三題後，AI 會生成 3 到 4 個專屬行動卡點與解法。勾選後，完成今日復盤就會進到側邊欄執行力清單。</p>
                 <div class="check-loading" id="execLoading" hidden>
-                  <p class="check-loading__label">正在分析你的行動卡點…</p>
+                  <p class="check-loading__label">正在分析你的行動卡點與解法…</p>
                   <div class="ai-thinking__bar"><i></i></div>
                 </div>
                 <div class="check-list" id="execChecks"></div>
@@ -364,7 +357,7 @@
         <section class="page" id="page-sfm" data-page="sfm" hidden>
           <header class="page__header">
             <h2 class="page__title">執行力</h2>
-            <p class="page__subtitle">待辦與歷史行動總覽。復盤裡勾選的行動卡點，會同步到這裡。</p>
+            <p class="page__subtitle">個人行動清單總覽。復盤裡勾選的執行步驟與解法，會累積在這裡。</p>
           </header>
 
           <form class="panel add-task" id="taskForm">
@@ -446,6 +439,6 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=78"></script>
+    <script src="app.js?v=79"></script>
   </body>
 </html>

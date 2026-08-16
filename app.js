@@ -87,6 +87,7 @@ const state = {
   promptsBusy: false,
   promptsToken: 0,
   awarenessPrompts: [],
+  executionPrompts: [],
   deepPrompts: [],
   deepFollowBusy: [false, false, false, false],
   deepFollowToken: [0, 0, 0, 0],
@@ -1721,6 +1722,7 @@ function emptyJournal() {
     insight: emptyInsight(),
     deep: emptyDeep(),
     awarenessPrompts: [],
+    executionPrompts: [],
     deepPrompts: [],
     promptsSig: "",
     promptsAi: false,
@@ -1847,18 +1849,17 @@ function buildAwarenessCheckItems(journal) {
 
 function buildExecutionCheckItems(journal) {
   const items = [];
-  const task = String((journal.execution || [])[0] || "");
-  const stuck = String((journal.execution || [])[1] || "");
-  const step = String((journal.execution || [])[2] || "");
-  const body = `${stuck}\n${task}\n${(journal.bodyTags || []).join(" ")}\n${journal.bodyNote || ""}`;
-  if (/累|疲|睡|沒力|能量|頭痛|緊繃/.test(body)) pushUnique(items, "能量或睡眠不夠", 4);
-  if (/打斷|忙|臨時|別人|訊息|會議/.test(stuck)) pushUnique(items, "被其他事情打斷", 4);
-  if (/完美|失敗|丟臉|被看|焦慮|怕/.test(stuck)) pushUnique(items, "害怕做不好或被看見", 4);
-  if (/大|不知|從哪|複雜|太多/.test(`${stuck}\n${task}`)) pushUnique(items, "任務太大，不知道從哪開始", 4);
-  if (/為什麼|意義|不想|沒動力|提不起/.test(stuck)) pushUnique(items, "還沒對齊為什麼要做", 4);
-  if (step.trim()) pushUnique(items, "先做那 5 分鐘的一小步", 4);
-  ["目標不夠清楚", "任務太大，不知道從哪開始", "害怕做不好或被看見", "還沒對齊為什麼要做"].forEach((item) => {
-    if (items.length < 3) pushUnique(items, item, 4);
+  const answers = (journal.execution || []).map((item) => String(item || "").trim()).filter(Boolean);
+  const blob = `${answers.join("\n")}\n${journal.event || ""}\n${journal.bodyNote || ""}`;
+  answers.forEach((answer) => {
+    const short = answer.length > 18 ? `${answer.slice(0, 18)}…` : answer;
+    pushUnique(items, `先處理：${short}`, 4);
+  });
+  if (/累|疲|睡|沒力|能量|頭痛|緊繃/.test(blob)) pushUnique(items, "先讓身體休息 10 分鐘再開工", 4);
+  if (/怕|完美|失敗|丟臉|被看/.test(blob)) pushUnique(items, "只做醜一點的第一版，不求一次做好", 4);
+  if (/大|不知|從哪|複雜|太多/.test(blob)) pushUnique(items, "把任務拆成明天只做的最小一步", 4);
+  answers.slice(0, 2).forEach((answer) => {
+    if (items.length < 3) pushUnique(items, answer.slice(0, 28), 4);
   });
   return items.slice(0, 4);
 }
@@ -1945,6 +1946,7 @@ function applyGeneratedChecklist(kind, items, sig) {
   renderChecklist(isAware ? "awareChecks" : "execChecks", items, []);
   state.journalMeta[isAware ? "awarenessAi" : "executionAi"] = true;
   state.journalMeta[isAware ? "awarenessAiSig" : "executionAiSig"] = sig;
+  persistJournalQuietly();
 }
 
 async function generateJournalChecklist(kind, options = {}) {
@@ -1976,12 +1978,18 @@ async function generateJournalChecklist(kind, options = {}) {
       kind,
       date: currentIso(),
       answers,
-      questions: isAware ? (state.awarenessPrompts || []).map((item) => item.question) : [],
+      questions: isAware
+        ? (state.awarenessPrompts || []).map((item) => item.question)
+        : (state.executionPrompts || []).map((item) => item.question),
       context: {
         event: journal.event,
         mood: journal.mood,
         bodyTags: journal.bodyTags,
         bodyNote: journal.bodyNote,
+        openActions: getTasks()
+          .filter((task) => task.status !== "done")
+          .slice(0, 6)
+          .map((task) => task.title),
       },
       text: answers.join("\n"),
     });
@@ -1989,7 +1997,7 @@ async function generateJournalChecklist(kind, options = {}) {
     const items = normalizeAiChecklistItems(remote.items, min, max, fallback);
     if (items.length < min) throw new Error("雲端回傳格式不完整");
     applyGeneratedChecklist(kind, items, sig);
-    showToast(isAware ? "覺察勾勾表已生成。" : "行動卡點已生成。");
+    showToast(isAware ? "覺察勾勾表已生成。" : "行動卡點與解法已生成。");
   } catch (error) {
     if (state.checklistToken[kind] !== token) return;
     applyGeneratedChecklist(kind, fallback.slice(0, max), sig);
@@ -2126,6 +2134,12 @@ const LEGACY_AWARENESS_PROMPTS = [
   { question: "如果明天能重來一次，在某個小細節上，我會做哪一個不同的選擇？", placeholder: "一個小到明天做得到的選擇…" },
 ];
 
+const LEGACY_EXECUTION_PROMPTS = [
+  { question: "今天本來想做，但卻一直拖著沒做的是哪件事？", placeholder: "那件一直被推到明天的事…" },
+  { question: "是什麼原因讓你卡住、不想動？", placeholder: "真正卡住的原因…" },
+  { question: "明天只要花 5 分鐘，哪一小步可以讓你重新開始？", placeholder: "小到不可能失敗的一步…" },
+];
+
 const LEGACY_DEEP_PROMPTS = [
   {
     title: "今天哪一刻，我其實超想翻白眼（或超不爽），但還是忍住了？",
@@ -2175,6 +2189,13 @@ function normalizeAwarenessPrompts(list) {
     .slice(0, 3);
 }
 
+function normalizeExecutionPrompts(list) {
+  return normalizeAwarenessPrompts(list).map((item) => ({
+    ...item,
+    placeholder: item.placeholder === "寫下那個時刻…" ? "寫下那個卡點或一小步…" : item.placeholder,
+  }));
+}
+
 function normalizeDeepPrompts(list) {
   return (Array.isArray(list) ? list : [])
     .map((item) => {
@@ -2199,6 +2220,11 @@ function promptsSignature(journal) {
 function promptsHaveAnswers(journal) {
   const data = journal || collectJournal();
   return (data.awareness || []).some((item) => String(item || "").trim()) || deepHasContent(data.deep);
+}
+
+function executionHaveAnswers(journal) {
+  const data = journal || collectJournal();
+  return (data.execution || []).some((item) => String(item || "").trim());
 }
 
 function eventSnippet(journal) {
@@ -2274,6 +2300,26 @@ function localDeepPrompts(journal) {
   return pool[0];
 }
 
+function localExecutionPrompts(journal) {
+  const snippet = eventSnippet(journal);
+  const mood = journal.mood || "這份心情";
+  const tired = /累|疲|緊|痛|睡/.test(`${(journal.bodyTags || []).join("")}\n${journal.bodyNote || ""}`);
+  const pool = [
+    [
+      { question: `和「${snippet}」連在一起的，今天哪一件事你其實知道該做、卻沒動手？`, placeholder: "那件沒動手的事是…" },
+      { question: `心情停在「${mood}」時，真正讓你不想開始的是害怕、累，還是沒對齊為什麼？`, placeholder: "真正卡住的是…" },
+      { question: tired ? "如果身體只能再給你 8 分鐘，你會先完成哪一個最小動作？" : "明天只做一個小到不可能失敗的動作，會是哪一步？", placeholder: "那個最小動作是…" },
+    ],
+    [
+      { question: "今天哪一件事被你用「再等一下」輕輕推走了？", placeholder: "被推走的那件事是…" },
+      { question: "你拖延時，其實在保護自己免於什麼？", placeholder: "我在閃避的是…" },
+      { question: "如果明天只向這件事走近一步，具體會做什麼？", placeholder: "明天那一步是…" },
+    ],
+  ];
+  const seed = Array.from(promptsSignature(journal)).reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+  return pool[seed % pool.length];
+}
+
 function collectGrowthProgress() {
   const todayIso = currentIso();
   const dates = getCompletedDates();
@@ -2289,6 +2335,7 @@ function collectGrowthProgress() {
         mood: journal.mood || "",
         event: String(journal.event || review.rawText || "").slice(0, 120),
         awareness: (journal.awarenessChecks || []).slice(0, 4),
+        actions: (journal.executionChecks || []).slice(0, 3),
         insight: String(journal.insight?.title || journal.insight?.conclusion || "").slice(0, 80),
       };
     });
@@ -2298,9 +2345,11 @@ function collectGrowthProgress() {
     .slice(0, 10)
     .forEach(([, review]) => {
       (review.journal?.awarenessPrompts || []).forEach((item) => avoidQuestions.push(item.question || item.title || item));
+      (review.journal?.executionPrompts || []).forEach((item) => avoidQuestions.push(item.question || item.title || item));
       (review.journal?.deepPrompts || []).forEach((item) => avoidQuestions.push(item.title || item.question || item));
     });
   (state.awarenessPrompts || []).forEach((item) => avoidQuestions.push(item.question));
+  (state.executionPrompts || []).forEach((item) => avoidQuestions.push(item.question));
   (state.deepPrompts || []).forEach((item) => avoidQuestions.push(item.title));
   return {
     streak: calcStreak(dates, todayIso),
@@ -2342,6 +2391,38 @@ function renderAwarenessQuestions(prompts, options = {}) {
         <li>
           <p>${escapeHtml(item.question)}</p>
           <input class="input" id="aware${index + 1}" type="text" placeholder="${escapeHtml(item.placeholder)}" value="${escapeHtml(saved[index] || "")}" />
+        </li>
+      `
+    )
+    .join("");
+}
+
+function renderExecutionQuestions(prompts, options = {}) {
+  const root = document.getElementById("execQs");
+  if (!root) return;
+  const saved = options.answers || ["exec1", "exec2", "exec3"].map(journalFieldValue);
+  const items = normalizeExecutionPrompts(prompts);
+  if (!items.length) {
+    root.classList.add("is-waiting");
+    root.innerHTML = [0, 1, 2]
+      .map(
+        (index) => `
+          <li>
+            <p class="journal-q--pending">${index === 0 ? "寫完今日事件、心情與身體狀況後，會為你生成今天的三道執行力題。" : "題目會依今天的卡點與成長進度出現。"}</p>
+            <input class="input" id="exec${index + 1}" type="text" placeholder="題目出現後再寫…" value="${escapeHtml(saved[index] || "")}" />
+          </li>
+        `
+      )
+      .join("");
+    return;
+  }
+  root.classList.remove("is-waiting");
+  root.innerHTML = items
+    .map(
+      (item, index) => `
+        <li>
+          <p>${escapeHtml(item.question)}</p>
+          <input class="input" id="exec${index + 1}" type="text" placeholder="${escapeHtml(item.placeholder)}" value="${escapeHtml(saved[index] || "")}" />
         </li>
       `
     )
@@ -2399,26 +2480,47 @@ function renderDeepThemes(prompts, options = {}) {
   });
 }
 
-function setPromptsLoading(loading) {
+function setPromptsLoading(loading, scope = "all") {
   state.promptsBusy = loading;
-  const btn = document.getElementById("btnRefreshPrompts");
+  const awareBtn = document.getElementById("btnRefreshPrompts");
+  const execBtn = document.getElementById("btnRefreshExecPrompts");
   const awareLoader = document.getElementById("awarePromptLoading");
+  const execLoader = document.getElementById("execPromptLoading");
   const deepLoader = document.getElementById("deepPromptLoading");
-  if (btn) {
-    btn.disabled = loading;
-    btn.textContent = loading ? "生成中…" : "換一批今天的題目";
+  const showAware = loading && (scope === "all" || scope === "awareness");
+  const showExec = loading && (scope === "all" || scope === "execution");
+  if (awareBtn) {
+    awareBtn.disabled = loading;
+    awareBtn.textContent = showAware ? "生成中…" : "換一批今天的題目";
   }
-  if (awareLoader) awareLoader.hidden = !loading;
-  if (deepLoader) deepLoader.hidden = !loading;
+  if (execBtn) {
+    execBtn.disabled = loading;
+    execBtn.textContent = showExec ? "生成中…" : "換一批今天的行動題";
+  }
+  if (awareLoader) awareLoader.hidden = !showAware;
+  if (execLoader) execLoader.hidden = !showExec;
+  if (deepLoader) deepLoader.hidden = !showAware;
 }
 
-function applyGeneratedPrompts(awareness, deep, sig, fromAi) {
-  state.awarenessPrompts = normalizeAwarenessPrompts(awareness);
-  state.deepPrompts = normalizeDeepPrompts(deep);
+function applyGeneratedPrompts(awareness, deep, execution, sig, fromAi, scope = "all") {
+  const journal = collectJournal();
+  const fillAware = !state.awarenessPrompts.length || scope === "awareness";
+  const fillDeep = !state.deepPrompts.length || scope === "awareness";
+  const fillExec = !state.executionPrompts.length || scope === "execution";
+  if (fillAware && (scope !== "awareness" || !promptsHaveAnswers(journal))) {
+    state.awarenessPrompts = normalizeAwarenessPrompts(awareness);
+    renderAwarenessQuestions(state.awarenessPrompts);
+  }
+  if (fillDeep && (scope !== "awareness" || !deepHasContent(journal.deep))) {
+    state.deepPrompts = normalizeDeepPrompts(deep);
+    renderDeepThemes(state.deepPrompts);
+  }
+  if (fillExec && (scope !== "execution" || !executionHaveAnswers(journal))) {
+    state.executionPrompts = normalizeExecutionPrompts(execution);
+    renderExecutionQuestions(state.executionPrompts);
+  }
   state.journalMeta.promptsSig = sig;
   state.journalMeta.promptsAi = Boolean(fromAi);
-  renderAwarenessQuestions(state.awarenessPrompts);
-  renderDeepThemes(state.deepPrompts);
   persistJournalQuietly();
 }
 
@@ -2443,24 +2545,45 @@ function persistJournalQuietly() {
 
 async function generateJournalPrompts(options = {}) {
   if (state.promptsBusy) return;
+  const scope = options.scope || "all";
   const journal = collectJournal();
   if (!insightReady(journal)) {
     if (!options.auto) showToast("請先寫下今日事件、選擇心情，並標出身體狀況，才會生成今天的題目。");
     return;
   }
-  if (!options.force && promptsHaveAnswers(journal) && state.awarenessPrompts.length === 3 && state.deepPrompts.length === 4) {
-    return;
-  }
-  if (options.force && promptsHaveAnswers(journal)) {
+  if (options.force && scope !== "execution" && promptsHaveAnswers(journal)) {
     showToast("你已經開始作答了。想換題的話，先清空這幾題的回答。");
     return;
   }
+  if (options.force && scope === "execution" && executionHaveAnswers(journal)) {
+    showToast("你已經開始作答了。想換題的話，先清空這幾題的回答。");
+    return;
+  }
+  if (
+    !options.force &&
+    promptsHaveAnswers(journal) &&
+    executionHaveAnswers(journal) &&
+    state.awarenessPrompts.length === 3 &&
+    state.executionPrompts.length === 3 &&
+    state.deepPrompts.length === 4
+  ) {
+    return;
+  }
   const sig = promptsSignature(journal);
-  if (options.auto && !options.force && state.journalMeta.promptsSig === sig && state.awarenessPrompts.length === 3) return;
+  if (
+    options.auto &&
+    !options.force &&
+    state.journalMeta.promptsSig === sig &&
+    state.awarenessPrompts.length === 3 &&
+    state.executionPrompts.length === 3 &&
+    state.deepPrompts.length === 4
+  ) {
+    return;
+  }
 
   const token = (state.promptsToken || 0) + 1;
   state.promptsToken = token;
-  setPromptsLoading(true);
+  setPromptsLoading(true, scope);
 
   try {
     if (!state.user) throw new Error("請先登入，才能使用雲端 AI 出題。");
@@ -2481,16 +2604,31 @@ async function generateJournalPrompts(options = {}) {
     });
     if (state.promptsToken !== token) return;
     const awareness = normalizeAwarenessPrompts(remote.awareness);
+    const execution = normalizeExecutionPrompts(remote.execution);
     const deep = normalizeDeepPrompts(remote.deep);
     if (awareness.length < 3 || deep.length < 4) throw new Error("雲端回傳格式不完整");
-    applyGeneratedPrompts(awareness, deep, sig, true);
-    showToast("今天的覺察題與深度思考主題已生成。");
+    applyGeneratedPrompts(
+      awareness,
+      deep,
+      execution.length === 3 ? execution : localExecutionPrompts(journal),
+      sig,
+      true,
+      scope
+    );
+    showToast(scope === "execution" ? "今天的執行力題目已生成。" : "今天的覺察、執行與深度思考題目已生成。");
   } catch (error) {
     if (state.promptsToken !== token) return;
-    applyGeneratedPrompts(localAwarenessPrompts(journal), localDeepPrompts(journal), sig, false);
+    applyGeneratedPrompts(
+      localAwarenessPrompts(journal),
+      localDeepPrompts(journal),
+      localExecutionPrompts(journal),
+      sig,
+      false,
+      scope
+    );
     showToast(`雲端出題失敗：${formatApiError(error)}，先用今天的本地題目。`);
   } finally {
-    if (state.promptsToken === token) setPromptsLoading(false);
+    if (state.promptsToken === token) setPromptsLoading(false, scope);
   }
 }
 
@@ -2498,10 +2636,15 @@ function maybeAutoGeneratePrompts(journal) {
   if (state.journalHydrating) return;
   const data = journal || collectJournal();
   if (!insightReady(data)) return;
-  if (state.awarenessPrompts.length === 3 && state.deepPrompts.length === 4 && state.journalMeta.promptsSig === promptsSignature(data)) {
+  const haveAll =
+    state.awarenessPrompts.length === 3 &&
+    state.executionPrompts.length === 3 &&
+    state.deepPrompts.length === 4 &&
+    state.journalMeta.promptsSig === promptsSignature(data);
+  if (haveAll) return;
+  if (promptsHaveAnswers(data) && executionHaveAnswers(data) && state.awarenessPrompts.length === 3 && state.executionPrompts.length === 3) {
     return;
   }
-  if (promptsHaveAnswers(data) && state.awarenessPrompts.length === 3) return;
   generateJournalPrompts({ auto: true });
 }
 
@@ -2632,6 +2775,7 @@ function collectJournal() {
     insight: state.journalInsight || emptyInsight(),
     deep: [1, 2, 3, 4].map(collectDeepSlot),
     awarenessPrompts: state.awarenessPrompts || [],
+    executionPrompts: state.executionPrompts || [],
     deepPrompts: state.deepPrompts || [],
     promptsSig: state.journalMeta.promptsSig || "",
     promptsAi: Boolean(state.journalMeta.promptsAi),
@@ -2663,13 +2807,9 @@ function composeJournalRawText(journal) {
     if (String(item || "").trim()) lines.push(`${awareQs[index] || `覺察題 ${index + 1}`} ${item.trim()}`);
   });
   if ((journal.awarenessChecks || []).length) lines.push(`今天我覺察到：${journal.awarenessChecks.join("、")}`);
-  const execQs = [
-    "今天本來想做，但卻一直拖著沒做的是哪件事？",
-    "是什麼原因讓你卡住、不想動？",
-    "明天只要花 5 分鐘，哪一小步可以讓你重新開始？",
-  ];
+  const execQs = (journal.executionPrompts || state.executionPrompts || []).map((item) => item.question || item);
   (journal.execution || []).forEach((item, index) => {
-    if (String(item || "").trim()) lines.push(`${execQs[index]} ${item.trim()}`);
+    if (String(item || "").trim()) lines.push(`${execQs[index] || `執行題 ${index + 1}`} ${item.trim()}`);
   });
   if ((journal.executionChecks || []).length) lines.push(`我的行動卡點：${journal.executionChecks.join("、")}`);
   const deepQs = (journal.deepPrompts || state.deepPrompts || []).map((item) => item.title || item.question || item);
@@ -2739,10 +2879,13 @@ function fillJournal(journal) {
   };
   state.journalInsight = normalizeInsight(data.insight);
   state.awarenessPrompts = normalizeAwarenessPrompts(data.awarenessPrompts);
+  state.executionPrompts = normalizeExecutionPrompts(data.executionPrompts);
   state.deepPrompts = normalizeDeepPrompts(data.deepPrompts);
   const hasPromptAnswers =
     (data.awareness || []).some((item) => String(item || "").trim()) || deepHasContent(data.deep);
+  const hasExecAnswers = (data.execution || []).some((item) => String(item || "").trim());
   if (!state.awarenessPrompts.length && hasPromptAnswers) state.awarenessPrompts = LEGACY_AWARENESS_PROMPTS;
+  if (!state.executionPrompts.length && hasExecAnswers) state.executionPrompts = LEGACY_EXECUTION_PROMPTS;
   if (!state.deepPrompts.length && hasPromptAnswers) state.deepPrompts = LEGACY_DEEP_PROMPTS;
   ["thanks1", "thanks2", "thanks3"].forEach((id, index) => {
     const el = document.getElementById(id);
@@ -2755,10 +2898,7 @@ function fillJournal(journal) {
   const bodyNote = document.getElementById("bodyNote");
   if (bodyNote) bodyNote.value = data.bodyNote || "";
   renderAwarenessQuestions(state.awarenessPrompts, { answers: data.awareness });
-  ["exec1", "exec2", "exec3"].forEach((id, index) => {
-    const el = document.getElementById(id);
-    if (el) el.value = data.execution[index] || "";
-  });
+  renderExecutionQuestions(state.executionPrompts, { answers: data.execution });
   renderDeepThemes(state.deepPrompts, { deep: normalizeDeep(data.deep) });
   refreshJournalChecklists(data, { useSaved: true });
   renderInsightCard(state.journalInsight);
@@ -3982,7 +4122,7 @@ function renderTasks() {
   const tasks = getTasks().filter((task) => state.taskFilter === "all" || task.status === state.taskFilter);
 
   if (!getTasks().length) {
-    list.innerHTML = `<div class="empty"><p class="empty__title">執行力還是空的</p>在今日復盤勾選行動卡點，完成復盤後就會出現在這裡。</div>`;
+    list.innerHTML = `<div class="empty"><p class="empty__title">執行力還是空的</p>在今日復盤勾選行動卡點或解法，完成復盤後就會出現在這裡。</div>`;
     return;
   }
   if (!tasks.length) {
@@ -4009,6 +4149,7 @@ function renderTasks() {
               <div>
                 <p class="task-card__title">${escapeHtml(task.title)}</p>
                 <div class="task-card__meta">
+                  <span class="tag">行動清單</span>
                   <span class="tag tag--${escapeHtml(task.status)}">${escapeHtml(STATUS_LABEL[task.status] || task.status)}</span>
                   <span class="tag">${escapeHtml(task.source || "自行新增")}</span>
                   ${created && created !== dateLabel ? `<span class="tag">${created}</span>` : ""}
@@ -4412,7 +4553,8 @@ function bindEvents() {
   document.getElementById("btnAwareAi")?.addEventListener("click", () => generateJournalChecklist("awareness"));
   document.getElementById("btnExecAi")?.addEventListener("click", () => generateJournalChecklist("execution"));
   document.getElementById("btnInsightAi")?.addEventListener("click", () => generateJournalInsight());
-  document.getElementById("btnRefreshPrompts")?.addEventListener("click", () => generateJournalPrompts({ force: true }));
+  document.getElementById("btnRefreshPrompts")?.addEventListener("click", () => generateJournalPrompts({ force: true, scope: "awareness" }));
+  document.getElementById("btnRefreshExecPrompts")?.addEventListener("click", () => generateJournalPrompts({ force: true, scope: "execution" }));
   document.getElementById("section-deep")?.addEventListener("click", (event) => {
     const btn = event.target.closest("[data-deepen]");
     if (!btn) return;
