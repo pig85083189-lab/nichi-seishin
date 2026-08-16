@@ -12,6 +12,7 @@ const {
   mpgGateway,
   notifyUrl,
   readRequestBody,
+  logMpgKeyCheck,
 } = require("../../lib/newebpay");
 
 function parseJsonValue(raw) {
@@ -55,6 +56,7 @@ module.exports = async function handler(req, res) {
     return;
   }
 
+  logMpgKeyCheck();
   if (!newebpayConfigured()) {
     console.error("NewebPay not configured:", newebpayConfigStatus());
     res.status(501).json({
