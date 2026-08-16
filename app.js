@@ -986,11 +986,9 @@ function renderAuth() {
   const membership = state.membership || {};
   const status = membership.status || "";
   const entitled = Boolean(membership.entitled || membership.paid);
-  const payBtn = state.payConfigured
-    ? status === "active"
-      ? `<button class="auth-pay is-paid" type="button" disabled><span>已訂閱</span></button>`
-      : `<button class="auth-pay" id="btnNewebPay" type="button"><span>${status === "trialing" || status === "pending" ? "訂閱" : "訂閱以繼續"}</span></button>`
-    : "";
+  const payBtn = status === "active"
+    ? `<button class="auth-pay is-paid" type="button" disabled><span>已訂閱</span></button>`
+    : `<button class="auth-pay" id="btnNewebPay" type="button"><span>${status === "trialing" || status === "pending" ? "訂閱" : "訂閱以繼續"}</span></button>`;
   const trialHint = membership.trialEndsAt && status === "trialing"
     ? `<p class="auth-hint">試用至 ${escapeHtml(formatTrialDate(membership.trialEndsAt))}</p>`
     : entitled && status === "active"
@@ -1010,6 +1008,7 @@ function renderAuth() {
     <button class="auth-logout" id="btnSignOut" type="button"><span>登出</span></button>
     ${trialHint}
   `;
+  bindSubscribeButton();
 }
 
 let supabaseClient = null;
@@ -1182,22 +1181,41 @@ function submitNewebPayForm(gateway, fields) {
   form.submit();
 }
 
+function bindSubscribeButton() {
+  const btn = document.getElementById("btnNewebPay");
+  if (!btn || btn.dataset.bound === "1") return;
+  btn.dataset.bound = "1";
+  btn.addEventListener("click", onSubscribeClick);
+}
+
+function onSubscribeClick(event) {
+  console.log("Subscribe button clicked");
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  startNewebPay();
+}
+
 async function startNewebPay() {
+  console.log("Subscribe startNewebPay");
   if (typeof location === "undefined" || location.protocol === "file:") {
     showToast("請用 Vercel 網址開啟，才能使用藍新金流付款。");
     return;
   }
-  if (!state.user) {
-    showToast("請先登入，再前往付款。");
-    return;
-  }
-  const accessToken = await ensureFreshAccessToken();
-  if (!accessToken) {
-    showToast("請先登入，再前往付款。");
-    return;
+  let accessToken = state.accessToken || "";
+  try {
+    const fresh = await Promise.race([
+      ensureFreshAccessToken(),
+      new Promise((resolve) => setTimeout(() => resolve(""), 4000)),
+    ]);
+    if (fresh) accessToken = fresh;
+  } catch (error) {
+    console.warn("Subscribe token refresh failed", error && error.message ? error.message : error);
   }
   showToast("正在前往藍新金流…");
   try {
+    console.log("Subscribe fetch /api/pay/create");
     const response = await fetch(`${location.origin}/api/pay/create`, {
       method: "POST",
       credentials: "include",
@@ -2990,7 +3008,8 @@ function bindEvents() {
       signOutUser();
       return;
     }
-    if (target.closest("#btnNewebPay")) {
+    if (target.closest("#btnNewebPay") || target.closest(".auth-pay:not(:disabled)")) {
+      console.log("Subscribe button clicked");
       event.preventDefault();
       startNewebPay();
     }
