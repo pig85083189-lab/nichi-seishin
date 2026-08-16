@@ -2573,7 +2573,7 @@ function tourSteps() {
       tourSidebar: true,
       popover: {
         title: "歷史紀錄",
-        description: "所有完成的復盤都在這裡。用搜尋或標籤找回某個人、某一天、某一段心情。",
+        description: "所有完成的復盤都在這裡。列表先看當天那句重點，點開才展開完整內容；也可用搜尋或標籤找回某個人、某一天。",
         side: "right",
       },
     },
@@ -5633,6 +5633,116 @@ function renderSfm() {
     .join("");
 }
 
+function firstHighlightSentence(text, max = 84) {
+  const cleaned = String(text || "").replace(/\s+/g, " ").trim();
+  if (!cleaned) return "";
+  const match = cleaned.match(/[^。！？!?]+[。！？!?]?/);
+  const sentence = String(match ? match[0] : cleaned).trim();
+  return excerptText(sentence, max);
+}
+
+function historyHighlight(review) {
+  const journal = review?.journal && typeof review.journal === "object" ? review.journal : {};
+  const insight = normalizeInsight(journal.insight);
+  const organize = review?.organize && typeof review.organize === "object" ? review.organize : {};
+  const candidates = [
+    insight.conclusion,
+    insight.title,
+    organize.themeInsight,
+    organize.conclusion,
+    organize.themeTitle,
+    organize.reflection,
+    joinJournalAnswers(journal.awareness),
+    journal.event,
+    review?.rawText,
+  ];
+  for (const item of candidates) {
+    const sentence = firstHighlightSentence(item, 84);
+    if (sentence.replace(/[。！？!?…\s]/g, "").length >= 6) return sentence;
+  }
+  return "這天留下了一筆復盤。";
+}
+
+function historyBlock(label, bodyHtml) {
+  if (!String(bodyHtml || "").trim()) return "";
+  return `<section class="history-journal__block"><p class="history-journal__label">${escapeHtml(label)}</p>${bodyHtml}</section>`;
+}
+
+function historyTextBlock(label, value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  return historyBlock(label, `<p class="history-journal__text">${escapeHtml(text)}</p>`);
+}
+
+function historyListBlock(label, items) {
+  const list = (Array.isArray(items) ? items : [items])
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+  if (!list.length) return "";
+  return historyBlock(
+    label,
+    `<ul class="history-journal__list">${list.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+  );
+}
+
+function historyBodyCheckHtml(journal) {
+  const check = normalizeBodyCheck(journal.bodyCheck, journal.bodyTags, journal.bodyNote);
+  const lines = [];
+  const moodFlags = (check.mood.flags || []).join("、");
+  const bodyFlags = (check.body.flags || []).join("、");
+  const sleepFlags = (check.sleep.flags || []).join("、");
+  if (moodFlags || check.mood.reason) {
+    lines.push(`心情：${moodFlags || "狀態平穩"}${check.mood.reason ? `｜${check.mood.reason}` : ""}`);
+  }
+  if (bodyFlags || check.body.reason) {
+    lines.push(`身體：${bodyFlags || "狀態平穩"}${check.body.reason ? `｜${check.body.reason}` : ""}`);
+  }
+  if (sleepFlags || check.sleep.reason) {
+    lines.push(`睡眠：${sleepFlags || "未特別勾選"}${check.sleep.reason ? `｜${check.sleep.reason}` : ""}`);
+  }
+  const coach = normalizeBodyCoach(journal.bodyCoach);
+  if (coach.analysis) lines.push(coach.analysis);
+  (coach.suggestions || []).forEach((item, index) => lines.push(`建議 ${index + 1}：${item}`));
+  return historyListBlock("身心覺察", lines);
+}
+
+function renderHistoryJournal(review) {
+  const journal = review?.journal && typeof review.journal === "object" ? review.journal : emptyJournal();
+  const insight = normalizeInsight(journal.insight);
+  const awareAnswer = joinJournalAnswers(journal.awareness);
+  const execAnswer = joinJournalAnswers(journal.execution);
+  const parts = [
+    historyListBlock("今日感謝", journal.thanks),
+    historyTextBlock("今日事件", journal.event),
+    journal.mood ? historyTextBlock("心情", journal.mood) : "",
+    historyBodyCheckHtml(journal),
+    awareAnswer ? historyTextBlock("覺察力", awareAnswer) : "",
+    historyListBlock("今天我覺察到", journal.awarenessChecks),
+    execAnswer ? historyTextBlock("執行力", execAnswer) : "",
+    historyListBlock("行動卡點／解法", journal.executionChecks),
+    insight.conclusion
+      ? historyBlock(
+          "AI 洞察",
+          `${insight.title ? `<p class="history-journal__headline">${escapeHtml(insight.title)}</p>` : ""}<p class="history-journal__text">${escapeHtml(insight.conclusion)}</p>${
+            insight.logic ? `<p class="history-journal__note">${escapeHtml(insight.logic)}</p>` : ""
+          }${insight.bodyLink ? `<p class="history-journal__note">${escapeHtml(insight.bodyLink)}</p>` : ""}`
+        )
+      : "",
+    historyTextBlock("明天想顯化", journal.manifest),
+    historyListBlock("顯化執行目標", journal.manifestChecks),
+  ].filter(Boolean);
+
+  if (!parts.length) {
+    const fallback = String(review?.rawText || "").trim();
+    const organize = review?.organize;
+    if (organize) return `<div class="history-journal">${renderHistoryReport(review)}</div>`;
+    if (fallback) return `<div class="history-journal">${historyTextBlock("當天紀錄", fallback)}</div>`;
+    return `<div class="history-journal"><p class="history-journal__empty">這天還沒有留下完整復盤內容。</p></div>`;
+  }
+
+  return `<div class="history-journal">${parts.join("")}</div>`;
+}
+
 function renderHistory() {
   const list = document.getElementById("historyList");
   const query = state.historyQuery.trim().toLowerCase();
@@ -5645,7 +5755,7 @@ function renderHistory() {
         if (!tags.includes(state.historyTag)) return false;
       }
       if (!query) return true;
-      const hay = `${iso} ${formatDisplayDate(iso)} ${reviewSearchText(review)}`.toLowerCase();
+      const hay = `${iso} ${formatDisplayDate(iso)} ${reviewSearchText(review)} ${historyHighlight(review)}`.toLowerCase();
       return hay.includes(query);
     });
 
@@ -5665,17 +5775,23 @@ function renderHistory() {
       const tags = (ai?.tags || (ai?.themeCategory ? [ai.themeCategory] : []))
         .map((tag) => `<span class="tag tag--ai">${escapeHtml(tag)}</span>`)
         .join("");
-      const report = open && ai ? renderHistoryReport(review) : open ? `<div class="history-report"><p class="raw-record">${escapeHtml(review.rawText || "")}</p></div>` : "";
+      const highlight = historyHighlight(review);
       return `
-        <article class="history-card ${open ? "is-open" : ""}">
-          <p class="history-card__date">${formatDisplayDate(iso)}</p>
-          <p class="history-card__excerpt">${escapeHtml(excerptText(ai?.themeTitle ? `【${ai.themeCategory || ""}】${ai.themeTitle}` : review.rawText))}</p>
-          <div class="history-card__meta">
-            ${tags}
-            <button class="btn btn--ghost btn--tiny" data-history-toggle="${iso}" type="button">${open ? "收合" : "展開完整報告"}</button>
-            <button class="btn btn--ghost btn--tiny" data-open="${iso}" type="button">打開這天</button>
+        <article class="history-card ${open ? "is-open" : ""}" data-history-iso="${escapeHtml(iso)}">
+          <button class="history-card__summary" data-history-toggle="${iso}" type="button" aria-expanded="${open ? "true" : "false"}">
+            <span class="history-card__date">${formatDisplayDate(iso)}</span>
+            <span class="history-card__chevron" aria-hidden="true"></span>
+            <span class="history-card__excerpt">${escapeHtml(highlight)}</span>
+            ${tags ? `<span class="history-card__tags">${tags}</span>` : ""}
+          </button>
+          <div class="history-card__panel">
+            <div class="history-card__panel-inner">
+              ${renderHistoryJournal(review)}
+              <div class="history-card__actions">
+                <button class="btn btn--ghost btn--tiny" data-open="${iso}" type="button">打開這天</button>
+              </div>
+            </div>
           </div>
-          ${report}
         </article>
       `;
     })
@@ -6117,17 +6233,27 @@ function bindEvents() {
     renderHistory();
   });
   document.getElementById("historyList").addEventListener("click", (event) => {
-    const toggle = event.target.closest("[data-history-toggle]");
     const open = event.target.closest("[data-open]");
-    if (toggle) {
-      state.historyOpen = state.historyOpen === toggle.dataset.historyToggle ? "" : toggle.dataset.historyToggle;
-      renderHistory();
-    }
     if (open) {
+      event.preventDefault();
+      event.stopPropagation();
       document.getElementById("reviewDate").value = open.dataset.open;
       loadReviewForDate(open.dataset.open);
       switchPage("today");
+      return;
     }
+    const toggle = event.target.closest("[data-history-toggle]");
+    if (!toggle) return;
+    const iso = toggle.dataset.historyToggle;
+    const nextOpen = state.historyOpen === iso ? "" : iso;
+    state.historyOpen = nextOpen;
+    const list = document.getElementById("historyList");
+    list.querySelectorAll(".history-card").forEach((card) => {
+      const isOpen = card.dataset.historyIso === nextOpen;
+      card.classList.toggle("is-open", isOpen);
+      const summary = card.querySelector("[data-history-toggle]");
+      if (summary) summary.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    });
   });
 
   const topAuth = document.getElementById("topAuthBtn");
