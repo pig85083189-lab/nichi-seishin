@@ -167,7 +167,7 @@ module.exports = async function handler(req, res) {
     merchantId: payStatus.merchantId,
     notifyUrl: notifyUrl(),
     schedule,
-    version: tradeParams.Version,
+    version: "1.5",
     formKeys: Object.keys(fields),
     hasMerchantId: Boolean(fields.MerchantID_),
     hasPostData: Boolean(fields.PostData_),
