@@ -3,12 +3,11 @@ const { ensureTrial, patchSubscription } = require("../../lib/supabase");
 const {
   newebpayConfigured,
   newebpayConfigStatus,
-  PERIOD_VERSION,
   createOrderNo,
   defaultPeriodAmt,
   defaultPeriodTimes,
   periodProdDesc,
-  periodSchedule,
+  buildPeriodTradeParams,
   periodPostFields,
   periodAutoSubmitHtml,
   periodGateway,
@@ -97,29 +96,34 @@ module.exports = async function handler(req, res) {
   const times = defaultPeriodTimes();
   const itemDesc = periodProdDesc(body.itemDesc);
   const orderNo = createOrderNo().replace(/[^A-Za-z0-9_]/g, "").slice(0, 30);
-  const schedule = periodSchedule(sub.trial_ends_at);
-  const tradeParams = {
-    RespondType: "JSON",
-    TimeStamp: String(Math.floor(Date.now() / 1000)),
-    Version: PERIOD_VERSION,
-    LangType: "zh-Tw",
-    MerOrderNo: orderNo,
-    ProdDesc: itemDesc,
-    PeriodAmt: String(Math.round(amt)),
-    PeriodType: schedule.PeriodType,
-    PeriodPoint: schedule.PeriodPoint,
-    PeriodStartType: schedule.PeriodStartType,
-    PeriodTimes: String(times),
-    PeriodMemo: "nichi_seishin",
-    PayerEmail: user.email,
-    EmailModify: 0,
-    PaymentInfo: "N",
-    OrderInfo: "N",
-    NotifyURL: notifyUrl(),
-    ReturnURL: returnUrl(),
-    BackURL: clientBackUrl(),
+  let tradeParams;
+  try {
+    tradeParams = buildPeriodTradeParams({
+      orderNo,
+      email: user.email,
+      amt,
+      itemDesc,
+    });
+  } catch (error) {
+    console.error("NewebPay period params invalid:", error && error.message ? error.message : error);
+    res.status(400).json({ ok: false, error: String(error && error.message ? error.message : "藍新定期定額參數不完整") });
+    return;
+  }
+  const schedule = {
+    PeriodType: tradeParams.PeriodType,
+    PeriodPoint: tradeParams.PeriodPoint,
+    PeriodStartType: tradeParams.PeriodStartType,
   };
-  if (schedule.PeriodFirstdate) tradeParams.PeriodFirstdate = schedule.PeriodFirstdate;
+  console.log("NewebPay period plaintext keys:", Object.keys(tradeParams), {
+    MerOrderNo: tradeParams.MerOrderNo,
+    PeriodAmt: tradeParams.PeriodAmt,
+    PeriodType: tradeParams.PeriodType,
+    PeriodPoint: tradeParams.PeriodPoint,
+    PeriodStartType: tradeParams.PeriodStartType,
+    PeriodTimes: tradeParams.PeriodTimes,
+    Version: tradeParams.Version,
+    MerchantID: tradeParams.MerchantID,
+  });
 
   let saved;
   try {
