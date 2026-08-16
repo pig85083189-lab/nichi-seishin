@@ -151,7 +151,16 @@ module.exports = async function handler(req, res) {
     res.status(500).json({ ok: false, error: "藍新參數加密失敗，請確認 HASH_KEY 為 32 碼、HASH_IV 為 16 碼。" });
     return;
   }
-  console.log("NewebPay period created:", orderNo, "NotifyURL:", notifyUrl(), "schedule:", schedule);
+  const payStatus = newebpayConfigStatus();
+  console.log("NewebPay period created:", {
+    orderNo,
+    env: payStatus.env,
+    production: payStatus.production,
+    gateway: payStatus.gateway,
+    merchantId: payStatus.merchantId,
+    notifyUrl: notifyUrl(),
+    schedule,
+  });
 
   if (wantsJson(req)) {
     res.status(200).json({
