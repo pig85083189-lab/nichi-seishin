@@ -52,14 +52,14 @@ module.exports = async function handler(req, res) {
   const raw = await readRequestBody(req);
   const body = parseFormBody(raw);
   const rawText = Buffer.isBuffer(raw) ? raw.toString("utf8") : String(raw || "");
-  console.log("NewebPay Period return body keys:", Object.keys(body || {}));
+  console.log("NewebPay MPG return body keys:", Object.keys(body || {}));
 
   try {
     const payload = decryptPayNotify(body);
     const fail = formatPeriodFail(payload);
     const result = payload.Result && typeof payload.Result === "object" ? payload.Result : payload;
     const orderNo = String(result.MerchantOrderNo || result.MerOrderNo || "").trim();
-    console.log("NewebPay Period return payload:", {
+    console.log("NewebPay MPG return payload:", {
       Status: payload.Status,
       Message: payload.Message,
       Result: result,
@@ -75,7 +75,7 @@ module.exports = async function handler(req, res) {
       ? fallback.message
       : String(error && error.message ? error.message : "訂閱結果驗證失敗");
     const code = fallback && fallback.code ? fallback.code : "";
-    console.error("NewebPay Period return error:", {
+    console.error("NewebPay MPG return error:", {
       message,
       code,
       detail: fallback && fallback.detail ? fallback.detail : "",

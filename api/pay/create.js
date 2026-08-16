@@ -4,16 +4,13 @@ const {
   newebpayConfigured,
   newebpayConfigStatus,
   createOrderNo,
-  defaultPeriodAmt,
-  defaultPeriodTimes,
-  periodProdDesc,
-  buildPeriodTradeParams,
-  periodPostFields,
-  periodAutoSubmitHtml,
-  periodGateway,
+  mpgAmt,
+  mpgItemDesc,
+  buildMpgTradeParams,
+  mpgFormFields,
+  mpgAutoSubmitHtml,
+  mpgGateway,
   notifyUrl,
-  returnUrl,
-  clientBackUrl,
   readRequestBody,
 } = require("../../lib/newebpay");
 
@@ -74,7 +71,7 @@ module.exports = async function handler(req, res) {
     const hasToken = Boolean(bearerToken(req, extra));
     res.status(401).json({
       ok: false,
-      error: hasToken ? "登入已過期，請重新登入後再訂閱" : "請先登入",
+      error: hasToken ? "登入已過期，請重新登入後再付款" : "請先登入",
     });
     return;
   }
@@ -92,91 +89,77 @@ module.exports = async function handler(req, res) {
     return;
   }
   if (sub.status === "active") {
-    res.status(409).json({ ok: false, error: "你已經訂閱中" });
+    res.status(409).json({ ok: false, error: "你已經付款完成" });
     return;
   }
   if (!user.email) {
-    res.status(400).json({ ok: false, error: "這個帳號沒有 Email，藍新定期定額需要付款人信箱" });
+    res.status(400).json({ ok: false, error: "這個帳號沒有 Email，藍新一次付清需要付款人信箱" });
     return;
   }
 
-  const amt = Number(body.amt || defaultPeriodAmt());
-  if (!Number.isFinite(amt) || amt < 1) {
-    res.status(400).json({ ok: false, error: "金額必須是正整數" });
-    return;
-  }
-  const times = defaultPeriodTimes();
-  const itemDesc = periodProdDesc(body.itemDesc);
+  const amt = mpgAmt();
+  const itemDesc = mpgItemDesc(body.itemDesc);
   const orderNo = createOrderNo().replace(/[^A-Za-z0-9_]/g, "").slice(0, 30);
   let tradeParams;
   try {
-    tradeParams = buildPeriodTradeParams({
+    tradeParams = buildMpgTradeParams({
       orderNo,
       email: user.email,
-      amt,
       itemDesc,
     });
   } catch (error) {
-    console.error("NewebPay period params invalid:", error && error.message ? error.message : error);
-    res.status(400).json({ ok: false, error: String(error && error.message ? error.message : "藍新定期定額參數不完整") });
+    console.error("NewebPay MPG params invalid:", error && error.message ? error.message : error);
+    res.status(400).json({ ok: false, error: String(error && error.message ? error.message : "藍新一次付清參數不完整") });
     return;
   }
-  const schedule = {
-    PeriodType: tradeParams.PeriodType,
-    PeriodPoint: tradeParams.PeriodPoint,
-    PeriodStartType: tradeParams.PeriodStartType,
-  };
-  console.log("NewebPay Period assembled payload:", tradeParams);
+  console.log("NewebPay MPG assembled payload:", tradeParams);
 
   let saved;
   try {
     saved = await patchSubscription(user.id, {
       status: "pending",
       email: user.email,
-      amount: Math.round(amt),
+      amount: amt,
       merchant_order_no: orderNo,
-      period_type: schedule.PeriodType,
-      period_point: schedule.PeriodPoint,
-      period_times: times,
-      period_start_type: Number(schedule.PeriodStartType),
     });
   } catch (error) {
     console.error("NewebPay patchSubscription failed:", error && error.message ? error.message : error);
-    res.status(500).json({ ok: false, error: String(error && error.message ? error.message : "無法寫入訂閱訂單") });
+    res.status(500).json({ ok: false, error: String(error && error.message ? error.message : "無法寫入付款訂單") });
     return;
   }
   if (!saved) {
-    res.status(500).json({ ok: false, error: "無法寫入訂閱訂單，請稍後再試" });
+    res.status(500).json({ ok: false, error: "無法寫入付款訂單，請稍後再試" });
     return;
   }
 
   let fields;
   try {
-    fields = periodPostFields(tradeParams);
+    fields = mpgFormFields(tradeParams);
   } catch (error) {
     console.error("NewebPay encrypt failed:", error && error.message ? error.message : error, newebpayConfigStatus());
     res.status(500).json({ ok: false, error: "藍新參數加密失敗，請確認 HASH_KEY 為 32 碼、HASH_IV 為 16 碼。" });
     return;
   }
   const payStatus = newebpayConfigStatus();
-  console.log("NewebPay period created:", {
+  console.log("NewebPay MPG created:", {
     orderNo,
     env: payStatus.env,
     production: payStatus.production,
     gateway: payStatus.gateway,
     merchantId: payStatus.merchantId,
     notifyUrl: notifyUrl(),
-    schedule,
-    version: "1.5",
+    version: tradeParams.Version,
+    amt: tradeParams.Amt,
     formKeys: Object.keys(fields),
-    hasMerchantId: Boolean(fields.MerchantID_),
-    hasPostData: Boolean(fields.PostData_),
+    hasMerchantId: Boolean(fields.MerchantID),
+    hasTradeInfo: Boolean(fields.TradeInfo),
+    hasTradeSha: Boolean(fields.TradeSha),
   });
 
   if (wantsJson(req)) {
     res.status(200).json({
       ok: true,
-      gateway: periodGateway(),
+      gateway: mpgGateway(),
       orderNo,
       fields,
     });
@@ -184,5 +167,5 @@ module.exports = async function handler(req, res) {
   }
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.status(200).send(periodAutoSubmitHtml(fields));
+  res.status(200).send(mpgAutoSubmitHtml(fields));
 };

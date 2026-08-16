@@ -1008,14 +1008,14 @@ function renderAuth() {
   const status = membership.status || "";
   const entitled = Boolean(membership.entitled || membership.paid);
   const payBtn = status === "active"
-    ? `<button class="auth-pay is-paid" type="button" disabled><span>已訂閱</span></button>`
-    : `<button class="auth-pay" id="btnNewebPay" type="button"><span>${status === "trialing" || status === "pending" ? "訂閱" : "訂閱以繼續"}</span></button>`;
+    ? `<button class="auth-pay is-paid" type="button" disabled><span>已付款</span></button>`
+    : `<button class="auth-pay" id="btnNewebPay" type="button"><span>${status === "trialing" || status === "pending" ? "一次付清 NT$399" : "付款以繼續 NT$399"}</span></button>`;
   const trialHint = membership.trialEndsAt && status === "trialing"
     ? `<p class="auth-hint">試用至 ${escapeHtml(formatTrialDate(membership.trialEndsAt))}</p>`
     : entitled && status === "active"
-      ? `<p class="auth-hint">定期定額訂閱已啟用。</p>`
+      ? `<p class="auth-hint">一次付清已完成。</p>`
       : status === "expired" || status === "cancelled" || status === "past_due"
-        ? `<p class="auth-hint">試用已結束，訂閱後可繼續使用雲端 AI。</p>`
+        ? `<p class="auth-hint">試用已結束，付款 NT$399 後可繼續使用雲端 AI。</p>`
         : `<p class="auth-hint">登入後會讀取你在雲端的復盤與個人紀錄。</p>`;
   side.innerHTML = `
     <div class="auth-user">
@@ -1190,16 +1190,18 @@ function submitNewebPayForm(gateway, fields) {
   form.action = gateway;
   form.acceptCharset = "UTF-8";
   form.enctype = "application/x-www-form-urlencoded";
-  const merchantId = fields && fields.MerchantID_ != null ? String(fields.MerchantID_) : "";
-  const postData = fields && fields.PostData_ != null ? String(fields.PostData_).replace(/\s+/g, "").toLowerCase() : "";
-  [
-    ["MerchantID_", merchantId],
-    ["PostData_", postData],
-  ].forEach(([name, value]) => {
+  const names = ["MerchantID", "TradeInfo", "TradeSha", "Version", "EncryptType"].filter(
+    (name) => fields && fields[name] != null && String(fields[name]) !== ""
+  );
+  if (!names.length) {
+    showToast("藍新付款欄位不完整");
+    return;
+  }
+  names.forEach((name) => {
     const input = document.createElement("input");
     input.type = "hidden";
     input.name = name;
-    input.value = value;
+    input.value = String(fields[name]);
     form.appendChild(input);
   });
   document.body.appendChild(form);
@@ -1412,7 +1414,7 @@ function handleAuthQuery() {
       setAuthError(message);
       showToast(`登入失敗：${message}`);
     }
-    if (pay === "ok") showToast("訂閱授權已送出。會員狀態會在藍新通知後更新。");
+    if (pay === "ok") showToast("付款已送出。會員狀態會在藍新通知後更新。");
     if (pay === "fail" || pay === "error") {
       const code = params.get("code") || "";
       const reason = params.get("reason") || "請再試一次";
