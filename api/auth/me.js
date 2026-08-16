@@ -16,7 +16,11 @@ module.exports = async function handler(req, res) {
       membership = publicMembership(row);
     } catch (error) {
       membershipError = String(error && error.message ? error.message : error);
-      console.error("ensureTrial failed:", membershipError);
+      console.error("ensureTrial failed:", {
+        message: membershipError,
+        name: error && error.name,
+        stack: error && error.stack,
+      });
     }
   }
   res.status(200).json({

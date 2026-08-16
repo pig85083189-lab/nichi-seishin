@@ -83,9 +83,11 @@ alter table public.nichi_billing_events enable row level security;
 
 revoke all on public.nichi_subscriptions from anon, authenticated;
 revoke all on public.nichi_billing_events from anon, authenticated;
+grant usage on schema public to anon, authenticated, service_role;
 grant select on public.nichi_subscriptions to authenticated;
 grant all on public.nichi_subscriptions to service_role;
 grant all on public.nichi_billing_events to service_role;
+notify pgrst, 'reload schema';
 
 drop policy if exists "nichi_subscriptions_select_own" on public.nichi_subscriptions;
 create policy "nichi_subscriptions_select_own"
