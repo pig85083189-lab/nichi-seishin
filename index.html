@@ -29,7 +29,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="app.css?v=65" />
+    <link rel="stylesheet" href="app.css?v=66" />
   </head>
   <body>
     <script>
@@ -252,22 +252,15 @@
 
           <section class="journal-card" id="section-aware">
             <h2 class="journal-card__title"><span>04</span> 覺察力</h2>
+            <p class="journal-guide">題目每天依今天的輸入與成長進度生成，不是固定題庫。寫完事件、心情與身體狀況後會自動出題。</p>
             <div class="journal-split">
               <div class="journal-col">
-                <ol class="journal-qs">
-                  <li>
-                    <p>今天，哪個時刻感受到了「生命力」或「平靜」？</p>
-                    <input class="input" id="aware1" type="text" placeholder="寫下那個時刻…" />
-                  </li>
-                  <li>
-                    <p>今天，哪一個時刻我出現了「防衛心」或「情緒波動」？</p>
-                    <input class="input" id="aware2" type="text" placeholder="寫下那個時刻…" />
-                  </li>
-                  <li>
-                    <p>如果明天能重來一次，在某個小細節上，我會做哪一個不同的選擇？</p>
-                    <input class="input" id="aware3" type="text" placeholder="一個小到明天做得到的選擇…" />
-                  </li>
-                </ol>
+                <div class="check-loading" id="awarePromptLoading" hidden>
+                  <p class="check-loading__label">正在為你生成今天的覺察題目…</p>
+                  <div class="ai-thinking__bar"><i></i></div>
+                </div>
+                <ol class="journal-qs" id="awareQs"></ol>
+                <button class="ai-check-btn" id="btnRefreshPrompts" type="button">換一批今天的題目</button>
                 <button class="ai-check-btn" id="btnAwareAi" type="button">AI 分析並生成勾勾表</button>
               </div>
               <div class="journal-col">
@@ -316,77 +309,12 @@
 
           <section class="journal-card" id="section-deep">
             <h2 class="journal-card__title"><span>06</span> 深度思考</h2>
-            <p class="journal-guide">先用白話把場面講清楚，再往下挖一點點。點開卡片即可書寫。</p>
-            <div class="deep-list">
-              <details class="deep-item">
-                <summary>今天哪一刻，我其實超想翻白眼（或超不爽），但還是忍住了？</summary>
-                <div class="deep-block">
-                  <p class="deep-guide"><strong>白話想一想</strong>先不用分析。那一刻是誰、什麼場面、你心裡那句沒說出口的話是什麼？</p>
-                  <textarea class="textarea" id="deep1plain" rows="3" placeholder="那一刻發生了什麼…"></textarea>
-                </div>
-                <div class="deep-block">
-                  <p class="deep-guide"><strong>深挖一點點</strong>你忍住的背後，真正被碰到的是什麼？是不被尊重、被誤解，還是怕關係破掉？</p>
-                  <textarea class="textarea" id="deep1deep" rows="3" placeholder="真正觸發我的是…"></textarea>
-                </div>
-                <button class="ai-check-btn" data-deepen="1" type="button">讓 AI 帶我再深入思考</button>
-                <div class="check-loading" id="deep1Loading" hidden>
-                  <p class="check-loading__label">正在根據你的回答往下挖…</p>
-                  <div class="ai-thinking__bar"><i></i></div>
-                </div>
-                <div class="deep-follow" id="deep1Follow"></div>
-              </details>
-              <details class="deep-item">
-                <summary>今天有沒有哪件事，是我其實可以不要做，但又不好意思拒絕的？</summary>
-                <div class="deep-block">
-                  <p class="deep-guide"><strong>白話想一想</strong>那件「算了，我來」的事是什麼？如果可以重來，你其實想說什麼？</p>
-                  <textarea class="textarea" id="deep2plain" rows="3" placeholder="那件不好意思拒絕的事是…"></textarea>
-                </div>
-                <div class="deep-block">
-                  <p class="deep-guide"><strong>深挖一點點</strong>不好意思拒絕，通常在保護什麼？是怕被覺得不夠好，還是怕讓對方失望？</p>
-                  <textarea class="textarea" id="deep2deep" rows="3" placeholder="我真正在保護的是…"></textarea>
-                </div>
-                <button class="ai-check-btn" data-deepen="2" type="button">讓 AI 帶我再深入思考</button>
-                <div class="check-loading" id="deep2Loading" hidden>
-                  <p class="check-loading__label">正在根據你的回答往下挖…</p>
-                  <div class="ai-thinking__bar"><i></i></div>
-                </div>
-                <div class="deep-follow" id="deep2Follow"></div>
-              </details>
-              <details class="deep-item">
-                <summary>如果今天可以重來，哪一件事我絕對不要再用老方法處理？</summary>
-                <div class="deep-block">
-                  <p class="deep-guide"><strong>白話想一想</strong>那個老方法是什麼？重來一次，你會改哪一個小動作就好？</p>
-                  <textarea class="textarea" id="deep3plain" rows="3" placeholder="那個老方法，以及我想改的小動作…"></textarea>
-                </div>
-                <div class="deep-block">
-                  <p class="deep-guide"><strong>深挖一點點</strong>老方法曾經保護過你。這次你想換成什麼新方法，才比較像現在的自己？</p>
-                  <textarea class="textarea" id="deep3deep" rows="3" placeholder="我想換成的新方法是…"></textarea>
-                </div>
-                <button class="ai-check-btn" data-deepen="3" type="button">讓 AI 帶我再深入思考</button>
-                <div class="check-loading" id="deep3Loading" hidden>
-                  <p class="check-loading__label">正在根據你的回答往下挖…</p>
-                  <div class="ai-thinking__bar"><i></i></div>
-                </div>
-                <div class="deep-follow" id="deep3Follow"></div>
-              </details>
-              <details class="deep-item">
-                <summary>今天最爽、最讓我覺得「還好我有堅持」的一瞬間是什麼？</summary>
-                <div class="deep-block">
-                  <p class="deep-guide"><strong>白話想一想</strong>那個瞬間發生了什麼？你當時做了哪件「有點難，但還是做了」的事？</p>
-                  <textarea class="textarea" id="deep4plain" rows="3" placeholder="那個還好我有堅持的瞬間是…"></textarea>
-                </div>
-                <div class="deep-block">
-                  <p class="deep-guide"><strong>深挖一點點</strong>這件事碰觸到你的哪一個價值觀？明天要怎麼複製這個成功經驗，再小一步也行。</p>
-                  <textarea class="textarea" id="deep4deep" rows="3" placeholder="我想留下來、明天再複製的是…"></textarea>
-                </div>
-                <button class="ai-check-btn" data-deepen="4" type="button">讓 AI 帶我再深入思考</button>
-                <div class="check-loading" id="deep4Loading" hidden>
-                  <p class="check-loading__label">正在根據你的回答往下挖…</p>
-                  <div class="ai-thinking__bar"><i></i></div>
-                </div>
-                <div class="deep-follow" id="deep4Follow"></div>
-              </details>
+            <p class="journal-guide">四個主題每天依今天的故事與近期成長動態生成。點開卡片即可書寫，再讓 AI 往下追問。</p>
+            <div class="check-loading" id="deepPromptLoading" hidden>
+              <p class="check-loading__label">正在生成今天的深度思考主題…</p>
+              <div class="ai-thinking__bar"><i></i></div>
             </div>
+            <div class="deep-list" id="deepList"></div>
           </section>
 
           <div class="journal-footer">
@@ -518,6 +446,6 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=77"></script>
+    <script src="app.js?v=78"></script>
   </body>
 </html>

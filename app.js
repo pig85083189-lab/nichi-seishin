@@ -76,12 +76,18 @@ const state = {
     awarenessAiSig: "",
     executionAiSig: "",
     insightSig: "",
+    promptsSig: "",
+    promptsAi: false,
   },
   checklistBusy: { awareness: false, execution: false },
   checklistToken: { awareness: 0, execution: 0 },
   insightBusy: false,
   insightToken: 0,
   journalInsight: null,
+  promptsBusy: false,
+  promptsToken: 0,
+  awarenessPrompts: [],
+  deepPrompts: [],
   deepFollowBusy: [false, false, false, false],
   deepFollowToken: [0, 0, 0, 0],
   organizeSource: "",
@@ -1714,6 +1720,10 @@ function emptyJournal() {
     executionAiSig: "",
     insight: emptyInsight(),
     deep: emptyDeep(),
+    awarenessPrompts: [],
+    deepPrompts: [],
+    promptsSig: "",
+    promptsAi: false,
   };
 }
 
@@ -1889,6 +1899,7 @@ function scheduleJournalChecklists() {
     refreshJournalChecklists(data);
     maybeAutoGenerateChecklists(data);
     maybeAutoGenerateInsight(data);
+    maybeAutoGeneratePrompts(data);
   }, 900);
 }
 
@@ -1965,6 +1976,7 @@ async function generateJournalChecklist(kind, options = {}) {
       kind,
       date: currentIso(),
       answers,
+      questions: isAware ? (state.awarenessPrompts || []).map((item) => item.question) : [],
       context: {
         event: journal.event,
         mood: journal.mood,
@@ -2108,12 +2120,394 @@ function maybeAutoGenerateInsight(journal) {
   }
 }
 
-const DEEP_THEMES = [
-  "今天哪一刻，我其實超想翻白眼（或超不爽），但還是忍住了？",
-  "今天有沒有哪件事，是我其實可以不要做，但又不好意思拒絕的？",
-  "如果今天可以重來，哪一件事我絕對不要再用老方法處理？",
-  "今天最爽、最讓我覺得「還好我有堅持」的一瞬間是什麼？",
+const LEGACY_AWARENESS_PROMPTS = [
+  { question: "今天，哪個時刻感受到了「生命力」或「平靜」？", placeholder: "寫下那個時刻…" },
+  { question: "今天，哪一個時刻我出現了「防衛心」或「情緒波動」？", placeholder: "寫下那個時刻…" },
+  { question: "如果明天能重來一次，在某個小細節上，我會做哪一個不同的選擇？", placeholder: "一個小到明天做得到的選擇…" },
 ];
+
+const LEGACY_DEEP_PROMPTS = [
+  {
+    title: "今天哪一刻，我其實超想翻白眼（或超不爽），但還是忍住了？",
+    plainGuide: "白話想一想：先不用分析。那一刻是誰、什麼場面、你心裡那句沒說出口的話是什麼？",
+    deepGuide: "深挖一點點：你忍住的背後，真正被碰到的是什麼？是不被尊重、被誤解，還是怕關係破掉？",
+    placeholderPlain: "那一刻發生了什麼…",
+    placeholderDeep: "真正觸發我的是…",
+  },
+  {
+    title: "今天有沒有哪件事，是我其實可以不要做，但又不好意思拒絕的？",
+    plainGuide: "白話想一想：那件「算了，我來」的事是什麼？如果可以重來，你其實想說什麼？",
+    deepGuide: "深挖一點點：不好意思拒絕，通常在保護什麼？是怕被覺得不夠好，還是怕讓對方失望？",
+    placeholderPlain: "那件不好意思拒絕的事是…",
+    placeholderDeep: "我真正在保護的是…",
+  },
+  {
+    title: "如果今天可以重來，哪一件事我絕對不要再用老方法處理？",
+    plainGuide: "白話想一想：那個老方法是什麼？重來一次，你會改哪一個小動作就好？",
+    deepGuide: "深挖一點點：老方法曾經保護過你。這次你想換成什麼新方法，才比較像現在的自己？",
+    placeholderPlain: "那個老方法，以及我想改的小動作…",
+    placeholderDeep: "我想換成的新方法是…",
+  },
+  {
+    title: "今天最爽、最讓我覺得「還好我有堅持」的一瞬間是什麼？",
+    plainGuide: "白話想一想：那個瞬間發生了什麼？你當時做了哪件「有點難，但還是做了」的事？",
+    deepGuide: "深挖一點點：這件事碰觸到你的哪一個價值觀？明天要怎麼複製這個成功經驗，再小一步也行。",
+    placeholderPlain: "那個還好我有堅持的瞬間是…",
+    placeholderDeep: "我想留下來、明天再複製的是…",
+  },
+];
+
+function normalizeAwarenessPrompts(list) {
+  return (Array.isArray(list) ? list : [])
+    .map((item) => {
+      if (typeof item === "string") {
+        const question = item.trim();
+        return question ? { question, placeholder: "寫下那個時刻…" } : null;
+      }
+      const question = String(item?.question || item?.title || "").trim();
+      if (!question) return null;
+      return {
+        question: question.slice(0, 80),
+        placeholder: String(item?.placeholder || "寫下那個時刻…").trim().slice(0, 36) || "寫下那個時刻…",
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 3);
+}
+
+function normalizeDeepPrompts(list) {
+  return (Array.isArray(list) ? list : [])
+    .map((item) => {
+      const title = String(item?.title || item?.question || "").trim();
+      if (!title) return null;
+      return {
+        title: title.slice(0, 90),
+        plainGuide: String(item?.plainGuide || "白話想一想：先把場面講清楚。").trim().slice(0, 90),
+        deepGuide: String(item?.deepGuide || "深挖一點點：真正被碰到的是哪一層？").trim().slice(0, 90),
+        placeholderPlain: String(item?.placeholderPlain || "那一刻發生了什麼…").trim().slice(0, 36),
+        placeholderDeep: String(item?.placeholderDeep || "真正觸發我的是…").trim().slice(0, 36),
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 4);
+}
+
+function promptsSignature(journal) {
+  return [currentIso(), insightSignature(journal)].join("\n");
+}
+
+function promptsHaveAnswers(journal) {
+  const data = journal || collectJournal();
+  return (data.awareness || []).some((item) => String(item || "").trim()) || deepHasContent(data.deep);
+}
+
+function eventSnippet(journal) {
+  const text = String(journal?.event || "").replace(/\s+/g, " ").trim();
+  if (!text) return "今天這件事";
+  return text.length > 16 ? `${text.slice(0, 16)}…` : text;
+}
+
+function localAwarenessPrompts(journal) {
+  const mood = journal.mood || "這份心情";
+  const snippet = eventSnippet(journal);
+  const tags = (journal.bodyTags || []).join("、");
+  const body = String(journal.bodyNote || "").trim();
+  const related = /他|她|對方|同事|家人|朋友|老闆|客戶|伴侶/.test(`${journal.event || ""}\n${body}`);
+  const tired = /累|疲|緊|痛|睡|胸口/.test(`${tags}\n${body}`);
+  const pool = [
+    [
+      { question: `在「${snippet}」裡，哪一句話最先讓你心口一緊？`, placeholder: "那句話是…" },
+      { question: `心情停在「${mood}」時，你其實最想被接住的是什麼？`, placeholder: "我想被接住的是…" },
+      { question: tired ? "身體今天最早發出的那個訊號，是在提醒你停哪一步？" : "如果明天只改一個小細節，你會讓哪一句話被說出來？", placeholder: "那個小細節是…" },
+    ],
+    [
+      { question: related ? "今天在關係裡，你沒說出口、但其實很在乎的是哪一句？" : "今天哪一個選擇，其實是為了保護自己才做的？", placeholder: "那一句／那個選擇是…" },
+      { question: `「${mood}」底下，還有沒有另一層更小、更真的感覺？`, placeholder: "更真的感覺是…" },
+      { question: "明天的自己，會感謝今天哪個小小的誠實？", placeholder: "那個誠實是…" },
+    ],
+    [
+      { question: "今天哪一刻，你覺得自己被看不見、或被看得太用力？", placeholder: "那個時刻是…" },
+      { question: tired ? `身體的「${tags || "不適"}」，和今天這件事哪裡連在一起？` : "今天哪一個念頭，其實是舊劇本又播出一次？", placeholder: "那個連結／舊劇本是…" },
+      { question: "若只能對今天的自己說一句人話，會是哪一句？", placeholder: "那句人話是…" },
+    ],
+  ];
+  const seed = Array.from(promptsSignature(journal)).reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+  return pool[seed % pool.length];
+}
+
+function localDeepPrompts(journal) {
+  const mood = journal.mood || "這份心情";
+  const snippet = eventSnippet(journal);
+  const related = /他|她|對方|同事|家人|朋友|老闆|客戶|伴侶/.test(journal.event || "");
+  const pool = [
+    [
+      {
+        title: `面對「${snippet}」，你哪一句真心話最後還是吞回去了？`,
+        plainGuide: "白話想一想：那句話卡在哪裡？當時場面是什麼？",
+        deepGuide: "深挖一點點：吞回去，是在保護關係、面子，還是保護那個還沒準備好的自己？",
+        placeholderPlain: "那句沒說出口的話是…",
+        placeholderDeep: "我真正在保護的是…",
+      },
+      {
+        title: related ? "今天對方（或當時的自己）聽見的，和你想傳達的，差在哪裡？" : "今天哪一個決定，其實是害怕多過想要？",
+        plainGuide: "白話想一想：你以為自己在做什麼？實際被接收到的又是什麼？",
+        deepGuide: `深挖一點點：心情停在「${mood}」時，真正害怕失去的是什麼？`,
+        placeholderPlain: "兩邊的落差是…",
+        placeholderDeep: "我真正怕失去的是…",
+      },
+      {
+        title: "如果把今天的防衛拿掉十秒，你會先照顧哪一塊？",
+        plainGuide: "白話想一想：防衛出現時，身體或語氣先發生了什麼？",
+        deepGuide: "深挖一點點：那十秒裡，你最需要的一句話是什麼？",
+        placeholderPlain: "防衛出現的樣子是…",
+        placeholderDeep: "我最需要的那句話是…",
+      },
+      {
+        title: "今天哪一個小小的誠實，值得被你明天再做一次？",
+        plainGuide: "白話想一想：那個誠實可能很小，甚至只有你自己看見。",
+        deepGuide: "深挖一點點：它碰到你的哪一個價值？明天怎麼複製，再小一步也行。",
+        placeholderPlain: "那個小小的誠實是…",
+        placeholderDeep: "我想留下來的是…",
+      },
+    ],
+  ];
+  return pool[0];
+}
+
+function collectGrowthProgress() {
+  const todayIso = currentIso();
+  const dates = getCompletedDates();
+  const reviews = getReviews();
+  const recentReviews = Object.entries(reviews)
+    .filter(([iso, review]) => iso !== todayIso && reviewIsComplete(review))
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .slice(0, 7)
+    .map(([iso, review]) => {
+      const journal = review.journal || {};
+      return {
+        date: iso,
+        mood: journal.mood || "",
+        event: String(journal.event || review.rawText || "").slice(0, 120),
+        awareness: (journal.awarenessChecks || []).slice(0, 4),
+        insight: String(journal.insight?.title || journal.insight?.conclusion || "").slice(0, 80),
+      };
+    });
+  const avoidQuestions = [];
+  Object.entries(reviews)
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .slice(0, 10)
+    .forEach(([, review]) => {
+      (review.journal?.awarenessPrompts || []).forEach((item) => avoidQuestions.push(item.question || item.title || item));
+      (review.journal?.deepPrompts || []).forEach((item) => avoidQuestions.push(item.title || item.question || item));
+    });
+  (state.awarenessPrompts || []).forEach((item) => avoidQuestions.push(item.question));
+  (state.deepPrompts || []).forEach((item) => avoidQuestions.push(item.title));
+  return {
+    streak: calcStreak(dates, todayIso),
+    recentReviews,
+    recentInsights: getInsights()
+      .slice(0, 8)
+      .map((item) => ({ date: item.date || "", title: item.title || "" })),
+    openActions: getTasks()
+      .filter((task) => task.status !== "done")
+      .slice(0, 6)
+      .map((task) => task.title),
+    avoidQuestions: [...new Set(avoidQuestions.map((item) => String(item || "").trim()).filter(Boolean))].slice(0, 20),
+  };
+}
+
+function renderAwarenessQuestions(prompts, options = {}) {
+  const root = document.getElementById("awareQs");
+  if (!root) return;
+  const saved = options.answers || ["aware1", "aware2", "aware3"].map(journalFieldValue);
+  const items = normalizeAwarenessPrompts(prompts);
+  if (!items.length) {
+    root.classList.add("is-waiting");
+    root.innerHTML = [0, 1, 2]
+      .map(
+        (index) => `
+          <li>
+            <p class="journal-q--pending">${index === 0 ? "寫完今日事件、心情與身體狀況後，會為你生成今天的三道覺察題。" : "題目會依今天的輸入與成長進度出現。"}</p>
+            <input class="input" id="aware${index + 1}" type="text" placeholder="題目出現後再寫…" value="${escapeHtml(saved[index] || "")}" />
+          </li>
+        `
+      )
+      .join("");
+    return;
+  }
+  root.classList.remove("is-waiting");
+  root.innerHTML = items
+    .map(
+      (item, index) => `
+        <li>
+          <p>${escapeHtml(item.question)}</p>
+          <input class="input" id="aware${index + 1}" type="text" placeholder="${escapeHtml(item.placeholder)}" value="${escapeHtml(saved[index] || "")}" />
+        </li>
+      `
+    )
+    .join("");
+}
+
+function renderDeepThemes(prompts, options = {}) {
+  const root = document.getElementById("deepList");
+  if (!root) return;
+  const items = normalizeDeepPrompts(prompts);
+  const deep = options.deep || [1, 2, 3, 4].map((index) => {
+    try {
+      return collectDeepSlot(index);
+    } catch {
+      return { plain: "", deep: "", followups: [], notes: ["", "", "", ""] };
+    }
+  });
+  const openSet = new Set(
+    [...root.querySelectorAll("details.deep-item[open]")].map((el, index) => Number(el.dataset.deepIndex || index + 1))
+  );
+  if (!items.length) {
+    root.classList.add("is-waiting");
+    root.innerHTML = `<p class="deep-empty">寫完今日事件、心情與身體狀況後，會依你的成長進度生成今天的四個深度思考主題。</p>`;
+    return;
+  }
+  root.classList.remove("is-waiting");
+  root.innerHTML = items
+    .map((item, i) => {
+      const index = i + 1;
+      const slot = deep[i] || { plain: "", deep: "", followups: [], notes: [] };
+      return `
+        <details class="deep-item" data-deep-index="${index}" ${openSet.has(index) ? "open" : ""}>
+          <summary>${escapeHtml(item.title)}</summary>
+          <div class="deep-block">
+            <p class="deep-guide"><strong>白話想一想</strong>${escapeHtml(String(item.plainGuide || "").replace(/^白話想一想[:：]?\s*/, ""))}</p>
+            <textarea class="textarea" id="deep${index}plain" rows="3" placeholder="${escapeHtml(item.placeholderPlain)}">${escapeHtml(slot.plain || "")}</textarea>
+          </div>
+          <div class="deep-block">
+            <p class="deep-guide"><strong>深挖一點點</strong>${escapeHtml(String(item.deepGuide || "").replace(/^深挖一點點[:：]?\s*/, ""))}</p>
+            <textarea class="textarea" id="deep${index}deep" rows="3" placeholder="${escapeHtml(item.placeholderDeep)}">${escapeHtml(slot.deep || "")}</textarea>
+          </div>
+          <button class="ai-check-btn" data-deepen="${index}" type="button">讓 AI 帶我再深入思考</button>
+          <div class="check-loading" id="deep${index}Loading" hidden>
+            <p class="check-loading__label">正在根據你的回答往下挖…</p>
+            <div class="ai-thinking__bar"><i></i></div>
+          </div>
+          <div class="deep-follow" id="deep${index}Follow"></div>
+        </details>
+      `;
+    })
+    .join("");
+  items.forEach((_, i) => {
+    const slot = deep[i] || {};
+    renderDeepFollow(i + 1, slot.followups, slot.notes);
+  });
+}
+
+function setPromptsLoading(loading) {
+  state.promptsBusy = loading;
+  const btn = document.getElementById("btnRefreshPrompts");
+  const awareLoader = document.getElementById("awarePromptLoading");
+  const deepLoader = document.getElementById("deepPromptLoading");
+  if (btn) {
+    btn.disabled = loading;
+    btn.textContent = loading ? "生成中…" : "換一批今天的題目";
+  }
+  if (awareLoader) awareLoader.hidden = !loading;
+  if (deepLoader) deepLoader.hidden = !loading;
+}
+
+function applyGeneratedPrompts(awareness, deep, sig, fromAi) {
+  state.awarenessPrompts = normalizeAwarenessPrompts(awareness);
+  state.deepPrompts = normalizeDeepPrompts(deep);
+  state.journalMeta.promptsSig = sig;
+  state.journalMeta.promptsAi = Boolean(fromAi);
+  renderAwarenessQuestions(state.awarenessPrompts);
+  renderDeepThemes(state.deepPrompts);
+  persistJournalQuietly();
+}
+
+function persistJournalQuietly() {
+  try {
+    const { journal, rawText } = syncHiddenReviewText();
+    const prev = getReview(currentIso()) || {};
+    upsertReview(currentIso(), {
+      rawText: rawText || prev.rawText || "",
+      journal,
+      organize: state.organize || prev.organize || null,
+      gratitude: prev.gratitude || state.gratitude || "",
+      selectedQuotes: state.selectedQuotes,
+      selectedSfm: state.selectedSfm,
+      thinkHistory: state.think.history,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch {
+    /* 出題後的安靜儲存失敗不擋畫面 */
+  }
+}
+
+async function generateJournalPrompts(options = {}) {
+  if (state.promptsBusy) return;
+  const journal = collectJournal();
+  if (!insightReady(journal)) {
+    if (!options.auto) showToast("請先寫下今日事件、選擇心情，並標出身體狀況，才會生成今天的題目。");
+    return;
+  }
+  if (!options.force && promptsHaveAnswers(journal) && state.awarenessPrompts.length === 3 && state.deepPrompts.length === 4) {
+    return;
+  }
+  if (options.force && promptsHaveAnswers(journal)) {
+    showToast("你已經開始作答了。想換題的話，先清空這幾題的回答。");
+    return;
+  }
+  const sig = promptsSignature(journal);
+  if (options.auto && !options.force && state.journalMeta.promptsSig === sig && state.awarenessPrompts.length === 3) return;
+
+  const token = (state.promptsToken || 0) + 1;
+  state.promptsToken = token;
+  setPromptsLoading(true);
+
+  try {
+    if (!state.user) throw new Error("請先登入，才能使用雲端 AI 出題。");
+    const insight = normalizeInsight(state.journalInsight);
+    const remote = await postReview({
+      mode: "prompts",
+      date: currentIso(),
+      text: journal.event,
+      context: {
+        thanks: journal.thanks,
+        event: journal.event,
+        mood: journal.mood,
+        bodyTags: journal.bodyTags,
+        bodyNote: journal.bodyNote,
+        insight: [insight.title, insight.conclusion].filter(Boolean).join("／"),
+      },
+      progress: collectGrowthProgress(),
+    });
+    if (state.promptsToken !== token) return;
+    const awareness = normalizeAwarenessPrompts(remote.awareness);
+    const deep = normalizeDeepPrompts(remote.deep);
+    if (awareness.length < 3 || deep.length < 4) throw new Error("雲端回傳格式不完整");
+    applyGeneratedPrompts(awareness, deep, sig, true);
+    showToast("今天的覺察題與深度思考主題已生成。");
+  } catch (error) {
+    if (state.promptsToken !== token) return;
+    applyGeneratedPrompts(localAwarenessPrompts(journal), localDeepPrompts(journal), sig, false);
+    showToast(`雲端出題失敗：${formatApiError(error)}，先用今天的本地題目。`);
+  } finally {
+    if (state.promptsToken === token) setPromptsLoading(false);
+  }
+}
+
+function maybeAutoGeneratePrompts(journal) {
+  if (state.journalHydrating) return;
+  const data = journal || collectJournal();
+  if (!insightReady(data)) return;
+  if (state.awarenessPrompts.length === 3 && state.deepPrompts.length === 4 && state.journalMeta.promptsSig === promptsSignature(data)) {
+    return;
+  }
+  if (promptsHaveAnswers(data) && state.awarenessPrompts.length === 3) return;
+  generateJournalPrompts({ auto: true });
+}
+
+function currentDeepTheme(index) {
+  return (state.deepPrompts[index - 1] || {}).title || "";
+}
 
 function collectDeepSlot(index) {
   const followups = [...document.querySelectorAll(`#deep${index}Follow [data-followup]`)].map((el) =>
@@ -2163,13 +2557,13 @@ function setDeepFollowLoading(index, loading) {
 }
 
 function localDeepFollowFallback(index, slot) {
-  const themeFallbacks = [
-    ["那句沒說出口的話，如果說出來，你最怕對方聽見什麼？", "忍住的那一秒，身體哪裡先緊起來？", "如果可以只改一個小動作，你會讓哪一句話被對方聽見？"],
-    ["不好意思拒絕時，你在保護誰的感受？", "如果這次說「這次我沒辦法」，最壞的畫面是什麼？", "這件事如果不是你做，誰其實也可以承擔？"],
-    ["那個老方法曾經幫你逃過什麼？", "新方法只需要改哪一個最小的動作？", "如果明天只用新方法做 5 分鐘，會從哪一步開始？"],
-    ["那一刻讓你覺得『我是這樣的人』的，是哪一個價值？", "明天要複製它，最小的一步是什麼？", "如果把這份堅持說給自己聽，那句話會是什麼？"],
+  const text = `${slot.plain || ""} ${slot.deep || ""}`.replace(/\s+/g, " ").trim();
+  const snippet = text ? (text.length > 12 ? `${text.slice(0, 12)}…` : text) : currentDeepTheme(index) || "這件事";
+  return [
+    `在「${snippet}」裡，你最不想被看穿的是哪一句？`,
+    "如果把防衛拿掉十秒，你其實想說什麼？",
+    "明天只要改一個最小的動作，會從哪一步開始？",
   ];
-  return themeFallbacks[index - 1] || themeFallbacks[0];
 }
 
 async function generateDeepFollow(index) {
@@ -2194,13 +2588,14 @@ async function generateDeepFollow(index) {
     const remote = await postReview({
       mode: "deepen",
       date: currentIso(),
-      theme: DEEP_THEMES[slotIndex - 1],
+      theme: currentDeepTheme(slotIndex) || "今天的深度思考",
       plain: slot.plain,
       deep: slot.deep,
       text: `${slot.plain}\n${slot.deep}`.trim(),
       context: {
         event: journal.event,
         mood: journal.mood,
+        theme: currentDeepTheme(slotIndex),
       },
     });
     if (state.deepFollowToken[slotIndex - 1] !== token) return;
@@ -2236,6 +2631,10 @@ function collectJournal() {
     executionAiSig: state.journalMeta.executionAiSig || "",
     insight: state.journalInsight || emptyInsight(),
     deep: [1, 2, 3, 4].map(collectDeepSlot),
+    awarenessPrompts: state.awarenessPrompts || [],
+    deepPrompts: state.deepPrompts || [],
+    promptsSig: state.journalMeta.promptsSig || "",
+    promptsAi: Boolean(state.journalMeta.promptsAi),
   };
   return journal;
 }
@@ -2259,13 +2658,9 @@ function composeJournalRawText(journal) {
     if (insight.logic) lines.push(insight.logic);
     if (insight.bodyLink) lines.push(insight.bodyLink);
   }
-  const awareQs = [
-    "今天，哪個時刻感受到了「生命力」或「平靜」？",
-    "今天，哪一個時刻我出現了「防衛心」或「情緒波動」？",
-    "如果明天能重來一次，在某個小細節上，我會做哪一個不同的選擇？",
-  ];
+  const awareQs = (journal.awarenessPrompts || state.awarenessPrompts || []).map((item) => item.question || item);
   (journal.awareness || []).forEach((item, index) => {
-    if (String(item || "").trim()) lines.push(`${awareQs[index]} ${item.trim()}`);
+    if (String(item || "").trim()) lines.push(`${awareQs[index] || `覺察題 ${index + 1}`} ${item.trim()}`);
   });
   if ((journal.awarenessChecks || []).length) lines.push(`今天我覺察到：${journal.awarenessChecks.join("、")}`);
   const execQs = [
@@ -2277,17 +2672,12 @@ function composeJournalRawText(journal) {
     if (String(item || "").trim()) lines.push(`${execQs[index]} ${item.trim()}`);
   });
   if ((journal.executionChecks || []).length) lines.push(`我的行動卡點：${journal.executionChecks.join("、")}`);
-  const deepQs = [
-    "今天哪一刻，我其實超想翻白眼（或超不爽），但還是忍住了？",
-    "今天有沒有哪件事，是我其實可以不要做，但又不好意思拒絕的？",
-    "如果今天可以重來，哪一件事我絕對不要再用老方法處理？",
-    "今天最爽、最讓我覺得「還好我有堅持」的一瞬間是什麼？",
-  ];
+  const deepQs = (journal.deepPrompts || state.deepPrompts || []).map((item) => item.title || item.question || item);
   normalizeDeep(journal.deep).forEach((item, index) => {
     const plain = String(item.plain || "").trim();
     const deep = String(item.deep || "").trim();
     if (!plain && !deep && !(item.followups || []).length) return;
-    lines.push(deepQs[index]);
+    lines.push(deepQs[index] || `深度思考 ${index + 1}`);
     if (plain) lines.push(`白話想一想：${plain}`);
     if (deep) lines.push(`深挖一點點：${deep}`);
     (item.followups || []).forEach((question, qIndex) => {
@@ -2331,10 +2721,12 @@ function fillJournal(journal) {
   state.checklistToken.awareness += 1;
   state.checklistToken.execution += 1;
   state.insightToken += 1;
+  state.promptsToken += 1;
   state.deepFollowToken = state.deepFollowToken.map((n) => n + 1);
   setChecklistLoading("awareness", false);
   setChecklistLoading("execution", false);
   setInsightLoading(false);
+  setPromptsLoading(false);
   [1, 2, 3, 4].forEach((index) => setDeepFollowLoading(index, false));
   state.journalMeta = {
     awarenessAi: Boolean(data.awarenessAi),
@@ -2342,8 +2734,16 @@ function fillJournal(journal) {
     awarenessAiSig: data.awarenessAiSig || "",
     executionAiSig: data.executionAiSig || "",
     insightSig: data.insight?.sig || "",
+    promptsSig: data.promptsSig || "",
+    promptsAi: Boolean(data.promptsAi),
   };
   state.journalInsight = normalizeInsight(data.insight);
+  state.awarenessPrompts = normalizeAwarenessPrompts(data.awarenessPrompts);
+  state.deepPrompts = normalizeDeepPrompts(data.deepPrompts);
+  const hasPromptAnswers =
+    (data.awareness || []).some((item) => String(item || "").trim()) || deepHasContent(data.deep);
+  if (!state.awarenessPrompts.length && hasPromptAnswers) state.awarenessPrompts = LEGACY_AWARENESS_PROMPTS;
+  if (!state.deepPrompts.length && hasPromptAnswers) state.deepPrompts = LEGACY_DEEP_PROMPTS;
   ["thanks1", "thanks2", "thanks3"].forEach((id, index) => {
     const el = document.getElementById(id);
     if (el) el.value = data.thanks[index] || "";
@@ -2354,22 +2754,12 @@ function fillJournal(journal) {
   setActiveButtons("bodyTags", ".tag-btn", data.bodyTags);
   const bodyNote = document.getElementById("bodyNote");
   if (bodyNote) bodyNote.value = data.bodyNote || "";
-  ["aware1", "aware2", "aware3"].forEach((id, index) => {
-    const el = document.getElementById(id);
-    if (el) el.value = data.awareness[index] || "";
-  });
+  renderAwarenessQuestions(state.awarenessPrompts, { answers: data.awareness });
   ["exec1", "exec2", "exec3"].forEach((id, index) => {
     const el = document.getElementById(id);
     if (el) el.value = data.execution[index] || "";
   });
-  const deep = normalizeDeep(data.deep);
-  deep.forEach((item, index) => {
-    const plain = document.getElementById(`deep${index + 1}plain`);
-    const note = document.getElementById(`deep${index + 1}deep`);
-    if (plain) plain.value = item.plain || "";
-    if (note) note.value = item.deep || "";
-    renderDeepFollow(index + 1, item.followups, item.notes);
-  });
+  renderDeepThemes(state.deepPrompts, { deep: normalizeDeep(data.deep) });
   refreshJournalChecklists(data, { useSaved: true });
   renderInsightCard(state.journalInsight);
   state.journalHydrating = false;
@@ -2450,6 +2840,8 @@ function loadReviewForDate(iso) {
     }
   }
   renderAiStage();
+  maybeAutoGenerateInsight(review?.journal || collectJournal());
+  maybeAutoGeneratePrompts(review?.journal || collectJournal());
 }
 
 function renderConclusionCallout(text) {
@@ -4020,6 +4412,7 @@ function bindEvents() {
   document.getElementById("btnAwareAi")?.addEventListener("click", () => generateJournalChecklist("awareness"));
   document.getElementById("btnExecAi")?.addEventListener("click", () => generateJournalChecklist("execution"));
   document.getElementById("btnInsightAi")?.addEventListener("click", () => generateJournalInsight());
+  document.getElementById("btnRefreshPrompts")?.addEventListener("click", () => generateJournalPrompts({ force: true }));
   document.getElementById("section-deep")?.addEventListener("click", (event) => {
     const btn = event.target.closest("[data-deepen]");
     if (!btn) return;
@@ -4032,7 +4425,9 @@ function bindEvents() {
     const on = !btn.classList.contains("is-on");
     document.querySelectorAll("#moodRow .mood-btn").forEach((item) => item.classList.toggle("is-on", on && item === btn));
     refreshJournalChecklists();
-    maybeAutoGenerateInsight(collectJournal());
+    const journal = collectJournal();
+    maybeAutoGenerateInsight(journal);
+    maybeAutoGeneratePrompts(journal);
   });
 
   document.getElementById("bodyTags")?.addEventListener("click", (event) => {
@@ -4040,7 +4435,9 @@ function bindEvents() {
     if (!btn) return;
     btn.classList.toggle("is-on");
     refreshJournalChecklists();
-    maybeAutoGenerateInsight(collectJournal());
+    const journal = collectJournal();
+    maybeAutoGenerateInsight(journal);
+    maybeAutoGeneratePrompts(journal);
   });
 
   document.getElementById("page-today")?.addEventListener("input", (event) => {

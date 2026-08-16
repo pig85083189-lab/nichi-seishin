@@ -224,6 +224,7 @@ const DEEPEN_SYSTEM = `你是「日精進」的高階心靈教練：有同理心
 - 每一題是完整問句，12-36 字，貼近他剛寫的人、場面、情緒，不要空泛
 - 像一對一教練追問：溫柔，但問到真正被碰到的那一層
 - 禁止說教、禁止病例腔、禁止重複他已經回答過的原題
+- 禁止套用固定題庫；每一題都要從他剛寫的人、場面、情緒長出來
 - 繁體中文`;
 
 function deepenUserPrompt(body) {
@@ -231,7 +232,7 @@ function deepenUserPrompt(body) {
   const plain = String(body.plain || "").trim();
   const deep = String(body.deep || body.note || "").trim();
   const ctx = body.context && typeof body.context === "object" ? body.context : {};
-  return `請針對這個主題與回答，再提出 3 到 4 個更深的追問。
+  return `請針對這個主題與回答，再提出 3 到 4 個更深的追問。追問必須是今天才想得出來的，不要用制式題庫。
 
 主題：${theme || "深度思考"}
 白話想一想：${plain || "（未寫）"}
@@ -291,11 +292,15 @@ function checklistUserPrompt(kind, body) {
 身體狀態：${bodyTags || "未選"}
 身體提醒：${ctx.bodyNote || "未寫"}`;
   }
+  const questions = Array.isArray(body.questions) ? body.questions.map((item) => String(item || "").trim()) : [];
   return `請分析這個人今天的覺察，產出 4 到 6 條「今天我覺察到」勾選項目。
 
-哪個時刻感受到生命力或平靜：${answers[0] || "（未填）"}
-哪個時刻出現防衛心或情緒波動：${answers[1] || "（未填）"}
-明天會做的不同小選擇：${answers[2] || "（未填）"}
+題目一：${questions[0] || "今天的第一個覺察題"}
+回答一：${answers[0] || "（未填）"}
+題目二：${questions[1] || "今天的第二個覺察題"}
+回答二：${answers[1] || "（未填）"}
+題目三：${questions[2] || "今天的第三個覺察題"}
+回答三：${answers[2] || "（未填）"}
 
 背景補充：
 心情：${ctx.mood || "未選"}
@@ -304,7 +309,126 @@ function checklistUserPrompt(kind, body) {
 身體提醒：${ctx.bodyNote || "未寫"}`;
 }
 
-async function callOpenAI(messages) {
+const PROMPTS_SYSTEM = `你是「日精進」的高階心靈教練。請依這個人今天的真實輸入，以及近期成長進度，動態生成全新的覺察題與深度思考主題。
+
+【任務】
+- awareness：3 道覺察力題目，讓他寫短答。
+- deep：4 個深度思考主題。每個主題含標題、白話引導、深挖引導。
+
+【必須遵守】
+- 只輸出 JSON
+- 題目必須貼近今天的事件、心情、身體訊號、感恩與近期洞察，讓他覺得「這題是為我今天出的」
+- 每天視角都要不同：可從關係、身體、價值、界線、未說出口的話、想保護的東西、小小的堅持等切入，但不要重複使用者最近已經問過的題
+- 禁止使用固定題庫口吻。尤其禁止出現或改寫這些死題：
+  「生命力或平靜」「防衛心或情緒波動」「翻白眼」「不好意思拒絕」「老方法處理」「還好我有堅持」
+- 禁止雞湯、禁止說教、禁止病例腔、禁止空泛「你真正的感受是什麼」
+- 題目要具體、有畫面、有啟發，像一對一教練今天才想出來的
+- 繁體中文
+
+{
+  "awareness": [
+    { "question": "完整問句，18-36字", "placeholder": "8-16字的作答提示" },
+    { "question": "完整問句", "placeholder": "作答提示" },
+    { "question": "完整問句", "placeholder": "作答提示" }
+  ],
+  "deep": [
+    {
+      "title": "深度思考主題，完整問句，18-40字",
+      "plainGuide": "白話想一想：一句引導，幫他把場面講清楚",
+      "deepGuide": "深挖一點點：一句引導，問到真正被碰到的那一層",
+      "placeholderPlain": "8-18字",
+      "placeholderDeep": "8-18字"
+    }
+  ]
+}
+awareness 必須剛好 3 題。deep 必須剛好 4 題。`;
+
+function compactLine(value, max) {
+  return String(value || "").replace(/\s+/g, " ").trim().slice(0, max || 160);
+}
+
+function promptsUserPrompt(body) {
+  const ctx = body.context && typeof body.context === "object" ? body.context : {};
+  const progress = body.progress && typeof body.progress === "object" ? body.progress : {};
+  const bodyTags = Array.isArray(ctx.bodyTags) ? ctx.bodyTags.join("、") : "";
+  const thanks = Array.isArray(ctx.thanks) ? ctx.thanks.filter(Boolean).join("、") : "";
+  const recent = Array.isArray(progress.recentReviews) ? progress.recentReviews : [];
+  const recentInsights = Array.isArray(progress.recentInsights) ? progress.recentInsights : [];
+  const avoid = Array.isArray(progress.avoidQuestions) ? progress.avoidQuestions.filter(Boolean) : [];
+  const openActions = Array.isArray(progress.openActions) ? progress.openActions.filter(Boolean) : [];
+  const recentText = recent
+    .slice(0, 7)
+    .map((item) => {
+      const checks = Array.isArray(item.awareness) ? item.awareness.join("、") : "";
+      return `- ${item.date || ""}｜心情 ${item.mood || "未記"}｜${compactLine(item.event, 80)}${item.insight ? `｜洞察：${compactLine(item.insight, 60)}` : ""}${checks ? `｜已覺察：${compactLine(checks, 80)}` : ""}`;
+    })
+    .join("\n");
+  return `請為這個人生成「今天才有」的覺察題 3 題，以及深度思考主題 4 題。
+
+日期：${body.date || ""}
+連續復盤天數：${progress.streak || 0}
+
+【今天的輸入】
+今日感謝：${thanks || "未寫"}
+今日事件：${compactLine(ctx.event || body.text, 500) || "（未寫）"}
+心情：${ctx.mood || "未選"}
+身體狀態：${bodyTags || "未選"}
+身體在提醒我：${compactLine(ctx.bodyNote, 200) || "未寫"}
+今日核心結論：${compactLine(ctx.insight, 220) || "尚未生成"}
+
+【成長進度】
+近期已覺察洞察：${recentInsights.slice(0, 8).map((item) => compactLine(item.title || item, 40)).filter(Boolean).join("、") || "尚無"}
+尚未完成的行動：${openActions.slice(0, 6).map((item) => compactLine(item, 40)).join("、") || "尚無"}
+最近幾天的復盤：
+${recentText || "（還沒有歷史復盤）"}
+
+【請避開、不要再出相近的題】
+${avoid.length ? avoid.slice(0, 16).map((item) => `- ${compactLine(item, 60)}`).join("\n") : "（無）"}
+
+請讓今天的題目承接他的進度：看見重複模式就換新視角，看見新突破就往下挖一層。`;
+}
+
+function normalizePromptItem(item) {
+  if (typeof item === "string") {
+    const question = item.trim();
+    return question ? { question, placeholder: "寫下那個時刻…" } : null;
+  }
+  if (!item || typeof item !== "object") return null;
+  const question = String(item.question || item.title || item.text || "").trim();
+  if (!question) return null;
+  return {
+    question: question.slice(0, 80),
+    placeholder: String(item.placeholder || "寫下那個時刻…").trim().slice(0, 36) || "寫下那個時刻…",
+  };
+}
+
+function normalizeDeepPromptItem(item) {
+  const base = normalizePromptItem(item);
+  if (!base) return null;
+  const data = item && typeof item === "object" ? item : {};
+  return {
+    title: base.question.slice(0, 90),
+    plainGuide: String(data.plainGuide || data.plain || "白話想一想：先把場面講清楚。").trim().slice(0, 80),
+    deepGuide: String(data.deepGuide || data.deep || "深挖一點點：真正被碰到的是哪一層？").trim().slice(0, 80),
+    placeholderPlain: String(data.placeholderPlain || "那一刻發生了什麼…").trim().slice(0, 36),
+    placeholderDeep: String(data.placeholderDeep || "真正觸發我的是…").trim().slice(0, 36),
+  };
+}
+
+function normalizePromptsResult(raw) {
+  const data = raw && typeof raw === "object" ? raw : {};
+  const awareness = (Array.isArray(data.awareness) ? data.awareness : [])
+    .map(normalizePromptItem)
+    .filter(Boolean)
+    .slice(0, 3);
+  const deep = (Array.isArray(data.deep) ? data.deep : [])
+    .map(normalizeDeepPromptItem)
+    .filter(Boolean)
+    .slice(0, 4);
+  return { awareness, deep };
+}
+
+async function callOpenAI(messages, options = {}) {
   const apiKey = getApiKey();
   if (!apiKey) {
     const error = new Error("伺服器尚未設定 OPENAI_API_KEY");
@@ -332,7 +456,7 @@ async function callOpenAI(messages) {
       headers,
       body: JSON.stringify({
         model,
-        temperature: 0.75,
+        temperature: Number.isFinite(options.temperature) ? options.temperature : 0.75,
         response_format: { type: "json_object" },
         messages,
       }),
@@ -407,7 +531,9 @@ module.exports = async function handler(req, res) {
             ? "insight"
             : body.mode === "deepen"
               ? "deepen"
-              : "organize";
+              : body.mode === "prompts"
+                ? "prompts"
+                : "organize";
     const text = String(body.text || "").trim();
     if (mode === "checklist") {
       const answers = Array.isArray(body.answers) ? body.answers.map((item) => String(item || "").trim()) : [];
@@ -429,6 +555,15 @@ module.exports = async function handler(req, res) {
       const deep = String(body.deep || body.note || "").trim();
       if (!plain && !deep) {
         res.status(400).json({ ok: false, error: "請先在這個主題寫下一點回答" });
+        return;
+      }
+    } else if (mode === "prompts") {
+      const ctx = body.context && typeof body.context === "object" ? body.context : {};
+      const event = String(ctx.event || text || "").trim();
+      const mood = String(ctx.mood || "").trim();
+      const hasBody = (Array.isArray(ctx.bodyTags) && ctx.bodyTags.length) || String(ctx.bodyNote || "").trim();
+      if (!event || !mood || !hasBody) {
+        res.status(400).json({ ok: false, error: "請先寫下今日事件、選擇心情，並標出身體狀況" });
         return;
       }
     } else if (!text && mode === "organize" && !Array.isArray(body.messages)) {
@@ -459,6 +594,11 @@ module.exports = async function handler(req, res) {
         { role: "system", content: DEEPEN_SYSTEM },
         { role: "user", content: deepenUserPrompt(body) },
       ];
+    } else if (mode === "prompts") {
+      messages = [
+        { role: "system", content: PROMPTS_SYSTEM },
+        { role: "user", content: promptsUserPrompt(body) },
+      ];
     } else if (mode === "think") {
       const round = Number(body.round) || 1;
       const max = Number(body.max) || 5;
@@ -479,7 +619,7 @@ module.exports = async function handler(req, res) {
       ];
     }
 
-    const data = await callOpenAI(messages);
+    const data = await callOpenAI(messages, { temperature: mode === "prompts" ? 0.95 : 0.75 });
     if (mode === "checklist") {
       const kind = body.kind === "execution" ? "execution" : "awareness";
       const min = kind === "execution" ? 3 : 4;
@@ -508,6 +648,15 @@ module.exports = async function handler(req, res) {
         return;
       }
       res.status(200).json({ ok: true, source: "openai", data: { questions } });
+      return;
+    }
+    if (mode === "prompts") {
+      const prompts = normalizePromptsResult(data);
+      if (prompts.awareness.length < 3 || prompts.deep.length < 4) {
+        res.status(502).json({ ok: false, error: "AI 題目格式不完整，請再試一次" });
+        return;
+      }
+      res.status(200).json({ ok: true, source: "openai", data: prompts });
       return;
     }
     res.status(200).json({ ok: true, source: "openai", data });
