@@ -4,8 +4,8 @@
   "description": "每天 10 分鐘，把日子過成復利",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#efeee9",
-  "theme_color": "#1a1a1a",
+  "background_color": "#f5efe6",
+  "theme_color": "#9c8879",
   "lang": "zh-Hant",
   "icons": [
     {
