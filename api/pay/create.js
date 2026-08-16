@@ -61,7 +61,7 @@ module.exports = async function handler(req, res) {
     console.error("NewebPay not configured:", newebpayConfigStatus());
     res.status(501).json({
       ok: false,
-      error: "尚未設定藍新金流。請在 Vercel 加上 NEWEBPAY_MERCHANT_ID、NEWEBPAY_HASH_KEY（32 碼）與 NEWEBPAY_HASH_IV（16 碼）。",
+      error: "藍新金流尚未就緒。商店代號與金鑰已硬編碼為 HTC109030010100，請確認 HashKey 32 碼、HashIV 16 碼。",
     });
     return;
   }
@@ -101,7 +101,7 @@ module.exports = async function handler(req, res) {
 
   const amt = mpgAmt();
   const itemDesc = mpgItemDesc(body.itemDesc);
-  const orderNo = createOrderNo().replace(/[^A-Za-z0-9_]/g, "").slice(0, 30);
+  const orderNo = createOrderNo();
   let tradeParams;
   try {
     tradeParams = buildMpgTradeParams({
