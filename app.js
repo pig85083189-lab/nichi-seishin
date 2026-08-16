@@ -1192,7 +1192,10 @@ async function startNewebPay() {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload.ok) {
-      showToast(payload.error || `無法前往藍新金流（${response.status}）`);
+      const message = [payload.code, payload.error, payload.detail].filter(Boolean).join(" ").trim()
+        || `無法前往藍新金流（${response.status}）`;
+      setAuthError(message);
+      showToast(message);
       return;
     }
     if (!payload.gateway || !payload.fields) {
@@ -1346,11 +1349,17 @@ function handleAuthQuery() {
       showToast(`登入失敗：${message}`);
     }
     if (pay === "ok") showToast("訂閱授權已送出。會員狀態會在藍新通知後更新。");
-    if (pay === "fail") showToast(`付款未完成：${params.get("reason") || "請再試一次"}`);
-    if (pay === "error") showToast(`付款結果異常：${params.get("reason") || "請再試一次"}`);
+    if (pay === "fail" || pay === "error") {
+      const code = params.get("code") || "";
+      const reason = params.get("reason") || "請再試一次";
+      const message = [code, reason].filter(Boolean).join(" ");
+      setAuthError(message);
+      showToast(pay === "fail" ? `付款未完成：${message}` : `付款結果異常：${message}`);
+    }
     if (pay === "back") showToast("已返回商店，尚未完成付款。");
     params.delete("auth");
     params.delete("reason");
+    params.delete("code");
     params.delete("pay");
     params.delete("order");
     params.delete("error");
