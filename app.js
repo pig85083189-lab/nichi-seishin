@@ -591,7 +591,7 @@ function parseAiJson(raw) {
   const candidate = (fenced ? fenced[1] : text).trim();
   const start = candidate.indexOf("{");
   const end = candidate.lastIndexOf("}");
-  if (start === -1 || end === -1) throw new Error("AI 回傳不是 JSON");
+  if (start === -1 || end === -1) throw new Error("雲端回傳不是 JSON");
   return JSON.parse(candidate.slice(start, end + 1));
 }
 
@@ -607,7 +607,7 @@ function formatApiError(error) {
   if (error?.name === "AbortError" || /請求逾時|逾時/.test(message)) return "雲端通道逾時。請確認 Vercel 已 Redeploy，且 OPENAI_API_KEY 設在 Production。";
   if (/file:|本機 HTML/.test(message)) return message;
   if (/401|請先使用 Google|未登入|未授權/i.test(message)) {
-    return "請先登入，才能使用雲端 AI 與同步備份。";
+    return "請先登入，才能使用雲端分析與同步備份。";
   }
   if (/402|試用已結束|免費體驗已結束|paywall/i.test(message)) {
     return "您的 3 天免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限";
@@ -820,10 +820,10 @@ function thinkFromOrganize(organize, round = 1) {
 
 async function maybeEnhanceWithApi(rawText, token) {
   if (!state.user) {
-    showToast("本地草稿已出。登入後才能使用雲端 AI 與同步備份。");
+    showToast("本地草稿已出。登入後才能使用雲端分析與同步備份。");
     return;
   }
-  showToast("正在呼叫雲端 AI…");
+  showToast("正在連線雲端…");
   try {
     const remote = await generateReview(rawText);
     if (runOrganize._token !== token) {
@@ -836,11 +836,11 @@ async function maybeEnhanceWithApi(rawText, token) {
       prompt: defaultThinkPrompt(state.organize),
     });
     console.log("[日精進 API] 雲端復盤已套用", remote.themeTitle);
-    showToast("雲端 AI 復盤已套用。");
+    showToast("雲端復盤已套用。");
   } catch (error) {
     const reason = formatApiError(error);
     console.error("[日精進 API] 雲端呼叫失敗，畫面維持本地結果。真正原因：", reason, error);
-    showToast(`雲端 AI 失敗：${reason}`);
+    showToast(`雲端分析失敗：${reason}`);
   }
 }
 
@@ -2149,7 +2149,7 @@ function renderAiReportBlock(ai, status) {
   if (status === "loading") {
     return `
       <article class="report-card report-card--ai report-card--coach">
-        <h3>💡 AI 教練成長洞察</h3>
+        <h3>💡 深度洞察</h3>
         <p class="report-empty">正在把這個區間的勾選量、趨勢與復盤摘要，整理成閃光點與突破口…</p>
       </article>
     `;
@@ -2157,7 +2157,7 @@ function renderAiReportBlock(ai, status) {
   if (status === "error") {
     return `
       <article class="report-card report-card--ai report-card--coach">
-        <h3>💡 AI 教練成長洞察</h3>
+        <h3>💡 深度洞察</h3>
         <p class="report-empty">${escapeHtml(ai || "雲端洞察暫時不可用。圖表與本地摘要仍在上面。")}</p>
       </article>
     `;
@@ -2175,10 +2175,10 @@ function renderAiReportBlock(ai, status) {
   const breakthroughs = ai.breakthroughs && ai.breakthroughs.length ? ai.breakthroughs : ai.nextPlan;
   return `
     <article class="report-card report-card--ai report-card--coach">
-      <h3>💡 AI 教練成長洞察</h3>
+      <h3>💡 深度洞察</h3>
       ${rangeNote ? `<p class="report-range">${escapeHtml(rangeNote)}</p>` : ""}
       ${ai.summary ? `<p class="rv-card__conclusion">${escapeHtml(ai.summary)}</p>` : ""}
-      <p class="sfm-hint">${ai.generatedAt ? `生成於 ${escapeHtml(String(ai.generatedAt).replace("T", " ").slice(0, 16))}` : "雲端 AI 聚合"}</p>
+      <p class="sfm-hint">${ai.generatedAt ? `生成於 ${escapeHtml(String(ai.generatedAt).replace("T", " ").slice(0, 16))}` : "雲端聚合"}</p>
     </article>
     <article class="report-card report-card--glow">
       <h3>本期閃光點</h3>
@@ -2412,7 +2412,7 @@ function tourSteps() {
     {
       popover: {
         title: "歡迎來到日精進",
-        description: "這是一份互動式使用說明。接下來會帶你走過日期切換、01 到 07 的復盤與 AI，再到側邊欄各頁。隨時可以按「略過導覽」。",
+        description: "這是一份互動式使用說明。接下來會帶你走過日期切換、01 到 07 的復盤與洞察，再到側邊欄各頁。隨時可以按「略過導覽」。",
         side: "over",
         align: "center",
       },
@@ -2441,7 +2441,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "02 今日事件",
-        description: "寫下今天真正被碰到的事，再點選心情。這兩項會成為後面 AI 出題與洞察的原料。",
+        description: "寫下今天真正被碰到的事，再點選心情。這兩項會成為後面出題與洞察的原料。",
         side: "bottom",
       },
     },
@@ -2458,7 +2458,7 @@ function tourSteps() {
       element: "#section-insight",
       tourPage: "today",
       popover: {
-        title: "AI 深度教練洞察",
+        title: "深度洞察",
         description: "寫完事件、心情與身體後，點「生成深度洞察」，或等它自動生成今日核心結論。",
         side: "bottom",
       },
@@ -2468,7 +2468,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "04 覺察力",
-        description: "左側是一道核心反思題。寫完後點「AI 分析並生成勾勾表」，右側會出現可勾選的洞察。勾選後完成復盤，會存進側邊欄「覺察力」。",
+        description: "左側是一道核心反思題。寫完後點「分析並生成勾勾表」，右側會出現可勾選的洞察。勾選後完成復盤，會存進側邊欄「覺察力」。",
         side: "top",
       },
     },
@@ -2477,7 +2477,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "生成覺察勾勾表",
-        description: "點擊這裡，讓 AI 幫你整理覺察勾勾表。勾選你今天真正看見的那幾條即可。",
+        description: "點擊這裡，整理今天的覺察勾勾表。勾選你今天真正看見的那幾條即可。",
         side: "top",
       },
     },
@@ -2486,7 +2486,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "05 執行力",
-        description: "回答這道核心行動題後，點 AI 生成卡點與解法勾勾表。勾選的步驟，完成復盤後會進入側邊欄「執行力」。",
+        description: "回答這道核心行動題後，點按鈕生成卡點與解法勾勾表。勾選的步驟，完成復盤後會進入側邊欄「執行力」。",
         side: "top",
       },
     },
@@ -2495,7 +2495,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "06 深度思考",
-        description: "四個主題每天依你的故事生成。點開卡片書寫，再讓 AI 往下追問，把想不清楚的事挖深一點。",
+        description: "四個主題每天依你的故事生成。點開卡片書寫，再往下追問，把想不清楚的事挖深一點。",
         side: "top",
       },
     },
@@ -2533,7 +2533,7 @@ function tourSteps() {
       tourSidebar: true,
       popover: {
         title: "週月報",
-        description: "把一週或一個月的勾選量、完成率收成圖表，並請 AI 教練寫出閃光點與突破口。底部可回看封存的月報。",
+        description: "把一週或一個月的勾選量、完成率收成圖表，並用深度洞察寫出閃光點與突破口。底部可回看封存的月報。",
         side: "right",
       },
     },
@@ -3107,9 +3107,9 @@ function checklistUi(kind) {
     return { btn: "btnManifestAi", loader: "manifestLoading", list: "manifestChecks", idle: "生成執行目標" };
   }
   if (kind === "awareness") {
-    return { btn: "btnAwareAi", loader: "awareLoading", list: "awareChecks", idle: "AI 分析並生成勾勾表" };
+    return { btn: "btnAwareAi", loader: "awareLoading", list: "awareChecks", idle: "分析並生成勾勾表" };
   }
-  return { btn: "btnExecAi", loader: "execLoading", list: "execChecks", idle: "AI 分析並生成勾勾表" };
+  return { btn: "btnExecAi", loader: "execLoading", list: "execChecks", idle: "分析並生成勾勾表" };
 }
 
 function setChecklistLoading(kind, loading) {
@@ -3150,7 +3150,7 @@ async function generateJournalChecklist(kind, options = {}) {
   const journal = collectJournal();
   const answers = isAware ? journal.awareness : journal.execution;
   if (!coreAnswerFilled(answers)) {
-    if (!options.auto) showToast("先把左側這道核心題寫完，再請 AI 整理勾勾表。");
+    if (!options.auto) showToast("先把左側這道核心題寫完，再整理勾勾表。");
     return;
   }
   const sig = checklistSignature(answers);
@@ -3166,7 +3166,7 @@ async function generateJournalChecklist(kind, options = {}) {
 
   try {
     if (!state.user) {
-      throw new Error("請先登入，才能使用雲端 AI 分析。");
+      throw new Error("請先登入，才能使用雲端分析。");
     }
     const remote = await postReview({
       mode: "checklist",
@@ -3234,7 +3234,7 @@ async function generateManifestChecklist(options = {}) {
   const journal = collectJournal();
   const vision = String(journal.manifest || "").trim();
   if (vision.length < 4) {
-    if (!options.auto) showToast("先寫下明天想顯化的事情，再請 AI 拆成執行目標。");
+    if (!options.auto) showToast("先寫下明天想顯化的事情，再拆成執行目標。");
     return;
   }
   const sig = vision;
@@ -3246,7 +3246,7 @@ async function generateManifestChecklist(options = {}) {
   const fallback = buildManifestCheckItems(journal);
 
   try {
-    if (!state.user) throw new Error("請先登入，才能使用雲端 AI 分析。");
+    if (!state.user) throw new Error("請先登入，才能使用雲端分析。");
     const remote = await postReview({
       mode: "manifest",
       date: currentIso(),
@@ -3357,7 +3357,7 @@ async function generateJournalInsight(options = {}) {
   setInsightLoading(true);
 
   try {
-    if (!state.user) throw new Error("請先登入，才能使用雲端 AI 分析。");
+    if (!state.user) throw new Error("請先登入，才能使用雲端分析。");
     const remote = await postReview({
       mode: "insight",
       date: currentIso(),
@@ -3487,7 +3487,7 @@ async function generateBodyCoach(options = {}) {
   setBodyCoachLoading(true);
 
   try {
-    if (!state.user) throw new Error("請先登入，才能使用雲端 AI 分析。");
+    if (!state.user) throw new Error("請先登入，才能使用雲端分析。");
     const remote = await postReview({
       mode: "bodycoach",
       date: currentIso(),
@@ -3760,7 +3760,7 @@ function renderDeepThemes(prompts, options = {}) {
             <p class="deep-guide"><strong>深挖一點點</strong>${escapeHtml(String(item.deepGuide || "").replace(/^深挖一點點[:：]?\s*/, ""))}</p>
             <textarea class="textarea" id="deep${index}deep" rows="3" placeholder="${escapeHtml(item.placeholderDeep)}">${escapeHtml(slot.deep || "")}</textarea>
           </div>
-          <button class="ai-check-btn" data-deepen="${index}" type="button">讓 AI 帶我再深入思考</button>
+          <button class="ai-check-btn" data-deepen="${index}" type="button">帶我再深入思考</button>
           <div class="check-loading" id="deep${index}Loading" hidden>
             <p class="check-loading__label">正在根據你的回答往下挖…</p>
             <div class="ai-thinking__bar"><i></i></div>
@@ -3840,7 +3840,7 @@ async function generateJournalPrompts(options = {}) {
   setPromptsLoading(true, scope);
 
   try {
-    if (!state.user) throw new Error("請先登入，才能使用雲端 AI 出題。");
+    if (!state.user) throw new Error("請先登入，才能使用雲端出題。");
     const insight = normalizeInsight(state.journalInsight);
     const remote = await postReview({
       mode: "prompts",
@@ -3905,7 +3905,7 @@ function renderDeepFollow(index, questions, notes) {
   }
   const saved = notes || [];
   root.innerHTML = `
-    <p class="deep-follow__head">AI 教練追問</p>
+    <p class="deep-follow__head">深度追問</p>
     ${items
       .map(
         (question, i) => `
@@ -3925,7 +3925,7 @@ function setDeepFollowLoading(index, loading) {
   state.deepFollowBusy[index - 1] = loading;
   if (btn) {
     btn.disabled = loading;
-    btn.textContent = loading ? "分析中…" : "讓 AI 帶我再深入思考";
+    btn.textContent = loading ? "分析中…" : "帶我再深入思考";
   }
   if (loader) loader.hidden = !loading;
 }
@@ -3945,7 +3945,7 @@ async function generateDeepFollow(index) {
   if (slotIndex < 1 || slotIndex > 4 || state.deepFollowBusy[slotIndex - 1]) return;
   const slot = collectDeepSlot(slotIndex);
   if (!String(slot.plain || "").trim() && !String(slot.deep || "").trim()) {
-    showToast("先在這個主題寫下一點，再請 AI 往下挖。");
+    showToast("先在這個主題寫下一點，再往下挖。");
     return;
   }
   const details = document.querySelector(`#deep${slotIndex}plain`)?.closest("details");
@@ -3958,7 +3958,7 @@ async function generateDeepFollow(index) {
   const journal = collectJournal();
   const fallback = localDeepFollowFallback(slotIndex, slot);
   try {
-    if (!state.user) throw new Error("請先登入，才能使用雲端 AI 分析。");
+    if (!state.user) throw new Error("請先登入，才能使用雲端分析。");
     const remote = await postReview({
       mode: "deepen",
       date: currentIso(),
@@ -4046,7 +4046,7 @@ function composeJournalRawText(journal) {
   }
   const insight = normalizeInsight(journal.insight);
   if (insight.conclusion) {
-    lines.push("AI 深度教練洞察");
+    lines.push("深度洞察");
     if (insight.title) lines.push(insight.title);
     lines.push(insight.conclusion);
     if (insight.logic) lines.push(insight.logic);
@@ -4493,7 +4493,7 @@ function renderAiStage() {
         title: "核心洞察區",
         variant: "insight",
         body: `
-          <p class="rv-card__kicker">${state.organizeSource === "cloud" ? "雲端 AI 復盤" : "本地草稿"}</p>
+          <p class="rv-card__kicker">${state.organizeSource === "cloud" ? "雲端復盤" : "本地草稿"}</p>
           <p class="theme-inline">【${escapeHtml(ai.themeCategory || "覺察")}】${escapeHtml(ai.themeTitle || "今天的復盤")} <span class="stars">[${starsText(ai.themeStars)}]</span></p>
           ${renderSub(
             "今日金句",
@@ -5060,7 +5060,7 @@ function runOrganize(event) {
       silent: true,
       prompt: defaultThinkPrompt(state.organize),
     });
-    showToast("先出本地草稿，接著呼叫雲端 AI…");
+    showToast("先出本地草稿，接著連線雲端…");
     maybeEnhanceWithApi(rawText, token);
   } catch {
     try {
@@ -5182,7 +5182,7 @@ async function enhanceThinkWithApi(nextRound, selected, reply, token) {
     showToast("登入後，深度思考才會走到雲端。");
     return;
   }
-  showToast("正在呼叫雲端 AI 深挖…");
+  showToast("正在往下深挖…");
   try {
     const remote = await generateThink(state.rawText, state.organize, nextRound, selected, reply);
     if (state.thinkToken !== token) return;
@@ -5296,7 +5296,7 @@ function renderReport() {
       <article class="report-card">
         <div class="empty">
           <p class="empty__title">這個區間還沒有復盤</p>
-          <p class="report-empty">寫下第一篇、勾選覺察／執行／顯化之後，這裡會出現圖表與 AI 教練洞察。</p>
+          <p class="report-empty">寫下第一篇、勾選覺察／執行／顯化之後，這裡會出現圖表與深度洞察。</p>
         </div>
       </article>
       <div id="reportAi"></div>
@@ -5373,7 +5373,7 @@ function fillArchiveModal(period) {
     {
       ai:
         view.cached || {
-          summary: "這份月份已留下數據存檔。登入後可生成 AI 教練洞察。",
+          summary: "這份月份已留下數據存檔。登入後可生成深度洞察。",
           highlights: [],
           breakthroughs: [],
           fromIso: view.local.fromIso,
@@ -5722,7 +5722,7 @@ function renderHistoryJournal(review) {
     historyListBlock("行動卡點／解法", journal.executionChecks),
     insight.conclusion
       ? historyBlock(
-          "AI 洞察",
+          "深度洞察",
           `${insight.title ? `<p class="history-journal__headline">${escapeHtml(insight.title)}</p>` : ""}<p class="history-journal__text">${escapeHtml(insight.conclusion)}</p>${
             insight.logic ? `<p class="history-journal__note">${escapeHtml(insight.logic)}</p>` : ""
           }${insight.bodyLink ? `<p class="history-journal__note">${escapeHtml(insight.bodyLink)}</p>` : ""}`
