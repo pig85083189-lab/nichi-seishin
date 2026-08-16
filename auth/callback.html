@@ -5,35 +5,88 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>日精進 — 完成登入</title>
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <style>
+      body {
+        font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+        margin: 2rem auto;
+        max-width: 36rem;
+        padding: 0 1.25rem;
+        color: #3d342c;
+        line-height: 1.6;
+      }
+      #actions {
+        margin-top: 1rem;
+      }
+      #actions a {
+        display: inline-block;
+        padding: 0.6rem 1rem;
+        border-radius: 999px;
+        background: #4f5e56;
+        color: #fff;
+        text-decoration: none;
+      }
+      #debug {
+        white-space: pre-wrap;
+        font-size: 12px;
+        color: #6b5e4e;
+      }
+    </style>
   </head>
   <body>
     <p id="status">正在完成 Google 登入…</p>
-    <pre id="debug" style="white-space: pre-wrap; font-size: 12px; color: #6b5e4e;"></pre>
+    <p id="actions" hidden><a id="retry" href="/">回到首頁重新登入</a></p>
+    <pre id="debug"></pre>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
+    <script src="pkce-storage.js?v=1"></script>
     <script>
       (async function () {
-        var home = "https://nichi-seishin.vercel.app/";
+        var home = (location.origin || "https://nichi-seishin.vercel.app") + "/";
         var statusEl = document.getElementById("status");
         var debugEl = document.getElementById("debug");
-        var STORAGE_KEY = "nichi-auth";
+        var actionsEl = document.getElementById("actions");
+        var retryEl = document.getElementById("retry");
         var AUTH_ERROR_KEY = "nichi.authError";
+        var storageApi = window.NichiAuthStorage;
 
         function note(text) {
           if (debugEl) debugEl.textContent = String(text || "");
         }
 
-        function fail(reason) {
+        function friendly(reason) {
           var message = String(reason || "Google 登入失敗");
+          if (/PKCE verifier not found|Auth session missing|code verifier/i.test(message)) {
+            return "登入驗證已過期，瀏覽器找不到 PKCE 驗證碼。請回到首頁再點一次「使用 Google 帳號登入」，並避免用無痕視窗或不同瀏覽器開啟連結。";
+          }
+          if (/invalid request|both auth code and code verifier/i.test(message)) {
+            return "登入驗證碼不完整。請回到首頁重新登入。";
+          }
+          if (/expired|invalid_grant/i.test(message)) {
+            return "授權碼已過期或已使用過。請回到首頁重新登入。";
+          }
+          return message;
+        }
+
+        function clearStaleAuth() {
+          if (storageApi && storageApi.clearAuthArtifacts) {
+            storageApi.clearAuthArtifacts({ keepSession: false });
+          }
+        }
+
+        function fail(reason) {
+          var message = friendly(reason);
+          clearStaleAuth();
           try {
             sessionStorage.setItem(AUTH_ERROR_KEY, message);
           } catch (e) {
             /* ignore */
           }
           if (statusEl) statusEl.textContent = "登入失敗：" + message;
+          if (retryEl) retryEl.href = home + "?auth=error&reason=" + encodeURIComponent(message.slice(0, 180));
+          if (actionsEl) actionsEl.hidden = false;
           note(location.href);
           window.setTimeout(function () {
-            location.replace(home + "?auth=error&reason=" + encodeURIComponent(message.slice(0, 240)));
-          }, 4000);
+            location.replace(home + "?auth=error&reason=" + encodeURIComponent(message.slice(0, 180)));
+          }, 5000);
         }
 
         function query() {
@@ -55,13 +108,21 @@
 
           var code = params.get("code") || "";
           if (!code) {
-            fail("回調網址缺少 code。請再點一次「使用 Google 帳號登入」。");
+            fail("回調網址缺少授權碼。請再點一次「使用 Google 帳號登入」。");
             return;
           }
           if (code.indexOf("4/") === 0) {
             fail(
               "Google 把授權碼送到了網站，而不是 Supabase。請到 Google Cloud → 憑證 → 授權重新導向 URI，改成唯一這一列：https://zmjfbdtwxuawebwnybfp.supabase.co/auth/v1/callback"
             );
+            return;
+          }
+
+          if (storageApi && storageApi.persistVerifierCopies) {
+            storageApi.persistVerifierCopies();
+          }
+          if (!storageApi || !storageApi.readVerifier || !storageApi.readVerifier()) {
+            fail("Auth session missing! PKCE verifier not found in storage.");
             return;
           }
 
@@ -81,7 +142,8 @@
               autoRefreshToken: true,
               detectSessionInUrl: false,
               flowType: "pkce",
-              storageKey: STORAGE_KEY,
+              storageKey: storageApi.STORAGE_KEY,
+              storage: storageApi.createAuthStorage(),
             },
           });
           if (client.auth.initialize) await client.auth.initialize();

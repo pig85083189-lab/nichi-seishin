@@ -1048,13 +1048,15 @@ async function getSupabase() {
     const url = String(cfg.supabaseUrl || "").trim();
     const key = String(cfg.supabaseAnonKey || "").trim();
     if (!url || !key) return null;
+    const authStorage = window.NichiAuthStorage && window.NichiAuthStorage.createAuthStorage();
     supabaseClient = createClient(url, key, {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true,
+        detectSessionInUrl: false,
         flowType: "pkce",
         storageKey: "nichi-auth",
+        ...(authStorage ? { storage: authStorage } : {}),
       },
     });
     if (supabaseClient.auth.initialize) await supabaseClient.auth.initialize();
@@ -1122,6 +1124,9 @@ function translateAuthError(error) {
   if (/popup|provider is not enabled|unsupported provider/i.test(message)) {
     return "尚未在 Supabase 開啟 Google 登入。請到 Authentication → Providers 啟用 Google。";
   }
+  if (/PKCE verifier not found|Auth session missing|code verifier/i.test(message)) {
+    return "登入驗證已過期，瀏覽器找不到 PKCE 驗證碼。請再點一次「使用 Google 帳號登入」，並避免用無痕視窗或不同瀏覽器開啟回調連結。";
+  }
   if (/Unable to exchange external code|invalid_grant|invalid_client/i.test(message)) {
     return "Google 授權碼交換失敗。請確認 Google Cloud 的重新導向 URI 是 https://zmjfbdtwxuawebwnybfp.supabase.co/auth/v1/callback，且 Client ID / Secret 是同一組網頁應用程式憑證。";
   }
@@ -1150,7 +1155,10 @@ async function signInWithGoogle() {
     return;
   }
   setAuthError("");
-  const redirectTo = "https://nichi-seishin.vercel.app/auth/callback.html";
+  if (window.NichiAuthStorage && window.NichiAuthStorage.clearAuthArtifacts) {
+    window.NichiAuthStorage.clearAuthArtifacts({ keepSession: true });
+  }
+  const redirectTo = `${location.origin}/auth/callback.html`;
   const { data, error } = await client.auth.signInWithOAuth({
     provider: "google",
     options: {
@@ -1171,7 +1179,20 @@ async function signInWithGoogle() {
     showToast(message);
     return;
   }
-  window.location.assign(data.url);
+  if (window.NichiAuthStorage) {
+    window.NichiAuthStorage.persistVerifierCopies();
+    if (!window.NichiAuthStorage.readVerifier()) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      window.NichiAuthStorage.persistVerifierCopies();
+    }
+    if (!window.NichiAuthStorage.readVerifier()) {
+      const message = "無法儲存登入驗證碼。請關閉無痕模式，並允許此網站使用 Cookie 後再試。";
+      setAuthError(message);
+      showToast(message);
+      return;
+    }
+  }
+  window.location.replace(data.url);
 }
 
 async function signOutUser() {
