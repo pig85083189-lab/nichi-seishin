@@ -13,6 +13,7 @@ const STORAGE_KEYS = {
 };
 
 const REVIEW_API = "/api/review";
+const NEWEBPAY_EPG_URL = "https://core.newebpay.com/EPG/HTC109030010100/QLBIYc";
 
 const PROMPT_CHIPS = [
   "今天最卡的一件事",
@@ -1009,7 +1010,7 @@ function renderAuth() {
   const entitled = Boolean(membership.entitled || membership.paid);
   const payBtn = status === "active"
     ? `<button class="auth-pay is-paid" type="button" disabled><span>已付款</span></button>`
-    : `<button class="auth-pay" id="btnNewebPay" type="button"><span>${status === "trialing" || status === "pending" ? "一次付清 NT$399" : "付款以繼續 NT$399"}</span></button>`;
+    : `<a class="auth-pay" id="btnNewebPay" href="${NEWEBPAY_EPG_URL}"><span>${status === "trialing" || status === "pending" ? "一次付清 NT$399" : "付款以繼續 NT$399"}</span></a>`;
   const trialHint = membership.trialEndsAt && status === "trialing"
     ? `<p class="auth-hint">試用至 ${escapeHtml(formatTrialDate(membership.trialEndsAt))}</p>`
     : entitled && status === "active"
@@ -1260,55 +1261,8 @@ function onSubscribeClick(event) {
   startNewebPay();
 }
 
-async function startNewebPay() {
-  console.log("Subscribe startNewebPay");
-  if (typeof location === "undefined" || location.protocol === "file:") {
-    showToast("請用 Vercel 網址開啟，才能使用藍新金流付款。");
-    return;
-  }
-  let accessToken = currentAccessToken();
-  try {
-    const fresh = await Promise.race([
-      ensureFreshAccessToken(),
-      new Promise((resolve) => setTimeout(() => resolve(""), 4000)),
-    ]);
-    if (fresh) accessToken = fresh;
-  } catch (error) {
-    console.warn("Subscribe token refresh failed", error && error.message ? error.message : error);
-  }
-  if (!accessToken) accessToken = currentAccessToken();
-  showToast("正在前往藍新金流…");
-  try {
-    console.log("Subscribe fetch /api/pay/create", { tokenChars: accessToken.length });
-    const headers = {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    };
-    if (accessToken) {
-      headers.Authorization = `Bearer ${accessToken}`;
-      headers["X-Supabase-Auth"] = accessToken;
-    }
-    const response = await fetch(`${location.origin}/api/pay/create`, {
-      method: "POST",
-      credentials: "include",
-      headers,
-      body: JSON.stringify({ accessToken }),
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || !payload.ok) {
-      const message = payload.error || payload.code || `無法前往藍新金流（${response.status}）`;
-      setAuthError(message);
-      showToast(message);
-      return;
-    }
-    if (!payload.gateway || !payload.fields) {
-      showToast("沒有取得藍新付款表單，請稍後再試。");
-      return;
-    }
-    submitNewebPayForm(payload.gateway, payload.fields);
-  } catch (error) {
-    showToast(error && error.message ? error.message : "無法前往藍新金流");
-  }
+function startNewebPay() {
+  window.location.assign(NEWEBPAY_EPG_URL);
 }
 
 function rowsToReviewMap(rows) {
