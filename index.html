@@ -27,7 +27,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="app.css?v=53" />
+    <link rel="stylesheet" href="app.css?v=54" />
   </head>
   <body>
     <script>
@@ -46,7 +46,9 @@
             <path d="M4 7h16M4 12h16M4 17h16" />
           </svg>
         </button>
-        <span class="logo">日精進</span>
+        <a class="logo" href="/" aria-label="回首頁">
+          <img src="logo.png" alt="進行式ING" width="100" height="36" />
+        </a>
       </div>
       <div class="topbar-right">
         <time class="date" id="headerDate"></time>
@@ -64,7 +66,11 @@
 
     <div class="layout" id="app">
       <nav class="sidebar" id="sidebar">
-        <div class="drawer-brand"><span>日精進</span></div>
+        <div class="drawer-brand">
+          <a class="logo" href="/" aria-label="回首頁">
+            <img src="logo.png" alt="進行式ING" width="100" height="36" />
+          </a>
+        </div>
 
         <div class="side-nav">
           <a class="side-item is-active" data-page="today" href="#today">

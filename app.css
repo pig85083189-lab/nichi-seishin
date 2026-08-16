@@ -130,11 +130,22 @@ code {
 }
 
 .logo {
-  font-family: var(--serif);
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 1;
+  min-width: 0;
+  line-height: 0;
+  text-decoration: none;
+  color: inherit;
+}
+
+.logo img {
+  display: block;
+  height: 36px;
+  width: auto;
+  max-width: min(200px, 46vw);
+  object-fit: contain;
+  object-position: left center;
 }
 
 .date {
@@ -202,11 +213,8 @@ body.nav-closed .sidebar {
 
 .drawer-brand {
   display: none;
+  align-items: center;
   padding: 8px 12px 18px;
-  font-family: var(--serif);
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
 }
 
 .side-nav {
@@ -1935,6 +1943,10 @@ body.nav-closed .auth-pay {
 }
 
 @media (max-width: 560px) {
+  .logo img {
+    height: 32px;
+  }
+
   .date {
     font-size: 12px;
     letter-spacing: 0.08em;
