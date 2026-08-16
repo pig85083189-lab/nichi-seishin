@@ -250,9 +250,8 @@ function formatBodyCheckPrompt(ctx) {
   const groupLine = (label, group) => {
     const data = group && typeof group === "object" ? group : {};
     const flags = Array.isArray(data.flags) ? data.flags.filter(Boolean).join("、") : "";
-    if (data.none) return `${label}：沒有（一切都很好）${data.reason ? `；原因：${data.reason}` : ""}`;
     if (flags) return `${label}：${flags}${data.reason ? `；原因：${data.reason}` : ""}`;
-    return `${label}：未選${data.reason ? `；說明：${data.reason}` : ""}`;
+    return `${label}：未勾選（視為狀態平穩）${data.reason ? `；說明：${data.reason}` : ""}`;
   };
   return `${groupLine("今日心情檢核", check.mood)}
 ${groupLine("今日身體檢核", check.body)}
@@ -673,18 +672,6 @@ module.exports = async function handler(req, res) {
       const vision = String(body.vision || text || "").trim();
       if (vision.length < 4) {
         res.status(400).json({ ok: false, error: "請先寫下明天想顯化的事情" });
-        return;
-      }
-    } else if (mode === "bodycoach") {
-      const ctx = body.context && typeof body.context === "object" ? body.context : {};
-      const check = ctx.bodyCheck && typeof ctx.bodyCheck === "object" ? ctx.bodyCheck : {};
-      const moodOk = Boolean(check.mood && (check.mood.none || (Array.isArray(check.mood.flags) && check.mood.flags.length)));
-      const bodyOk = Boolean(check.body && (check.body.none || (Array.isArray(check.body.flags) && check.body.flags.length)));
-      const sleepOk = Boolean(
-        check.sleep && ((Array.isArray(check.sleep.flags) && check.sleep.flags.length) || String(check.sleep.reason || "").trim())
-      );
-      if (!moodOk || !bodyOk || !sleepOk) {
-        res.status(400).json({ ok: false, error: "請先勾選今日心情、身體狀況，以及昨日睡眠" });
         return;
       }
     } else if (!text && mode === "organize" && !Array.isArray(body.messages)) {

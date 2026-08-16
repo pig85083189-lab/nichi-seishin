@@ -2794,13 +2794,12 @@ function deriveBodyNote(check) {
 function collectBodyCheck() {
   const readGroup = (name, reasonId) => {
     const root = document.querySelector(`[data-body-group="${name}"]`);
-    const noneBtn = root?.querySelector("[data-body-none]");
-    const flags = [...(root?.querySelectorAll(".body-flag-btn.is-on:not([data-body-none])") || [])]
+    const flags = [...(root?.querySelectorAll(".body-flag-btn.is-on") || [])]
       .map((btn) => btn.dataset.bodyFlag)
       .filter(Boolean);
     return {
       flags,
-      none: Boolean(noneBtn && noneBtn.classList.contains("is-on") && !flags.length),
+      none: false,
       reason: journalFieldValue(reasonId),
     };
   };
@@ -2830,8 +2829,7 @@ function fillBodyCheck(check) {
     const group = data[name];
     const flagSet = new Set(group.flags || []);
     root.querySelectorAll(".body-flag-btn").forEach((btn) => {
-      if (btn.hasAttribute("data-body-none")) btn.classList.toggle("is-on", Boolean(group.none) && !flagSet.size);
-      else btn.classList.toggle("is-on", flagSet.has(btn.dataset.bodyFlag));
+      btn.classList.toggle("is-on", flagSet.has(btn.dataset.bodyFlag));
     });
   });
   const moodReason = document.getElementById("bodyMoodReason");
@@ -2843,14 +2841,18 @@ function fillBodyCheck(check) {
   syncBodyReasonVisibility(data);
 }
 
-function bodyGroupChosen(group) {
-  if (!group) return false;
-  return Boolean(group.none || (group.flags && group.flags.length));
+function bodyCheckHasSignal(check) {
+  const data = check || emptyBodyCheck();
+  return ["mood", "body", "sleep"].some((name) => {
+    const group = data[name] || {};
+    return Boolean((group.flags || []).length || String(group.reason || "").trim());
+  });
 }
 
-function bodyCoachReady(journal) {
+function bodyCoachReady(journal, options = {}) {
   const check = (journal && journal.bodyCheck) || collectBodyCheck();
-  return bodyGroupChosen(check.mood) && bodyGroupChosen(check.body) && Boolean((check.sleep.flags || []).length || String(check.sleep.reason || "").trim());
+  if (options.auto) return bodyCheckHasSignal(check);
+  return true;
 }
 
 function bodyCoachSignature(journal) {
@@ -3371,7 +3373,7 @@ function renderBodyCoachCard(coach) {
   if (!root) return;
   const data = normalizeBodyCoach(coach);
   if (!data.analysis && !data.suggestions.length) {
-    root.innerHTML = `<p class="insight-card__empty">先勾選心情、身體與睡眠，再點按鈕或等它自動生成。</p>`;
+    root.innerHTML = `<p class="insight-card__empty">有狀況再勾選。沒勾選就代表今天大致平穩，也可直接點按鈕生成建議。</p>`;
     return;
   }
   const tips = data.suggestions
@@ -3398,9 +3400,9 @@ function setBodyCoachLoading(loading) {
 
 function localBodyCoachFallback(journal) {
   const check = normalizeBodyCheck(journal.bodyCheck, journal.bodyTags, journal.bodyNote);
-  const moodBits = check.mood.none ? "心情大致平穩" : `心情出現「${(check.mood.flags || []).join("、") || "波動"}」`;
-  const bodyBits = check.body.none ? "身體沒有明顯不適" : `身體有「${(check.body.flags || []).join("、") || "訊號"}」`;
-  const sleepBits = (check.sleep.flags || []).join("、") || "睡眠狀況未明";
+  const moodBits = (check.mood.flags || []).length ? `心情出現「${check.mood.flags.join("、")}」` : "心情大致平穩";
+  const bodyBits = (check.body.flags || []).length ? `身體有「${check.body.flags.join("、")}」` : "身體沒有明顯不適";
+  const sleepBits = (check.sleep.flags || []).join("、") || "未特別勾選睡眠狀況";
   const suggestions = [];
   if (check.mood.flags.includes("焦慮") || check.sleep.flags.includes("睡不著")) {
     suggestions.push("今晚先做 8 次「吸 4 秒、吐 6 秒」的腹式呼吸，讓交感神經慢慢降下來。");
@@ -3429,8 +3431,8 @@ function localBodyCoachFallback(journal) {
 async function generateBodyCoach(options = {}) {
   if (state.bodyCoachBusy) return;
   const journal = collectJournal();
-  if (!bodyCoachReady(journal)) {
-    if (!options.auto) showToast("請先勾選今日心情、身體狀況，以及昨日睡眠。");
+  if (!bodyCoachReady(journal, options)) {
+    if (!options.auto) showToast("請先勾選今天有出現的狀況。");
     return;
   }
   const sig = bodyCoachSignature(journal);
@@ -3477,7 +3479,7 @@ async function generateBodyCoach(options = {}) {
 
 function maybeAutoGenerateBodyCoach(journal) {
   if (state.journalHydrating) return;
-  if (bodyCoachReady(journal) && state.journalMeta.bodyCoachSig !== bodyCoachSignature(journal)) {
+  if (bodyCoachReady(journal, { auto: true }) && state.journalMeta.bodyCoachSig !== bodyCoachSignature(journal)) {
     generateBodyCoach({ auto: true });
   }
 }
@@ -4155,11 +4157,9 @@ function composeJournalRawText(journal) {
   if (String(journal.event || "").trim()) lines.push(`今日事件：${journal.event.trim()}`);
   if (journal.mood) lines.push(`心情：${journal.mood}`);
   const check = normalizeBodyCheck(journal.bodyCheck, journal.bodyTags, journal.bodyNote);
-  if (check.mood.none) lines.push("今日心情檢核：沒有（一切都很好）");
-  else if (check.mood.flags.length) lines.push(`今日心情檢核：${check.mood.flags.join("、")}`);
+  if (check.mood.flags.length) lines.push(`今日心情檢核：${check.mood.flags.join("、")}`);
   if (check.mood.reason) lines.push(`心情原因：${check.mood.reason}`);
-  if (check.body.none) lines.push("今日身體檢核：沒有（一切都很好）");
-  else if (check.body.flags.length) lines.push(`今日身體檢核：${check.body.flags.join("、")}`);
+  if (check.body.flags.length) lines.push(`今日身體檢核：${check.body.flags.join("、")}`);
   if (check.body.reason) lines.push(`身體原因：${check.body.reason}`);
   if (check.sleep.flags.length) lines.push(`昨日睡眠檢核：${check.sleep.flags.join("、")}`);
   if (check.sleep.reason) lines.push(`睡眠說明：${check.sleep.reason}`);
@@ -6100,18 +6100,7 @@ function bindEvents() {
   document.getElementById("section-body")?.addEventListener("click", (event) => {
     const btn = event.target.closest(".body-flag-btn");
     if (!btn) return;
-    const root = btn.closest("[data-body-group]");
-    if (!root) return;
-    const isNone = btn.hasAttribute("data-body-none");
-    if (isNone) {
-      const on = !btn.classList.contains("is-on");
-      root.querySelectorAll(".body-flag-btn").forEach((item) => item.classList.toggle("is-on", on && item === btn));
-    } else {
-      btn.classList.toggle("is-on");
-      if (btn.classList.contains("is-on")) {
-        root.querySelector("[data-body-none]")?.classList.remove("is-on");
-      }
-    }
+    btn.classList.toggle("is-on");
     syncBodyReasonVisibility();
     persistJournalQuietly();
     refreshJournalChecklists();

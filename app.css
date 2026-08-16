@@ -2789,12 +2789,6 @@ body.nav-closed .auth-pay {
   text-align: left;
 }
 
-.body-flag-btn--none.is-on {
-  background: var(--header);
-  border-color: var(--header);
-  color: #fff;
-}
-
 .body-reason {
   display: grid;
   gap: 8px;

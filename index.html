@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=74" />
+    <link rel="stylesheet" href="app.css?v=75" />
     <style>
       .splash {
         position: fixed;
@@ -257,7 +257,7 @@
 
           <section class="journal-card" id="section-body">
             <h2 class="journal-card__title"><span>03</span> 身體覺察</h2>
-            <p class="journal-guide">用三個具體檢核，把心情、身體與睡眠連起來看。勾選「有」的狀況後，再寫下原因；右側會給你可實踐的照顧建議。</p>
+            <p class="journal-guide">用三個具體檢核，把心情、身體與睡眠連起來看。有狀況再勾選，沒勾選就代表今天大致平穩；勾了之後再寫原因，右側會給你可實踐的照顧建議。</p>
             <div class="journal-split journal-split--body">
               <div class="journal-col body-check">
                 <div class="body-check-group" data-body-group="mood">
@@ -266,7 +266,6 @@
                     <button class="tag-btn body-flag-btn" type="button" data-body-group="mood" data-body-flag="焦慮">出現焦慮</button>
                     <button class="tag-btn body-flag-btn" type="button" data-body-group="mood" data-body-flag="脾氣暴躁">脾氣暴躁</button>
                     <button class="tag-btn body-flag-btn" type="button" data-body-group="mood" data-body-flag="不耐煩">不耐煩</button>
-                    <button class="tag-btn body-flag-btn body-flag-btn--none" type="button" data-body-group="mood" data-body-none="1">沒有（一切都很好）</button>
                   </div>
                   <label class="body-reason" data-body-reason="mood" hidden>
                     <span class="journal-label">原因是什麼？</span>
@@ -279,7 +278,6 @@
                     <button class="tag-btn body-flag-btn" type="button" data-body-group="body" data-body-flag="腸胃不適">腸胃不適</button>
                     <button class="tag-btn body-flag-btn" type="button" data-body-group="body" data-body-flag="頭痛">頭痛</button>
                     <button class="tag-btn body-flag-btn" type="button" data-body-group="body" data-body-flag="全身痠痛">全身痠痛</button>
-                    <button class="tag-btn body-flag-btn body-flag-btn--none" type="button" data-body-group="body" data-body-none="1">沒有（一切都很好）</button>
                   </div>
                   <label class="body-reason" data-body-reason="body" hidden>
                     <span class="journal-label">原因是什麼？</span>
@@ -310,7 +308,7 @@
                   <div class="ai-thinking__bar"><i></i></div>
                 </div>
                 <div class="body-coach__body" id="bodyCoachBody">
-                  <p class="insight-card__empty">先勾選心情、身體與睡眠，再點按鈕或等它自動生成。</p>
+                  <p class="insight-card__empty">有狀況再勾選。沒勾選就代表今天大致平穩，也可直接點按鈕生成建議。</p>
                 </div>
               </aside>
             </div>
@@ -635,6 +633,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=88"></script>
+    <script src="app.js?v=89"></script>
   </body>
 </html>
