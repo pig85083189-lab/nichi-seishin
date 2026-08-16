@@ -1064,6 +1064,25 @@ function applySession(session) {
     : null;
 }
 
+async function ensureFreshAccessToken() {
+  const client = await getSupabase();
+  if (!client) return "";
+  let session = null;
+  try {
+    const current = await client.auth.getSession();
+    session = current.data && current.data.session;
+    const expiresAt = session && session.expires_at ? Number(session.expires_at) * 1000 : 0;
+    if (!session || (expiresAt && expiresAt < Date.now() + 60 * 1000)) {
+      const refreshed = await client.auth.refreshSession();
+      if (refreshed.data && refreshed.data.session) session = refreshed.data.session;
+    }
+  } catch (error) {
+    console.warn("ensureFreshAccessToken failed", error && error.message ? error.message : error);
+  }
+  applySession(session);
+  return state.accessToken;
+}
+
 let lastAuthError = "";
 
 function setAuthError(message) {
@@ -1166,16 +1185,8 @@ async function startNewebPay() {
     showToast("請先登入，再前往付款。");
     return;
   }
-  try {
-    const client = await getSupabase();
-    if (client && !state.accessToken) {
-      const { data } = await client.auth.getSession();
-      applySession(data.session);
-    }
-  } catch {
-    /* 沒有 token 時下面會回 401 */
-  }
-  if (!state.accessToken) {
+  const accessToken = await ensureFreshAccessToken();
+  if (!accessToken) {
     showToast("請先登入，再前往付款。");
     return;
   }
@@ -1187,8 +1198,9 @@ async function startNewebPay() {
       headers: authHeaders({
         Accept: "application/json",
         "Content-Type": "application/json",
+        "X-Supabase-Auth": accessToken,
       }),
-      body: "{}",
+      body: JSON.stringify({ accessToken }),
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload.ok) {
@@ -1301,8 +1313,7 @@ async function refreshAuth() {
     const client = await getSupabase();
     state.authConfigured = Boolean(client);
     if (client) {
-      const { data } = await client.auth.getSession();
-      applySession(data.session);
+      await ensureFreshAccessToken();
     }
     if (typeof location !== "undefined" && location.protocol !== "file:") {
       const response = await fetch(`${location.origin}/api/auth/me`, {

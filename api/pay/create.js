@@ -1,4 +1,4 @@
-const { getSession } = require("../../lib/auth");
+const { getSession, bearerToken } = require("../../lib/auth");
 const { ensureTrial, patchSubscription } = require("../../lib/supabase");
 const {
   newebpayConfigured,
@@ -61,9 +61,14 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const user = await getSession(req);
+  const body = req.method === "POST" ? readJsonBody(req) : {};
+  const user = await getSession(req, { accessToken: body.accessToken || body.token });
   if (!user) {
-    res.status(401).json({ ok: false, error: "請先登入" });
+    const hasToken = Boolean(bearerToken(req, { accessToken: body.accessToken || body.token }));
+    res.status(401).json({
+      ok: false,
+      error: hasToken ? "登入已過期，請重新登入後再訂閱" : "請先登入",
+    });
     return;
   }
 
@@ -88,7 +93,6 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const body = req.method === "POST" ? readJsonBody(req) : {};
   const amt = Number(body.amt || defaultPeriodAmt());
   if (!Number.isFinite(amt) || amt < 1) {
     res.status(400).json({ ok: false, error: "金額必須是正整數" });
