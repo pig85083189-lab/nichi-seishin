@@ -29,7 +29,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="app.css?v=68" />
+    <link rel="stylesheet" href="app.css?v=69" />
   </head>
   <body>
     <script>
@@ -351,7 +351,7 @@
         <section class="page" id="page-report" data-page="report" hidden>
           <header class="page__header">
             <h2 class="page__title">週月報</h2>
-            <p class="page__subtitle">把每天的片段，收成一段看得懂的成長軌跡。</p>
+            <p class="page__subtitle">用圖表看見三力節奏，再用 AI 教練點出閃光點與突破口。</p>
           </header>
 
           <div class="tabs" role="tablist" aria-label="報告類型">
@@ -474,14 +474,28 @@
       </form>
     </dialog>
 
+    <dialog class="modal archive-modal" id="reportArchiveModal">
+      <div class="archive-modal__card">
+        <header class="archive-modal__head">
+          <h3 class="modal__title" id="reportArchiveTitle">月度成長報告</h3>
+          <div class="archive-modal__actions">
+            <button class="btn btn--outline" id="reportArchivePrint" type="button">下載 PDF / 列印</button>
+            <button class="btn btn--ghost" id="reportArchiveClose" type="button">關閉</button>
+          </div>
+        </header>
+        <div class="archive-modal__body" id="reportArchiveBody"></div>
+      </div>
+    </dialog>
+
     <div class="toast" id="toast" hidden></div>
     <script>
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("service-worker.js").catch(function () {});
       }
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=81"></script>
+    <script src="app.js?v=82"></script>
   </body>
 </html>

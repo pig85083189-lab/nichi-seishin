@@ -1,23 +1,36 @@
 const { callOpenAI } = require("../lib/openai");
 const { requireUser } = require("../lib/auth");
-const { kvConfigured, listUsers, loadReviews, mergeReviews, loadReport, loadLatestReport, saveReport } = require("../lib/store");
+const { buildGrowthStats, formatStatsPrompt } = require("../lib/report-stats");
+const {
+  kvConfigured,
+  listUsers,
+  loadReviews,
+  loadUserData,
+  mergeReviews,
+  loadReport,
+  loadLatestReport,
+  listArchivedReports,
+  archiveUserReport,
+} = require("../lib/store");
 
-const REPORT_SYSTEM = `你是「日精進」的週月報教練。使用者會給你一段期間內、多天的復盤摘要。請聚合成一份冷靜、精準、可執行的綜合報告。
+const REPORT_SYSTEM = `你是「日精進」的成長教練。使用者會給你一段期間內的復盤摘要，以及覺察力、執行力、顯化力的勾選量與完成頻率。
 
-【口吻】
-- 對事不對人。禁止雞湯、禁止空話。
-- 從重複出現的落差、盲點、金句裡看出軌跡，不要逐日流水帳。
+請寫一份冷靜、精準、可執行的成長報告。對事不對人。禁止雞湯、禁止空話。必須貼近數據與原文。
 
-【必須寫滿這三段】
-1. insights：本週／本月關鍵洞察，2-4 條。每條一句到兩句，點出結構，不要抒情。
-2. progress：進步軌跡，2-4 條。寫「比前幾天更清楚／還卡在哪」。
-3. nextPlan：下週／下月規劃，2-4 條。必須是做得到的下一步，不要口號。
+【必須寫滿】
+1. highlights「本期閃光點」：2-4 條。肯定他做得很棒、進步顯著的地方，要具體，不要空泛誇獎。
+2. breakthroughs「成長突破口」：2-3 條。客觀指出盲點、停滯或三力失衡，每條含一個明天做得到的改進建議。
+3. insights：關鍵洞察，2-4 條。
+4. progress：進步軌跡，2-4 條。
+5. nextPlan：下週／下月規劃，2-4 條，必須做得到。
 
 另外給 title（報告標題）與 summary（一句總述）。
 只輸出 JSON，繁體中文，不要 markdown。
 {
-  "title": "本週：好意沒講清楚，解法就變成壓力",
+  "title": "本週：心念開始落地，執行還差一口氣",
   "summary": "一句總述",
+  "highlights": ["閃光點1", "閃光點2"],
+  "breakthroughs": ["突破口1（含具體建議）", "突破口2"],
   "insights": ["洞察1", "洞察2"],
   "progress": ["軌跡1", "軌跡2"],
   "nextPlan": ["規劃1", "規劃2"]
@@ -79,6 +92,10 @@ function todayTaipeiIso() {
   return `${taipei.getUTCFullYear()}-${pad(taipei.getUTCMonth() + 1)}-${pad(taipei.getUTCDate())}`;
 }
 
+function validIso(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
+}
+
 function rangeFor(type, options = {}) {
   const today = options.toIso || todayTaipeiIso();
   const complete = Boolean(options.complete);
@@ -105,15 +122,24 @@ function reviewsInRange(all, fromIso, toIso) {
   return Object.entries(all || {})
     .filter(([iso, review]) => iso >= fromIso && iso <= toIso && review && typeof review === "object")
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([iso, review]) => ({
-      date: iso,
-      rawText: String(review.rawText || "").slice(0, 800),
-      themeTitle: review.themeTitle || review.organize?.themeTitle || "",
-      conclusion: review.conclusion || review.organize?.conclusion || "",
-      quotes: Array.isArray(review.quotes) ? review.quotes.slice(0, 3) : review.organize?.quotes || [],
-      gratitude: review.gratitude || "",
-      themeCategory: review.themeCategory || review.organize?.themeCategory || "",
-    }));
+    .map(([iso, review]) => {
+      const journal = review.journal && typeof review.journal === "object" ? review.journal : {};
+      return {
+        date: iso,
+        rawText: String(review.rawText || "").slice(0, 800),
+        themeTitle: review.themeTitle || review.organize?.themeTitle || "",
+        conclusion: review.conclusion || review.organize?.conclusion || "",
+        quotes: Array.isArray(review.quotes) ? review.quotes.slice(0, 3) : review.organize?.quotes || [],
+        gratitude: review.gratitude || "",
+        themeCategory: review.themeCategory || review.organize?.themeCategory || "",
+        journal: {
+          awarenessChecks: Array.isArray(journal.awarenessChecks) ? journal.awarenessChecks.slice(0, 8) : [],
+          executionChecks: Array.isArray(journal.executionChecks) ? journal.executionChecks.slice(0, 8) : [],
+          manifestChecks: Array.isArray(journal.manifestChecks) ? journal.manifestChecks.slice(0, 8) : [],
+          manifest: String(journal.manifest || "").slice(0, 120),
+        },
+      };
+    });
 }
 
 function compactMap(list) {
@@ -133,15 +159,27 @@ function cronAuthorized(req) {
   return header === `Bearer ${secret}`;
 }
 
-async function buildAiReport({ type, fromIso, toIso, period, label, entries }) {
-  const digest = entries
+function lines(list, max = 6) {
+  return Array.isArray(list) ? list.map((item) => String(item || "").trim()).filter(Boolean).slice(0, max) : [];
+}
+
+async function buildAiReport({ type, fromIso, toIso, period, label, entries, stats, archived }) {
+  const digest = (entries || [])
     .map((item) => {
       const quotes = Array.isArray(item.quotes) ? item.quotes.filter(Boolean).join("／") : "";
+      const journal = item.journal && typeof item.journal === "object" ? item.journal : {};
+      const checks = [
+        journal.awarenessChecks?.length ? `覺察勾選：${journal.awarenessChecks.join("、")}` : "",
+        journal.executionChecks?.length ? `執行勾選：${journal.executionChecks.join("、")}` : "",
+        journal.manifestChecks?.length ? `顯化勾選：${journal.manifestChecks.join("、")}` : "",
+        journal.manifest ? `顯化願景：${journal.manifest}` : "",
+      ].filter(Boolean);
       return [
         `【${item.date}】${item.themeCategory || ""} ${item.themeTitle || ""}`.trim(),
         item.conclusion ? `結論：${item.conclusion}` : "",
         item.rawText ? `原文：${String(item.rawText).slice(0, 280)}` : "",
         quotes ? `金句：${quotes}` : "",
+        ...checks,
       ]
         .filter(Boolean)
         .join("\n");
@@ -153,7 +191,7 @@ async function buildAiReport({ type, fromIso, toIso, period, label, entries }) {
       { role: "system", content: REPORT_SYSTEM },
       {
         role: "user",
-        content: `這是「${label}」復盤（${fromIso} 至 ${toIso}），共 ${entries.length} 天。請聚合成綜合報告。\n\n${digest || "（這段期間沒有復盤摘要）"}`,
+        content: `這是「${label}」成長報告（${fromIso} 至 ${toIso}），共 ${entries.length} 天復盤。\n\n【三力數據】\n${formatStatsPrompt(stats)}\n\n【復盤摘要】\n${digest || "（這段期間沒有復盤摘要，請只根據三力數據寫）"}`,
       },
     ],
     25000
@@ -166,14 +204,26 @@ async function buildAiReport({ type, fromIso, toIso, period, label, entries }) {
     label,
     fromIso,
     toIso,
-    title: data.title || `${label}綜合報告`,
+    archived: Boolean(archived),
+    title: data.title || `${label}成長報告`,
     summary: data.summary || "",
-    insights: Array.isArray(data.insights) ? data.insights.filter(Boolean).slice(0, 6) : [],
-    progress: Array.isArray(data.progress) ? data.progress.filter(Boolean).slice(0, 6) : [],
-    nextPlan: Array.isArray(data.nextPlan) ? data.nextPlan.filter(Boolean).slice(0, 6) : [],
+    highlights: lines(data.highlights, 4),
+    breakthroughs: lines(data.breakthroughs, 3),
+    insights: lines(data.insights, 6),
+    progress: lines(data.progress, 6),
+    nextPlan: lines(data.nextPlan, 6),
+    stats: stats || null,
     days: entries.length,
     generatedAt: new Date().toISOString(),
     source: "openai",
+  };
+}
+
+function librariesFrom(body, bundle) {
+  return {
+    insights: Array.isArray(body.insights) ? body.insights : bundle?.insights || [],
+    tasks: Array.isArray(body.tasks) ? body.tasks : bundle?.tasks || [],
+    manifests: Array.isArray(body.manifests) ? body.manifests : bundle?.manifests || [],
   };
 }
 
@@ -188,27 +238,44 @@ async function handler(req, res, forced = {}) {
   const type = forced.type || req.query?.type || body.type || "week";
   const kind = type === "month" ? "month" : "week";
   const readOnly = String(req.query?.read || body.read || "") === "1";
+  const listOnly = String(req.query?.list || body.list || "") === "1";
   const fromCron = Boolean(forced.cron || req.query?.cron);
-  const complete = fromCron || String(req.query?.complete || "") === "1";
+  const complete = fromCron || String(req.query?.complete || body.complete || "") === "1";
 
   if (fromCron && !cronAuthorized(req)) {
     res.status(401).json({ ok: false, error: "Cron 未授權" });
     return;
   }
 
-  const range = rangeFor(kind, {
-    toIso: body.toIso,
-    complete,
-  });
+  const computed = rangeFor(kind, { toIso: body.toIso, complete });
+  const range =
+    validIso(body.fromIso) && validIso(body.toIso)
+      ? {
+          fromIso: body.fromIso,
+          toIso: body.toIso,
+          period: String(body.period || (kind === "month" ? body.fromIso.slice(0, 7) : body.fromIso)),
+          label: kind === "month" ? "月報" : "週報",
+        }
+      : computed;
   const period = String(body.period || req.query?.period || range.period);
+  const archived = kind === "month" && (complete || Boolean(body.archive));
 
   try {
     if (fromCron) {
       const users = await listUsers();
       const results = [];
       for (const account of users) {
-        const entries = reviewsInRange(await loadReviews(account.id), range.fromIso, range.toIso);
-        if (!entries.length) {
+        const bundle = await loadUserData(account.id);
+        const entries = reviewsInRange(bundle.reviews || {}, range.fromIso, range.toIso);
+        const stats = buildGrowthStats({
+          fromIso: range.fromIso,
+          toIso: range.toIso,
+          reviews: bundle.reviews || {},
+          insights: bundle.insights || [],
+          tasks: bundle.tasks || [],
+          manifests: bundle.manifests || [],
+        });
+        if (!entries.length && !(stats.totals && stats.totals.checked)) {
           results.push({ userId: account.id, skipped: true });
           continue;
         }
@@ -219,9 +286,11 @@ async function handler(req, res, forced = {}) {
           period,
           label: range.label,
           entries,
+          stats,
+          archived,
         });
-        await saveReport(account.id, kind, period, report);
-        results.push({ userId: account.id, ok: true, period, days: entries.length });
+        await archiveUserReport(account.id, report);
+        results.push({ userId: account.id, ok: true, period, days: entries.length, archived });
       }
       res.status(200).json({ ok: true, cron: true, results, kv: kvConfigured() });
       return;
@@ -234,6 +303,12 @@ async function handler(req, res, forced = {}) {
       await mergeReviews(user.id, compactMap(body.reviews));
     }
 
+    if (listOnly) {
+      const items = await listArchivedReports(user.id);
+      res.status(200).json({ ok: true, data: items, kv: kvConfigured(), userId: user.id });
+      return;
+    }
+
     const wantLatest = String(req.query?.latest || body.latest || "") === "1";
     if (readOnly || req.method === "GET") {
       let stored = await loadReport(user.id, kind, period);
@@ -242,12 +317,25 @@ async function handler(req, res, forced = {}) {
       return;
     }
 
-    let entries = Array.isArray(body.reviews) ? reviewsInRange(compactMap(body.reviews), range.fromIso, range.toIso) : [];
+    const bundle = await loadUserData(user.id);
+    const libs = librariesFrom(body, bundle);
+    const postedReviews = Array.isArray(body.reviews) ? compactMap(body.reviews) : {};
+    let entries = Object.keys(postedReviews).length
+      ? reviewsInRange(postedReviews, range.fromIso, range.toIso)
+      : [];
     if (!entries.length) {
-      entries = reviewsInRange(await loadReviews(user.id), range.fromIso, range.toIso);
+      entries = reviewsInRange(bundle.reviews || (await loadReviews(user.id)), range.fromIso, range.toIso);
     }
+    const stats = buildGrowthStats({
+      fromIso: range.fromIso,
+      toIso: range.toIso,
+      reviews: Object.keys(postedReviews).length ? postedReviews : bundle.reviews || {},
+      insights: libs.insights,
+      tasks: libs.tasks,
+      manifests: libs.manifests,
+    });
 
-    if (!entries.length) {
+    if (!entries.length && !(stats.totals && stats.totals.checked)) {
       res.status(200).json({
         ok: true,
         skipped: true,
@@ -256,6 +344,7 @@ async function handler(req, res, forced = {}) {
         period,
         fromIso: range.fromIso,
         toIso: range.toIso,
+        stats,
         kv: kvConfigured(),
         userId: user.id,
       });
@@ -269,8 +358,10 @@ async function handler(req, res, forced = {}) {
       period,
       label: range.label,
       entries,
+      stats,
+      archived,
     });
-    await saveReport(user.id, kind, period, report);
+    await archiveUserReport(user.id, report);
     res.status(200).json({ ok: true, data: report, kv: kvConfigured(), userId: user.id });
   } catch (error) {
     const aborted = error?.name === "AbortError" || /aborted/i.test(String(error?.message || ""));

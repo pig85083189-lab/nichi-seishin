@@ -50,6 +50,8 @@ const REPORT_STOP_WORDS = new Set([
 const state = {
   page: "today",
   reportType: "week",
+  reportCharts: { radar: null, bars: null },
+  monthArchiveTried: false,
   taskFilter: "all",
   insightFilter: "all",
   manifestFilter: "all",
@@ -912,8 +914,162 @@ function rangeFor(type) {
   };
 }
 
-function buildReport(type) {
-  const { fromIso, toIso, days, label } = rangeFor(type);
+function previousMonthRange() {
+  const today = startOfDay(new Date());
+  const from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const to = new Date(today.getFullYear(), today.getMonth(), 0);
+  return {
+    fromIso: toInputDate(from),
+    toIso: toInputDate(to),
+    period: toInputDate(from).slice(0, 7),
+    days: to.getDate(),
+    label: "上月",
+  };
+}
+
+function formatMonthLabel(period) {
+  const [year, month] = String(period || "").split("-");
+  if (!year || !month) return String(period || "月報");
+  return `${year} 年 ${Number(month)} 月`;
+}
+
+function itemDateIso(item) {
+  const date = String((item && (item.date || item.iso)) || "").slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
+  const created = String((item && item.createdAt) || "").slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(created) ? created : "";
+}
+
+function enumerateReportDays(fromIso, toIso) {
+  const days = [];
+  const start = parseIsoDate(fromIso);
+  const end = parseIsoDate(toIso);
+  if (!start || !end || start > end) return days;
+  let cursor = start;
+  let guard = 0;
+  while (cursor <= end && guard < 62) {
+    days.push(toInputDate(cursor));
+    cursor = addDays(cursor, 1);
+    guard += 1;
+  }
+  return days;
+}
+
+function journalCheckCounts(review) {
+  const journal = review && review.journal && typeof review.journal === "object" ? review.journal : {};
+  return {
+    awareness: Array.isArray(journal.awarenessChecks) ? journal.awarenessChecks.filter(Boolean).length : 0,
+    execution: Array.isArray(journal.executionChecks) ? journal.executionChecks.filter(Boolean).length : 0,
+    manifestation: Array.isArray(journal.manifestChecks) ? journal.manifestChecks.filter(Boolean).length : 0,
+  };
+}
+
+function libraryBucket(items, fromIso, toIso) {
+  const bucket = { checked: 0, done: 0, doing: 0, later: 0, daysActive: 0 };
+  const active = new Set();
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    const iso = itemDateIso(item);
+    if (!iso || iso < fromIso || iso > toIso) return;
+    bucket.checked += 1;
+    active.add(iso);
+    const status = String(item.status || "doing");
+    if (status === "done") bucket.done += 1;
+    else if (status === "later") bucket.later += 1;
+    else bucket.doing += 1;
+  });
+  bucket.daysActive = active.size;
+  return bucket;
+}
+
+function sampleLibraryTitles(items, fromIso, toIso, limit = 8) {
+  return (Array.isArray(items) ? items : [])
+    .filter((item) => {
+      const iso = itemDateIso(item);
+      return iso && iso >= fromIso && iso <= toIso;
+    })
+    .map((item) => String(item.title || "").trim())
+    .filter(Boolean)
+    .slice(0, limit);
+}
+
+function buildGrowthStats(fromIso, toIso) {
+  const reviews = getReviews();
+  const insights = getInsights();
+  const tasks = getTasks();
+  const manifests = getManifests();
+  const insightByDate = new Map();
+  const taskByDate = new Map();
+  const manifestByDate = new Map();
+  const group = (list, map) => {
+    list.forEach((item) => {
+      const iso = itemDateIso(item);
+      if (!iso) return;
+      if (!map.has(iso)) map.set(iso, []);
+      map.get(iso).push(item);
+    });
+  };
+  group(insights, insightByDate);
+  group(tasks, taskByDate);
+  group(manifests, manifestByDate);
+
+  const series = enumerateReportDays(fromIso, toIso).map((iso) => {
+    const checks = journalCheckCounts(reviews[iso]);
+    return {
+      iso,
+      awareness: checks.awareness || (insightByDate.get(iso) || []).length,
+      execution: checks.execution || (taskByDate.get(iso) || []).length,
+      manifestation: checks.manifestation || (manifestByDate.get(iso) || []).length,
+    };
+  });
+  const sum = (key) => series.reduce((total, row) => total + Number(row[key] || 0), 0);
+  const awarenessLib = libraryBucket(insights, fromIso, toIso);
+  const executionLib = libraryBucket(tasks, fromIso, toIso);
+  const manifestationLib = libraryBucket(manifests, fromIso, toIso);
+  const awareness = {
+    ...awarenessLib,
+    checked: Math.max(awarenessLib.checked, sum("awareness")),
+    done: Math.max(awarenessLib.done, awarenessLib.checked),
+  };
+  const execution = {
+    ...executionLib,
+    checked: Math.max(executionLib.checked, sum("execution")),
+  };
+  const manifestation = {
+    ...manifestationLib,
+    checked: Math.max(manifestationLib.checked, sum("manifestation")),
+  };
+  const filledDays = series.filter((row) => row.awareness || row.execution || row.manifestation).length;
+  return {
+    fromIso,
+    toIso,
+    days: series.length,
+    filledDays,
+    awareness,
+    execution,
+    manifestation,
+    series,
+    totals: {
+      checked: awareness.checked + execution.checked + manifestation.checked,
+      done: awareness.done + execution.done + manifestation.done,
+      filledDays,
+    },
+    samples: {
+      awareness: sampleLibraryTitles(insights, fromIso, toIso),
+      execution: sampleLibraryTitles(tasks, fromIso, toIso),
+      manifestation: sampleLibraryTitles(manifests, fromIso, toIso),
+    },
+  };
+}
+
+function completionRate(bucket) {
+  const checked = Number(bucket && bucket.checked) || 0;
+  const done = Number(bucket && bucket.done) || 0;
+  if (!checked) return 0;
+  return Math.round((done / checked) * 100);
+}
+
+function buildReport(type, rangeOverride) {
+  const { fromIso, toIso, days, label } = rangeOverride || rangeFor(type);
   const reviews = getReviews();
   const entries = Object.keys(reviews)
     .filter((iso) => iso >= fromIso && iso <= toIso && reviewIsComplete(reviews[iso]))
@@ -931,8 +1087,10 @@ function buildReport(type) {
   const filledDays = entries.length;
   const totalChars = entries.reduce((sum, item) => sum + item.text.replace(/\s/g, "").length, 0);
   const keywords = extractKeywords(entries.map((item) => item.text));
+  const stats = buildGrowthStats(fromIso, toIso);
+  const period = type === "month" ? fromIso.slice(0, 7) : fromIso;
 
-  return { label, fromIso, toIso, days, filledDays, totalChars, keywords, entries };
+  return { type, label, fromIso, toIso, period, days, filledDays, totalChars, keywords, entries, stats };
 }
 
 function getStoredReports() {
@@ -979,6 +1137,7 @@ function compactReviewsForRange(fromIso, toIso) {
         quotes: Array.isArray(ai.quotes) ? ai.quotes.slice(0, 3) : [],
         gratitude: review.gratitude || ai.gratitudeNote || "",
         themeCategory: ai.themeCategory || "",
+        journal: review.journal && typeof review.journal === "object" ? review.journal : {},
       };
     });
 }
@@ -995,16 +1154,28 @@ async function fetchStoredCloudReport(type, period, latest) {
   return payload && payload.data && typeof payload.data === "object" ? payload.data : null;
 }
 
-async function generateCloudReport(type, fromIso, toIso, period) {
+async function generateCloudReport(type, fromIso, toIso, period, options = {}) {
   if (!state.user) return null;
   const reviews = compactReviewsForRange(fromIso, toIso);
-  if (!reviews.length) return null;
+  const stats = options.stats || buildGrowthStats(fromIso, toIso);
+  if (!reviews.length && !(stats.totals && stats.totals.checked)) return null;
   const response = await fetchWithTimeout(
     `${location.origin}/api/generate-report`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type, period, fromIso, toIso, reviews }),
+      body: JSON.stringify({
+        type,
+        period,
+        fromIso,
+        toIso,
+        archive: Boolean(options.archive),
+        reviews,
+        stats,
+        insights: getInsights(),
+        tasks: getTasks(),
+        manifests: getManifests(),
+      }),
     },
     28000
   );
@@ -1013,6 +1184,30 @@ async function generateCloudReport(type, fromIso, toIso, period) {
     throw new Error(payload.error || `HTTP ${response.status}`);
   }
   return payload.data || null;
+}
+
+async function fetchArchivedReportList() {
+  const local = listLocalMonthArchives();
+  if (!state.user) return local;
+  try {
+    const response = await fetchWithTimeout(
+      `${location.origin}/api/generate-report?list=1`,
+      { method: "GET" },
+      8000
+    );
+    const payload = await response.json().catch(() => ({}));
+    const remote = Array.isArray(payload.data) ? payload.data : [];
+    const map = new Map();
+    [...local, ...remote.filter((item) => item && item.type !== "week")].forEach((item) => {
+      const period = String(item.period || "");
+      if (!period) return;
+      const current = map.get(period);
+      if (!current || String(item.generatedAt || "") >= String(current.generatedAt || "")) map.set(period, item);
+    });
+    return [...map.values()].sort((left, right) => String(right.period).localeCompare(String(left.period)));
+  } catch {
+    return local;
+  }
 }
 
 function scheduleCloudSync() {
@@ -1622,20 +1817,217 @@ function syncReviewsToCloud() {
   scheduleCloudSync();
 }
 
+function listLocalMonthArchives() {
+  const stored = getStoredReports();
+  const fromCache = Object.entries(stored)
+    .filter(([key, value]) => key.startsWith("month:") && value && typeof value === "object")
+    .map(([key, value]) => ({
+      type: "month",
+      period: value.period || key.slice(6),
+      title: value.title || formatMonthLabel(value.period || key.slice(6)),
+      generatedAt: value.generatedAt || "",
+      fromIso: value.fromIso || "",
+      toIso: value.toIso || "",
+      archived: true,
+    }));
+  const current = toInputDate(new Date()).slice(0, 7);
+  const months = new Set(fromCache.map((item) => item.period));
+  Object.keys(getReviews()).forEach((iso) => {
+    const month = iso.slice(0, 7);
+    if (month && month < current) months.add(month);
+  });
+  getInsights().concat(getTasks(), getManifests()).forEach((item) => {
+    const month = itemDateIso(item).slice(0, 7);
+    if (month && month < current) months.add(month);
+  });
+  const map = new Map();
+  fromCache.forEach((item) => map.set(item.period, item));
+  [...months].forEach((period) => {
+    if (map.has(period)) return;
+    map.set(period, {
+      type: "month",
+      period,
+      title: `${formatMonthLabel(period)}成長報告`,
+      generatedAt: "",
+      fromIso: `${period}-01`,
+      toIso: "",
+      archived: true,
+    });
+  });
+  return [...map.values()].sort((left, right) => String(right.period).localeCompare(String(left.period)));
+}
+
+function lastDayOfMonthIso(period) {
+  const [year, month] = String(period || "").split("-").map(Number);
+  if (!year || !month) return "";
+  return toInputDate(new Date(year, month, 0));
+}
+
+function destroyReportCharts(prefix) {
+  const charts = state.reportCharts || {};
+  const keys = prefix
+    ? [`${prefix}Radar`, `${prefix}Bars`]
+    : Object.keys(charts);
+  keys.forEach((key) => {
+    if (charts[key] && typeof charts[key].destroy === "function") charts[key].destroy();
+    charts[key] = null;
+  });
+}
+
+function chartPalette() {
+  return {
+    awareness: "#9c8879",
+    execution: "#c4a484",
+    manifestation: "#8f7468",
+    awarenessSoft: "rgba(156, 136, 121, 0.35)",
+    executionSoft: "rgba(196, 164, 132, 0.45)",
+    manifestationSoft: "rgba(143, 116, 104, 0.4)",
+    tick: "#8a7d72",
+    grid: "rgba(232, 221, 208, 0.9)",
+  };
+}
+
+function paintReportCharts(stats, prefix = "report") {
+  destroyReportCharts(prefix);
+  const ChartLib = typeof window !== "undefined" ? window.Chart : null;
+  const data = stats || { awareness: {}, execution: {}, manifestation: {}, series: [] };
+  const colors = chartPalette();
+  const radarEl = document.getElementById(`${prefix}Radar`);
+  const barsEl = document.getElementById(`${prefix}Bars`);
+  const awareness = Number(data.awareness?.checked || 0);
+  const execution = Number(data.execution?.checked || 0);
+  const manifestation = Number(data.manifestation?.checked || 0);
+  const series = Array.isArray(data.series) ? data.series : [];
+  if (!ChartLib || !radarEl || !barsEl) {
+    paintReportChartFallback(data, prefix);
+    return;
+  }
+  const max = Math.max(4, awareness, execution, manifestation);
+  state.reportCharts[`${prefix}Radar`] = new ChartLib(radarEl, {
+    type: "radar",
+    data: {
+      labels: ["覺察力", "執行力", "顯化力"],
+      datasets: [
+        {
+          label: "已勾選",
+          data: [awareness, execution, manifestation],
+          backgroundColor: colors.awarenessSoft,
+          borderColor: colors.awareness,
+          pointBackgroundColor: colors.manifestation,
+          pointBorderColor: "#fff",
+          borderWidth: 2,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        r: {
+          min: 0,
+          max,
+          ticks: { stepSize: Math.ceil(max / 4) || 1, color: colors.tick, backdropColor: "transparent", showLabelBackdrop: false },
+          pointLabels: { color: colors.tick, font: { size: 13, family: "Noto Sans TC, sans-serif" } },
+          grid: { color: colors.grid },
+          angleLines: { color: colors.grid },
+        },
+      },
+    },
+  });
+  state.reportCharts[`${prefix}Bars`] = new ChartLib(barsEl, {
+    type: "bar",
+    data: {
+      labels: series.map((row) => String(row.iso || "").slice(5).replace("-", "/")),
+      datasets: [
+        { label: "覺察力", data: series.map((row) => row.awareness || 0), backgroundColor: colors.awareness, stack: "growth" },
+        { label: "執行力", data: series.map((row) => row.execution || 0), backgroundColor: colors.execution, stack: "growth" },
+        { label: "顯化力", data: series.map((row) => row.manifestation || 0), backgroundColor: colors.manifestation, stack: "growth" },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: { color: colors.tick, boxWidth: 10, font: { family: "Noto Sans TC, sans-serif" } },
+        },
+      },
+      scales: {
+        x: { stacked: true, ticks: { color: colors.tick, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 }, grid: { display: false } },
+        y: { stacked: true, beginAtZero: true, ticks: { color: colors.tick, precision: 0 }, grid: { color: colors.grid } },
+      },
+    },
+  });
+}
+
+function paintReportChartFallback(stats, prefix) {
+  const host = document.getElementById(`${prefix}ChartFallback`);
+  if (!host) return;
+  const series = Array.isArray(stats?.series) ? stats.series : [];
+  const max = Math.max(1, ...series.map((row) => (row.awareness || 0) + (row.execution || 0) + (row.manifestation || 0)));
+  host.hidden = false;
+  host.innerHTML = series
+    .map((row) => {
+      const total = (row.awareness || 0) + (row.execution || 0) + (row.manifestation || 0);
+      return `<div class="chart-fallback__row"><span>${escapeHtml(String(row.iso || "").slice(5))}</span><i style="width:${Math.round((total / max) * 100)}%"></i></div>`;
+    })
+    .join("");
+}
+
+function renderChartCard(stats, prefix = "report") {
+  const data = stats || { awareness: {}, execution: {}, manifestation: {}, totals: {} };
+  return `
+    <article class="report-card report-card--charts">
+      <h3>三力成長圖表</h3>
+      <p class="report-range">覺察力、執行力、顯化力在這個區間的勾選量與完成頻率。</p>
+      <div class="growth-metrics">
+        <article class="growth-metric">
+          <span>覺察力</span>
+          <strong>${data.awareness?.checked || 0}</strong>
+          <em>完成 ${completionRate(data.awareness)}%</em>
+        </article>
+        <article class="growth-metric">
+          <span>執行力</span>
+          <strong>${data.execution?.checked || 0}</strong>
+          <em>完成 ${completionRate(data.execution)}%</em>
+        </article>
+        <article class="growth-metric">
+          <span>顯化力</span>
+          <strong>${data.manifestation?.checked || 0}</strong>
+          <em>完成 ${completionRate(data.manifestation)}%</em>
+        </article>
+      </div>
+      <div class="chart-grid">
+        <div class="chart-panel">
+          <p class="chart-panel__label">雷達圖 · 三力結構</p>
+          <div class="chart-wrap"><canvas id="${prefix}Radar" aria-label="覺察力執行力顯化力雷達圖"></canvas></div>
+        </div>
+        <div class="chart-panel">
+          <p class="chart-panel__label">堆疊柱狀圖 · 每日勾選</p>
+          <div class="chart-wrap chart-wrap--wide"><canvas id="${prefix}Bars" aria-label="每日勾選堆疊柱狀圖"></canvas></div>
+        </div>
+      </div>
+      <div class="chart-fallback" id="${prefix}ChartFallback" hidden></div>
+    </article>
+  `;
+}
+
 function renderAiReportBlock(ai, status) {
   if (status === "loading") {
     return `
-      <article class="report-card report-card--ai">
-        <h3>綜合報告</h3>
-        <p class="report-empty">正在把這段期間的復盤聚合成洞察、軌跡與規劃…</p>
+      <article class="report-card report-card--ai report-card--coach">
+        <h3>💡 AI 教練成長洞察</h3>
+        <p class="report-empty">正在把這個區間的勾選量、趨勢與復盤摘要，整理成閃光點與突破口…</p>
       </article>
     `;
   }
   if (status === "error") {
     return `
-      <article class="report-card report-card--ai">
-        <h3>綜合報告</h3>
-        <p class="report-empty">${escapeHtml(ai || "雲端報告暫時不可用。本地摘要仍在上面。")}</p>
+      <article class="report-card report-card--ai report-card--coach">
+        <h3>💡 AI 教練成長洞察</h3>
+        <p class="report-empty">${escapeHtml(ai || "雲端洞察暫時不可用。圖表與本地摘要仍在上面。")}</p>
       </article>
     `;
   }
@@ -1643,37 +2035,58 @@ function renderAiReportBlock(ai, status) {
   const list = (items) =>
     Array.isArray(items) && items.length
       ? `<ul class="review-list">${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
-      : `<p class="report-empty">這一段還沒有足夠的復盤可以聚合。</p>`;
+      : "";
   const rangeNote =
     ai.fromIso && ai.toIso
       ? `${formatDisplayDate(ai.fromIso)} — ${formatDisplayDate(ai.toIso)}`
       : "";
+  const highlights = ai.highlights && ai.highlights.length ? ai.highlights : ai.insights;
+  const breakthroughs = ai.breakthroughs && ai.breakthroughs.length ? ai.breakthroughs : ai.nextPlan;
   return `
-    <article class="report-card report-card--ai">
-      <h3>${escapeHtml(ai.title || "綜合報告")}</h3>
+    <article class="report-card report-card--ai report-card--coach">
+      <h3>💡 AI 教練成長洞察</h3>
       ${rangeNote ? `<p class="report-range">${escapeHtml(rangeNote)}</p>` : ""}
       ${ai.summary ? `<p class="rv-card__conclusion">${escapeHtml(ai.summary)}</p>` : ""}
       <p class="sfm-hint">${ai.generatedAt ? `生成於 ${escapeHtml(String(ai.generatedAt).replace("T", " ").slice(0, 16))}` : "雲端 AI 聚合"}</p>
     </article>
-    <article class="report-card">
-      <h3>本${ai.type === "month" ? "月" : "週"}關鍵洞察</h3>
-      ${list(ai.insights)}
+    <article class="report-card report-card--glow">
+      <h3>本期閃光點</h3>
+      ${list(highlights) || `<p class="report-empty">這一段還沒有足夠的復盤可以聚合。</p>`}
     </article>
-    <article class="report-card">
-      <h3>進步軌跡</h3>
-      ${list(ai.progress)}
-    </article>
-    <article class="report-card">
-      <h3>${ai.type === "month" ? "下月" : "下週"}規劃</h3>
-      ${list(ai.nextPlan)}
+    <article class="report-card report-card--break">
+      <h3>成長突破口</h3>
+      ${list(breakthroughs) || `<p class="report-empty">這一段還沒有足夠的復盤可以聚合。</p>`}
     </article>
   `;
+}
+
+function renderHistoryReportList(items) {
+  if (!items.length) {
+    return `<div class="empty"><p class="empty__title">還沒有封存的月報</p>每月 1 號會自動結算上個月，也可以在這裡回看過去的成長。</div>`;
+  }
+  return items
+    .map((item) => {
+      const period = item.period || "";
+      return `
+        <article class="archive-card">
+          <div>
+            <p class="archive-card__title">${escapeHtml(item.title || `${formatMonthLabel(period)}成長報告`)}</p>
+            <p class="archive-card__meta">${escapeHtml(formatMonthLabel(period))}${item.generatedAt ? ` · ${escapeHtml(String(item.generatedAt).slice(0, 10).replace(/-/g, "/"))}` : " · 可開啟數據存檔"}</p>
+          </div>
+          <div class="archive-card__actions">
+            <button class="btn btn--ghost btn--tiny" data-open-archive="${escapeHtml(period)}" type="button">查看</button>
+            <button class="btn btn--ghost btn--tiny" data-print-archive="${escapeHtml(period)}" type="button">PDF / 列印</button>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
 }
 
 async function hydrateAiReport(type, local, token) {
   const root = document.getElementById("reportAi");
   if (!root) return;
-  const period = type === "month" ? local.fromIso.slice(0, 7) : local.fromIso;
+  const period = local.period || (type === "month" ? local.fromIso.slice(0, 7) : local.fromIso);
   const cached = readCachedReport(type, period) || readLatestCachedReport(type);
   if (cached) root.innerHTML = renderAiReportBlock(cached);
   else root.innerHTML = renderAiReportBlock(null, "loading");
@@ -1681,8 +2094,8 @@ async function hydrateAiReport(type, local, token) {
   try {
     let report = await fetchStoredCloudReport(type, period);
     if (!report) report = await fetchStoredCloudReport(type, period, true);
-    if (!report && local.filledDays) {
-      report = await generateCloudReport(type, local.fromIso, local.toIso, period);
+    if (!report && (local.filledDays || local.stats?.totals?.checked)) {
+      report = await generateCloudReport(type, local.fromIso, local.toIso, period, { stats: local.stats });
     }
     if (token !== renderReport._token) return;
     if (report) {
@@ -1695,6 +2108,105 @@ async function hydrateAiReport(type, local, token) {
     if (token !== renderReport._token) return;
     if (!cached) root.innerHTML = renderAiReportBlock(formatApiError(error), "error");
   }
+}
+
+async function ensurePreviousMonthArchive() {
+  if (state.monthArchiveTried) return;
+  state.monthArchiveTried = true;
+  const prev = previousMonthRange();
+  if (readCachedReport("month", prev.period)) return;
+  const local = buildReport("month", prev);
+  if (!local.filledDays && !(local.stats?.totals?.checked)) {
+    return;
+  }
+  const snapshot = {
+    type: "month",
+    period: prev.period,
+    fromIso: prev.fromIso,
+    toIso: prev.toIso,
+    label: "上月",
+    title: `${formatMonthLabel(prev.period)}成長報告`,
+    summary: "",
+    highlights: [],
+    breakthroughs: [],
+    stats: local.stats,
+    archived: true,
+    source: "local",
+    generatedAt: new Date().toISOString(),
+  };
+  writeCachedReport("month", prev.period, snapshot);
+  if (!state.user) return;
+  try {
+    const report = await generateCloudReport("month", prev.fromIso, prev.toIso, prev.period, {
+      stats: local.stats,
+      archive: true,
+    });
+    if (report) writeCachedReport("month", report.period || prev.period, report);
+  } catch {
+    /* 本地封存仍可用 */
+  }
+}
+
+function renderReportBody(report, options = {}) {
+  const rate = report.days ? Math.round((report.filledDays / report.days) * 100) : 0;
+  const cachedAi = options.ai;
+  const chartPrefix = options.chartPrefix || "report";
+  return `
+    <article class="report-card">
+      <h3>${escapeHtml(report.label || "本區間")}完成摘要</h3>
+      <p class="report-range">${formatDisplayDate(report.fromIso)} — ${formatDisplayDate(report.toIso)}</p>
+      <div class="stats" style="margin:16px 0 0">
+        <article class="stat-card">
+          <p class="stat-card__value">${report.filledDays}/${report.days}</p>
+          <p class="stat-card__label">填寫天數</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-card__value">${rate}%</p>
+          <p class="stat-card__label">完成率</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-card__value">${report.stats?.totals?.checked || 0}</p>
+          <p class="stat-card__label">三力勾選</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-card__value">${formatCharCount(report.totalChars)}</p>
+          <p class="stat-card__label">累積總字數</p>
+        </article>
+      </div>
+      <p class="report-rhythm" style="margin-top:16px">${escapeHtml(formatFrequencyLabel(report.days, report.filledDays))}。一共留下 ${formatCharCount(report.totalChars)}。</p>
+    </article>
+    ${renderChartCard(report.stats, chartPrefix)}
+    <div id="${options.aiId || "reportAi"}">${renderAiReportBlock(cachedAi, cachedAi ? undefined : "loading")}</div>
+    <article class="report-card">
+      <h3>高頻關鍵字</h3>
+      <div class="report-keywords">
+        ${
+          (report.keywords || []).length
+            ? report.keywords.map((item) => `<span class="keyword">${escapeHtml(item.word)}<span class="keyword__count">${item.count}</span></span>`).join("")
+            : `<p class="report-empty">字還不夠多，關鍵字會在你繼續寫之後長出來。</p>`
+        }
+      </div>
+    </article>
+    <article class="report-card">
+      <h3>逐日回顧</h3>
+      ${
+        (report.entries || []).length
+          ? `<ul class="highlight-list">${report.entries
+              .slice()
+              .reverse()
+              .map(
+                (item) => `
+                  <li>
+                    <span class="highlight-list__date">${formatDisplayDate(item.iso)}</span>
+                    <p class="highlight-list__text">${escapeHtml(item.highlight)}</p>
+                  </li>
+                `
+              )
+              .join("")}</ul>`
+          : `<p class="report-empty">這個區間還沒有逐日摘要。</p>`
+      }
+    </article>
+  `;
 }
 
 /* =============================================================================
@@ -4233,77 +4745,142 @@ function renderReport() {
   const report = buildReport(state.reportType);
   const root = document.getElementById("reportContent");
   if (!root) return;
-  const rate = report.days ? Math.round((report.filledDays / report.days) * 100) : 0;
+  destroyReportCharts("report");
   const token = (renderReport._token || 0) + 1;
   renderReport._token = token;
-  const period = state.reportType === "month" ? report.fromIso.slice(0, 7) : report.fromIso;
+  const period = report.period;
   const cachedAi = readCachedReport(state.reportType, period) || readLatestCachedReport(state.reportType);
+  const hasData = report.filledDays || (report.stats?.totals?.checked || 0);
 
-  if (!report.filledDays) {
+  if (!hasData) {
     root.innerHTML = `
       <article class="report-card">
         <div class="empty">
           <p class="empty__title">這個區間還沒有復盤</p>
-          <p class="report-empty">寫下第一篇之後，週月報會自動幫你數天數、算節奏，並聚合成洞察與規劃。</p>
+          <p class="report-empty">寫下第一篇、勾選覺察／執行／顯化之後，這裡會出現圖表與 AI 教練洞察。</p>
         </div>
       </article>
-      <div id="reportAi">${renderAiReportBlock(cachedAi, cachedAi ? undefined : "loading")}</div>
+      <div id="reportAi"></div>
+      <article class="report-card" id="reportHistoryCard">
+        <h3>歷史報告列表</h3>
+        <p class="report-range">每月 1 號會自動封存上個月的月度成長報告。</p>
+        <div class="archive-list" id="reportHistoryList">${renderHistoryReportList(listLocalMonthArchives())}</div>
+      </article>
     `;
-    hydrateAiReport(state.reportType, report, token);
+    hydrateReportHistory();
+    ensurePreviousMonthArchive().then(() => {
+      if (token === renderReport._token) hydrateReportHistory();
+    });
     return;
   }
 
   root.innerHTML = `
-    <article class="report-card">
-      <h3>${escapeHtml(report.label)}完成摘要</h3>
-      <p class="report-range">${formatDisplayDate(report.fromIso)} — ${formatDisplayDate(report.toIso)}</p>
-      <div class="stats" style="margin:16px 0 0">
-        <article class="stat-card">
-          <p class="stat-card__value">${report.filledDays}/${report.days}</p>
-          <p class="stat-card__label">填寫天數</p>
-        </article>
-        <article class="stat-card">
-          <p class="stat-card__value">${rate}%</p>
-          <p class="stat-card__label">完成率</p>
-        </article>
-        <article class="stat-card">
-          <p class="stat-card__value">${formatCharCount(report.totalChars)}</p>
-          <p class="stat-card__label">累積總字數</p>
-        </article>
-      </div>
-      <p class="report-rhythm" style="margin-top:16px">${escapeHtml(formatFrequencyLabel(report.days, report.filledDays))}。一共留下 ${formatCharCount(report.totalChars)}。</p>
-    </article>
-    <article class="report-card">
-      <h3>高頻關鍵字</h3>
-      <div class="report-keywords">
-        ${
-          report.keywords.length
-            ? report.keywords.map((item) => `<span class="keyword">${escapeHtml(item.word)}<span class="keyword__count">${item.count}</span></span>`).join("")
-            : `<p class="report-empty">字還不夠多，關鍵字會在你繼續寫之後長出來。</p>`
-        }
-      </div>
-    </article>
-    <div id="reportAi">${renderAiReportBlock(cachedAi, cachedAi ? undefined : "loading")}</div>
-    <article class="report-card">
-      <h3>逐日回顧</h3>
-      <ul class="highlight-list">
-        ${report.entries
-          .slice()
-          .reverse()
-          .map(
-            (item) => `
-              <li>
-                <span class="highlight-list__date">${formatDisplayDate(item.iso)}</span>
-                <p class="highlight-list__text">${escapeHtml(item.highlight)}</p>
-              </li>
-            `
-          )
-          .join("")}
-      </ul>
+    ${renderReportBody(report, { ai: cachedAi })}
+    <article class="report-card" id="reportHistoryCard">
+      <h3>歷史報告列表</h3>
+      <p class="report-range">點開任意月份，回看當時的圖表、閃光點與突破口。可列印成 PDF 存檔。</p>
+      <div class="archive-list" id="reportHistoryList">${renderHistoryReportList(listLocalMonthArchives())}</div>
     </article>
   `;
+  requestAnimationFrame(() => paintReportCharts(report.stats, "report"));
   hydrateAiReport(state.reportType, report, token);
+  hydrateReportHistory();
+  ensurePreviousMonthArchive().then(() => {
+    if (token === renderReport._token) hydrateReportHistory();
+  });
   syncReviewsToCloud();
+}
+
+async function hydrateReportHistory() {
+  const list = document.getElementById("reportHistoryList");
+  if (!list) return;
+  const items = await fetchArchivedReportList();
+  list.innerHTML = renderHistoryReportList(items);
+}
+
+function archiveRangeForPeriod(period) {
+  const fromIso = `${period}-01`;
+  return {
+    fromIso,
+    toIso: lastDayOfMonthIso(period),
+    days: Number(lastDayOfMonthIso(period).slice(-2)) || 30,
+    label: formatMonthLabel(period),
+  };
+}
+
+function buildArchiveViewModel(period) {
+  const range = archiveRangeForPeriod(period);
+  const local = buildReport("month", range);
+  const cached = readCachedReport("month", period);
+  return {
+    local,
+    cached,
+    stats: (cached && cached.stats) || local.stats,
+  };
+}
+
+function fillArchiveModal(period) {
+  const modal = document.getElementById("reportArchiveModal");
+  const body = document.getElementById("reportArchiveBody");
+  const title = document.getElementById("reportArchiveTitle");
+  if (!modal || !body) return;
+  const view = buildArchiveViewModel(period);
+  if (title) title.textContent = view.cached?.title || `${formatMonthLabel(period)}成長報告`;
+  body.innerHTML = renderReportBody(
+    {
+      ...view.local,
+      label: formatMonthLabel(period),
+    },
+    {
+      ai:
+        view.cached || {
+          summary: "這份月份已留下數據存檔。登入後可生成 AI 教練洞察。",
+          highlights: [],
+          breakthroughs: [],
+          fromIso: view.local.fromIso,
+          toIso: view.local.toIso,
+        },
+      aiId: "archiveAi",
+      chartPrefix: "archive",
+    }
+  );
+  modal.dataset.period = period;
+  if (typeof modal.showModal === "function") {
+    if (!modal.open) modal.showModal();
+  } else {
+    modal.setAttribute("open", "");
+  }
+  requestAnimationFrame(() => paintReportCharts(view.stats, "archive"));
+}
+
+async function openArchivedMonth(period, options = {}) {
+  const range = archiveRangeForPeriod(period);
+  fillArchiveModal(period);
+  const cached = readCachedReport("month", period);
+  if (state.user && (!cached || cached.source === "local")) {
+    try {
+      let report = await fetchStoredCloudReport("month", period);
+      if (!report) {
+        report = await generateCloudReport("month", range.fromIso, range.toIso, period, {
+          stats: buildGrowthStats(range.fromIso, range.toIso),
+          archive: true,
+        });
+      }
+      if (report) {
+        writeCachedReport("month", report.period || period, report);
+        fillArchiveModal(period);
+      }
+    } catch {
+      /* 本地存檔仍可看 */
+    }
+  }
+  if (options.print) window.setTimeout(() => printArchivedReport(), 250);
+}
+
+function printArchivedReport() {
+  document.body.classList.add("printing-report");
+  window.print();
+  window.setTimeout(() => document.body.classList.remove("printing-report"), 400);
 }
 
 function renderTasks() {
@@ -4926,6 +5503,27 @@ function bindEvents() {
       renderReport();
     });
   });
+
+  document.getElementById("reportContent")?.addEventListener("click", (event) => {
+    const open = event.target.closest("[data-open-archive]");
+    const printBtn = event.target.closest("[data-print-archive]");
+    if (open) {
+      event.preventDefault();
+      openArchivedMonth(open.dataset.openArchive);
+    }
+    if (printBtn) {
+      event.preventDefault();
+      openArchivedMonth(printBtn.dataset.printArchive, { print: true });
+    }
+  });
+  document.getElementById("reportArchivePrint")?.addEventListener("click", () => printArchivedReport());
+  document.getElementById("reportArchiveClose")?.addEventListener("click", () => {
+    const modal = document.getElementById("reportArchiveModal");
+    destroyReportCharts("archive");
+    if (modal && typeof modal.close === "function") modal.close();
+    else if (modal) modal.removeAttribute("open");
+  });
+  window.addEventListener("afterprint", () => document.body.classList.remove("printing-report"));
 
   document.getElementById("taskForm")?.addEventListener("submit", addTask);
   document.getElementById("taskFilters")?.addEventListener("click", (event) => {
