@@ -146,6 +146,8 @@ module.exports = async function handler(req, res) {
   console.log("NewebPay MPG created:", {
     orderNo,
     env: payStatus.env,
+    mode: payStatus.mode,
+    modeReason: payStatus.modeReason,
     production: payStatus.production,
     gateway: payStatus.gateway,
     merchantId: payStatus.merchantId,
