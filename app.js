@@ -1563,8 +1563,6 @@ function switchPage(page) {
   if (page === "next") renderTasks();
   if (page === "sfm") renderSfm();
   if (page === "history") renderHistory();
-  const tip = document.getElementById("journalTip");
-  if (tip) tip.hidden = page !== "today";
 }
 
 function currentIso() {
