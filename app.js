@@ -82,9 +82,6 @@ const state = {
   selectedPractice: [],
   gratitude: "",
   remindedDate: "",
-  recognition: null,
-  listening: false,
-  speechTarget: "",
   journalHydrating: false,
   journalCheckTimer: 0,
   journalMeta: {
@@ -2415,7 +2412,7 @@ function tourSteps() {
     {
       popover: {
         title: "歡迎來到日精進",
-        description: "這是一份互動式使用說明。接下來會帶你走過日期與語音、01 到 07 的復盤與 AI，再到側邊欄各頁。隨時可以按「略過導覽」。",
+        description: "這是一份互動式使用說明。接下來會帶你走過日期切換、01 到 07 的復盤與 AI，再到側邊欄各頁。隨時可以按「略過導覽」。",
         side: "over",
         align: "center",
       },
@@ -2424,8 +2421,8 @@ function tourSteps() {
       element: "#journalWhen",
       tourPage: "today",
       popover: {
-        title: "日期與語音記錄",
-        description: "點日期可切換要寫的那一天。右側「語音記錄」能把你說的話寫進正在填的欄位，適合累了不想打字的時候。",
+        title: "切換復盤日期",
+        description: "點日期可切換要寫的那一天，方便補寫昨天或回看之前的紀錄。",
         side: "bottom",
         align: "end",
       },
@@ -4297,21 +4294,6 @@ function updateJournalDateLabel(iso) {
   if (label) label.textContent = formatHeaderDate(date);
 }
 
-function speechTarget() {
-  const active = document.activeElement;
-  if (active && (active.matches("input, textarea") && active.id !== "reviewDate")) return active;
-  if (state.speechTarget && document.getElementById(state.speechTarget)) {
-    return document.getElementById(state.speechTarget);
-  }
-  return document.getElementById("thanks1") || document.getElementById("reviewText");
-}
-
-function rememberSpeechTarget(el) {
-  if (el && el.id && el.matches("input, textarea") && el.id !== "reviewDate" && el.id !== "reviewText") {
-    state.speechTarget = el.id;
-  }
-}
-
 function saveJournalDraft() {
   const { journal, rawText } = syncHiddenReviewText();
   if (!rawText && !journalHasContent(journal) && !state.organize) {
@@ -5870,7 +5852,7 @@ function renderHistoryReport(review) {
 }
 
 /* =============================================================================
- * 提醒 / 語音 / API Modal
+ * 提醒
  * =========================================================================== */
 
 function reminderLabel() {
@@ -5915,76 +5897,12 @@ function tickReminder() {
   showToast("現在是你設定的復盤時間。");
   if ("Notification" in window && Notification.permission === "granted") {
     try {
-      new Notification("日精進", { body: "該寫今天的復盤了。用講的也沒關係。" });
+      new Notification("日精進", { body: "該寫今天的復盤了。" });
     } catch {
       /* ignore */
     }
   }
 }
-
-function setupSpeech() {
-  try {
-    const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const btn = document.getElementById("micBtn");
-    if (!btn) return;
-    if (!Speech) {
-      btn.hidden = true;
-      return;
-    }
-    const recognition = new Speech();
-    recognition.lang = "zh-TW";
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.onresult = (event) => {
-      let finalText = "";
-      for (let i = event.resultIndex; i < event.results.length; i += 1) {
-        if (event.results[i].isFinal) finalText += event.results[i][0].transcript;
-      }
-      if (!finalText) return;
-      const field = speechTarget();
-      if (!field) return;
-      const prefix = field.value && !field.value.endsWith("\n") && field.value ? field.value : field.value;
-      field.value = `${prefix}${finalText}`;
-      syncHiddenReviewText();
-    };
-    recognition.onend = () => {
-      state.listening = false;
-      btn.classList.remove("is-on");
-      const label = document.getElementById("micLabel");
-      if (label) label.textContent = "語音記錄";
-    };
-    state.recognition = recognition;
-  } catch {
-    const btn = document.getElementById("micBtn");
-    if (btn) btn.hidden = true;
-  }
-}
-
-function toggleMic() {
-  const btn = document.getElementById("micBtn");
-  if (!state.recognition) {
-    if (btn) btn.classList.toggle("is-on");
-    showToast("語音記錄準備中，也可以先用鍵盤寫下。");
-    return;
-  }
-  if (state.listening) {
-    state.recognition.stop();
-    return;
-  }
-  try {
-    state.recognition.start();
-    state.listening = true;
-    if (btn) {
-      btn.classList.add("is-on");
-      btn.setAttribute("aria-pressed", "true");
-    }
-    const label = document.getElementById("micLabel");
-    if (label) label.textContent = "聆聽中";
-  } catch {
-    showToast("無法啟動語音輸入，也可以用鍵盤寫下。");
-  }
-}
-
 
 /* =============================================================================
  * 事件
@@ -6070,7 +5988,6 @@ function bindEvents() {
     organizeBtn.disabled = false;
     organizeBtn.addEventListener("click", runOrganize);
   }
-  document.getElementById("micBtn")?.addEventListener("click", toggleMic);
   document.getElementById("btnCompleteToday")?.addEventListener("click", completeToday);
   document.getElementById("btnSaveDraft")?.addEventListener("click", saveJournalDraft);
   document.getElementById("btnAwareAi")?.addEventListener("click", () => generateJournalChecklist("awareness"));
@@ -6122,23 +6039,6 @@ function bindEvents() {
     if (event.target && event.target.matches("#awareChecks input, #execChecks input, #manifestChecks input")) {
       persistJournalQuietly();
     }
-  });
-
-  document.getElementById("page-today")?.addEventListener("focusin", (event) => {
-    rememberSpeechTarget(event.target);
-  });
-
-  document.getElementById("page-today")?.addEventListener("click", (event) => {
-    const mini = event.target.closest("[data-voice-ui]");
-    if (!mini) return;
-    event.preventDefault();
-    const input = mini.closest(".thanks-row")?.querySelector("input, textarea");
-    if (input) {
-      input.focus();
-      rememberSpeechTarget(input);
-    }
-    mini.classList.toggle("is-on");
-    toggleMic();
   });
 
   document.getElementById("aiStage").addEventListener("click", (event) => {
@@ -6437,7 +6337,6 @@ function init() {
     backfillLibrariesFromReviews();
     updateStats();
     initReminder();
-    setupSpeech();
     setInterval(tickReminder, 20000);
     probeReviewApi();
     refreshAuth();

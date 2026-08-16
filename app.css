@@ -2129,7 +2129,9 @@ body.nav-closed .auth-pay {
   }
 
   .journal-when {
+    align-items: center;
     justify-self: center;
+    text-align: center;
   }
 
   .journal-split,
@@ -2551,11 +2553,10 @@ body.nav-closed .auth-pay {
 .journal-when {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
-  gap: 10px;
-  min-width: 168px;
-  text-align: center;
+  min-width: 0;
+  text-align: right;
 }
 
 .journal-when__date {
@@ -2569,30 +2570,6 @@ body.nav-closed .auth-pay {
   letter-spacing: 0.06em;
   color: var(--text);
   cursor: pointer;
-}
-
-.voice-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-width: 132px;
-  height: 36px;
-  padding: 0 14px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--text);
-  font-size: 13px;
-  cursor: pointer;
-  box-shadow: var(--shadow);
-}
-
-.voice-btn:hover,
-.voice-btn.is-on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
 }
 
 .journal-card {
@@ -2667,8 +2644,8 @@ body.nav-closed .auth-pay {
 
 .thanks-row {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) 36px;
-  gap: 8px;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 10px;
   align-items: center;
 }
 
@@ -2686,23 +2663,6 @@ body.nav-closed .auth-pay {
 
 .thanks-row .input {
   width: 100%;
-}
-
-.mic-mini {
-  width: 36px;
-  height: 36px;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--muted);
-  font-size: 16px;
-  cursor: pointer;
-}
-
-.mic-mini:hover,
-.mic-mini.is-on {
-  background: var(--accent-soft);
-  color: var(--header);
 }
 
 .mood-row {

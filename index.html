@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=75" />
+    <link rel="stylesheet" href="app.css?v=76" />
     <style>
       .splash {
         position: fixed;
@@ -203,10 +203,6 @@
                 <span id="journalDateLabel">2026 / 08 / 16</span>
               </button>
               <input class="sr-only" id="reviewDate" type="date" required />
-              <button class="voice-btn" id="micBtn" type="button" aria-pressed="false">
-                <span aria-hidden="true">🔊</span>
-                <span id="micLabel">語音記錄</span>
-              </button>
             </div>
           </header>
 
@@ -220,17 +216,14 @@
               <div class="thanks-row">
                 <span>人</span>
                 <input class="input" id="thanks1" type="text" placeholder="今天想感謝的一個人…" data-journal="thanks" />
-                <button class="mic-mini" type="button" aria-label="語音輸入" data-voice-ui>🎤</button>
               </div>
               <div class="thanks-row">
                 <span>事</span>
                 <input class="input" id="thanks2" type="text" placeholder="今天想感謝的一件事…" data-journal="thanks" />
-                <button class="mic-mini" type="button" aria-label="語音輸入" data-voice-ui>🎤</button>
               </div>
               <div class="thanks-row">
                 <span>物</span>
                 <input class="input" id="thanks3" type="text" placeholder="今天想感謝的一個物、空間或片刻…" data-journal="thanks" />
-                <button class="mic-mini" type="button" aria-label="語音輸入" data-voice-ui>🎤</button>
               </div>
             </div>
           </section>
@@ -633,6 +626,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=89"></script>
+    <script src="app.js?v=90"></script>
   </body>
 </html>
