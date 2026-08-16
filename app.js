@@ -1211,22 +1211,35 @@ function submitNewebPayForm(gateway, fields) {
   form.action = gateway;
   form.acceptCharset = "UTF-8";
   form.enctype = "application/x-www-form-urlencoded";
-  const names = ["MerchantID", "TradeInfo", "TradeSha", "Version", "EncryptType"].filter(
-    (name) => fields && fields[name] != null && String(fields[name]) !== ""
-  );
-  if (!names.length) {
-    showToast("藍新付款欄位不完整");
+  const tradeInfo = fields && fields.TradeInfo != null ? String(fields.TradeInfo).replace(/\s+/g, "").toLowerCase() : "";
+  const tradeSha = fields && fields.TradeSha != null ? String(fields.TradeSha).replace(/\s+/g, "").toUpperCase() : "";
+  if (!/^[0-9a-f]+$/.test(tradeInfo) || tradeInfo.includes("%")) {
+    showToast("TradeInfo 不是純 hex，已中止送出以免簽章不符");
     return;
   }
-  names.forEach((name) => {
+  if (!/^[0-9A-F]{64}$/.test(tradeSha)) {
+    showToast("TradeSha 必須是 64 碼大寫 hex");
+    return;
+  }
+  const payload = {
+    MerchantID: String((fields && fields.MerchantID) || "").replace(/\s+/g, ""),
+    TradeInfo: tradeInfo,
+    TradeSha: tradeSha,
+    Version: String((fields && fields.Version) || "2.0"),
+    EncryptType: "0",
+  };
+  if (payload.MerchantID !== "HTC109030010100") {
+    showToast("商店代號必須是 HTC109030010100");
+    return;
+  }
+  Object.entries(payload).forEach(([name, value]) => {
     const input = document.createElement("input");
     input.type = "hidden";
     input.name = name;
-    input.value = String(fields[name]);
+    input.value = value;
     form.appendChild(input);
   });
-  const tradeInfo = fields && fields.TradeInfo != null ? String(fields.TradeInfo) : "";
-  console.log("MPG form TradeInfo chars", tradeInfo.length, "hasPercent", tradeInfo.includes("%"));
+  console.log("MPG form TradeInfo chars", tradeInfo.length, "hasPercent", tradeInfo.includes("%"), "shaUpper", tradeSha);
   document.body.appendChild(form);
   form.submit();
 }
