@@ -114,16 +114,7 @@ module.exports = async function handler(req, res) {
     PeriodPoint: tradeParams.PeriodPoint,
     PeriodStartType: tradeParams.PeriodStartType,
   };
-  console.log("NewebPay period plaintext keys:", Object.keys(tradeParams), {
-    MerOrderNo: tradeParams.MerOrderNo,
-    PeriodAmt: tradeParams.PeriodAmt,
-    PeriodType: tradeParams.PeriodType,
-    PeriodPoint: tradeParams.PeriodPoint,
-    PeriodStartType: tradeParams.PeriodStartType,
-    PeriodTimes: tradeParams.PeriodTimes,
-    Version: tradeParams.Version,
-    MerchantID: tradeParams.MerchantID,
-  });
+  console.log("NewebPay Period assembled payload:", tradeParams);
 
   let saved;
   try {
