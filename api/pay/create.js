@@ -11,7 +11,6 @@ const {
   periodPostFields,
   periodAutoSubmitHtml,
   periodGateway,
-  probePeriodGateway,
   notifyUrl,
   returnUrl,
   clientBackUrl,
@@ -170,22 +169,9 @@ module.exports = async function handler(req, res) {
     schedule,
     version: tradeParams.Version,
     formKeys: Object.keys(fields),
+    hasMerchantId: Boolean(fields.MerchantID_),
+    hasPostData: Boolean(fields.PostData_),
   });
-
-  try {
-    const rejected = await probePeriodGateway(fields);
-    if (rejected) {
-      console.error("NewebPay Period gateway rejected:", rejected);
-      res.status(400).json({
-        ok: false,
-        error: rejected.message,
-        code: rejected.code || "",
-      });
-      return;
-    }
-  } catch (error) {
-    console.error("NewebPay Period gateway probe failed:", error && error.message ? error.message : error);
-  }
 
   if (wantsJson(req)) {
     res.status(200).json({
