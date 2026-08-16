@@ -168,7 +168,6 @@ module.exports = async function handler(req, res) {
         ok: false,
         error: rejected.message,
         code: rejected.code || "",
-        detail: rejected.detail || "",
       });
       return;
     }

@@ -1192,8 +1192,7 @@ async function startNewebPay() {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload.ok) {
-      const message = [payload.code, payload.error, payload.detail].filter(Boolean).join(" ").trim()
-        || `無法前往藍新金流（${response.status}）`;
+      const message = payload.error || payload.code || `無法前往藍新金流（${response.status}）`;
       setAuthError(message);
       showToast(message);
       return;
