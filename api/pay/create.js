@@ -2,6 +2,7 @@ const { getSession } = require("../../lib/auth");
 const { ensureTrial, patchSubscription } = require("../../lib/supabase");
 const {
   newebpayConfigured,
+  newebpayConfigStatus,
   PERIOD_VERSION,
   createOrderNo,
   defaultPeriodAmt,
@@ -52,20 +53,17 @@ module.exports = async function handler(req, res) {
   }
 
   if (!newebpayConfigured()) {
+    console.error("NewebPay not configured:", newebpayConfigStatus());
     res.status(501).json({
       ok: false,
-      error: "尚未設定 NEWEBPAY_MERCHANT_ID、NEWEBPAY_HASH_KEY（32 碼）與 NEWEBPAY_HASH_IV（16 碼）",
+      error: "尚未設定藍新金流。請在 Vercel 加上 NEWEBPAY_MERCHANT_ID、NEWEBPAY_HASH_KEY（32 碼）與 NEWEBPAY_HASH_IV（16 碼）。",
     });
     return;
   }
 
   const user = await getSession(req);
   if (!user) {
-    if (wantsJson(req)) {
-      res.status(401).json({ ok: false, error: "請先登入" });
-      return;
-    }
-    res.redirect(302, "/");
+    res.status(401).json({ ok: false, error: "請先登入" });
     return;
   }
 
@@ -123,22 +121,36 @@ module.exports = async function handler(req, res) {
   };
   if (schedule.PeriodFirstdate) tradeParams.PeriodFirstdate = schedule.PeriodFirstdate;
 
-  const saved = await patchSubscription(user.id, {
-    status: "pending",
-    email: user.email,
-    amount: Math.round(amt),
-    merchant_order_no: orderNo,
-    period_type: schedule.PeriodType,
-    period_point: schedule.PeriodPoint,
-    period_times: times,
-    period_start_type: Number(schedule.PeriodStartType),
-  });
+  let saved;
+  try {
+    saved = await patchSubscription(user.id, {
+      status: "pending",
+      email: user.email,
+      amount: Math.round(amt),
+      merchant_order_no: orderNo,
+      period_type: schedule.PeriodType,
+      period_point: schedule.PeriodPoint,
+      period_times: times,
+      period_start_type: Number(schedule.PeriodStartType),
+    });
+  } catch (error) {
+    console.error("NewebPay patchSubscription failed:", error && error.message ? error.message : error);
+    res.status(500).json({ ok: false, error: String(error && error.message ? error.message : "無法寫入訂閱訂單") });
+    return;
+  }
   if (!saved) {
     res.status(500).json({ ok: false, error: "無法寫入訂閱訂單，請稍後再試" });
     return;
   }
 
-  const fields = periodPostFields(tradeParams);
+  let fields;
+  try {
+    fields = periodPostFields(tradeParams);
+  } catch (error) {
+    console.error("NewebPay encrypt failed:", error && error.message ? error.message : error, newebpayConfigStatus());
+    res.status(500).json({ ok: false, error: "藍新參數加密失敗，請確認 HASH_KEY 為 32 碼、HASH_IV 為 16 碼。" });
+    return;
+  }
   console.log("NewebPay period created:", orderNo, "NotifyURL:", notifyUrl(), "schedule:", schedule);
 
   if (wantsJson(req)) {

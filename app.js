@@ -1141,7 +1141,23 @@ async function signOutUser() {
   showToast("已登出。本機草稿仍在這台裝置上。");
 }
 
-function startNewebPay() {
+function submitNewebPayForm(gateway, fields) {
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = gateway;
+  form.acceptCharset = "UTF-8";
+  Object.entries(fields || {}).forEach(([name, value]) => {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = value == null ? "" : String(value);
+    form.appendChild(input);
+  });
+  document.body.appendChild(form);
+  form.submit();
+}
+
+async function startNewebPay() {
   if (typeof location === "undefined" || location.protocol === "file:") {
     showToast("請用 Vercel 網址開啟，才能使用藍新金流付款。");
     return;
@@ -1150,32 +1166,43 @@ function startNewebPay() {
     showToast("請先登入，再前往付款。");
     return;
   }
+  try {
+    const client = await getSupabase();
+    if (client && !state.accessToken) {
+      const { data } = await client.auth.getSession();
+      applySession(data.session);
+    }
+  } catch {
+    /* 沒有 token 時下面會回 401 */
+  }
+  if (!state.accessToken) {
+    showToast("請先登入，再前往付款。");
+    return;
+  }
   showToast("正在前往藍新金流…");
-  fetch(`${location.origin}/api/pay/create`, {
-    method: "POST",
-    credentials: "include",
-    headers: authHeaders({ Accept: "text/html" }),
-  })
-    .then(async (response) => {
-      const text = await response.text();
-      if (!response.ok) {
-        let message = "無法前往藍新金流";
-        try {
-          const payload = JSON.parse(text);
-          if (payload && payload.error) message = payload.error;
-        } catch {
-          /* keep default */
-        }
-        showToast(message);
-        return;
-      }
-      document.open();
-      document.write(text);
-      document.close();
-    })
-    .catch((error) => {
-      showToast(error && error.message ? error.message : "無法前往藍新金流");
+  try {
+    const response = await fetch(`${location.origin}/api/pay/create`, {
+      method: "POST",
+      credentials: "include",
+      headers: authHeaders({
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      }),
+      body: "{}",
     });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) {
+      showToast(payload.error || `無法前往藍新金流（${response.status}）`);
+      return;
+    }
+    if (!payload.gateway || !payload.fields) {
+      showToast("沒有取得藍新付款表單，請稍後再試。");
+      return;
+    }
+    submitNewebPayForm(payload.gateway, payload.fields);
+  } catch (error) {
+    showToast(error && error.message ? error.message : "無法前往藍新金流");
+  }
 }
 
 function rowsToReviewMap(rows) {
