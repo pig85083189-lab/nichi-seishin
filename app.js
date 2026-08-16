@@ -52,6 +52,7 @@ const state = {
   reportType: "week",
   reportCharts: { radar: null, bars: null },
   monthArchiveTried: false,
+  tour: null,
   taskFilter: "all",
   insightFilter: "all",
   manifestFilter: "all",
@@ -2242,7 +2243,8 @@ function toggleMenu() {
   setSidebarCollapsed(!document.body.classList.contains("nav-closed"));
 }
 
-function switchPage(page) {
+function switchPage(page, options = {}) {
+  if (!page) return;
   state.page = page;
   document.querySelectorAll(".side-item").forEach((btn) => {
     btn.classList.toggle("is-active", btn.dataset.page === page);
@@ -2252,12 +2254,258 @@ function switchPage(page) {
     section.classList.toggle("is-active", active);
     section.hidden = !active;
   });
-  if (isMobile()) setSidebarOpen(false);
+  if (isMobile() && !options.keepSidebar) setSidebarOpen(false);
   if (page === "report") renderReport();
   if (page === "next") renderInsights();
   if (page === "sfm") renderTasks();
   if (page === "manifest") renderManifests();
   if (page === "history") renderHistory();
+}
+
+function driverFactory() {
+  return window.driver?.js?.driver || window.driver?.driver || null;
+}
+
+function prepareTourStep(step) {
+  if (!step) return;
+  if (step.tourSidebar) {
+    if (isMobile()) setSidebarOpen(true);
+    else if (document.body.classList.contains("nav-closed")) setSidebarCollapsed(false);
+  } else if (isMobile()) {
+    setSidebarOpen(false);
+  }
+  if (step.tourPage) switchPage(step.tourPage, { keepSidebar: Boolean(step.tourSidebar) });
+}
+
+function tourSteps() {
+  return [
+    {
+      popover: {
+        title: "歡迎來到日精進",
+        description: "這是一份互動式使用說明。接下來會帶你走過日期與語音、01 到 07 的復盤與 AI，再到側邊欄各頁。隨時可以按「略過導覽」。",
+        side: "over",
+        align: "center",
+      },
+    },
+    {
+      element: "#journalWhen",
+      tourPage: "today",
+      popover: {
+        title: "日期與語音記錄",
+        description: "點日期可切換要寫的那一天。右側「語音記錄」能把你說的話寫進正在填的欄位，適合累了不想打字的時候。",
+        side: "bottom",
+        align: "end",
+      },
+    },
+    {
+      element: "#section-thanks",
+      tourPage: "today",
+      popover: {
+        title: "01 今日感謝",
+        description: "從人、事、物各寫一件今天想感謝的。不用完整，寫下名字或片刻就好。",
+        side: "bottom",
+      },
+    },
+    {
+      element: "#section-event",
+      tourPage: "today",
+      popover: {
+        title: "02 今日事件",
+        description: "寫下今天真正被碰到的事，再點選心情。這兩項會成為後面 AI 出題與洞察的原料。",
+        side: "bottom",
+      },
+    },
+    {
+      element: "#section-body",
+      tourPage: "today",
+      popover: {
+        title: "03 身體覺察",
+        description: "勾選身體狀態，也可寫它在提醒你什麼。身體訊號會一起進到 AI 深度洞察。",
+        side: "bottom",
+      },
+    },
+    {
+      element: "#section-insight",
+      tourPage: "today",
+      popover: {
+        title: "AI 深度教練洞察",
+        description: "寫完事件、心情與身體後，點「生成深度洞察」，或等它自動生成今日核心結論。",
+        side: "bottom",
+      },
+    },
+    {
+      element: "#section-aware",
+      tourPage: "today",
+      popover: {
+        title: "04 覺察力",
+        description: "左側是今天的覺察題。寫完三題後，點「AI 分析並生成勾勾表」，右側會出現可勾選的洞察。勾選後完成復盤，會存進側邊欄「覺察力」。",
+        side: "top",
+      },
+    },
+    {
+      element: "#btnAwareAi",
+      tourPage: "today",
+      popover: {
+        title: "生成覺察勾勾表",
+        description: "點擊這裡，讓 AI 幫你整理覺察勾勾表。勾選你今天真正看見的那幾條即可。",
+        side: "top",
+      },
+    },
+    {
+      element: "#section-exec",
+      tourPage: "today",
+      popover: {
+        title: "05 執行力",
+        description: "回答今天的行動題後，點 AI 生成卡點與解法勾勾表。勾選的步驟，完成復盤後會進入側邊欄「執行力」。",
+        side: "top",
+      },
+    },
+    {
+      element: "#section-deep",
+      tourPage: "today",
+      popover: {
+        title: "06 深度思考",
+        description: "四個主題每天依你的故事生成。點開卡片書寫，再讓 AI 往下追問，把想不清楚的事挖深一點。",
+        side: "top",
+      },
+    },
+    {
+      element: "#section-manifest",
+      tourPage: "today",
+      popover: {
+        title: "07 顯化力",
+        description: "左側寫下明天想顯化的心念，點「生成執行目標」，右側會拆成 3 到 5 個做得到的步驟。勾選後會進到側邊欄「顯化力」。",
+        side: "top",
+      },
+    },
+    {
+      element: "#journalFooter",
+      tourPage: "today",
+      popover: {
+        title: "完成今日復盤",
+        description: "寫完、勾完就按這裡。草稿可先儲存；完成後，勾選的覺察、行動與顯化步驟會同步到側邊欄。",
+        side: "top",
+      },
+    },
+    {
+      element: '.side-item[data-page="today"]',
+      tourPage: "today",
+      tourSidebar: true,
+      popover: {
+        title: "今日復盤",
+        description: "每天從這裡開始。側邊欄這一項會帶你回到剛才走完的 01 到 07。",
+        side: "right",
+      },
+    },
+    {
+      element: '.side-item[data-page="report"]',
+      tourPage: "report",
+      tourSidebar: true,
+      popover: {
+        title: "週月報",
+        description: "把一週或一個月的勾選量、完成率收成圖表，並請 AI 教練寫出閃光點與突破口。底部可回看封存的月報。",
+        side: "right",
+      },
+    },
+    {
+      element: '.side-item[data-page="next"]',
+      tourPage: "next",
+      tourSidebar: true,
+      popover: {
+        title: "覺察力清單",
+        description: "復盤裡勾選的洞察會累積在這裡，方便回看你已經看見過什麼。",
+        side: "right",
+      },
+    },
+    {
+      element: '.side-item[data-page="sfm"]',
+      tourPage: "sfm",
+      tourSidebar: true,
+      popover: {
+        title: "執行力清單",
+        description: "勾選的行動卡點與解法會變成個人行動清單。可標示進行中、先放著或已完成。",
+        side: "right",
+      },
+    },
+    {
+      element: '.side-item[data-page="manifest"]',
+      tourPage: "manifest",
+      tourSidebar: true,
+      popover: {
+        title: "顯化力清單",
+        description: "心念拆成的執行步驟會收在這裡，讓願景對應到每天做得到的行動。",
+        side: "right",
+      },
+    },
+    {
+      element: '.side-item[data-page="history"]',
+      tourPage: "history",
+      tourSidebar: true,
+      popover: {
+        title: "歷史紀錄",
+        description: "所有完成的復盤都在這裡。用搜尋或標籤找回某個人、某一天、某一段心情。",
+        side: "right",
+      },
+    },
+  ].filter((step) => !step.element || document.querySelector(step.element));
+}
+
+function startOnboardingTour() {
+  const createDriver = driverFactory();
+  if (!createDriver) {
+    showToast("導覽套件載入中，請稍後再試一次。");
+    return;
+  }
+  if (state.tour && typeof state.tour.destroy === "function") {
+    state.tour.destroy();
+    state.tour = null;
+  }
+  const splash = document.getElementById("splash");
+  if (splash) splash.remove();
+  switchPage("today");
+
+  const tour = createDriver({
+    showProgress: true,
+    animate: true,
+    allowClose: true,
+    overlayColor: "#1a1613",
+    overlayOpacity: 0.58,
+    stagePadding: 10,
+    stageRadius: 16,
+    popoverClass: "nichi-tour",
+    nextBtnText: "下一步",
+    prevBtnText: "上一步",
+    doneBtnText: "完成",
+    progressText: "{{current}} / {{total}}",
+    disableActiveInteraction: true,
+    steps: tourSteps(),
+    onHighlightStarted(element, step) {
+      prepareTourStep(step);
+    },
+    onHighlighted() {
+      window.setTimeout(() => {
+        if (state.tour && typeof state.tour.refresh === "function") state.tour.refresh();
+      }, 220);
+    },
+    onPopoverRender(popover) {
+      if (!popover?.footer || popover.footer.querySelector(".nichi-tour__skip")) return;
+      const skip = document.createElement("button");
+      skip.type = "button";
+      skip.className = "nichi-tour__skip";
+      skip.textContent = "略過導覽";
+      skip.addEventListener("click", () => {
+        if (state.tour) state.tour.destroy();
+      });
+      popover.footer.prepend(skip);
+    },
+    onDestroyed() {
+      state.tour = null;
+      if (isMobile()) setSidebarOpen(false);
+      switchPage("today");
+    },
+  });
+  state.tour = tour;
+  tour.drive();
 }
 
 function currentIso() {
@@ -5335,8 +5583,17 @@ function bindEvents() {
   document.querySelectorAll(".side-item").forEach((btn) => {
     btn.addEventListener("click", (event) => {
       event.preventDefault();
+      if (btn.id === "btnGuide") {
+        startOnboardingTour();
+        return;
+      }
+      if (!btn.dataset.page) return;
       switchPage(btn.dataset.page);
     });
+  });
+  document.getElementById("topGuideBtn")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    startOnboardingTour();
   });
 
   const promptChips = document.getElementById("promptChips");

@@ -543,8 +543,20 @@ body.nav-closed .side-logout {
   white-space: nowrap;
 }
 
-.auth-chip:hover {
+.guide-chip {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
+  color: var(--header-text);
+  font-size: 12px;
+  padding: 5px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.guide-chip:hover,
+.auth-chip:hover {
+  background: rgba(255, 255, 255, 0.14);
 }
 
 body.nav-closed .auth-hint,
@@ -3013,5 +3025,102 @@ body.nav-closed .auth-pay {
 
   .chart-wrap {
     break-inside: avoid;
+  }
+}
+
+.nichi-tour.driver-popover {
+  background: #f9f6f0;
+  color: var(--text);
+  border: 1px solid var(--cream-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 18px 16px 14px;
+  max-width: min(320px, calc(100vw - 28px));
+  font-family: var(--sans);
+}
+
+.nichi-tour .driver-popover-title {
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+  padding-right: 22px;
+}
+
+.nichi-tour .driver-popover-description {
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.nichi-tour .driver-popover-close-btn {
+  color: var(--muted);
+}
+
+.nichi-tour .driver-popover-close-btn:hover,
+.nichi-tour .driver-popover-close-btn:focus {
+  color: var(--text);
+}
+
+.nichi-tour .driver-popover-footer {
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin-top: 14px;
+}
+
+.nichi-tour .driver-popover-progress-text {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.nichi-tour .driver-popover-prev-btn {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--cream-border);
+  text-shadow: none;
+  border-radius: 10px;
+  padding: 7px 12px;
+}
+
+.nichi-tour .driver-popover-next-btn {
+  background: var(--accent);
+  color: var(--header-text);
+  border: 0;
+  text-shadow: none;
+  border-radius: 10px;
+  padding: 7px 14px;
+}
+
+.nichi-tour .driver-popover-next-btn:hover,
+.nichi-tour .driver-popover-prev-btn:hover {
+  background: var(--accent-hover);
+  color: var(--header-text);
+  border-color: transparent;
+}
+
+.nichi-tour__skip {
+  all: unset;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+  margin-right: auto;
+}
+
+.nichi-tour__skip:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.nichi-tour .driver-popover-arrow-side-left,
+.nichi-tour .driver-popover-arrow-side-right,
+.nichi-tour .driver-popover-arrow-side-top,
+.nichi-tour .driver-popover-arrow-side-bottom {
+  border-color: #f9f6f0;
+}
+
+@media (max-width: 560px) {
+  .date {
+    display: none;
   }
 }

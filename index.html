@@ -29,7 +29,8 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="app.css?v=70" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
+    <link rel="stylesheet" href="app.css?v=71" />
     <style>
       .splash {
         position: fixed;
@@ -90,6 +91,7 @@
       </div>
       <div class="topbar-right">
         <time class="date" id="headerDate"></time>
+        <button class="guide-chip" id="topGuideBtn" type="button">使用說明</button>
         <button class="auth-chip" id="topAuthBtn" type="button">登入</button>
       </div>
     </div>
@@ -153,6 +155,14 @@
             </svg>
             <span>歷史紀錄</span>
           </a>
+          <button class="side-item" id="btnGuide" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="8.5" />
+              <path d="M12 16.2v.2" />
+              <path d="M9.8 9.4a2.2 2.2 0 1 1 3.4 1.85c-.7.42-1.2.9-1.2 1.75" />
+            </svg>
+            <span>使用說明</span>
+          </button>
         </div>
 
         <div class="side-auth" id="sideAuth">
@@ -187,7 +197,7 @@
                 <span>本月完成</span>
               </div>
             </div>
-            <div class="journal-when">
+            <div class="journal-when" id="journalWhen">
               <button class="journal-when__date" id="journalDateBtn" type="button">
                 <span id="journalDateLabel">2026 / 08 / 16</span>
               </button>
@@ -373,7 +383,7 @@
             </div>
           </section>
 
-          <div class="journal-footer">
+          <div class="journal-footer" id="journalFooter">
             <div class="journal-footer__actions">
               <button class="btn btn--wide" id="btnCompleteToday" type="button">完成今日復盤</button>
               <button class="btn btn--outline" id="btnSaveDraft" type="button">儲存草稿</button>
@@ -529,9 +539,10 @@
         navigator.serviceWorker.register("service-worker.js").catch(function () {});
       }
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.js.iife.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=83"></script>
+    <script src="app.js?v=84"></script>
   </body>
 </html>
