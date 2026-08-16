@@ -8,6 +8,7 @@ const STORAGE_KEYS = {
   tasks: "nichi.tasks",
   sfm: "nichi.sfm",
   insights: "nichi.insights",
+  manifests: "nichi.manifests",
   reminder: "nichi.reminder",
   sidebar: "nichi.sidebarCollapsed",
   reports: "nichi.reports",
@@ -51,6 +52,7 @@ const state = {
   reportType: "week",
   taskFilter: "all",
   insightFilter: "all",
+  manifestFilter: "all",
   sfmFilter: "all",
   historyQuery: "",
   historyTag: "all",
@@ -75,12 +77,14 @@ const state = {
     executionAi: false,
     awarenessAiSig: "",
     executionAiSig: "",
+    manifestAi: false,
+    manifestAiSig: "",
     insightSig: "",
     promptsSig: "",
     promptsAi: false,
   },
-  checklistBusy: { awareness: false, execution: false },
-  checklistToken: { awareness: 0, execution: 0 },
+  checklistBusy: { awareness: false, execution: false, manifest: false },
+  checklistToken: { awareness: 0, execution: 0, manifest: 0 },
   insightBusy: false,
   insightToken: 0,
   journalInsight: null,
@@ -118,7 +122,7 @@ function saveJson(key, value, options = {}) {
   localStorage.setItem(key, JSON.stringify(value));
   if (
     !options.silent &&
-    [STORAGE_KEYS.reviews, STORAGE_KEYS.tasks, STORAGE_KEYS.sfm, STORAGE_KEYS.insights, STORAGE_KEYS.reports].includes(key)
+    [STORAGE_KEYS.reviews, STORAGE_KEYS.tasks, STORAGE_KEYS.sfm, STORAGE_KEYS.insights, STORAGE_KEYS.manifests, STORAGE_KEYS.reports].includes(key)
   ) {
     scheduleCloudSync();
   }
@@ -344,6 +348,44 @@ function saveInsights(items) {
   saveJson(STORAGE_KEYS.insights, items);
 }
 
+function getManifests() {
+  const saved = loadJson(STORAGE_KEYS.manifests, []);
+  return Array.isArray(saved) ? saved : [];
+}
+
+function saveManifests(items) {
+  saveJson(STORAGE_KEYS.manifests, items);
+}
+
+function addManifest({ key, title, vision, date }) {
+  const text = String(title || "").trim();
+  if (!text) return { added: false };
+  const items = getManifests();
+  if (key && items.some((item) => item.sourceKey === key)) return { added: false, exists: true };
+  const iso = date || currentIso();
+  if (items.some((item) => item.title === text && item.date === iso && item.vision === (vision || ""))) {
+    return { added: false, exists: true };
+  }
+  items.unshift({
+    id: uid(),
+    title: text,
+    vision: String(vision || "").trim(),
+    date: iso,
+    status: "doing",
+    source: "今日復盤",
+    sourceKey: key || "",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  saveManifests(items);
+  try {
+    renderManifests();
+  } catch {
+    /* 顯化力頁面還沒畫也沒關係 */
+  }
+  return { added: true };
+}
+
 function addInsight({ key, title, date, source }) {
   const text = String(title || "").trim();
   if (!text) return { added: false };
@@ -386,6 +428,15 @@ function syncJournalLibraries(iso, journal) {
       label,
       detail: "",
       source: "今日復盤",
+      date: iso,
+    });
+  });
+  const vision = String(data.manifest || "").trim();
+  (data.manifestChecks || []).forEach((label) => {
+    addManifest({
+      key: `manifest:${iso}:${label}`,
+      title: label,
+      vision,
       date: iso,
     });
   });
@@ -978,6 +1029,7 @@ function collectCloudBundle() {
     tasks: getTasks(),
     sfm: getSfm(),
     insights: getInsights(),
+    manifests: getManifests(),
     reports: getStoredReports(),
   };
 }
@@ -994,7 +1046,7 @@ async function pushCloudData() {
         reviews: bundle.reviews,
         tasks: bundle.tasks,
         sfm: bundle.sfm,
-        reports: { ...(bundle.reports || {}), __insights: bundle.insights || [] },
+        reports: { ...(bundle.reports || {}), __insights: bundle.insights || [], __manifests: bundle.manifests || [] },
         updated_at: new Date().toISOString(),
       },
       { onConflict: "user_id" }
@@ -1057,8 +1109,22 @@ function mergeCloudBundle(cloud) {
     });
     saveJson(STORAGE_KEYS.insights, [...insightMap.values()], { silent: true });
 
+    const rawManifests = Array.isArray(cloud.manifests)
+      ? cloud.manifests
+      : Array.isArray(cloud.reports && cloud.reports.__manifests)
+        ? cloud.reports.__manifests
+        : [];
+    const manifestMap = new Map();
+    [...getManifests(), ...rawManifests].forEach((item) => {
+      if (!item || !item.id) return;
+      const current = manifestMap.get(item.id);
+      if (!current || newerStamp(item, current)) manifestMap.set(item.id, item);
+    });
+    saveJson(STORAGE_KEYS.manifests, [...manifestMap.values()], { silent: true });
+
     const reports = { ...(cloud.reports || {}) };
     delete reports.__insights;
+    delete reports.__manifests;
     saveJson(STORAGE_KEYS.reports, { ...getStoredReports(), ...reports }, { silent: true });
   } finally {
     state.syncing = false;
@@ -1084,6 +1150,7 @@ async function pullCloudData() {
     updateStats();
     if (state.page === "next") renderInsights();
     if (state.page === "sfm") renderTasks();
+    if (state.page === "manifest") renderManifests();
     if (state.page === "history") renderHistory();
     if (state.page === "report") renderReport();
   } catch {
@@ -1410,13 +1477,16 @@ function normalizeRemoteBundle(row) {
   const reports = row.reports || (nested && nested.reports);
   const reportsRaw = reports && typeof reports === "object" && !Array.isArray(reports) ? { ...reports } : {};
   const insights = row.insights || (nested && nested.insights) || reportsRaw.__insights;
+  const manifests = row.manifests || (nested && nested.manifests) || reportsRaw.__manifests;
   delete reportsRaw.__insights;
-  if (!reviews && !tasks && !sfm && !Object.keys(reportsRaw).length && !(insights && insights.length)) return null;
+  delete reportsRaw.__manifests;
+  if (!reviews && !tasks && !sfm && !Object.keys(reportsRaw).length && !(insights && insights.length) && !(manifests && manifests.length)) return null;
   return {
     reviews: reviews && typeof reviews === "object" && !Array.isArray(reviews) ? reviews : {},
     tasks: Array.isArray(tasks) ? tasks : [],
     sfm: Array.isArray(sfm) ? sfm : [],
     insights: Array.isArray(insights) ? insights : [],
+    manifests: Array.isArray(manifests) ? manifests : [],
     reports: reportsRaw,
   };
 }
@@ -1674,6 +1744,7 @@ function switchPage(page) {
   if (page === "report") renderReport();
   if (page === "next") renderInsights();
   if (page === "sfm") renderTasks();
+  if (page === "manifest") renderManifests();
   if (page === "history") renderHistory();
 }
 
@@ -1719,6 +1790,11 @@ function emptyJournal() {
     executionAi: false,
     awarenessAiSig: "",
     executionAiSig: "",
+    manifest: "",
+    manifestChecks: [],
+    manifestCheckItems: [],
+    manifestAi: false,
+    manifestAiSig: "",
     insight: emptyInsight(),
     deep: emptyDeep(),
     awarenessPrompts: [],
@@ -1791,11 +1867,12 @@ function journalHasContent(journal) {
     journal.bodyNote,
     ...(journal.awareness || []),
     ...(journal.execution || []),
+    journal.manifest,
   ];
   if (textBits.some((item) => String(item || "").trim())) return true;
   if (deepHasContent(journal.deep)) return true;
   if (String(journal.insight?.conclusion || "").trim()) return true;
-  return Boolean((journal.bodyTags || []).length || (journal.awarenessChecks || []).length || (journal.executionChecks || []).length);
+  return Boolean((journal.bodyTags || []).length || (journal.awarenessChecks || []).length || (journal.executionChecks || []).length || (journal.manifestChecks || []).length);
 }
 
 function checkedValues(rootId) {
@@ -1882,14 +1959,21 @@ function renderChecklist(rootId, items, checked) {
 
 function refreshJournalChecklists(journal, options = {}) {
   const data = journal || collectJournal();
+  if (state.checklistBusy.awareness) options.skipAware = true;
+  if (state.checklistBusy.execution) options.skipExec = true;
+  if (state.checklistBusy.manifest) options.skipManifest = true;
   const keepAware = !options.forceLocal && (options.useSaved || data.awarenessAi) && (data.awarenessCheckItems || []).length;
   const keepExec = !options.forceLocal && (options.useSaved || data.executionAi) && (data.executionCheckItems || []).length;
+  const keepManifest = !options.forceLocal && (options.useSaved || data.manifestAi) && (data.manifestCheckItems || []).length;
   const awareItems = keepAware ? data.awarenessCheckItems.slice(0, 6) : buildAwarenessCheckItems(data);
   const execItems = keepExec ? data.executionCheckItems.slice(0, 4) : buildExecutionCheckItems(data);
+  const manifestItems = keepManifest ? data.manifestCheckItems.slice(0, 5) : [];
   const awareChecked = options.useSaved ? data.awarenessChecks : checkedValues("awareChecks");
   const execChecked = options.useSaved ? data.executionChecks : checkedValues("execChecks");
+  const manifestChecked = options.useSaved ? data.manifestChecks : checkedValues("manifestChecks");
   if (!options.skipAware) renderChecklist("awareChecks", awareItems, awareChecked);
   if (!options.skipExec) renderChecklist("execChecks", execItems, execChecked);
+  if (!options.skipManifest) renderChecklist("manifestChecks", manifestItems, manifestChecked);
 }
 
 function scheduleJournalChecklists() {
@@ -1899,6 +1983,7 @@ function scheduleJournalChecklists() {
     const data = collectJournal();
     refreshJournalChecklists(data);
     maybeAutoGenerateChecklists(data);
+    maybeAutoGenerateManifest(data);
     maybeAutoGenerateInsight(data);
     maybeAutoGeneratePrompts(data);
   }, 900);
@@ -1927,29 +2012,49 @@ function normalizeAiChecklistItems(raw, min, max, fallback) {
   return items.slice(0, max);
 }
 
+function checklistUi(kind) {
+  if (kind === "manifest") {
+    return { btn: "btnManifestAi", loader: "manifestLoading", list: "manifestChecks", idle: "生成執行目標" };
+  }
+  if (kind === "awareness") {
+    return { btn: "btnAwareAi", loader: "awareLoading", list: "awareChecks", idle: "AI 分析並生成勾勾表" };
+  }
+  return { btn: "btnExecAi", loader: "execLoading", list: "execChecks", idle: "AI 分析並生成勾勾表" };
+}
+
 function setChecklistLoading(kind, loading) {
-  const isAware = kind === "awareness";
-  const btn = document.getElementById(isAware ? "btnAwareAi" : "btnExecAi");
-  const loader = document.getElementById(isAware ? "awareLoading" : "execLoading");
-  const list = document.getElementById(isAware ? "awareChecks" : "execChecks");
+  const ui = checklistUi(kind);
+  const btn = document.getElementById(ui.btn);
+  const loader = document.getElementById(ui.loader);
+  const list = document.getElementById(ui.list);
   state.checklistBusy[kind] = loading;
   if (btn) {
     btn.disabled = loading;
-    btn.textContent = loading ? "分析中…" : "AI 分析並生成勾勾表";
+    btn.textContent = loading ? "分析中…" : ui.idle;
   }
   if (loader) loader.hidden = !loading;
   if (list) list.classList.toggle("is-loading", loading);
 }
 
 function applyGeneratedChecklist(kind, items, sig) {
-  const isAware = kind === "awareness";
-  renderChecklist(isAware ? "awareChecks" : "execChecks", items, []);
-  state.journalMeta[isAware ? "awarenessAi" : "executionAi"] = true;
-  state.journalMeta[isAware ? "awarenessAiSig" : "executionAiSig"] = sig;
+  const ui = checklistUi(kind);
+  renderChecklist(ui.list, items, []);
+  if (kind === "manifest") {
+    state.journalMeta.manifestAi = true;
+    state.journalMeta.manifestAiSig = sig;
+  } else {
+    const isAware = kind === "awareness";
+    state.journalMeta[isAware ? "awarenessAi" : "executionAi"] = true;
+    state.journalMeta[isAware ? "awarenessAiSig" : "executionAiSig"] = sig;
+  }
   persistJournalQuietly();
 }
 
 async function generateJournalChecklist(kind, options = {}) {
+  if (kind === "manifest") {
+    await generateManifestChecklist(options);
+    return;
+  }
   const isAware = kind === "awareness";
   if (state.checklistBusy[kind]) return;
   const journal = collectJournal();
@@ -2014,6 +2119,78 @@ function maybeAutoGenerateChecklists(journal) {
   }
   if (threeAnswersFilled(journal.execution) && state.journalMeta.executionAiSig !== checklistSignature(journal.execution)) {
     generateJournalChecklist("execution", { auto: true });
+  }
+}
+
+function manifestReady(journal) {
+  return String((journal || collectJournal()).manifest || "").trim().length >= 4;
+}
+
+function buildManifestCheckItems(journal) {
+  const vision = String(journal.manifest || "").trim();
+  const short = vision.length > 14 ? `${vision.slice(0, 14)}…` : vision || "這份願景";
+  const items = [];
+  pushUnique(items, `明天先為「${short}」做一件最小的事`, 5);
+  pushUnique(items, "把願景寫成一句明天做得到的話，貼在看得到的地方", 5);
+  pushUnique(items, "安排 10 分鐘，只靠近這件事一步", 5);
+  if (/錢|收入|客戶|成交|訂單/.test(vision)) pushUnique(items, "主動聯絡一位可能幫忙的人", 5);
+  if (/關係|愛|陪伴|溝通/.test(vision)) pushUnique(items, "對在乎的人說一句真心話", 5);
+  if (/睡|休息|健康|身體/.test(vision)) pushUnique(items, "今晚固定時間放下螢幕，讓身體先休息", 5);
+  return items.slice(0, 5);
+}
+
+async function generateManifestChecklist(options = {}) {
+  if (state.checklistBusy.manifest && !options.auto) return;
+  const journal = collectJournal();
+  const vision = String(journal.manifest || "").trim();
+  if (vision.length < 4) {
+    if (!options.auto) showToast("先寫下明天想顯化的事情，再請 AI 拆成執行目標。");
+    return;
+  }
+  const sig = vision;
+  if (options.auto && state.journalMeta.manifestAiSig === sig) return;
+
+  const token = (state.checklistToken.manifest || 0) + 1;
+  state.checklistToken.manifest = token;
+  setChecklistLoading("manifest", true);
+  const fallback = buildManifestCheckItems(journal);
+
+  try {
+    if (!state.user) throw new Error("請先登入，才能使用雲端 AI 分析。");
+    const remote = await postReview({
+      mode: "manifest",
+      date: currentIso(),
+      vision,
+      text: vision,
+      context: {
+        event: journal.event,
+        mood: journal.mood,
+        bodyTags: journal.bodyTags,
+        bodyNote: journal.bodyNote,
+        openActions: getTasks()
+          .filter((task) => task.status !== "done")
+          .slice(0, 6)
+          .map((task) => task.title),
+      },
+    });
+    if (state.checklistToken.manifest !== token) return;
+    const items = normalizeAiChecklistItems(remote.items, 3, 5, fallback);
+    if (items.length < 3) throw new Error("雲端回傳格式不完整");
+    applyGeneratedChecklist("manifest", items, sig);
+    showToast("顯化執行目標已生成。");
+  } catch (error) {
+    if (state.checklistToken.manifest !== token) return;
+    applyGeneratedChecklist("manifest", fallback.slice(0, 5), sig);
+    showToast(`雲端分析失敗：${formatApiError(error)}，先用本地步驟。`);
+  } finally {
+    if (state.checklistToken.manifest === token) setChecklistLoading("manifest", false);
+  }
+}
+
+function maybeAutoGenerateManifest(journal) {
+  if (state.journalHydrating) return;
+  if (manifestReady(journal) && state.journalMeta.manifestAiSig !== String(journal.manifest || "").trim()) {
+    generateManifestChecklist({ auto: true });
   }
 }
 
@@ -2772,6 +2949,11 @@ function collectJournal() {
     executionAi: Boolean(state.journalMeta.executionAi),
     awarenessAiSig: state.journalMeta.awarenessAiSig || "",
     executionAiSig: state.journalMeta.executionAiSig || "",
+    manifest: journalFieldValue("manifestVision"),
+    manifestChecks: checkedValues("manifestChecks"),
+    manifestCheckItems: checklistItems("manifestChecks"),
+    manifestAi: Boolean(state.journalMeta.manifestAi),
+    manifestAiSig: state.journalMeta.manifestAiSig || "",
     insight: state.journalInsight || emptyInsight(),
     deep: [1, 2, 3, 4].map(collectDeepSlot),
     awarenessPrompts: state.awarenessPrompts || [],
@@ -2812,6 +2994,8 @@ function composeJournalRawText(journal) {
     if (String(item || "").trim()) lines.push(`${execQs[index] || `執行題 ${index + 1}`} ${item.trim()}`);
   });
   if ((journal.executionChecks || []).length) lines.push(`我的行動卡點：${journal.executionChecks.join("、")}`);
+  if (String(journal.manifest || "").trim()) lines.push(`明天想顯化：${journal.manifest.trim()}`);
+  if ((journal.manifestChecks || []).length) lines.push(`顯化執行目標：${journal.manifestChecks.join("、")}`);
   const deepQs = (journal.deepPrompts || state.deepPrompts || []).map((item) => item.title || item.question || item);
   normalizeDeep(journal.deep).forEach((item, index) => {
     const plain = String(item.plain || "").trim();
@@ -2860,11 +3044,13 @@ function fillJournal(journal) {
   state.journalHydrating = true;
   state.checklistToken.awareness += 1;
   state.checklistToken.execution += 1;
+  state.checklistToken.manifest += 1;
   state.insightToken += 1;
   state.promptsToken += 1;
   state.deepFollowToken = state.deepFollowToken.map((n) => n + 1);
   setChecklistLoading("awareness", false);
   setChecklistLoading("execution", false);
+  setChecklistLoading("manifest", false);
   setInsightLoading(false);
   setPromptsLoading(false);
   [1, 2, 3, 4].forEach((index) => setDeepFollowLoading(index, false));
@@ -2873,6 +3059,8 @@ function fillJournal(journal) {
     executionAi: Boolean(data.executionAi),
     awarenessAiSig: data.awarenessAiSig || "",
     executionAiSig: data.executionAiSig || "",
+    manifestAi: Boolean(data.manifestAi),
+    manifestAiSig: data.manifestAiSig || "",
     insightSig: data.insight?.sig || "",
     promptsSig: data.promptsSig || "",
     promptsAi: Boolean(data.promptsAi),
@@ -2897,6 +3085,8 @@ function fillJournal(journal) {
   setActiveButtons("bodyTags", ".tag-btn", data.bodyTags);
   const bodyNote = document.getElementById("bodyNote");
   if (bodyNote) bodyNote.value = data.bodyNote || "";
+  const manifestVision = document.getElementById("manifestVision");
+  if (manifestVision) manifestVision.value = data.manifest || "";
   renderAwarenessQuestions(state.awarenessPrompts, { answers: data.awareness });
   renderExecutionQuestions(state.executionPrompts, { answers: data.execution });
   renderDeepThemes(state.deepPrompts, { deep: normalizeDeep(data.deep) });
@@ -4011,7 +4201,7 @@ function completeToday() {
 
   updateStats();
   syncReviewsToCloud();
-  showToast("今日復盤已完成，勾選的覺察與行動已同步到側邊欄。");
+  showToast("今日復盤已完成，勾選的覺察、行動與顯化步驟已同步到側邊欄。");
 }
 
 function inferSfmType(text) {
@@ -4241,6 +4431,57 @@ function renderInsights() {
             </article>
           `
         )
+        .join("");
+      return `<section class="library-group"><h3 class="library-group__date">${escapeHtml(iso ? formatDisplayDate(iso) : "未標日期")}</h3>${cards}</section>`;
+    })
+    .join("");
+}
+
+function renderManifests() {
+  const list = document.getElementById("manifestList");
+  if (!list) return;
+  const all = getManifests();
+  const items = all.filter((item) => state.manifestFilter === "all" || item.status === state.manifestFilter);
+  if (!all.length) {
+    list.innerHTML = `<div class="empty"><p class="empty__title">顯化力還是空的</p>在今日復盤寫下願景、勾選執行目標，完成復盤後就會出現在這裡。</div>`;
+    return;
+  }
+  if (!items.length) {
+    list.innerHTML = `<div class="empty">這個分類目前是空的。</div>`;
+    return;
+  }
+  const grouped = new Map();
+  items.forEach((item) => {
+    const iso = item.date || String(item.createdAt || "").slice(0, 10) || "";
+    if (!grouped.has(iso)) grouped.set(iso, []);
+    grouped.get(iso).push(item);
+  });
+  list.innerHTML = [...grouped.entries()]
+    .sort((a, b) => String(b[0]).localeCompare(String(a[0])))
+    .map(([iso, rows]) => {
+      const cards = rows
+        .map((item) => {
+          const vision = String(item.vision || "").trim();
+          return `
+            <article class="task-card">
+              <div>
+                <p class="task-card__title">${escapeHtml(item.title)}</p>
+                <div class="task-card__meta">
+                  <span class="tag">顯化力</span>
+                  <span class="tag tag--${escapeHtml(item.status || "doing")}">${escapeHtml(STATUS_LABEL[item.status] || item.status || "進行中")}</span>
+                  <span class="tag">${escapeHtml(item.source || "今日復盤")}</span>
+                  ${vision ? `<span class="tag">${escapeHtml(vision.length > 18 ? `${vision.slice(0, 18)}…` : vision)}</span>` : ""}
+                </div>
+              </div>
+              <div class="task-card__actions">
+                <button class="btn btn--ghost btn--tiny" data-manifest-status="${item.id}" data-to="doing" type="button">進行中</button>
+                <button class="btn btn--ghost btn--tiny" data-manifest-status="${item.id}" data-to="later" type="button">先放著</button>
+                <button class="btn btn--ghost btn--tiny" data-manifest-status="${item.id}" data-to="done" type="button">已完成</button>
+                <button class="btn btn--ghost btn--tiny" data-manifest-delete="${item.id}" type="button">刪除</button>
+              </div>
+            </article>
+          `;
+        })
         .join("");
       return `<section class="library-group"><h3 class="library-group__date">${escapeHtml(iso ? formatDisplayDate(iso) : "未標日期")}</h3>${cards}</section>`;
     })
@@ -4552,6 +4793,7 @@ function bindEvents() {
   document.getElementById("btnSaveDraft")?.addEventListener("click", saveJournalDraft);
   document.getElementById("btnAwareAi")?.addEventListener("click", () => generateJournalChecklist("awareness"));
   document.getElementById("btnExecAi")?.addEventListener("click", () => generateJournalChecklist("execution"));
+  document.getElementById("btnManifestAi")?.addEventListener("click", () => generateJournalChecklist("manifest"));
   document.getElementById("btnInsightAi")?.addEventListener("click", () => generateJournalInsight());
   document.getElementById("btnRefreshPrompts")?.addEventListener("click", () => generateJournalPrompts({ force: true, scope: "awareness" }));
   document.getElementById("btnRefreshExecPrompts")?.addEventListener("click", () => generateJournalPrompts({ force: true, scope: "execution" }));
@@ -4584,7 +4826,13 @@ function bindEvents() {
 
   document.getElementById("page-today")?.addEventListener("input", (event) => {
     const id = event.target && event.target.id;
-    if (/^(aware|exec)\d$|^eventText$|^bodyNote$/.test(id || "")) scheduleJournalChecklists();
+    if (/^(aware|exec)\d$|^eventText$|^bodyNote$|^manifestVision$/.test(id || "")) scheduleJournalChecklists();
+  });
+
+  document.getElementById("page-today")?.addEventListener("change", (event) => {
+    if (event.target && event.target.matches("#awareChecks input, #execChecks input, #manifestChecks input")) {
+      persistJournalQuietly();
+    }
   });
 
   document.getElementById("page-today")?.addEventListener("focusin", (event) => {
@@ -4720,6 +4968,33 @@ function bindEvents() {
     saveInsights(getInsights().filter((item) => item.id !== deleteBtn.dataset.insightDelete));
     renderInsights();
     showToast("已刪除這則洞察。");
+  });
+
+  document.getElementById("manifestFilters")?.addEventListener("click", (event) => {
+    const chip = event.target.closest("[data-manifest-filter]");
+    if (!chip) return;
+    state.manifestFilter = chip.dataset.manifestFilter;
+    document.querySelectorAll("#manifestFilters .chip").forEach((item) => item.classList.toggle("is-active", item === chip));
+    renderManifests();
+  });
+  document.getElementById("manifestList")?.addEventListener("click", (event) => {
+    const statusBtn = event.target.closest("[data-manifest-status]");
+    const deleteBtn = event.target.closest("[data-manifest-delete]");
+    let items = getManifests();
+    if (statusBtn) {
+      items = items.map((item) =>
+        item.id === statusBtn.dataset.manifestStatus
+          ? { ...item, status: statusBtn.dataset.to, updatedAt: new Date().toISOString() }
+          : item
+      );
+      saveManifests(items);
+      renderManifests();
+    }
+    if (deleteBtn) {
+      saveManifests(items.filter((item) => item.id !== deleteBtn.dataset.manifestDelete));
+      renderManifests();
+      showToast("已刪除這項顯化目標。");
+    }
   });
 
   document.getElementById("sfmFilters")?.addEventListener("click", (event) => {

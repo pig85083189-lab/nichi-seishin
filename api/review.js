@@ -163,6 +163,31 @@ const CHECKLIST_AWARENESS_SYSTEM = `你是「日精進」的高階心靈教練�
 - 禁止雞湯、禁止說教、禁止病例腔、禁止空泛「要愛自己」
 - 繁體中文`;
 
+const CHECKLIST_MANIFEST_SYSTEM = `你是「日精進」的高階心靈教練。使用者剛寫下明天想顯化的願景或目標。
+請把這句心念拆成具體、明天做得到的執行目標，讓他能用行動去靠近它。
+
+規則：
+- 只輸出 JSON：{"items":["..."]}
+- items 必須 3 到 5 條，不可少於 3、不可超過 5
+- 每一條 12-28 字，是可勾選的具體步驟，不要口號、不要空泛「相信宇宙」
+- 步驟要小、可執行、貼近這個人今天的事件與心情
+- 禁止雞湯、禁止說教、禁止病例腔
+- 繁體中文`;
+
+function manifestUserPrompt(body) {
+  const vision = String(body.vision || body.text || "").trim();
+  const ctx = body.context && typeof body.context === "object" ? body.context : {};
+  const bodyTags = Array.isArray(ctx.bodyTags) ? ctx.bodyTags.join("、") : "";
+  const openActions = Array.isArray(ctx.openActions) ? ctx.openActions.filter(Boolean) : [];
+  return `請把這個顯化願景拆成 3 到 5 個明天做得到的執行步驟。
+
+明天想顯化的事情：${vision || "（未寫）"}
+今日事件：${ctx.event || "未寫"}
+心情：${ctx.mood || "未選"}
+身體狀態：${bodyTags || "未選"}
+尚未完成的行動：${openActions.slice(0, 6).join("、") || "尚無"}`;
+}
+
 const CHECKLIST_EXECUTION_SYSTEM = `你是「日精進」的高階心靈教練。使用者剛回答今天的執行力題目（題目每天動態生成，不是固定題庫）。
 請依他的卡點、拖延原因與今天的處境，整理成「行動卡點／解法」勾選清單。勾選後會進入他的個人行動清單。
 
@@ -554,7 +579,9 @@ module.exports = async function handler(req, res) {
               ? "deepen"
               : body.mode === "prompts"
                 ? "prompts"
-                : "organize";
+                : body.mode === "manifest"
+                  ? "manifest"
+                  : "organize";
     const text = String(body.text || "").trim();
     if (mode === "checklist") {
       const answers = Array.isArray(body.answers) ? body.answers.map((item) => String(item || "").trim()) : [];
@@ -585,6 +612,12 @@ module.exports = async function handler(req, res) {
       const hasBody = (Array.isArray(ctx.bodyTags) && ctx.bodyTags.length) || String(ctx.bodyNote || "").trim();
       if (!event || !mood || !hasBody) {
         res.status(400).json({ ok: false, error: "請先寫下今日事件、選擇心情，並標出身體狀況" });
+        return;
+      }
+    } else if (mode === "manifest") {
+      const vision = String(body.vision || text || "").trim();
+      if (vision.length < 4) {
+        res.status(400).json({ ok: false, error: "請先寫下明天想顯化的事情" });
         return;
       }
     } else if (!text && mode === "organize" && !Array.isArray(body.messages)) {
@@ -619,6 +652,11 @@ module.exports = async function handler(req, res) {
       messages = [
         { role: "system", content: PROMPTS_SYSTEM },
         { role: "user", content: promptsUserPrompt(body) },
+      ];
+    } else if (mode === "manifest") {
+      messages = [
+        { role: "system", content: CHECKLIST_MANIFEST_SYSTEM },
+        { role: "user", content: manifestUserPrompt(body) },
       ];
     } else if (mode === "think") {
       const round = Number(body.round) || 1;
@@ -678,6 +716,15 @@ module.exports = async function handler(req, res) {
         return;
       }
       res.status(200).json({ ok: true, source: "openai", data: prompts });
+      return;
+    }
+    if (mode === "manifest") {
+      const items = normalizeChecklistItems(data, 3, 5);
+      if (items.length < 3) {
+        res.status(502).json({ ok: false, error: "AI 顯化步驟格式不完整，請再試一次" });
+        return;
+      }
+      res.status(200).json({ ok: true, source: "openai", data: { items: items.slice(0, 5), kind: "manifest" } });
       return;
     }
     res.status(200).json({ ok: true, source: "openai", data });

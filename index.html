@@ -29,7 +29,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="app.css?v=66" />
+    <link rel="stylesheet" href="app.css?v=68" />
   </head>
   <body>
     <script>
@@ -103,6 +103,12 @@
               <path d="M4.5 20.5a7.5 7.5 0 0 1 15 0" />
             </svg>
             <span>執行力</span>
+          </a>
+          <a class="side-item" data-page="manifest" href="#vision">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3l1.7 4.8L18.5 9.5l-4.2 3 1.2 5L12 15.2 8.5 17.5l1.2-5L5.5 9.5l4.8-1.7L12 3z" />
+            </svg>
+            <span>顯化力</span>
           </a>
           <a class="side-item" data-page="history" href="#history">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -310,6 +316,27 @@
             <div class="deep-list" id="deepList"></div>
           </section>
 
+          <section class="journal-card" id="section-manifest">
+            <h2 class="journal-card__title"><span>07</span> 顯化力</h2>
+            <p class="journal-guide">明天想顯化的事情。先寫下心念，AI 會把它拆成具體、做得到的執行目標。</p>
+            <div class="journal-split">
+              <div class="journal-col">
+                <p class="journal-label">明天想顯化的事情</p>
+                <textarea class="textarea" id="manifestVision" rows="5" placeholder="我想顯化的是……例如：更穩定的收入、被好好對待的關係、睡得著的夜晚…"></textarea>
+                <button class="ai-check-btn" id="btnManifestAi" type="button">生成執行目標</button>
+              </div>
+              <div class="journal-col">
+                <p class="journal-label">顯化執行目標</p>
+                <p class="journal-guide journal-guide--tight">寫下願景後，AI 會生成 3 到 5 個具體步驟。勾選後，完成今日復盤就會進到側邊欄顯化力清單。</p>
+                <div class="check-loading" id="manifestLoading" hidden>
+                  <p class="check-loading__label">正在把心念拆成明天做得到的行動…</p>
+                  <div class="ai-thinking__bar"><i></i></div>
+                </div>
+                <div class="check-list" id="manifestChecks"></div>
+              </div>
+            </div>
+          </section>
+
           <div class="journal-footer">
             <div class="journal-footer__actions">
               <button class="btn btn--wide" id="btnCompleteToday" type="button">完成今日復盤</button>
@@ -387,6 +414,22 @@
           <div class="task-list" id="taskList"></div>
         </section>
 
+        <section class="page" id="page-manifest" data-page="manifest" hidden>
+          <header class="page__header">
+            <h2 class="page__title">顯化力</h2>
+            <p class="page__subtitle">個人顯化願景與目標清單。復盤裡勾選的執行步驟，會累積成你的每日行動。</p>
+          </header>
+
+          <div class="chips" role="tablist" aria-label="顯化分類" id="manifestFilters">
+            <button class="chip is-active" data-manifest-filter="all" type="button">全部</button>
+            <button class="chip" data-manifest-filter="doing" type="button">進行中</button>
+            <button class="chip" data-manifest-filter="later" type="button">先放著</button>
+            <button class="chip" data-manifest-filter="done" type="button">已完成</button>
+          </div>
+
+          <div class="library-list" id="manifestList"></div>
+        </section>
+
         <section class="page" id="page-history" data-page="history" hidden>
           <header class="page__header">
             <h2 class="page__title">歷史紀錄</h2>
@@ -439,6 +482,6 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=79"></script>
+    <script src="app.js?v=81"></script>
   </body>
 </html>
