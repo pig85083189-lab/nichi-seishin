@@ -1165,11 +1165,11 @@ function submitNewebPayForm(gateway, fields) {
   form.method = "POST";
   form.action = gateway;
   form.acceptCharset = "UTF-8";
-  Object.entries(fields || {}).forEach(([name, value]) => {
+  ["MerchantID_", "PostData_"].forEach((name) => {
     const input = document.createElement("input");
     input.type = "hidden";
     input.name = name;
-    input.value = value == null ? "" : String(value);
+    input.value = fields && fields[name] != null ? String(fields[name]) : "";
     form.appendChild(input);
   });
   document.body.appendChild(form);
