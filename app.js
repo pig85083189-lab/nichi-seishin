@@ -65,6 +65,7 @@ const state = {
   remindedDate: "",
   recognition: null,
   listening: false,
+  speechTarget: "",
   organizeSource: "",
   apiConfigured: null,
   user: null,
@@ -376,7 +377,13 @@ function syncGuideToSfm(kind, index, checked) {
 }
 
 function reviewIsComplete(review) {
-  return Boolean(review && (review.completedAt || review.organize || String(review.rawText || "").trim()));
+  return Boolean(
+    review &&
+      (review.completedAt ||
+        review.organize ||
+        String(review.rawText || "").trim() ||
+        journalHasContent(review.journal))
+  );
 }
 
 function reviewSearchText(review) {
@@ -385,6 +392,7 @@ function reviewSearchText(review) {
   return [
     review.rawText,
     review.gratitude,
+    review.journal && JSON.stringify(review.journal),
     ai.themeCategory,
     ai.themeTitle,
     ai.themeInsight,
@@ -1277,6 +1285,7 @@ function rowsToReviewMap(rows) {
       organize: row.organize || row.ai || null,
       think: row.think || null,
       gratitude: row.gratitude || "",
+      journal: row.journal || null,
       completedAt: row.completed_at || row.completedAt || row.updated_at || "",
       userId: row.user_id || state.user?.id || "",
     };
@@ -1554,6 +1563,8 @@ function switchPage(page) {
   if (page === "next") renderTasks();
   if (page === "sfm") renderSfm();
   if (page === "history") renderHistory();
+  const tip = document.getElementById("journalTip");
+  if (tip) tip.hidden = page !== "today";
 }
 
 function currentIso() {
@@ -1561,17 +1572,211 @@ function currentIso() {
 }
 
 function renderPromptChips() {
-  document.getElementById("promptChips").innerHTML = PROMPT_CHIPS.map(
+  const root = document.getElementById("promptChips");
+  if (!root) return;
+  root.innerHTML = PROMPT_CHIPS.map(
     (label) => `<button class="prompt-chip" type="button" data-prompt="${escapeHtml(label)}">${escapeHtml(label)}</button>`
   ).join("");
 }
 
 function insertPrompt(label) {
   const textarea = document.getElementById("reviewText");
+  if (!textarea) return;
   const prefix = textarea.value.trim() ? `${textarea.value.trim()}\n\n` : "";
   textarea.value = `${prefix}${label}：`;
   textarea.focus();
   textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+}
+
+function journalFieldValue(id) {
+  return String(document.getElementById(id)?.value || "").trim();
+}
+
+function emptyJournal() {
+  return {
+    thanks: ["", "", ""],
+    event: "",
+    mood: "",
+    bodyTags: [],
+    bodyNote: "",
+    awareness: ["", "", ""],
+    awarenessChecks: [],
+    execution: ["", "", ""],
+    executionChecks: [],
+    deep: ["", "", "", ""],
+  };
+}
+
+function journalHasContent(journal) {
+  if (!journal || typeof journal !== "object") return false;
+  const textBits = [
+    ...(journal.thanks || []),
+    journal.event,
+    journal.mood,
+    journal.bodyNote,
+    ...(journal.awareness || []),
+    ...(journal.execution || []),
+    ...(journal.deep || []),
+  ];
+  if (textBits.some((item) => String(item || "").trim())) return true;
+  return Boolean((journal.bodyTags || []).length || (journal.awarenessChecks || []).length || (journal.executionChecks || []).length);
+}
+
+function checkedValues(rootId) {
+  return [...document.querySelectorAll(`#${rootId} input[type="checkbox"]:checked`)].map((input) => input.value);
+}
+
+function collectJournal() {
+  const journal = {
+    thanks: ["thanks1", "thanks2", "thanks3"].map(journalFieldValue),
+    event: journalFieldValue("eventText"),
+    mood: document.querySelector("#moodRow .mood-btn.is-on")?.dataset.mood || "",
+    bodyTags: [...document.querySelectorAll("#bodyTags .tag-btn.is-on")].map((btn) => btn.dataset.bodyTag),
+    bodyNote: journalFieldValue("bodyNote"),
+    awareness: ["aware1", "aware2", "aware3"].map(journalFieldValue),
+    awarenessChecks: checkedValues("awareChecks"),
+    execution: ["exec1", "exec2", "exec3"].map(journalFieldValue),
+    executionChecks: checkedValues("execChecks"),
+    deep: ["deep1", "deep2", "deep3", "deep4"].map(journalFieldValue),
+  };
+  return journal;
+}
+
+function composeJournalRawText(journal) {
+  const lines = [];
+  const thanks = (journal.thanks || []).map((item) => String(item || "").trim()).filter(Boolean);
+  if (thanks.length) {
+    lines.push("今日感謝");
+    thanks.forEach((item, index) => lines.push(`${index + 1}. ${item}`));
+  }
+  if (String(journal.event || "").trim()) lines.push(`今日事件：${journal.event.trim()}`);
+  if (journal.mood) lines.push(`心情：${journal.mood}`);
+  if ((journal.bodyTags || []).length) lines.push(`身體狀態：${journal.bodyTags.join("、")}`);
+  if (String(journal.bodyNote || "").trim()) lines.push(`身體提醒：${journal.bodyNote.trim()}`);
+  const awareQs = [
+    "今天，哪個時刻讓我感受到生命力或平靜？",
+    "今天，哪個時刻出現了防衛心或情緒波動？",
+    "如果明天重來一次，我會做哪個不同的選擇？",
+  ];
+  (journal.awareness || []).forEach((item, index) => {
+    if (String(item || "").trim()) lines.push(`${awareQs[index]} ${item.trim()}`);
+  });
+  if ((journal.awarenessChecks || []).length) lines.push(`今天我覺察到：${journal.awarenessChecks.join("、")}`);
+  const execQs = [
+    "今天本來想做，卻一直拖著沒做的是哪件事？",
+    "是什麼原因讓我卡住、不想動？",
+    "明天只花 5 分鐘，我可以先做哪一步？",
+  ];
+  (journal.execution || []).forEach((item, index) => {
+    if (String(item || "").trim()) lines.push(`${execQs[index]} ${item.trim()}`);
+  });
+  if ((journal.executionChecks || []).length) lines.push(`我的行動卡點：${journal.executionChecks.join("、")}`);
+  const deepQs = [
+    "今天哪一刻，我超想翻白眼，但還是忍住了？",
+    "今天哪句話，其實不是說給對方聽，是說給自己聽？",
+    "今天哪件事，我表面上沒反應，心裡其實有聲音？",
+    "如果把今天濃縮成一句話，我會對明天的自己說什麼？",
+  ];
+  (journal.deep || []).forEach((item, index) => {
+    if (String(item || "").trim()) lines.push(`${deepQs[index]} ${item.trim()}`);
+  });
+  return lines.join("\n");
+}
+
+function syncHiddenReviewText() {
+  const journal = collectJournal();
+  const composed = composeJournalRawText(journal);
+  const textarea = document.getElementById("reviewText");
+  const existing = String(textarea?.value || "").trim();
+  const rawText = journalHasContent(journal) ? composed : composed || existing;
+  if (textarea && (composed || !existing)) textarea.value = rawText;
+  return { journal, rawText };
+}
+
+function setActiveButtons(rootId, selector, values) {
+  const set = new Set(values || []);
+  document.querySelectorAll(`#${rootId} ${selector}`).forEach((btn) => {
+    const key = btn.dataset.mood || btn.dataset.bodyTag;
+    btn.classList.toggle("is-on", set.has(key));
+  });
+}
+
+function setCheckedValues(rootId, values) {
+  const set = new Set(values || []);
+  document.querySelectorAll(`#${rootId} input[type="checkbox"]`).forEach((input) => {
+    input.checked = set.has(input.value);
+  });
+}
+
+function fillJournal(journal) {
+  const data = { ...emptyJournal(), ...(journal && typeof journal === "object" ? journal : {}) };
+  ["thanks1", "thanks2", "thanks3"].forEach((id, index) => {
+    const el = document.getElementById(id);
+    if (el) el.value = data.thanks[index] || "";
+  });
+  const eventText = document.getElementById("eventText");
+  if (eventText) eventText.value = data.event || "";
+  setActiveButtons("moodRow", ".mood-btn", data.mood ? [data.mood] : []);
+  setActiveButtons("bodyTags", ".tag-btn", data.bodyTags);
+  const bodyNote = document.getElementById("bodyNote");
+  if (bodyNote) bodyNote.value = data.bodyNote || "";
+  ["aware1", "aware2", "aware3"].forEach((id, index) => {
+    const el = document.getElementById(id);
+    if (el) el.value = data.awareness[index] || "";
+  });
+  setCheckedValues("awareChecks", data.awarenessChecks);
+  ["exec1", "exec2", "exec3"].forEach((id, index) => {
+    const el = document.getElementById(id);
+    if (el) el.value = data.execution[index] || "";
+  });
+  setCheckedValues("execChecks", data.executionChecks);
+  ["deep1", "deep2", "deep3", "deep4"].forEach((id, index) => {
+    const el = document.getElementById(id);
+    if (el) el.value = data.deep[index] || "";
+  });
+}
+
+function updateJournalDateLabel(iso) {
+  const label = document.getElementById("journalDateLabel");
+  const date = parseIsoDate(iso) || new Date();
+  if (label) label.textContent = formatHeaderDate(date);
+}
+
+function speechTarget() {
+  const active = document.activeElement;
+  if (active && (active.matches("input, textarea") && active.id !== "reviewDate")) return active;
+  if (state.speechTarget && document.getElementById(state.speechTarget)) {
+    return document.getElementById(state.speechTarget);
+  }
+  return document.getElementById("thanks1") || document.getElementById("reviewText");
+}
+
+function rememberSpeechTarget(el) {
+  if (el && el.id && el.matches("input, textarea") && el.id !== "reviewDate" && el.id !== "reviewText") {
+    state.speechTarget = el.id;
+  }
+}
+
+function saveJournalDraft() {
+  const { journal, rawText } = syncHiddenReviewText();
+  if (!rawText && !journalHasContent(journal) && !state.organize) {
+    showToast("還沒有內容可以儲存。");
+    return;
+  }
+  const prev = getReview(currentIso()) || {};
+  upsertReview(currentIso(), {
+    rawText,
+    journal,
+    organize: state.organize || prev.organize || null,
+    gratitude: document.getElementById("gratitudeInput")?.value.trim() || state.gratitude,
+    selectedQuotes: state.selectedQuotes,
+    selectedSfm: state.selectedSfm,
+    thinkHistory: state.think.history,
+    updatedAt: new Date().toISOString(),
+  });
+  updateStats();
+  syncReviewsToCloud();
+  showToast("草稿已儲存。");
 }
 
 function resetAiSession() {
@@ -1588,7 +1793,10 @@ function resetAiSession() {
 
 function loadReviewForDate(iso) {
   const review = getReview(iso);
-  document.getElementById("reviewText").value = review?.rawText || "";
+  updateJournalDateLabel(iso);
+  fillJournal(review?.journal);
+  const textarea = document.getElementById("reviewText");
+  if (textarea) textarea.value = review?.rawText || composeJournalRawText(review?.journal || emptyJournal());
   resetAiSession();
   if (review?.organize) {
     state.organize = review.organize;
@@ -2424,6 +2632,7 @@ function runOrganize(event) {
     purgeThinkingUi();
 
     const input = document.getElementById("reviewText");
+    if (document.getElementById("thanks1")) syncHiddenReviewText();
     const rawText = String(input && input.value ? input.value : "").trim();
     if (!rawText) {
       showToast("先用講的或寫的，留一段今天的話。");
@@ -2575,8 +2784,9 @@ async function enhanceThinkWithApi(nextRound, selected, reply, token) {
 
 function completeToday() {
   const iso = currentIso();
-  const rawText = document.getElementById("reviewText").value.trim() || state.rawText;
-  if (!rawText && !state.organize) {
+  const collected = document.getElementById("thanks1") ? syncHiddenReviewText() : { journal: null, rawText: "" };
+  const rawText = collected.rawText || document.getElementById("reviewText")?.value.trim() || state.rawText;
+  if (!rawText && !state.organize && !journalHasContent(collected.journal)) {
     showToast("還沒有內容可以完成。");
     return;
   }
@@ -2586,6 +2796,7 @@ function completeToday() {
 
   upsertReview(iso, {
     rawText,
+    journal: collected.journal || getReview(iso)?.journal || emptyJournal(),
     organize,
     gratitude,
     selectedQuotes: state.selectedQuotes,
@@ -2637,7 +2848,9 @@ function inferSfmType(text) {
 }
 
 function clearReview() {
-  document.getElementById("reviewText").value = "";
+  const textarea = document.getElementById("reviewText");
+  if (textarea) textarea.value = "";
+  fillJournal(emptyJournal());
   resetAiSession();
   renderAiStage();
   const iso = currentIso();
@@ -2978,14 +3191,17 @@ function setupSpeech() {
         if (event.results[i].isFinal) finalText += event.results[i][0].transcript;
       }
       if (!finalText) return;
-      const textarea = document.getElementById("reviewText");
-      const prefix = textarea.value && !textarea.value.endsWith("\n") ? `${textarea.value}` : textarea.value;
-      textarea.value = `${prefix}${finalText}`;
+      const field = speechTarget();
+      if (!field) return;
+      const prefix = field.value && !field.value.endsWith("\n") && field.value ? field.value : field.value;
+      field.value = `${prefix}${finalText}`;
+      syncHiddenReviewText();
     };
     recognition.onend = () => {
       state.listening = false;
       btn.classList.remove("is-on");
-      document.getElementById("micLabel").textContent = "語音";
+      const label = document.getElementById("micLabel");
+      if (label) label.textContent = "語音記錄";
     };
     state.recognition = recognition;
   } catch {
@@ -2995,8 +3211,12 @@ function setupSpeech() {
 }
 
 function toggleMic() {
-  if (!state.recognition) return;
   const btn = document.getElementById("micBtn");
+  if (!state.recognition) {
+    if (btn) btn.classList.toggle("is-on");
+    showToast("語音記錄準備中，也可以先用鍵盤寫下。");
+    return;
+  }
   if (state.listening) {
     state.recognition.stop();
     return;
@@ -3004,10 +3224,14 @@ function toggleMic() {
   try {
     state.recognition.start();
     state.listening = true;
-    btn.classList.add("is-on");
-    document.getElementById("micLabel").textContent = "聆聽中";
+    if (btn) {
+      btn.classList.add("is-on");
+      btn.setAttribute("aria-pressed", "true");
+    }
+    const label = document.getElementById("micLabel");
+    if (label) label.textContent = "聆聽中";
   } catch {
-    showToast("無法啟動語音輸入，也可以用鍵盤麥克風。");
+    showToast("無法啟動語音輸入，也可以用鍵盤寫下。");
   }
 }
 
@@ -3049,21 +3273,65 @@ function bindEvents() {
     });
   });
 
-  document.getElementById("promptChips").addEventListener("click", (event) => {
-    const chip = event.target.closest("[data-prompt]");
-    if (chip) insertPrompt(chip.dataset.prompt);
-  });
+  const promptChips = document.getElementById("promptChips");
+  if (promptChips) {
+    promptChips.addEventListener("click", (event) => {
+      const chip = event.target.closest("[data-prompt]");
+      if (chip) insertPrompt(chip.dataset.prompt);
+    });
+  }
 
-  document.getElementById("reviewDate").addEventListener("change", () => {
+  document.getElementById("reviewDate")?.addEventListener("change", () => {
     loadReviewForDate(currentIso());
     updateStats();
   });
 
-  document.getElementById("clearReview").addEventListener("click", clearReview);
+  document.getElementById("journalDateBtn")?.addEventListener("click", () => {
+    const input = document.getElementById("reviewDate");
+    if (!input) return;
+    if (typeof input.showPicker === "function") input.showPicker();
+    else input.focus();
+  });
+
+  document.getElementById("clearReview")?.addEventListener("click", clearReview);
   const organizeBtn = document.getElementById("btnOrganize");
-  organizeBtn.disabled = false;
-  organizeBtn.addEventListener("click", runOrganize);
-  document.getElementById("micBtn").addEventListener("click", toggleMic);
+  if (organizeBtn) {
+    organizeBtn.disabled = false;
+    organizeBtn.addEventListener("click", runOrganize);
+  }
+  document.getElementById("micBtn")?.addEventListener("click", toggleMic);
+  document.getElementById("btnCompleteToday")?.addEventListener("click", completeToday);
+  document.getElementById("btnSaveDraft")?.addEventListener("click", saveJournalDraft);
+
+  document.getElementById("moodRow")?.addEventListener("click", (event) => {
+    const btn = event.target.closest(".mood-btn");
+    if (!btn) return;
+    const on = !btn.classList.contains("is-on");
+    document.querySelectorAll("#moodRow .mood-btn").forEach((item) => item.classList.toggle("is-on", on && item === btn));
+  });
+
+  document.getElementById("bodyTags")?.addEventListener("click", (event) => {
+    const btn = event.target.closest(".tag-btn");
+    if (!btn) return;
+    btn.classList.toggle("is-on");
+  });
+
+  document.getElementById("page-today")?.addEventListener("focusin", (event) => {
+    rememberSpeechTarget(event.target);
+  });
+
+  document.getElementById("page-today")?.addEventListener("click", (event) => {
+    const mini = event.target.closest("[data-voice-ui]");
+    if (!mini) return;
+    event.preventDefault();
+    const input = mini.closest(".thanks-row")?.querySelector("input, textarea");
+    if (input) {
+      input.focus();
+      rememberSpeechTarget(input);
+    }
+    mini.classList.toggle("is-on");
+    toggleMic();
+  });
 
   document.getElementById("aiStage").addEventListener("click", (event) => {
     const copyQuote = event.target.closest("[data-copy-quote]");
@@ -3252,6 +3520,7 @@ function init() {
   try {
     document.getElementById("headerDate").textContent = formatHeaderDate(new Date());
     document.getElementById("reviewDate").value = toInputDate(new Date());
+    updateJournalDateLabel(toInputDate(new Date()));
     const closed =
       localStorage.getItem("rv_sidebar") === "closed" || localStorage.getItem(STORAGE_KEYS.sidebar) === "1";
     if (closed && !isMobile()) {
