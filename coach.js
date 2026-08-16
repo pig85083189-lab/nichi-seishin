@@ -649,7 +649,7 @@ function renderAiStage() {
     <article class="ai-block gold-block">
       <h3>【今日金句】</h3>
       ${(quotes.length ? quotes : []).map((quote) => `<p class="gold-quote">${escapeHtml(quote)}</p>`).join("")}
-      <p class="sfm-hint">這幾句可以拿去發文（勾選後，完成今日復盤時會直接加入 SFM 素材庫）</p>
+      <p class="sfm-hint">這幾句可以拿去發文（勾選後，完成今日復盤時會直接加入『執行力』）</p>
       <div class="quote-list">${quoteChecks || sfmChecks}</div>
     </article>
     <article class="ai-block gratitude-box">
@@ -1237,7 +1237,7 @@ function renderTasks() {
   const tasks = getTasks().filter((task) => state.taskFilter === "all" || task.status === state.taskFilter);
 
   if (!getTasks().length) {
-    list.innerHTML = `<div class="empty"><p class="empty__title">還沒有下一步</p>從今日復盤勾選行動，或在上方手動新增一件最小的事。</div>`;
+    list.innerHTML = `<div class="empty"><p class="empty__title">覺察力還是空的</p>從今日復盤勾選行動，或在上方手動新增一件最小的事。</div>`;
     return;
   }
   if (!tasks.length) {
@@ -1292,7 +1292,7 @@ function renderSfm() {
   const grid = document.getElementById("sfmGrid");
   const items = getSfm().filter((item) => state.sfmFilter === "all" || item.type === state.sfmFilter);
   if (!getSfm().length) {
-    grid.innerHTML = `<div class="empty"><p class="empty__title">素材庫還是空的</p>完成今日復盤時，勾選金句就會自動來到這裡，供日後發文或寫作使用。</div>`;
+    grid.innerHTML = `<div class="empty"><p class="empty__title">執行力還是空的</p>完成今日復盤時，勾選金句就會自動來到這裡，供日後發文或寫作使用。</div>`;
     return;
   }
   if (!items.length) {

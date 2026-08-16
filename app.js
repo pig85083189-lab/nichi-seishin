@@ -287,12 +287,12 @@ function syncGuideToNextSteps(input, checked) {
   const detail = input.dataset.detail || "";
   if (checked) {
     const result = addTaskFromGuide({ key, label, detail });
-    if (result.added) showToast("已加入『我的下一步』");
-    else if (result.exists) showToast("這項已在『我的下一步』");
+    if (result.added) showToast("已加入『覺察力』");
+    else if (result.exists) showToast("這項已在『覺察力』");
     return;
   }
   const result = removeTaskFromGuide(key);
-  if (result.removed) showToast("已從『我的下一步』拿掉");
+  if (result.removed) showToast("已從『覺察力』拿掉");
   else if (result.kept) showToast("這項已在清單裡，改由你手動管理");
 }
 
@@ -366,13 +366,13 @@ function syncGuideToSfm(kind, index, checked) {
   }
   if (checked) {
     const result = addSfmFromGuide({ key, body, title, type, date: iso });
-    if (result.added) showToast("已存入 1 則到素材庫");
-    else if (result.exists) showToast("這則已在素材庫");
+    if (result.added) showToast("已存入 1 則到『執行力』");
+    else if (result.exists) showToast("這則已在『執行力』");
     return;
   }
   const result = removeSfmFromGuide(key);
-  if (result.removed) showToast("已從素材庫拿掉");
-  else if (result.kept) showToast("這則已在素材庫，改由你手動刪除");
+  if (result.removed) showToast("已從『執行力』拿掉");
+  else if (result.kept) showToast("這則已在『執行力』，改由你手動刪除");
 }
 
 function reviewIsComplete(review) {
@@ -1879,7 +1879,7 @@ function renderAiStage() {
             "今日金句",
             `
               ${quoteCards || `<p class="gold-quote">把今天寫下來，不是給別人看成績，是讓這一天確實被過過。</p>`}
-              <p class="sfm-hint">可直接複製當標題或筆記；勾選後會收入 SFM 素材庫</p>
+              <p class="sfm-hint">可直接複製當標題或筆記；勾選後會收入『執行力』</p>
               <div class="quote-list">${quoteChecks || ""}</div>
             `
           )}
@@ -1907,7 +1907,7 @@ function renderAiStage() {
           ? renderReviewCard({
               title: "Story · Feeling · Meaning",
               body: `
-                <p class="sfm-hint">也可勾選下面這幾段體悟，一併收入素材庫。</p>
+                <p class="sfm-hint">也可勾選下面這幾段體悟，一併收入『執行力』。</p>
                 <div class="quote-list">${sfmChecks}</div>
               `,
             })
@@ -2736,7 +2736,7 @@ function renderTasks() {
   const tasks = getTasks().filter((task) => state.taskFilter === "all" || task.status === state.taskFilter);
 
   if (!getTasks().length) {
-    list.innerHTML = `<div class="empty"><p class="empty__title">還沒有下一步</p>從今日復盤勾選行動，或在上方手動新增一件最小的事。</div>`;
+    list.innerHTML = `<div class="empty"><p class="empty__title">覺察力還是空的</p>從今日復盤勾選行動，或在上方手動新增一件最小的事。</div>`;
     return;
   }
   if (!tasks.length) {
@@ -2791,7 +2791,7 @@ function renderSfm() {
   const grid = document.getElementById("sfmGrid");
   const items = getSfm().filter((item) => state.sfmFilter === "all" || item.type === state.sfmFilter);
   if (!getSfm().length) {
-    grid.innerHTML = `<div class="empty"><p class="empty__title">素材庫還是空的</p>在復盤結果勾選金句，就會立刻存到這裡，重新整理也不會遺失。</div>`;
+    grid.innerHTML = `<div class="empty"><p class="empty__title">執行力還是空的</p>在復盤結果勾選金句，就會立刻存到這裡，重新整理也不會遺失。</div>`;
     return;
   }
   if (!items.length) {
@@ -3187,7 +3187,7 @@ function bindEvents() {
     if (deleteBtn) {
       saveSfm(getSfm().filter((item) => item.id !== deleteBtn.dataset.sfmDelete));
       renderSfm();
-      showToast("已從素材庫移除。");
+      showToast("已從『執行力』移除。");
     }
   });
 
