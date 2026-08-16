@@ -29,7 +29,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="app.css?v=63" />
+    <link rel="stylesheet" href="app.css?v=65" />
   </head>
   <body>
     <script>
@@ -421,7 +421,22 @@
         <section class="page" id="page-next" data-page="next" hidden>
           <header class="page__header">
             <h2 class="page__title">覺察力</h2>
-            <p class="page__subtitle">把復盤裡長出來的行動，放在看得見的地方。</p>
+            <p class="page__subtitle">個人歷史覺察總覽。復盤裡勾選的洞察，會自動收在這裡。</p>
+          </header>
+
+          <div class="chips" role="tablist" aria-label="覺察篩選" id="insightFilters">
+            <button class="chip is-active" data-insight-filter="all" type="button">全部</button>
+            <button class="chip" data-insight-filter="week" type="button">本週</button>
+            <button class="chip" data-insight-filter="month" type="button">本月</button>
+          </div>
+
+          <div class="library-list" id="insightList"></div>
+        </section>
+
+        <section class="page" id="page-sfm" data-page="sfm" hidden>
+          <header class="page__header">
+            <h2 class="page__title">執行力</h2>
+            <p class="page__subtitle">待辦與歷史行動總覽。復盤裡勾選的行動卡點，會同步到這裡。</p>
           </header>
 
           <form class="panel add-task" id="taskForm">
@@ -429,7 +444,7 @@
               class="input"
               id="taskTitle"
               type="text"
-              placeholder="新增下一步，例如：明天只做一件最小的事"
+              placeholder="新增行動，例如：明天只做一件最小的事"
               required
             />
             <select class="input select" id="taskSource" aria-label="來源">
@@ -441,7 +456,7 @@
             <button class="btn" type="submit">加入</button>
           </form>
 
-          <div class="chips" role="tablist" aria-label="待辦分類" id="taskFilters">
+          <div class="chips" role="tablist" aria-label="行動分類" id="taskFilters">
             <button class="chip is-active" data-filter="all" type="button">全部</button>
             <button class="chip" data-filter="doing" type="button">進行中</button>
             <button class="chip" data-filter="later" type="button">先放著</button>
@@ -449,22 +464,6 @@
           </div>
 
           <div class="task-list" id="taskList"></div>
-        </section>
-
-        <section class="page" id="page-sfm" data-page="sfm" hidden>
-          <header class="page__header">
-            <h2 class="page__title">執行力</h2>
-            <p class="page__subtitle">Story · Feeling · Meaning — 給日後發文與寫作用的故事、感受與意義。</p>
-          </header>
-
-          <div class="chips" role="tablist" aria-label="素材分類" id="sfmFilters">
-            <button class="chip is-active" data-sfm="all" type="button">全部</button>
-            <button class="chip" data-sfm="story" type="button">Story 故事</button>
-            <button class="chip" data-sfm="feeling" type="button">Feeling 感受</button>
-            <button class="chip" data-sfm="meaning" type="button">Meaning 意義</button>
-          </div>
-
-          <div class="sfm-grid" id="sfmGrid"></div>
         </section>
 
         <section class="page" id="page-history" data-page="history" hidden>
@@ -519,6 +518,6 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=75"></script>
+    <script src="app.js?v=77"></script>
   </body>
 </html>

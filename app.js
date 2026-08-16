@@ -7,6 +7,7 @@ const STORAGE_KEYS = {
   reviews: "nichi.reviews",
   tasks: "nichi.tasks",
   sfm: "nichi.sfm",
+  insights: "nichi.insights",
   reminder: "nichi.reminder",
   sidebar: "nichi.sidebarCollapsed",
   reports: "nichi.reports",
@@ -49,6 +50,7 @@ const state = {
   page: "today",
   reportType: "week",
   taskFilter: "all",
+  insightFilter: "all",
   sfmFilter: "all",
   historyQuery: "",
   historyTag: "all",
@@ -109,7 +111,7 @@ function saveJson(key, value, options = {}) {
   localStorage.setItem(key, JSON.stringify(value));
   if (
     !options.silent &&
-    [STORAGE_KEYS.reviews, STORAGE_KEYS.tasks, STORAGE_KEYS.sfm, STORAGE_KEYS.reports].includes(key)
+    [STORAGE_KEYS.reviews, STORAGE_KEYS.tasks, STORAGE_KEYS.sfm, STORAGE_KEYS.insights, STORAGE_KEYS.reports].includes(key)
   ) {
     scheduleCloudSync();
   }
@@ -258,26 +260,30 @@ function findTaskBySourceKey(key) {
   return getTasks().find((task) => task.sourceKey === key) || null;
 }
 
-function addTaskFromGuide({ key, label, detail }) {
+function addTaskFromGuide({ key, label, detail, source, date }) {
   const title = taskTitleFromParts(label, detail);
   if (!title) return { added: false };
+  const iso = date || currentIso();
   const tasks = getTasks();
-  if (tasks.some((task) => task.sourceKey === key || task.title === title)) {
+  if (key && tasks.some((task) => task.sourceKey === key)) return { added: false, exists: true };
+  if (tasks.some((task) => task.title === title && task.date === iso)) {
     return { added: false, exists: true };
   }
   tasks.unshift({
     id: uid(),
     title,
     status: "doing",
-    source: "今日復盤",
+    source: source || "今日復盤",
     sourceKey: key || "",
+    date: iso,
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   });
   saveTasks(tasks);
   try {
     renderTasks();
   } catch {
-    /* 下一步頁面還沒畫也沒關係 */
+    /* 執行力頁面還沒畫也沒關係 */
   }
   return { added: true };
 }
@@ -304,12 +310,12 @@ function syncGuideToNextSteps(input, checked) {
   const detail = input.dataset.detail || "";
   if (checked) {
     const result = addTaskFromGuide({ key, label, detail });
-    if (result.added) showToast("已加入『覺察力』");
-    else if (result.exists) showToast("這項已在『覺察力』");
+    if (result.added) showToast("已加入『執行力』");
+    else if (result.exists) showToast("這項已在『執行力』");
     return;
   }
   const result = removeTaskFromGuide(key);
-  if (result.removed) showToast("已從『覺察力』拿掉");
+  if (result.removed) showToast("已從『執行力』拿掉");
   else if (result.kept) showToast("這項已在清單裡，改由你手動管理");
 }
 
@@ -320,6 +326,69 @@ function getSfm() {
 
 function saveSfm(items) {
   saveJson(STORAGE_KEYS.sfm, items);
+}
+
+function getInsights() {
+  const saved = loadJson(STORAGE_KEYS.insights, []);
+  return Array.isArray(saved) ? saved : [];
+}
+
+function saveInsights(items) {
+  saveJson(STORAGE_KEYS.insights, items);
+}
+
+function addInsight({ key, title, date, source }) {
+  const text = String(title || "").trim();
+  if (!text) return { added: false };
+  const items = getInsights();
+  if (key && items.some((item) => item.sourceKey === key)) return { added: false, exists: true };
+  if (items.some((item) => item.title === text && item.date === (date || currentIso()))) {
+    return { added: false, exists: true };
+  }
+  items.unshift({
+    id: uid(),
+    title: text,
+    date: date || currentIso(),
+    source: source || "今日復盤",
+    sourceKey: key || "",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  saveInsights(items);
+  try {
+    renderInsights();
+  } catch {
+    /* 覺察力頁面還沒畫也沒關係 */
+  }
+  return { added: true };
+}
+
+function syncJournalLibraries(iso, journal) {
+  const data = journal && typeof journal === "object" ? journal : {};
+  (data.awarenessChecks || []).forEach((label) => {
+    addInsight({
+      key: `insight:${iso}:${label}`,
+      title: label,
+      date: iso,
+      source: "今日復盤",
+    });
+  });
+  (data.executionChecks || []).forEach((label) => {
+    addTaskFromGuide({
+      key: `exec:${iso}:${label}`,
+      label,
+      detail: "",
+      source: "今日復盤",
+      date: iso,
+    });
+  });
+}
+
+function backfillLibrariesFromReviews() {
+  Object.entries(getReviews()).forEach(([iso, review]) => {
+    if (!review || !(review.completedAt || review.journal)) return;
+    syncJournalLibraries(iso, review.journal || {});
+  });
 }
 
 function sfmGuideKey(kind, index, iso) {
@@ -901,6 +970,7 @@ function collectCloudBundle() {
     reviews: getReviews(),
     tasks: getTasks(),
     sfm: getSfm(),
+    insights: getInsights(),
     reports: getStoredReports(),
   };
 }
@@ -917,7 +987,7 @@ async function pushCloudData() {
         reviews: bundle.reviews,
         tasks: bundle.tasks,
         sfm: bundle.sfm,
-        reports: bundle.reports,
+        reports: { ...(bundle.reports || {}), __insights: bundle.insights || [] },
         updated_at: new Date().toISOString(),
       },
       { onConflict: "user_id" }
@@ -967,7 +1037,22 @@ function mergeCloudBundle(cloud) {
     });
     saveJson(STORAGE_KEYS.sfm, [...sfmMap.values()], { silent: true });
 
-    saveJson(STORAGE_KEYS.reports, { ...getStoredReports(), ...(cloud.reports || {}) }, { silent: true });
+    const rawInsights = Array.isArray(cloud.insights)
+      ? cloud.insights
+      : Array.isArray(cloud.reports && cloud.reports.__insights)
+        ? cloud.reports.__insights
+        : [];
+    const insightMap = new Map();
+    [...getInsights(), ...rawInsights].forEach((item) => {
+      if (!item || !item.id) return;
+      const current = insightMap.get(item.id);
+      if (!current || newerStamp(item, current)) insightMap.set(item.id, item);
+    });
+    saveJson(STORAGE_KEYS.insights, [...insightMap.values()], { silent: true });
+
+    const reports = { ...(cloud.reports || {}) };
+    delete reports.__insights;
+    saveJson(STORAGE_KEYS.reports, { ...getStoredReports(), ...reports }, { silent: true });
   } finally {
     state.syncing = false;
   }
@@ -990,8 +1075,8 @@ async function pullCloudData() {
   try {
     loadReviewForDate(currentIso());
     updateStats();
-    if (state.page === "next") renderTasks();
-    if (state.page === "sfm") renderSfm();
+    if (state.page === "next") renderInsights();
+    if (state.page === "sfm") renderTasks();
     if (state.page === "history") renderHistory();
     if (state.page === "report") renderReport();
   } catch {
@@ -1316,12 +1401,16 @@ function normalizeRemoteBundle(row) {
   const tasks = row.tasks || (nested && nested.tasks);
   const sfm = row.sfm || (nested && nested.sfm);
   const reports = row.reports || (nested && nested.reports);
-  if (!reviews && !tasks && !sfm && !reports) return null;
+  const reportsRaw = reports && typeof reports === "object" && !Array.isArray(reports) ? { ...reports } : {};
+  const insights = row.insights || (nested && nested.insights) || reportsRaw.__insights;
+  delete reportsRaw.__insights;
+  if (!reviews && !tasks && !sfm && !Object.keys(reportsRaw).length && !(insights && insights.length)) return null;
   return {
     reviews: reviews && typeof reviews === "object" && !Array.isArray(reviews) ? reviews : {},
     tasks: Array.isArray(tasks) ? tasks : [],
     sfm: Array.isArray(sfm) ? sfm : [],
-    reports: reports && typeof reports === "object" && !Array.isArray(reports) ? reports : {},
+    insights: Array.isArray(insights) ? insights : [],
+    reports: reportsRaw,
   };
 }
 
@@ -1576,8 +1665,8 @@ function switchPage(page) {
   });
   if (isMobile()) setSidebarOpen(false);
   if (page === "report") renderReport();
-  if (page === "next") renderTasks();
-  if (page === "sfm") renderSfm();
+  if (page === "next") renderInsights();
+  if (page === "sfm") renderTasks();
   if (page === "history") renderHistory();
 }
 
@@ -3356,6 +3445,8 @@ function completeToday() {
     updatedAt: new Date().toISOString(),
   });
 
+  syncJournalLibraries(iso, collected.journal || getReview(iso)?.journal || {});
+
   if (organize) {
     (organize.sfm || []).forEach((item, index) => {
       if (!state.selectedSfm.includes(`sfm:${index}`)) return;
@@ -3388,7 +3479,7 @@ function completeToday() {
 
   updateStats();
   syncReviewsToCloud();
-  showToast("今日復盤已完成，筆記、金句與下一步都收好了。");
+  showToast("今日復盤已完成，勾選的覺察與行動已同步到側邊欄。");
 }
 
 function inferSfmType(text) {
@@ -3499,7 +3590,7 @@ function renderTasks() {
   const tasks = getTasks().filter((task) => state.taskFilter === "all" || task.status === state.taskFilter);
 
   if (!getTasks().length) {
-    list.innerHTML = `<div class="empty"><p class="empty__title">覺察力還是空的</p>從今日復盤勾選行動，或在上方手動新增一件最小的事。</div>`;
+    list.innerHTML = `<div class="empty"><p class="empty__title">執行力還是空的</p>在今日復盤勾選行動卡點，完成復盤後就會出現在這裡。</div>`;
     return;
   }
   if (!tasks.length) {
@@ -3507,27 +3598,41 @@ function renderTasks() {
     return;
   }
 
-  list.innerHTML = tasks
-    .map((task) => {
-      const created = task.createdAt ? formatDisplayDate(task.createdAt.slice(0, 10)) : "";
-      return `
-        <article class="task-card">
-          <div>
-            <p class="task-card__title">${escapeHtml(task.title)}</p>
-            <div class="task-card__meta">
-              <span class="tag tag--${escapeHtml(task.status)}">${escapeHtml(STATUS_LABEL[task.status] || task.status)}</span>
-              <span class="tag">${escapeHtml(task.source || "自行新增")}</span>
-              ${created ? `<span class="tag">${created}</span>` : ""}
-            </div>
-          </div>
-          <div class="task-card__actions">
-            <button class="btn btn--ghost btn--tiny" data-task-status="${task.id}" data-to="doing" type="button">進行中</button>
-            <button class="btn btn--ghost btn--tiny" data-task-status="${task.id}" data-to="later" type="button">先放著</button>
-            <button class="btn btn--ghost btn--tiny" data-task-status="${task.id}" data-to="done" type="button">已完成</button>
-            <button class="btn btn--ghost btn--tiny" data-task-delete="${task.id}" type="button">刪除</button>
-          </div>
-        </article>
-      `;
+  const grouped = new Map();
+  tasks.forEach((task) => {
+    const iso = task.date || String(task.createdAt || "").slice(0, 10) || "";
+    if (!grouped.has(iso)) grouped.set(iso, []);
+    grouped.get(iso).push(task);
+  });
+  const sections = [...grouped.entries()].sort((a, b) => String(b[0]).localeCompare(String(a[0])));
+
+  list.innerHTML = sections
+    .map(([iso, items]) => {
+      const dateLabel = iso ? formatDisplayDate(iso) : "未標日期";
+      const cards = items
+        .map((task) => {
+          const created = task.createdAt ? formatDisplayDate(task.createdAt.slice(0, 10)) : "";
+          return `
+            <article class="task-card">
+              <div>
+                <p class="task-card__title">${escapeHtml(task.title)}</p>
+                <div class="task-card__meta">
+                  <span class="tag tag--${escapeHtml(task.status)}">${escapeHtml(STATUS_LABEL[task.status] || task.status)}</span>
+                  <span class="tag">${escapeHtml(task.source || "自行新增")}</span>
+                  ${created && created !== dateLabel ? `<span class="tag">${created}</span>` : ""}
+                </div>
+              </div>
+              <div class="task-card__actions">
+                <button class="btn btn--ghost btn--tiny" data-task-status="${task.id}" data-to="doing" type="button">進行中</button>
+                <button class="btn btn--ghost btn--tiny" data-task-status="${task.id}" data-to="later" type="button">先放著</button>
+                <button class="btn btn--ghost btn--tiny" data-task-status="${task.id}" data-to="done" type="button">已完成</button>
+                <button class="btn btn--ghost btn--tiny" data-task-delete="${task.id}" type="button">刪除</button>
+              </div>
+            </article>
+          `;
+        })
+        .join("");
+      return `<section class="library-group"><h3 class="library-group__date">${escapeHtml(dateLabel)}</h3>${cards}</section>`;
     })
     .join("");
 }
@@ -3542,16 +3647,76 @@ function addTask(event) {
     title,
     status: "doing",
     source: document.getElementById("taskSource").value,
+    date: currentIso(),
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   });
   saveTasks(tasks);
   document.getElementById("taskTitle").value = "";
   renderTasks();
-  showToast("下一步已加入。");
+  showToast("行動已加入。");
+}
+
+function insightInRange(item) {
+  const iso = item.date || String(item.createdAt || "").slice(0, 10);
+  const date = parseIsoDate(iso);
+  if (!date) return state.insightFilter === "all";
+  const today = startOfDay(new Date());
+  if (state.insightFilter === "week") return date >= startOfWeek(today) && date <= today;
+  if (state.insightFilter === "month") {
+    return date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth();
+  }
+  return true;
+}
+
+function renderInsights() {
+  const list = document.getElementById("insightList");
+  if (!list) return;
+  const all = getInsights();
+  const items = all.filter(insightInRange);
+  if (!all.length) {
+    list.innerHTML = `<div class="empty"><p class="empty__title">還沒有已覺察洞察</p>在今日復盤的覺察力勾選項目，完成復盤後就會出現在這裡。</div>`;
+    return;
+  }
+  if (!items.length) {
+    list.innerHTML = `<div class="empty">這個區間目前沒有洞察。</div>`;
+    return;
+  }
+  const grouped = new Map();
+  items.forEach((item) => {
+    const iso = item.date || String(item.createdAt || "").slice(0, 10) || "";
+    if (!grouped.has(iso)) grouped.set(iso, []);
+    grouped.get(iso).push(item);
+  });
+  list.innerHTML = [...grouped.entries()]
+    .sort((a, b) => String(b[0]).localeCompare(String(a[0])))
+    .map(([iso, rows]) => {
+      const cards = rows
+        .map(
+          (item) => `
+            <article class="task-card">
+              <div>
+                <p class="task-card__title">${escapeHtml(item.title)}</p>
+                <div class="task-card__meta">
+                  <span class="tag">已覺察洞察</span>
+                  <span class="tag">${escapeHtml(item.source || "今日復盤")}</span>
+                </div>
+              </div>
+              <div class="task-card__actions">
+                <button class="btn btn--ghost btn--tiny" data-insight-delete="${item.id}" type="button">刪除</button>
+              </div>
+            </article>
+          `
+        )
+        .join("");
+      return `<section class="library-group"><h3 class="library-group__date">${escapeHtml(iso ? formatDisplayDate(iso) : "未標日期")}</h3>${cards}</section>`;
+    })
+    .join("");
 }
 
 function renderSfm() {
   const grid = document.getElementById("sfmGrid");
+  if (!grid) return;
   const items = getSfm().filter((item) => state.sfmFilter === "all" || item.type === state.sfmFilter);
   if (!getSfm().length) {
     grid.innerHTML = `<div class="empty"><p class="empty__title">執行力還是空的</p>在復盤結果勾選金句，就會立刻存到這裡，重新整理也不會遺失。</div>`;
@@ -3975,38 +4140,57 @@ function bindEvents() {
     });
   });
 
-  document.getElementById("taskForm").addEventListener("submit", addTask);
-  document.getElementById("taskFilters").addEventListener("click", (event) => {
+  document.getElementById("taskForm")?.addEventListener("submit", addTask);
+  document.getElementById("taskFilters")?.addEventListener("click", (event) => {
     const chip = event.target.closest("[data-filter]");
     if (!chip) return;
     state.taskFilter = chip.dataset.filter;
     document.querySelectorAll("#taskFilters .chip").forEach((item) => item.classList.toggle("is-active", item === chip));
     renderTasks();
   });
-  document.getElementById("taskList").addEventListener("click", (event) => {
+  document.getElementById("taskList")?.addEventListener("click", (event) => {
     const statusBtn = event.target.closest("[data-task-status]");
     const deleteBtn = event.target.closest("[data-task-delete]");
     let tasks = getTasks();
     if (statusBtn) {
-      tasks = tasks.map((task) => (task.id === statusBtn.dataset.taskStatus ? { ...task, status: statusBtn.dataset.to } : task));
+      tasks = tasks.map((task) =>
+        task.id === statusBtn.dataset.taskStatus
+          ? { ...task, status: statusBtn.dataset.to, updatedAt: new Date().toISOString() }
+          : task
+      );
       saveTasks(tasks);
       renderTasks();
     }
     if (deleteBtn) {
       saveTasks(tasks.filter((task) => task.id !== deleteBtn.dataset.taskDelete));
       renderTasks();
-      showToast("已刪除這一步。");
+      showToast("已刪除這項行動。");
     }
   });
 
-  document.getElementById("sfmFilters").addEventListener("click", (event) => {
+  document.getElementById("insightFilters")?.addEventListener("click", (event) => {
+    const chip = event.target.closest("[data-insight-filter]");
+    if (!chip) return;
+    state.insightFilter = chip.dataset.insightFilter;
+    document.querySelectorAll("#insightFilters .chip").forEach((item) => item.classList.toggle("is-active", item === chip));
+    renderInsights();
+  });
+  document.getElementById("insightList")?.addEventListener("click", (event) => {
+    const deleteBtn = event.target.closest("[data-insight-delete]");
+    if (!deleteBtn) return;
+    saveInsights(getInsights().filter((item) => item.id !== deleteBtn.dataset.insightDelete));
+    renderInsights();
+    showToast("已刪除這則洞察。");
+  });
+
+  document.getElementById("sfmFilters")?.addEventListener("click", (event) => {
     const chip = event.target.closest("[data-sfm]");
     if (!chip) return;
     state.sfmFilter = chip.dataset.sfm;
     document.querySelectorAll("#sfmFilters .chip").forEach((item) => item.classList.toggle("is-active", item === chip));
     renderSfm();
   });
-  document.getElementById("sfmGrid").addEventListener("click", async (event) => {
+  document.getElementById("sfmGrid")?.addEventListener("click", async (event) => {
     const copyBtn = event.target.closest("[data-sfm-copy]");
     const deleteBtn = event.target.closest("[data-sfm-delete]");
     if (copyBtn) {
@@ -4097,6 +4281,7 @@ function init() {
     }
     renderPromptChips();
     loadReviewForDate(currentIso());
+    backfillLibrariesFromReviews();
     updateStats();
     initReminder();
     setupSpeech();
