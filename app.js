@@ -115,6 +115,7 @@ const state = {
   promptsToken: 0,
   corePromptsBusy: false,
   corePromptsToken: 0,
+  corePromptsFailedSig: "",
   awarenessPrompts: [],
   executionPrompts: [],
   deepPrompts: [],
@@ -3249,10 +3250,21 @@ function coreAnswerFilled(answers) {
   return joinJournalAnswers(answers).length >= 4;
 }
 
+function threePromptAnswersReady(answers) {
+  return (Array.isArray(answers) ? answers : []).filter((item) => String(item || "").trim()).length >= 3;
+}
+
 function awarenessReady(answers, mode = state.journalMode) {
   const list = Array.isArray(answers) ? answers : [];
+  if (normalizeAwarenessPrompts(state.awarenessPrompts).length >= 3) return threePromptAnswersReady(list);
   if (mode === "quick") return String(list[0] || "").trim().length >= 4;
-  return list.filter((item) => String(item || "").trim()).length >= 3;
+  return threePromptAnswersReady(list);
+}
+
+function executionReady(answers) {
+  const list = Array.isArray(answers) ? answers : [];
+  if (normalizeExecutionPrompts(state.executionPrompts).length >= 3) return threePromptAnswersReady(list);
+  return coreAnswerFilled(list);
 }
 
 function fillAwarenessAnswers(answers) {
@@ -3356,6 +3368,7 @@ function refreshJournalChecklists(journal, options = {}) {
 
 function scheduleJournalChecklists() {
   if (state.journalHydrating) return;
+  syncCorePromptGate();
   clearTimeout(state.journalCheckTimer);
   state.journalCheckTimer = setTimeout(() => {
     const data = collectJournal();
@@ -3397,9 +3410,9 @@ function checklistUi(kind) {
     return { btn: "btnManifestAi", loader: "manifestLoading", list: "manifestChecks", idle: "生成執行目標" };
   }
   if (kind === "awareness") {
-    return { btn: "btnAwareAi", loader: "awareLoading", list: "awareChecks", idle: "分析並生成勾勾表" };
+    return { btn: "btnAwareAi", loader: "awareLoading", list: "awareChecks", idle: "生成客製化覺察勾勾表" };
   }
-  return { btn: "btnExecAi", loader: "execLoading", list: "execChecks", idle: "分析並生成勾勾表" };
+  return { btn: "btnExecAi", loader: "execLoading", list: "execChecks", idle: "生成專屬行動卡點勾勾表" };
 }
 
 function setChecklistLoading(kind, loading) {
@@ -3439,9 +3452,9 @@ async function generateJournalChecklist(kind, options = {}) {
   if (state.checklistBusy[kind]) return;
   const journal = collectJournal();
   const answers = isAware ? journal.awareness : journal.execution;
-  const ready = isAware ? awarenessReady(answers) : coreAnswerFilled(answers);
+  const ready = isAware ? awarenessReady(answers) : executionReady(answers);
   if (!ready) {
-    if (!options.auto) showToast(isAware ? "先把覺察題寫完，再整理勾勾表。" : "先把執行力題目寫完，再整理勾勾表。");
+    if (!options.auto) showToast(isAware ? "先把三道覺察題寫完，再生成勾勾表。" : "先把三道執行突破題寫完，再生成勾勾表。");
     return;
   }
   const sig = checklistSignature(answers);
@@ -3501,7 +3514,7 @@ function maybeAutoGenerateChecklists(journal) {
   if (quickModuleOn("aware", journal) && awarenessReady(journal.awareness, "deep") && state.journalMeta.awarenessAiSig !== checklistSignature(journal.awareness)) {
     generateJournalChecklist("awareness", { auto: true });
   }
-  if (quickModuleOn("exec", journal) && coreAnswerFilled(journal.execution) && state.journalMeta.executionAiSig !== checklistSignature(journal.execution)) {
+  if (quickModuleOn("exec", journal) && executionReady(journal.execution) && state.journalMeta.executionAiSig !== checklistSignature(journal.execution)) {
     generateJournalChecklist("execution", { auto: true });
   }
 }
@@ -4214,6 +4227,8 @@ function collectGrowthProgress() {
   };
 }
 
+const CORE_WAIT_COPY = "請先完成上方今日感謝與事件，將為你生成今日專屬的覺察與執行反思題";
+
 function currentAwarenessQuestions() {
   const prompts = normalizeAwarenessPrompts(state.awarenessPrompts);
   if (prompts.length) return prompts.map((item) => item.question);
@@ -4245,27 +4260,76 @@ function corePromptsHaveAnswers(journal) {
   );
 }
 
+function isStockCoreQuestion(question) {
+  const q = String(question || "").trim();
+  if (!q) return true;
+  if (AWARENESS_QUESTIONS.some((item) => item.question === q)) return true;
+  return q === CORE_EXECUTION_PROMPT.question;
+}
+
+function keepHydratedCorePrompts(prompts, hasAnswers, fromAi) {
+  if (prompts.length < 3) return false;
+  if (hasAnswers) return true;
+  if (!fromAi) return false;
+  return !prompts.some((item) => isStockCoreQuestion(item.question));
+}
+
 function hydrateAwarenessPrompts(data) {
   const prompts = normalizeAwarenessPrompts(data?.awarenessPrompts);
-  if (prompts.length >= 3) return prompts;
   const hasAnswers = (data?.awareness || []).some((item) => String(item || "").trim());
-  if (hasAnswers) return AWARENESS_QUESTIONS.map((item, index) => prompts[index] || item);
-  return prompts;
+  if (keepHydratedCorePrompts(prompts, hasAnswers, data?.corePromptsAi)) return prompts.slice(0, 3);
+  return [];
 }
 
 function hydrateExecutionPrompts(data) {
   const prompts = normalizeExecutionPrompts(data?.executionPrompts);
-  if (prompts.length >= 3) return prompts;
   const hasAnswers = (data?.execution || []).some((item) => String(item || "").trim());
-  if (hasAnswers || prompts.length) {
-    const local = localExecutionPrompts(data);
-    return [prompts[0] || local[0], prompts[1] || local[1], prompts[2] || local[2]];
-  }
-  return prompts;
+  if (keepHydratedCorePrompts(prompts, hasAnswers, data?.corePromptsAi)) return prompts.slice(0, 3);
+  return [];
+}
+
+function hasCorePromptSet() {
+  return (
+    normalizeAwarenessPrompts(state.awarenessPrompts).length >= 3 &&
+    normalizeExecutionPrompts(state.executionPrompts).length >= 3
+  );
 }
 
 function collectPromptAnswers(prefix, count = 3) {
   return Array.from({ length: count }, (_, index) => journalFieldValue(`${prefix}${index + 1}`));
+}
+
+function syncCorePromptGate() {
+  const ready = coreStoryReady();
+  const loading = Boolean(state.corePromptsBusy);
+  const hasAware = normalizeAwarenessPrompts(state.awarenessPrompts).length >= 3;
+  const hasExec = normalizeExecutionPrompts(state.executionPrompts).length >= 3;
+  const awareEmpty = document.getElementById("awareEmpty");
+  const execEmpty = document.getElementById("execEmpty");
+  const awareBtn = document.getElementById("btnAwarePrompts");
+  const execBtn = document.getElementById("btnExecPrompts");
+  if (awareEmpty) {
+    awareEmpty.textContent = CORE_WAIT_COPY;
+    awareEmpty.hidden = loading || hasAware;
+  }
+  if (execEmpty) {
+    execEmpty.textContent = CORE_WAIT_COPY;
+    execEmpty.hidden = loading || hasExec;
+  }
+  if (awareBtn) {
+    awareBtn.hidden = hasAware;
+    if (!awareBtn.hidden) {
+      awareBtn.disabled = !ready || loading;
+      awareBtn.textContent = loading ? "出題中…" : "生成今日專屬反思題";
+    }
+  }
+  if (execBtn) {
+    execBtn.hidden = hasExec;
+    if (!execBtn.hidden) {
+      execBtn.disabled = !ready || loading;
+      execBtn.textContent = loading ? "出題中…" : "生成今日專屬行動題";
+    }
+  }
 }
 
 function renderDynamicQuestions(rootId, emptyId, genBtnId, checkBtnId, prompts, prefix, answers, rows) {
@@ -4277,8 +4341,14 @@ function renderDynamicQuestions(rootId, emptyId, genBtnId, checkBtnId, prompts, 
   if (!root) return;
   if (!items.length) {
     root.innerHTML = "";
-    if (empty) empty.hidden = false;
-    if (genBtn) genBtn.hidden = false;
+    if (empty) {
+      empty.textContent = CORE_WAIT_COPY;
+      empty.hidden = Boolean(state.corePromptsBusy);
+    }
+    if (genBtn) {
+      genBtn.hidden = false;
+      genBtn.disabled = !coreStoryReady() || Boolean(state.corePromptsBusy);
+    }
     if (checkBtn) checkBtn.hidden = true;
     return;
   }
@@ -4436,6 +4506,7 @@ function applyGeneratedCorePrompts(awareness, execution, sig, fromAi) {
   state.executionPrompts = normalizeExecutionPrompts(execution);
   state.journalMeta.corePromptsSig = sig;
   state.journalMeta.corePromptsAi = Boolean(fromAi);
+  if (fromAi) state.corePromptsFailedSig = "";
   renderAwarenessQuestions(state.awarenessPrompts, { answers: awareAnswers });
   renderExecutionQuestions(state.executionPrompts, { answers: execAnswers });
   persistJournalQuietly();
@@ -4445,28 +4516,9 @@ function setCorePromptsLoading(loading) {
   state.corePromptsBusy = loading;
   const awareLoader = document.getElementById("awarePromptLoading");
   const execLoader = document.getElementById("execPromptLoading");
-  const awareEmpty = document.getElementById("awareEmpty");
-  const execEmpty = document.getElementById("execEmpty");
-  const awareBtn = document.getElementById("btnAwarePrompts");
-  const execBtn = document.getElementById("btnExecPrompts");
-  const hasSet =
-    normalizeAwarenessPrompts(state.awarenessPrompts).length >= 3 &&
-    normalizeExecutionPrompts(state.executionPrompts).length >= 3;
   if (awareLoader) awareLoader.hidden = !loading;
   if (execLoader) execLoader.hidden = !loading;
-  if (awareEmpty) awareEmpty.hidden = loading || hasSet;
-  if (execEmpty) execEmpty.hidden = loading || hasSet;
-  [awareBtn, execBtn].forEach((btn) => {
-    if (!btn) return;
-    if (hasSet) btn.hidden = true;
-    if (btn.hidden) return;
-    btn.disabled = loading;
-    btn.textContent = loading
-      ? "出題中…"
-      : btn.id === "btnExecPrompts"
-        ? "生成今日專屬行動題"
-        : "生成今日專屬反思題";
-  });
+  syncCorePromptGate();
 }
 
 async function generateCorePrompts(options = {}) {
@@ -4474,14 +4526,16 @@ async function generateCorePrompts(options = {}) {
   const journal = collectJournal();
   if (!coreStoryReady(journal)) {
     if (!options.auto) showToast("請先寫下今日感謝、事件，並選擇心情。");
+    syncCorePromptGate();
     return;
   }
   const sig = corePromptsSignature(journal);
-  const hasSet =
-    normalizeAwarenessPrompts(state.awarenessPrompts).length >= 3 &&
-    normalizeExecutionPrompts(state.executionPrompts).length >= 3;
+  const hasSet = hasCorePromptSet();
   if (!options.force && corePromptsHaveAnswers(journal) && hasSet) return;
-  if (options.auto && !options.force && state.journalMeta.corePromptsSig === sig && hasSet) return;
+  if (options.auto && !options.force && hasSet && state.journalMeta.corePromptsAi && state.journalMeta.corePromptsSig === sig) {
+    return;
+  }
+  if (options.auto && !options.force && state.corePromptsFailedSig === sig) return;
 
   const token = (state.corePromptsToken || 0) + 1;
   state.corePromptsToken = token;
@@ -4509,8 +4563,12 @@ async function generateCorePrompts(options = {}) {
     if (!options.auto) showToast("今天的覺察與執行題已生成。");
   } catch (error) {
     if (state.corePromptsToken !== token) return;
-    applyGeneratedCorePrompts(localAwarenessPrompts(journal), localExecutionPrompts(journal), sig, false);
-    if (!options.auto) showToast(`雲端出題失敗：${formatApiError(error)}，先用今天的本地題目。`);
+    if (options.auto) state.corePromptsFailedSig = sig;
+    showToast(
+      options.auto
+        ? `今日專屬題目還沒生成：${formatApiError(error)}。可點按鈕再試一次。`
+        : `雲端出題失敗：${formatApiError(error)}。請再試一次。`
+    );
   } finally {
     if (state.corePromptsToken === token) setCorePromptsLoading(false);
   }
@@ -4518,14 +4576,18 @@ async function generateCorePrompts(options = {}) {
 
 function maybeAutoGenerateCorePrompts(journal) {
   if (state.journalHydrating) return;
-  if (state.journalMode === "quick" && !state.quickModules?.aware && !state.quickModules?.exec) return;
+  if (state.journalMode === "quick" && !state.quickModules?.aware && !state.quickModules?.exec) {
+    syncCorePromptGate();
+    return;
+  }
   const data = journal || collectJournal();
+  syncCorePromptGate();
   if (!coreStoryReady(data)) return;
-  const hasSet =
-    normalizeAwarenessPrompts(state.awarenessPrompts).length >= 3 &&
-    normalizeExecutionPrompts(state.executionPrompts).length >= 3;
-  if (hasSet && state.journalMeta.corePromptsSig === corePromptsSignature(data)) return;
+  const hasSet = hasCorePromptSet();
+  const sig = corePromptsSignature(data);
+  if (hasSet && state.journalMeta.corePromptsAi && state.journalMeta.corePromptsSig === sig) return;
   if (hasSet && corePromptsHaveAnswers(data)) return;
+  if (state.corePromptsFailedSig === sig) return;
   generateCorePrompts({ auto: true });
 }
 
@@ -4925,6 +4987,7 @@ function fillJournal(journal) {
   setPromptsLoading(false);
   setCorePromptsLoading(false);
   state.corePromptsToken += 1;
+  state.corePromptsFailedSig = "";
   [1, 2, 3, 4].forEach((index) => setDeepFollowLoading(index, false));
   state.journalMeta = {
     awarenessAi: Boolean(data.awarenessAi),
@@ -4966,6 +5029,7 @@ function fillJournal(journal) {
   refreshJournalChecklists(data, { useSaved: true });
   renderInsightCard(state.journalInsight);
   renderBodyCoachCard(state.journalBodyCoach);
+  syncCorePromptGate();
   state.journalHydrating = false;
 }
 
@@ -6913,8 +6977,11 @@ function bindEvents() {
     document.querySelectorAll("#moodRow .mood-btn").forEach((item) => item.classList.toggle("is-on", on && item === btn));
     refreshJournalChecklists();
     const journal = collectJournal();
+    persistJournalQuietly();
+    syncCorePromptGate();
     maybeAutoGenerateInsight(journal);
     maybeAutoGeneratePrompts(journal);
+    maybeAutoGenerateCorePrompts(journal);
   });
 
   document.getElementById("section-body")?.addEventListener("click", (event) => {

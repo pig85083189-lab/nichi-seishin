@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=90" />
+    <link rel="stylesheet" href="app.css?v=91" />
     <style>
       .splash {
         position: fixed;
@@ -384,17 +384,17 @@
             <h2 class="journal-card__title js-quick-only"><span>03</span> 今日覺察</h2>
             <h2 class="journal-card__title js-deep-only"><span>04</span> 覺察力</h2>
             <p class="journal-guide js-quick-only">用一句話看見今天真正被碰到的地方。寫完就可以走向明天最小的一步。</p>
-            <p class="journal-guide js-deep-only">寫完今日感謝與事件後，會依你今天的狀態生成 3 道專屬覺察題。寫完再整理勾選表；完成復盤會存進側邊欄「覺察力」。</p>
+            <p class="journal-guide js-deep-only">完成上方「01 今日感謝」與「02 今日事件與心情」後，會依今天的經歷動態生成 3 道專屬覺察題。寫完再一鍵生成客製化覺察勾勾表；完成復盤會存進側邊欄「覺察力」。</p>
             <div class="journal-split">
               <div class="journal-col">
                 <div class="check-loading" id="awarePromptLoading" hidden>
                   <p class="check-loading__label">正在為你生成今天的覺察題…</p>
                   <div class="ai-thinking__bar"><i></i></div>
                 </div>
-                <p class="deep-empty" id="awareEmpty">請先完成上方今日感謝與事件，將為你生成今日專屬反思題</p>
-                <button class="ai-check-btn js-deep-only" id="btnAwarePrompts" type="button">生成今日專屬反思題</button>
+                <p class="deep-empty" id="awareEmpty">請先完成上方今日感謝與事件，將為你生成今日專屬的覺察與執行反思題</p>
+                <button class="ai-check-btn" id="btnAwarePrompts" type="button">生成今日專屬反思題</button>
                 <div id="awareQuestions"></div>
-                <button class="ai-check-btn js-deep-only" id="btnAwareAi" type="button" hidden>分析並生成勾勾表</button>
+                <button class="ai-check-btn" id="btnAwareAi" type="button" hidden>生成客製化覺察勾勾表</button>
               </div>
               <div class="journal-col js-deep-only">
                 <p class="journal-label">今天我覺察到</p>
@@ -412,7 +412,7 @@
             <h2 class="journal-card__title js-quick-only"><span>04</span> 今日最小行動</h2>
             <h2 class="journal-card__title js-deep-only"><span>05</span> 執行力</h2>
             <p class="journal-guide js-quick-only">明天只要做一件小到 5 分鐘內能完成的事。完成復盤後會進到側邊欄「執行力」清單，方便追蹤。</p>
-            <p class="journal-guide js-deep-only">寫完今日感謝與事件後，會依今天的情緒波動或卡點生成 3 道專屬執行題。寫完再整理行動勾選表；完成復盤會進到側邊欄「執行力」。</p>
+            <p class="journal-guide js-deep-only">完成上方感謝與事件後，會依今天的卡點、生氣或拖延動態生成 3 道執行突破題。寫完再一鍵生成專屬行動卡點勾勾表，並同步至側邊欄「執行力」。</p>
             <div class="journal-split">
               <div class="journal-col">
                 <div class="js-deep-only">
@@ -420,10 +420,10 @@
                     <p class="check-loading__label">正在為你生成今天的執行力題目…</p>
                     <div class="ai-thinking__bar"><i></i></div>
                   </div>
-                  <p class="deep-empty" id="execEmpty">請先完成上方今日感謝與事件，將為你生成今日專屬反思題</p>
+                  <p class="deep-empty" id="execEmpty">請先完成上方今日感謝與事件，將為你生成今日專屬的覺察與執行反思題</p>
                   <button class="ai-check-btn" id="btnExecPrompts" type="button">生成今日專屬行動題</button>
                   <div id="execQuestions"></div>
-                  <button class="ai-check-btn" id="btnExecAi" type="button" hidden>分析並生成勾勾表</button>
+                  <button class="ai-check-btn" id="btnExecAi" type="button" hidden>生成專屬行動卡點勾勾表</button>
                 </div>
                 <div class="exec-next">
                   <p class="journal-label">明天最小的一步</p>
@@ -755,6 +755,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=106"></script>
+    <script src="app.js?v=107"></script>
   </body>
 </html>

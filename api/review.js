@@ -586,20 +586,21 @@ ${avoid.length ? avoid.slice(0, 16).map((item) => `- ${compactLine(item, 60)}`).
 請讓今天的深度思考主題承接他的進度：看見重複模式就換新視角，看見新突破就往下挖一層。`;
 }
 
-const CORE_PROMPTS_SYSTEM = `你是「日精進」的高階心靈教練。請依這個人今天寫下的感謝、事件與心情，動態生成今天才有的覺察力與執行力題目。
+const CORE_PROMPTS_SYSTEM = `你是「日精進」的高階心靈教練。請精準讀取使用者今天寫下的感謝內容、事件經過與當下情緒，動態生成「只屬於今天」的覺察力與執行力題目。
 
 【任務】
-- awareness：3 道針對性、直擊心靈的覺察反思題。由淺入深：先碰到今天的畫面，再問感受，再問真正介意／渴望的那一層。
-- execution：3 道針對性的執行力問題。必須對準今天事件裡的情緒波動或卡點，例如：哪一件事需要突破、真正卡住的是什麼、明天最快可採取的行動。
+- awareness：3 道直擊心靈的覺察反思題。必須對準今天實際發生的畫面、情緒波動、感動或委屈，引導他看見背後的期待、防衛或盲點。由淺入深。
+- execution：3 道針對性的執行突破題。必須對準今天事件裡的卡點、生氣、拖延或做不下去的地方：具體盲點是什麼、卡住的真正原因、明天最快能採取的突破行動。
 
 【必須遵守】
 - 只輸出 JSON
-- 題目必須貼近感謝、事件與心情原文，讓他覺得「這題是為我今天出的」
+- 題目裡要能看見今天的人、事、情緒，讓他一眼覺得「這題是為我今天出的」
 - 每天視角都要不同，不要重複使用者最近已經問過的題
 - 禁止使用固定題庫口吻。尤其禁止出現或改寫這些死題：
   「今天哪一件事最觸動你」「你當時真正的感受是什麼」「你真正介意的是什麼」
   「生命力或平靜」「防衛心或情緒波動」「翻白眼」「不好意思拒絕」「老方法處理」
   「本來想做卻一直拖著」「卡住不想動」「明天只要花 5 分鐘」
+  「今天在執行目標時遇到了什麼實質卡點」
 - 禁止雞湯、禁止說教、禁止病例腔、禁止空泛「你真正的感受是什麼」「你要更努力」
 - 題目要具體、有畫面、有啟發，像一對一教練今天才想出來的
 - 繁體中文
@@ -621,17 +622,21 @@ function isCorePromptsRequest(body) {
 function corePromptsUserPrompt(body) {
   const ctx = body.context && typeof body.context === "object" ? body.context : {};
   const progress = body.progress && typeof body.progress === "object" ? body.progress : {};
-  const thanks = Array.isArray(ctx.thanks) ? ctx.thanks.filter(Boolean).join("、") : "";
+  const thanksList = Array.isArray(ctx.thanks)
+    ? ctx.thanks.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+  const thanks = thanksList.map((item, index) => `${index + 1}. ${item}`).join("\n") || "未寫";
   const avoid = Array.isArray(progress.avoidQuestions) ? progress.avoidQuestions.filter(Boolean) : [];
   const openActions = Array.isArray(progress.openActions) ? progress.openActions.filter(Boolean) : [];
-  return `請為這個人生成「今天才有」的覺察力 3 題、執行力 3 題。
+  return `請精準讀取以下「今天的原文」，生成只屬於這一天的覺察力 3 題、執行力 3 題。題目必須能讓人認出今天的感謝、事件與情緒，不要出成萬用題。
 
 日期：${body.date || ""}
 連續復盤天數：${progress.streak || 0}
 
-【今天的輸入】
-今日感謝：${thanks || "未寫"}
-今日事件：${compactLine(ctx.event || body.text, 500) || "（未寫）"}
+【今天的輸入｜必須據此出題】
+今日感謝：
+${thanks}
+今日事件：${compactLine(ctx.event || body.text, 800) || "（未寫）"}
 心情：${ctx.mood || "未選"}
 
 尚未完成的行動：${openActions.slice(0, 6).map((item) => compactLine(item, 40)).join("、") || "尚無"}
@@ -639,7 +644,8 @@ function corePromptsUserPrompt(body) {
 【請避開、不要再出相近的題】
 ${avoid.length ? avoid.slice(0, 16).map((item) => `- ${compactLine(item, 60)}`).join("\n") : "（無）"}
 
-覺察題要直擊今天被碰到的那一層；執行題要對準今天的卡點與明天做得到的最小突破。`;
+覺察題：針對今天的情緒波動、感動或委屈，引導看見背後的期待或盲點。
+執行題：針對今天卡住、生氣或拖延的部分，問具體盲點，以及明天最快的突破行動。`;
 }
 
 function normalizePromptItem(item) {
