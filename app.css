@@ -3355,7 +3355,7 @@ body[data-journal-mode="quick"] #section-manifest {
 .insight-card__result {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
 }
 
 .insight-card__kicker {
@@ -3395,7 +3395,7 @@ body[data-journal-mode="quick"] #section-manifest {
 
 .insight-block {
   position: relative;
-  padding: 16px 18px 18px;
+  padding: 18px 20px 20px;
   background: rgba(255, 255, 255, 0.64);
   border: 1px solid rgba(228, 212, 200, 0.95);
   border-radius: 14px;
@@ -3426,6 +3426,11 @@ body[data-journal-mode="quick"] #section-manifest {
 
 .insight-block--tips {
   background: rgba(247, 239, 230, 0.92);
+}
+
+.insight-block--review {
+  background: rgba(255, 250, 244, 0.9);
+  border-color: #e8d5c6;
 }
 
 .insight-block--focus {

@@ -208,24 +208,29 @@ const CHECKLIST_EXECUTION_SYSTEM = `你是「日精進」的高階心靈教練�
 const INSIGHT_JSON_SHAPE = `{
   "title": "一句有質感的洞察標題，12-22字",
   "psychology": "① 深層心理與盲點解析：3到6句。必須回答「為什麼這件事會觸動他」：點出防衛機制、情緒盲點、或潛在期待。要貼近原文，有畫面、有因果。",
+  "reflection": "② 客觀檢討與反思：3到5句。溫柔但精準地指出今天的處理方式有哪些可以調整。不責備、不羞辱，但直指核心：他做了什麼、沒做什麼、哪裡卡住、下一次可以怎麼改。",
   "bodyLink": "身體與心理的關聯，1到2句。若沒有身體訊號可給空字串。",
-  "suggestions": ["具體突破建議1", "具體突破建議2", "具體突破建議3"],
+  "suggestions": ["下次可立刻套用的做法1", "下次可立刻套用的做法2", "下次可立刻套用的做法3"],
   "takeaways": ["今日核心重點1", "今日核心重點2", "今日核心重點3"],
   "conclusion": "一段總述，2到4句，把今天最該被看見的事收成可帶走的結論。"
 }`;
 
-const INSIGHT_SYSTEM = `你是「日精進」的高階心靈與成長教練：溫柔，但犀利；陪伴，但不討好。使用者剛寫下今天的事件、心情，以及身體狀況。
+const INSIGHT_SYSTEM = `你是「日精進」溫暖且具建設性的成長教練：先接住，再點破；陪伴，但不討好。使用者剛寫下今天的事件、心情，以及身體狀況。
 請根據事件、情緒與身體反應，生成一份結構完整、有深度的「深度洞察」。禁止只給一句空泛金句。
 
-【必須寫滿三個維度】
+【必須寫滿四個維度】
 ① 深層心理與盲點解析（psychology）：
-- 指出事件背後的心理防衛機制、情緒盲點或潛在期待
+- 指出今日事件背後的情緒盲點與心理防衛
 - 必須回答：為什麼這件事會觸動他？
 - 可點出「我以為／其實在怕什麼」、還沒說出口的需求、身體訊號如何幫腔
-② 具體突破建議（suggestions）：
-- 給 2 到 3 條溫暖、可行、具體的行動或轉念練習
-- 每條 18-42 字，今晚或明天做得到，不要口號
-③ 今日核心重點整理（takeaways）：
+② 客觀檢討與反思（reflection）：
+- 溫柔但精準地檢討今天的處理方式有哪些可以調整
+- 不責備、不羞辱、不說「你應該早就知道」
+- 直指核心：他實際做了什麼、迴避了什麼、哪裡讓事情更卡
+③ 具體突破建議／怎麼做會更好（suggestions）：
+- 給 2 到 3 條實踐性極高、下次遇到類似狀況可以立刻套用的具體行動或轉念做法
+- 每條 18-42 字，寫成可執行的步驟，不要口號
+④ 今日核心重點整理（takeaways）：
 - 給 2 到 4 條精煉金句或條列重點
 - 讓他一眼帶走今天的最大收穫
 
@@ -236,17 +241,20 @@ const INSIGHT_SYSTEM = `你是「日精進」的高階心靈與成長教練：�
 - 繁體中文
 ${INSIGHT_JSON_SHAPE}`;
 
-const QUICK_INSIGHT_SYSTEM = `你是「日精進」的高階心靈與成長教練：溫柔、精準、不說教。使用者剛用「快速復盤」寫下今日感謝、今天發生的事，以及心情。
+const QUICK_INSIGHT_SYSTEM = `你是「日精進」溫暖且具建設性的成長教練：溫柔、精準、不責備。使用者剛用「快速復盤」寫下今日感謝、今天發生的事，以及心情。
 請生成一份結構完整、有深度的「深度洞察」。即使是快速復盤，也禁止只給一句話。
 
-【必須寫滿三個維度】
+【必須寫滿四個維度】
 ① 深層心理與盲點解析（psychology）：
 - 結合他寫下的感謝與事件，指出為什麼這件事會觸動他
-- 點出防衛機制、情緒盲點、或潛在期待；若感謝裡已有滋養，也要看見那道光
-② 具體突破建議（suggestions）：
-- 給 2 到 3 條溫暖、可行、具體的行動或轉念練習
+- 點出情緒盲點與心理防衛；若感謝裡已有滋養，也要看見那道光
+② 客觀檢討與反思（reflection）：
+- 溫柔但精準地檢討今天的處理方式有哪些可以調整
+- 不責備，但直指核心：他做了什麼、沒做什麼、哪裡可以更好
+③ 具體突破建議／怎麼做會更好（suggestions）：
+- 給 2 到 3 條實踐性極高、下次遇到類似狀況可以立刻套用的具體行動或轉念做法
 - 每條 18-42 字，5 到 15 分鐘內做得到
-③ 今日核心重點整理（takeaways）：
+④ 今日核心重點整理（takeaways）：
 - 給 2 到 4 條精煉金句或條列重點，讓他一眼帶走今天的最大收穫
 
 規則：
@@ -270,7 +278,7 @@ function insightUserPrompt(body) {
     ? ctx.awareness.map((item) => String(item || "").trim()).filter(Boolean).join("／")
     : "";
   if (isQuickInsightRequest(body)) {
-    return `這是快速復盤。請生成包含三個完整維度的深度洞察：① 深層心理與盲點解析 ② 具體突破建議 ③ 今日核心重點整理。
+    return `這是快速復盤。請生成包含四個完整維度的深度洞察：① 深層心理與盲點解析 ② 客觀檢討與反思 ③ 具體突破建議（怎麼做會更好） ④ 今日核心重點整理。
 
 今日感謝：${thanks || "（未寫）"}
 今日事件：${ctx.event || body.text || "（未寫）"}
@@ -278,7 +286,7 @@ function insightUserPrompt(body) {
 今日覺察：${awareness || "未寫"}
 明天最小的一步：${ctx.smallestStep || "未寫"}`;
   }
-  return `請為這個人生成包含三個完整維度的深度洞察：① 深層心理與盲點解析 ② 具體突破建議 ③ 今日核心重點整理。
+  return `請為這個人生成包含四個完整維度的深度洞察：① 深層心理與盲點解析 ② 客觀檢討與反思 ③ 具體突破建議（怎麼做會更好） ④ 今日核心重點整理。
 
 今日感謝：${thanks || "未寫"}
 今日事件：${ctx.event || body.text || "（未寫）"}
@@ -298,12 +306,14 @@ function normalizeStringList(raw, max = 4) {
 function normalizeInsightResult(raw) {
   const data = raw && typeof raw === "object" ? raw : {};
   const psychology = String(data.psychology || data.analysis || data.logic || "").trim();
+  const reflection = String(data.reflection || data.review || data.critique || "").trim();
   const conclusion = String(data.conclusion || data.summary || data.core || "").trim();
   const suggestions = normalizeStringList(data.suggestions || data.actions || data.tips, 3);
   const takeaways = normalizeStringList(data.takeaways || data.keyPoints || data.highlights, 4);
   return {
     title: String(data.title || data.headline || "").trim().slice(0, 48),
     psychology,
+    reflection,
     conclusion: conclusion || psychology,
     logic: String(data.logic || "").trim() || psychology,
     bodyLink: String(data.bodyLink || data.body || data.link || "").trim(),
