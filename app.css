@@ -3297,7 +3297,7 @@ body[data-journal-mode="quick"] #section-manifest {
 }
 
 .deep-empty {
-  margin: 0;
+  margin: 0 0 12px;
   padding: 16px 14px;
   border: 1px dashed var(--border);
   border-radius: var(--radius-sm);
@@ -3305,6 +3305,10 @@ body[data-journal-mode="quick"] #section-manifest {
   color: var(--muted);
   font-size: 14px;
   line-height: 1.6;
+}
+
+.deep-empty[hidden] {
+  display: none;
 }
 
 .check-line {
