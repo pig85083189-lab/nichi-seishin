@@ -2493,7 +2493,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "快速或深度復盤",
-        description: "時間不夠就選「快速復盤」：感謝、事件、一句覺察、明天最小一步。想慢慢看自己，再走完整的七大模組。",
+        description: "時間不夠就選「快速復盤」：感謝、事件與心情、身心狀況，再生成完整洞察。想慢慢看自己，再走完整的七大模組。",
         side: "bottom",
       },
     },
@@ -2511,7 +2511,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "02 今日事件",
-        description: "寫下今天真正被碰到的事，再點選心情。這兩項會成為後面出題與洞察的原料。",
+        description: "寫下今天真正被碰到的事，再點選心情。快速復盤會接著記錄身心狀況；深度復盤則會成為後面出題與洞察的原料。",
         side: "bottom",
       },
     },
@@ -3476,15 +3476,27 @@ function insightReady(journal) {
 function insightSignature(journal) {
   const data = journal || collectJournal();
   const thanks = (data.thanks || []).map((item) => String(item || "").trim()).filter(Boolean).join("、");
+  const check = normalizeBodyCheck(data.bodyCheck, data.bodyTags, data.bodyNote);
+  const bodySig = [
+    (check.mood.flags || []).join("、"),
+    check.mood.reason || "",
+    (check.body.flags || []).join("、"),
+    check.body.other || "",
+    check.body.reason || "",
+    check.sleep.duration || "",
+    check.sleep.quality || "",
+    check.sleep.energy || "",
+    check.sleep.reason || "",
+  ].join("|");
   if ((data.mode || state.journalMode) === "quick") {
-    return ["quick", thanks, String(data.event || "").trim(), data.mood || ""].join("\n");
+    return ["quick", thanks, String(data.event || "").trim(), data.mood || "", bodySig].join("\n");
   }
-  return ["deep", String(data.event || "").trim(), data.mood || "", (data.bodyTags || []).join("、"), String(data.bodyNote || "").trim()].join("\n");
+  return ["deep", String(data.event || "").trim(), data.mood || "", bodySig].join("\n");
 }
 
 function insightEmptyCopy(quick) {
   return quick
-    ? "先寫下感謝、今天發生的事，並選好心情，再點按鈕或等它自動生成四層洞察。"
+    ? "先寫下感謝、事件與心情，身心狀況可依當天勾選，再點按鈕或完成快速復盤，就會生成四層洞察。"
     : "先把事件、心情與身體反應寫下來，再點按鈕或等它自動生成四層洞察。";
 }
 
@@ -3583,7 +3595,7 @@ function setInsightLoading(loading) {
   }
   if (quickBtn) {
     quickBtn.disabled = loading;
-    quickBtn.textContent = loading ? "梳理中…" : "生成今日洞察";
+    quickBtn.textContent = loading ? "梳理中…" : "生成深度洞察";
   }
   if (deepLoader) deepLoader.hidden = !loading;
   if (quickLoader) quickLoader.hidden = !loading;
@@ -3605,7 +3617,7 @@ function localInsightFallback(journal) {
       psychology,
       conclusion: psychology,
       logic: psychology,
-      bodyLink: "",
+      bodyLink: tags && tags !== "身體的訊號" ? `${tags} 也在幫今天的心情說話。` : "",
       reflection: "今天你已經願意把事情寫下來，這是好的。比較容易卡住的地方，是情緒一來就急著判定對錯，或把還沒說出口的期待，直接當成對方應該懂。調整點不在「你不該有感覺」，而在「感覺出現後，你有沒有給自己一句真實的話」。",
       suggestions: [
         "今晚用一句話對自己說：我看見今天被碰到的地方了，先不用立刻修好。",
@@ -3615,7 +3627,7 @@ function localInsightFallback(journal) {
       takeaways: [
         `心情「${mood}」不是噪音，是入口。`,
         "被觸動，往往因為有還沒被滿足的期待。",
-        "感謝與事件可以同時存在，不必互相取消。",
+        "感謝、事件與身體訊號可以同時存在，不必互相取消。",
       ],
       sig: insightSignature(journal),
     };
@@ -4338,8 +4350,10 @@ function inferJournalMode(data) {
   if (data?.mode === "quick" || data?.mode === "deep") return data.mode;
   const deepBits = [...(data?.awareness || []).slice(1), ...(data?.execution || []), data?.manifest];
   if (deepBits.some((item) => String(item || "").trim())) return "deep";
-  if (deepHasContent(data?.deep) || String(data?.insight?.conclusion || "").trim()) return "deep";
-  if (bodyCheckHasSignal(normalizeBodyCheck(data?.bodyCheck, data?.bodyTags, data?.bodyNote))) return "deep";
+  if (deepHasContent(data?.deep)) return "deep";
+  if ((data?.awarenessChecks || []).length || (data?.executionChecks || []).length || (data?.manifestChecks || []).length) {
+    return "deep";
+  }
   return state.journalMode === "quick" ? "quick" : "deep";
 }
 
@@ -5621,18 +5635,28 @@ async function finishTodayReview() {
   if (state.completeBusy) return;
   if (state.journalMode === "quick") {
     const journal = collectJournal();
-    if (quickInsightReady(journal)) {
-      document.getElementById("section-quick-insight")?.scrollIntoView({ behavior: "smooth", block: "center" });
-      setCompleteBusy(true);
-      try {
-        await waitForInsightIdle();
-        const hasInsight = Boolean(normalizeInsight(state.journalInsight).conclusion);
-        if (!hasInsight || state.journalMeta.insightSig !== insightSignature(journal)) {
-          await generateJournalInsight({ auto: false, fromComplete: true });
-        }
-      } finally {
-        setCompleteBusy(false);
+    if (!quickInsightReady(journal)) {
+      showToast("請先寫下今日感謝、事件，並選擇心情。");
+      document.getElementById("section-thanks")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    document.getElementById("section-quick-insight")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setCompleteBusy(true);
+    try {
+      await waitForInsightIdle();
+      const insight = normalizeInsight(state.journalInsight);
+      const hasInsight = Boolean(
+        insight.psychology ||
+          insight.conclusion ||
+          insight.reflection ||
+          insight.suggestions.length ||
+          insight.takeaways.length
+      );
+      if (!hasInsight || state.journalMeta.insightSig !== insightSignature(journal)) {
+        await generateJournalInsight({ auto: false, fromComplete: true });
       }
+    } finally {
+      setCompleteBusy(false);
     }
   }
   const iso = currentIso();

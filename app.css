@@ -2886,11 +2886,16 @@ body:not([data-journal-mode="quick"]) .js-quick-only {
 }
 
 body[data-journal-mode="quick"] .js-deep-only,
-body[data-journal-mode="quick"] #section-body,
+body[data-journal-mode="quick"] #section-aware,
+body[data-journal-mode="quick"] #section-exec,
 body[data-journal-mode="quick"] #section-insight,
 body[data-journal-mode="quick"] #section-deep,
 body[data-journal-mode="quick"] #section-manifest {
   display: none !important;
+}
+
+body[data-journal-mode="quick"] #section-body .journal-split--body {
+  grid-template-columns: 1fr;
 }
 
 .journal-label--sub {
