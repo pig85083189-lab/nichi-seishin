@@ -239,25 +239,27 @@ const INSIGHT_SYSTEM = `你是「日精進」溫暖且具建設性的成長教�
 ${INSIGHT_JSON_SHAPE}`;
 
 const QUICK_INSIGHT_SYSTEM = `你是「日精進」溫暖且具建設性的成長教練：溫柔、精準、不責備。使用者剛用「快速復盤」寫下今日感謝、今天發生的事，以及心情。
+他可能另外加選了身體覺察、覺察力、執行力或顯化力。若有這些模組的內容，必須一併納入綜合評估；沒有的模組不要硬編。
 請生成一份結構完整、有深度的「深度洞察」。即使是快速復盤，也禁止只給一句話。
 
 【必須寫滿四個維度】
 ① 深層心理與盲點解析（psychology）：
 - 結合他寫下的感謝與事件，指出為什麼這件事會觸動他
 - 點出情緒盲點與心理防衛；若感謝裡已有滋養，也要看見那道光
+- 若有身體、覺察或執行內容，把身心與行動卡點串起來看
 ② 客觀檢討與反思（reflection）：
 - 溫柔但精準地檢討今天的處理方式有哪些可以調整
 - 不責備，但直指核心：他做了什麼、沒做什麼、哪裡可以更好
 ③ 具體突破建議／怎麼做會更好（suggestions）：
 - 給 2 到 3 條實踐性極高、下次遇到類似狀況可以立刻套用的具體行動或轉念做法
-- 每條 18-42 字，5 到 15 分鐘內做得到
+- 每條 18-42 字，5 到 15 分鐘內做得到；若他已寫執行／顯化，建議要承接那些內容
 ④ 今日核心重點整理（takeaways）：
 - 給 2 到 4 條精煉金句或條列重點，讓他一眼帶走今天的最大收穫
 
 規則：
 - 只輸出 JSON
-- 必須貼近感謝與事件原文，不要空泛雞湯、不要說教、不要病例腔
-- bodyLink 可為空字串（快速復盤沒有身體檢核）
+- 必須貼近他今天實際寫下的模組原文，不要空泛雞湯、不要說教、不要病例腔
+- 若有身體訊號，bodyLink 寫 1 到 2 句關聯；若沒有可給空字串
 - 繁體中文
 ${INSIGHT_JSON_SHAPE}`;
 
@@ -275,11 +277,27 @@ function insightUserPrompt(body) {
     ? ctx.awareness.map((item) => String(item || "").trim()).filter(Boolean).join("／")
     : "";
   if (isQuickInsightRequest(body)) {
+    const modules = Array.isArray(ctx.modules) ? ctx.modules.map((item) => String(item || "").trim()).filter(Boolean) : [];
+    const execution = Array.isArray(ctx.execution)
+      ? ctx.execution.map((item) => String(item || "").trim()).filter(Boolean).join("／")
+      : "";
+    const extras = [];
+    if (modules.includes("body") || ctx.bodyCheck || (Array.isArray(ctx.bodyTags) && ctx.bodyTags.length)) {
+      extras.push(formatBodyCheckPrompt(ctx));
+    }
+    if (modules.includes("aware") || awareness) extras.push(`今日覺察：${awareness || "未寫"}`);
+    if (modules.includes("exec") || execution || ctx.smallestStep) {
+      extras.push(`執行力回答：${execution || "未寫"}`);
+      extras.push(`明天最小的一步：${ctx.smallestStep || "未寫"}`);
+    }
+    if (modules.includes("manifest") || ctx.manifest) extras.push(`明天想顯化：${ctx.manifest || "未寫"}`);
     return `這是快速復盤。請生成包含四個完整維度的深度洞察：① 深層心理與盲點解析 ② 客觀檢討與反思 ③ 具體突破建議（怎麼做會更好） ④ 今日核心重點整理。
+今天加選的模組：${modules.length ? modules.join("、") : "無（只寫感謝、事件與心情）"}
 
 今日感謝：${thanks || "（未寫）"}
 今日事件：${ctx.event || body.text || "（未寫）"}
-心情：${ctx.mood || "未選"}`;
+心情：${ctx.mood || "未選"}
+${extras.join("\n")}`.trim();
   }
   return `請為這個人生成包含四個完整維度的深度洞察：① 深層心理與盲點解析 ② 客觀檢討與反思 ③ 具體突破建議（怎麼做會更好） ④ 今日核心重點整理。
 

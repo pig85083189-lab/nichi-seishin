@@ -74,6 +74,7 @@ const state = {
   historyTag: "all",
   historyOpen: "",
   journalMode: "deep",
+  quickModules: { body: false, aware: false, exec: false, manifest: false },
   deepExpanded: false,
   organize: null,
   rawText: "",
@@ -2497,7 +2498,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "快速或深度復盤",
-        description: "時間不夠就選「快速復盤」：感謝、事件與心情，再生成完整洞察。想慢慢看自己，再走完整的七大模組。",
+        description: "時間不夠就選「快速復盤」：感謝、事件與心情，再生成完整洞察。想加深，可加選身體覺察、覺察力、執行力或顯化力。",
         side: "bottom",
       },
     },
@@ -2809,6 +2810,57 @@ function addThanksField() {
   input?.focus();
 }
 
+function emptyQuickModules() {
+  return { body: false, aware: false, exec: false, manifest: false };
+}
+
+function normalizeQuickModules(raw) {
+  const src = raw && typeof raw === "object" ? raw : {};
+  return {
+    body: Boolean(src.body),
+    aware: Boolean(src.aware),
+    exec: Boolean(src.exec),
+    manifest: Boolean(src.manifest),
+  };
+}
+
+function quickModuleOn(key, journal) {
+  if ((journal?.mode || state.journalMode) !== "quick") return true;
+  const mods = normalizeQuickModules(journal?.quickModules || state.quickModules);
+  return Boolean(mods[key]);
+}
+
+function syncQuickModules(mods = state.quickModules) {
+  const next = normalizeQuickModules(mods);
+  state.quickModules = next;
+  const isQuick = state.journalMode === "quick";
+  document.body.dataset.quickBody = isQuick && next.body ? "on" : "";
+  document.body.dataset.quickAware = isQuick && next.aware ? "on" : "";
+  document.body.dataset.quickExec = isQuick && next.exec ? "on" : "";
+  document.body.dataset.quickManifest = isQuick && next.manifest ? "on" : "";
+  document.querySelectorAll("[data-quick-mod]").forEach((btn) => {
+    const on = Boolean(next[btn.dataset.quickMod]);
+    btn.classList.toggle("is-on", on);
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+  });
+}
+
+function toggleQuickModule(key) {
+  if (state.journalMode !== "quick" || !["body", "aware", "exec", "manifest"].includes(key)) return;
+  const next = { ...normalizeQuickModules(state.quickModules), [key]: !state.quickModules?.[key] };
+  syncQuickModules(next);
+  persistJournalQuietly();
+  const journal = collectJournal();
+  if (next[key]) {
+    const sectionId = { body: "section-body", aware: "section-aware", exec: "section-exec", manifest: "section-manifest" }[key];
+    document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  if (next.aware || next.exec) maybeAutoGenerateCorePrompts(journal);
+  if (next.body) maybeAutoGenerateBodyCoach(journal);
+  if (next.manifest) maybeAutoGenerateManifest(journal);
+  maybeAutoGenerateInsight(journal);
+}
+
 function emptyJournal() {
   return {
     thanks: ["", "", ""],
@@ -2845,6 +2897,7 @@ function emptyJournal() {
     promptsAi: false,
     corePromptsSig: "",
     corePromptsAi: false,
+    quickModules: emptyQuickModules(),
   };
 }
 
@@ -3443,11 +3496,12 @@ async function generateJournalChecklist(kind, options = {}) {
 }
 
 function maybeAutoGenerateChecklists(journal) {
-  if (state.journalHydrating || state.journalMode === "quick") return;
-  if (awarenessReady(journal.awareness, "deep") && state.journalMeta.awarenessAiSig !== checklistSignature(journal.awareness)) {
+  if (state.journalHydrating) return;
+  if (state.journalMode === "quick" && !state.quickModules?.aware && !state.quickModules?.exec) return;
+  if (quickModuleOn("aware", journal) && awarenessReady(journal.awareness, "deep") && state.journalMeta.awarenessAiSig !== checklistSignature(journal.awareness)) {
     generateJournalChecklist("awareness", { auto: true });
   }
-  if (coreAnswerFilled(journal.execution) && state.journalMeta.executionAiSig !== checklistSignature(journal.execution)) {
+  if (quickModuleOn("exec", journal) && coreAnswerFilled(journal.execution) && state.journalMeta.executionAiSig !== checklistSignature(journal.execution)) {
     generateJournalChecklist("execution", { auto: true });
   }
 }
@@ -3519,6 +3573,7 @@ async function generateManifestChecklist(options = {}) {
 
 function maybeAutoGenerateManifest(journal) {
   if (state.journalHydrating) return;
+  if (state.journalMode === "quick" && !state.quickModules?.manifest) return;
   if (manifestReady(journal) && state.journalMeta.manifestAiSig !== String(journal.manifest || "").trim()) {
     generateManifestChecklist({ auto: true });
   }
@@ -3563,7 +3618,13 @@ function insightSignature(journal) {
     check.sleep.reason || "",
   ].join("|");
   if ((data.mode || state.journalMode) === "quick") {
-    return ["quick", thanks, String(data.event || "").trim(), data.mood || ""].join("\n");
+    const mods = normalizeQuickModules(data.quickModules || state.quickModules);
+    const extra = [];
+    if (mods.body) extra.push(bodySig);
+    if (mods.aware) extra.push((data.awareness || []).map((item) => String(item || "").trim()).join("|"));
+    if (mods.exec) extra.push((data.execution || []).map((item) => String(item || "").trim()).join("|"), String(data.smallestStep || "").trim());
+    if (mods.manifest) extra.push(String(data.manifest || "").trim());
+    return ["quick", thanks, String(data.event || "").trim(), data.mood || "", JSON.stringify(mods), ...extra].join("\n");
   }
   return ["deep", String(data.event || "").trim(), data.mood || "", bodySig].join("\n");
 }
@@ -3748,6 +3809,7 @@ async function generateJournalInsight(options = {}) {
   state.insightToken = token;
   setInsightLoading(true);
   const isQuick = state.journalMode === "quick";
+  const mods = isQuick ? normalizeQuickModules(journal.quickModules || state.quickModules) : { body: true, aware: true, exec: true, manifest: true };
 
   try {
     if (!state.user) throw new Error("請先登入，才能使用雲端分析。");
@@ -3758,14 +3820,17 @@ async function generateJournalInsight(options = {}) {
       text: journal.event,
       context: {
         variant: isQuick ? "quick" : "deep",
+        modules: Object.keys(mods).filter((key) => mods[key]),
         event: journal.event,
         mood: journal.mood,
         thanks: journal.thanks,
-        awareness: journal.awareness,
-        smallestStep: journal.smallestStep,
-        bodyTags: journal.bodyTags,
-        bodyNote: journal.bodyNote,
-        bodyCheck: journal.bodyCheck,
+        awareness: mods.aware ? journal.awareness : [],
+        execution: mods.exec ? journal.execution : [],
+        smallestStep: mods.exec ? journal.smallestStep : "",
+        bodyTags: mods.body ? journal.bodyTags : [],
+        bodyNote: mods.body ? journal.bodyNote : "",
+        bodyCheck: mods.body ? journal.bodyCheck : null,
+        manifest: mods.manifest ? journal.manifest : "",
       },
     });
     if (state.insightToken !== token) return false;
@@ -3924,7 +3989,8 @@ async function generateBodyCoach(options = {}) {
 }
 
 function maybeAutoGenerateBodyCoach(journal) {
-  if (state.journalHydrating || state.journalMode === "quick") return;
+  if (state.journalHydrating) return;
+  if (state.journalMode === "quick" && !state.quickModules?.body) return;
   if (bodyCoachReady(journal, { auto: true }) && state.journalMeta.bodyCoachSig !== bodyCoachSignature(journal)) {
     generateBodyCoach({ auto: true });
   }
@@ -4451,7 +4517,8 @@ async function generateCorePrompts(options = {}) {
 }
 
 function maybeAutoGenerateCorePrompts(journal) {
-  if (state.journalHydrating || state.journalMode === "quick") return;
+  if (state.journalHydrating) return;
+  if (state.journalMode === "quick" && !state.quickModules?.aware && !state.quickModules?.exec) return;
   const data = journal || collectJournal();
   if (!coreStoryReady(data)) return;
   const hasSet =
@@ -4678,6 +4745,7 @@ function applyJournalMode(mode, options = {}) {
     /* 偏好寫入失敗不擋畫面 */
   }
   syncCompleteButtonLabel();
+  syncQuickModules(state.quickModules);
   if (!options.silent && !state.journalHydrating) persistJournalQuietly();
   if (!options.silent && !state.journalHydrating && next === "quick") {
     maybeAutoGenerateInsight(collectJournal());
@@ -4724,6 +4792,7 @@ function collectJournal() {
     promptsAi: Boolean(state.journalMeta.promptsAi),
     corePromptsSig: state.journalMeta.corePromptsSig || "",
     corePromptsAi: Boolean(state.journalMeta.corePromptsAi),
+    quickModules: normalizeQuickModules(state.quickModules),
   };
   return journal;
 }
@@ -4877,6 +4946,7 @@ function fillJournal(journal) {
   state.executionPrompts = hydrateExecutionPrompts(data);
   state.deepPrompts = normalizeDeepPrompts(data.deepPrompts);
   state.deepExpanded = Boolean(data.deepExpanded) || normalizeDeep(data.deep).slice(1).some(deepSlotHasContent);
+  state.quickModules = normalizeQuickModules(data.quickModules);
   applyJournalMode(inferJournalMode(data), { silent: true });
   const hasPromptAnswers =
     (data.awareness || []).some((item) => String(item || "").trim()) || deepHasContent(data.deep);
@@ -6823,6 +6893,11 @@ function bindEvents() {
     const btn = event.target.closest("[data-journal-mode]");
     if (!btn) return;
     applyJournalMode(btn.dataset.journalMode);
+  });
+  document.getElementById("quickModules")?.addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-quick-mod]");
+    if (!btn) return;
+    toggleQuickModule(btn.dataset.quickMod);
   });
   document.getElementById("btnDeepMore")?.addEventListener("click", expandDeepThemes);
   document.getElementById("section-deep")?.addEventListener("click", (event) => {

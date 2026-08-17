@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=89" />
+    <link rel="stylesheet" href="app.css?v=90" />
     <style>
       .splash {
         position: fixed;
@@ -209,7 +209,7 @@
           <div class="journal-mode" role="tablist" aria-label="復盤模式">
             <button class="journal-mode__btn" data-journal-mode="quick" type="button" role="tab" aria-selected="false">
               <strong>⚡ 快速復盤</strong>
-              <span>3–5 分鐘 · 感謝、事件與心情</span>
+              <span>3–5 分鐘 · 感謝、事件與心情，可加選模組</span>
             </button>
             <button class="journal-mode__btn is-on" data-journal-mode="deep" type="button" role="tab" aria-selected="true">
               <strong>🌙 深度復盤</strong>
@@ -243,7 +243,7 @@
           <section class="journal-card" id="section-event">
             <h2 class="journal-card__title js-quick-only"><span>02</span> 今日事件與心情</h2>
             <h2 class="journal-card__title js-deep-only"><span>02</span> 今日事件</h2>
-            <p class="journal-guide js-quick-only">寫下今天真正被碰到的事，再點選心情。寫完就可以生成深度洞察。</p>
+            <p class="journal-guide js-quick-only">寫下今天真正被碰到的事，再點選心情。想加深再加選下方模組。</p>
             <p class="journal-guide js-deep-only">透過這些事件引發深度思考。先把開心、生氣、難過的那件事寫下來就好。</p>
             <div class="journal-split">
               <label class="journal-col">
@@ -259,6 +259,17 @@
                   <button class="mood-btn" type="button" data-mood="難過">難過</button>
                 </div>
               </div>
+            </div>
+          </section>
+
+          <section class="journal-card quick-modules js-quick-only" id="quickModules">
+            <h2 class="journal-card__title">今天想加寫的模組</h2>
+            <p class="journal-guide">預設保持極簡。想加強哪一塊，再勾選展開；取消就會收合。</p>
+            <div class="quick-modules__list" role="group" aria-label="快速復盤選配模組">
+              <button class="quick-mod" data-quick-mod="body" type="button" aria-pressed="false">身體覺察</button>
+              <button class="quick-mod" data-quick-mod="aware" type="button" aria-pressed="false">覺察力</button>
+              <button class="quick-mod" data-quick-mod="exec" type="button" aria-pressed="false">執行力</button>
+              <button class="quick-mod" data-quick-mod="manifest" type="button" aria-pressed="false">顯化力</button>
             </div>
           </section>
 
@@ -744,6 +755,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=105"></script>
+    <script src="app.js?v=106"></script>
   </body>
 </html>
