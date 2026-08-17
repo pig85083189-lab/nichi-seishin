@@ -2296,6 +2296,10 @@ body.nav-closed .auth-pay {
     text-align: center;
   }
 
+  .journal-mode {
+    grid-template-columns: 1fr;
+  }
+
   .journal-split,
   .journal-footer__actions {
     grid-template-columns: 1fr;
@@ -2732,6 +2736,100 @@ body.nav-closed .auth-pay {
   letter-spacing: 0.06em;
   color: var(--text);
   cursor: pointer;
+}
+
+.journal-mode {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 0 0 20px;
+}
+
+.journal-mode__btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 72px;
+  padding: 12px 14px;
+  border: 1px solid var(--cream-border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink-soft);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.journal-mode__btn strong {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.journal-mode__btn span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.journal-mode__btn:hover {
+  background: var(--cream);
+}
+
+.journal-mode__btn.is-on {
+  background: var(--accent-soft);
+  border-color: #d9cbb8;
+  box-shadow: var(--shadow);
+}
+
+body:not([data-journal-mode="quick"]) .js-quick-only {
+  display: none !important;
+}
+
+body[data-journal-mode="quick"] .js-deep-only,
+body[data-journal-mode="quick"] #section-body,
+body[data-journal-mode="quick"] #section-insight,
+body[data-journal-mode="quick"] #section-deep,
+body[data-journal-mode="quick"] #section-manifest {
+  display: none !important;
+}
+
+.journal-label--sub {
+  margin-top: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.body-other {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.body-other[hidden] {
+  display: none;
+}
+
+.aware-q + .aware-q,
+.exec-next {
+  margin-top: 16px;
+}
+
+.deep-more-btn {
+  width: 100%;
+  margin-top: 12px;
+}
+
+.deep-more[hidden],
+.deep-more-btn[hidden] {
+  display: none !important;
+}
+
+.report-card--pattern {
+  background: var(--cream);
+  border-color: var(--cream-border);
 }
 
 .journal-card {

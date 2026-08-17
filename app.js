@@ -12,6 +12,7 @@ const STORAGE_KEYS = {
   reminder: "nichi.reminder",
   sidebar: "nichi.sidebarCollapsed",
   reports: "nichi.reports",
+  journalMode: "nichi.journalMode",
 };
 
 const REVIEW_API = "/api/review";
@@ -72,6 +73,8 @@ const state = {
   historyQuery: "",
   historyTag: "all",
   historyOpen: "",
+  journalMode: "deep",
+  deepExpanded: false,
   organize: null,
   rawText: "",
   think: { round: 0, max: 5, history: [], current: null },
@@ -447,6 +450,16 @@ function syncJournalLibraries(iso, journal) {
       date: iso,
     });
   });
+  const smallest = String(data.smallestStep || "").trim();
+  if (smallest) {
+    addTaskFromGuide({
+      key: `exec-step:${iso}`,
+      label: `明天最小一步：${smallest}`,
+      detail: "",
+      source: "今日最小行動",
+      date: iso,
+    });
+  }
   const vision = String(data.manifest || "").trim();
   (data.manifestChecks || []).forEach((label) => {
     addManifest({
@@ -2188,6 +2201,14 @@ function renderAiReportBlock(ai, status) {
       <h3>成長突破口</h3>
       ${list(breakthroughs) || `<p class="report-empty">這一段還沒有足夠的復盤可以聚合。</p>`}
     </article>
+    ${
+      Array.isArray(ai.patterns) && ai.patterns.length
+        ? `<article class="report-card report-card--pattern">
+      <h3>隱性模式</h3>
+      ${list(ai.patterns)}
+    </article>`
+        : ""
+    }
   `;
 }
 
@@ -2428,6 +2449,15 @@ function tourSteps() {
       },
     },
     {
+      element: ".journal-mode",
+      tourPage: "today",
+      popover: {
+        title: "快速或深度復盤",
+        description: "時間不夠就選「快速復盤」：感謝、事件、一句覺察、明天最小一步。想慢慢看自己，再走完整的七大模組。",
+        side: "bottom",
+      },
+    },
+    {
       element: "#section-thanks",
       tourPage: "today",
       popover: {
@@ -2450,7 +2480,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "03 身體覺察",
-        description: "用心情、身體、睡眠三個檢核看今天的狀態。勾選異常後寫下原因，右側會生成 3 個可實踐的照顧建議。",
+        description: "用心情、身體、睡眠三個檢核看今天的狀態。身體可加寫「其他感受」；睡眠改記時間、品質與起床精神，方便長期累積。",
         side: "bottom",
       },
     },
@@ -2468,7 +2498,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "04 覺察力",
-        description: "左側是一道核心反思題。寫完後點「分析並生成勾勾表」，右側會出現可勾選的洞察。勾選後完成復盤，會存進側邊欄「覺察力」。",
+        description: "三個白話小問題，慢慢往內看：最觸動的事、真正的感受、真正介意的是什麼。寫完後會整理成可勾選的覺察面向。",
         side: "top",
       },
     },
@@ -2486,7 +2516,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "05 執行力",
-        description: "回答這道核心行動題後，點按鈕生成卡點與解法勾勾表。勾選的步驟，完成復盤後會進入側邊欄「執行力」。",
+        description: "先看清今天的卡點，再寫下「明天最小的一步」：微小、具體、5 分鐘內能做完。完成復盤後會進到側邊欄「執行力」。",
         side: "top",
       },
     },
@@ -2495,7 +2525,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "06 深度思考",
-        description: "四個主題每天依你的故事生成。點開卡片書寫，再往下追問，把想不清楚的事挖深一點。",
+        description: "今天先深挖一個最貼近你的主題。若還想繼續，再點「我還想繼續探索」展開另外三題。",
         side: "top",
       },
     },
@@ -2663,10 +2693,13 @@ function journalFieldValue(id) {
   return String(document.getElementById(id)?.value || "").trim();
 }
 
-const CORE_AWARENESS_PROMPT = {
-  question: "今天發生了什麼讓你內心波動、有所省思，或看清了自己哪個盲點與核心信念的全盤覺察？",
-  placeholder: "把今天的場面、內心波動、看見的盲點或核心信念寫下來…",
-};
+const AWARENESS_QUESTIONS = [
+  { question: "今天哪一件事最觸動你？", placeholder: "那件讓你心裡動了一下的事…" },
+  { question: "你當時真正的感受是什麼？", placeholder: "不一定是表面的情緒，更裡面那一層…" },
+  { question: "如果再往內看一層，你覺得自己真正介意的是什麼？", placeholder: "被碰到的，也許是被看見、被尊重、安全感…" },
+];
+
+const CORE_AWARENESS_PROMPT = AWARENESS_QUESTIONS[0];
 
 const CORE_EXECUTION_PROMPT = {
   question: "今天在執行目標時遇到了什麼實質卡點？你打算採取什麼全面性的行動或突破策略來解決它？",
@@ -2682,12 +2715,15 @@ function emptyJournal() {
     bodyNote: "",
     bodyCheck: emptyBodyCheck(),
     bodyCoach: emptyBodyCoach(),
-    awareness: [""],
+    awareness: ["", "", ""],
     awarenessChecks: [],
     awarenessCheckItems: [],
     execution: [""],
     executionChecks: [],
     executionCheckItems: [],
+    smallestStep: "",
+    mode: state.journalMode === "quick" ? "quick" : "deep",
+    deepExpanded: false,
     awarenessAi: false,
     executionAi: false,
     awarenessAiSig: "",
@@ -2723,8 +2759,8 @@ function emptyInsight() {
 function emptyBodyCheck() {
   return {
     mood: { flags: [], none: false, reason: "" },
-    body: { flags: [], none: false, reason: "" },
-    sleep: { flags: [], none: false, reason: "" },
+    body: { flags: [], none: false, reason: "", other: "" },
+    sleep: { flags: [], none: false, reason: "", duration: "", quality: "", energy: "" },
   };
 }
 
@@ -2739,6 +2775,20 @@ function normalizeBodyGroup(group) {
     none: Boolean(data.none),
     reason: String(data.reason || "").trim(),
   };
+}
+
+function migrateSleepFields(sleep) {
+  const next = {
+    ...normalizeBodyGroup(sleep),
+    duration: String(sleep?.duration || "").trim(),
+    quality: String(sleep?.quality || "").trim(),
+    energy: String(sleep?.energy || "").trim(),
+  };
+  const flags = next.flags || [];
+  if (!next.quality && flags.includes("睡不著")) next.quality = "睡不著";
+  if (!next.quality && flags.includes("睡得很好")) next.quality = "很好";
+  if (!next.duration && flags.includes("10:00以前入睡")) next.duration = next.duration || "";
+  return next;
 }
 
 function migrateBodyCheckFromTags(tags, note) {
@@ -2766,13 +2816,14 @@ function migrateBodyCheckFromTags(tags, note) {
 
 function normalizeBodyCheck(raw, tags, note) {
   if (raw && typeof raw === "object" && (raw.mood || raw.body || raw.sleep)) {
+    const body = normalizeBodyGroup(raw.body);
     const next = {
       mood: normalizeBodyGroup(raw.mood),
-      body: normalizeBodyGroup(raw.body),
-      sleep: normalizeBodyGroup(raw.sleep),
+      body: { ...body, other: String(raw.body?.other || "").trim() },
+      sleep: migrateSleepFields(raw.sleep),
     };
     if (next.mood.flags.length) next.mood.none = false;
-    if (next.body.flags.length) next.body.none = false;
+    if (next.body.flags.length || next.body.other) next.body.none = false;
     return next;
   }
   return migrateBodyCheckFromTags(tags, note);
@@ -2785,7 +2836,11 @@ function deriveBodyTags(check) {
   else tags.push(...data.mood.flags);
   if (data.body.none) tags.push("身體無不適");
   else tags.push(...data.body.flags);
+  if (data.body.other) tags.push("其他");
   tags.push(...data.sleep.flags);
+  if (data.sleep.duration) tags.push(data.sleep.duration);
+  if (data.sleep.quality) tags.push(data.sleep.quality);
+  if (data.sleep.energy) tags.push(`起床${data.sleep.energy}`);
   return tags;
 }
 
@@ -2793,7 +2848,11 @@ function deriveBodyNote(check) {
   const data = normalizeBodyCheck(check);
   const parts = [];
   if (data.mood.reason) parts.push(`心情原因：${data.mood.reason}`);
+  if (data.body.other) parts.push(`其他身體感受：${data.body.other}`);
   if (data.body.reason) parts.push(`身體原因：${data.body.reason}`);
+  if (data.sleep.duration) parts.push(`睡眠時間：${data.sleep.duration}`);
+  if (data.sleep.quality) parts.push(`睡眠品質：${data.sleep.quality}`);
+  if (data.sleep.energy) parts.push(`起床精神：${data.sleep.energy}`);
   if (data.sleep.reason) parts.push(`睡眠說明：${data.sleep.reason}`);
   return parts.join("\n");
 }
@@ -2810,10 +2869,19 @@ function collectBodyCheck() {
       reason: journalFieldValue(reasonId),
     };
   };
+  const sleepValue = (field) =>
+    document.querySelector(`[data-sleep-field="${field}"] .sleep-chip.is-on`)?.dataset.sleepValue || "";
+  const body = readGroup("body", "bodyBodyReason");
+  const sleep = readGroup("sleep", "bodySleepReason");
   return {
     mood: readGroup("mood", "bodyMoodReason"),
-    body: readGroup("body", "bodyBodyReason"),
-    sleep: readGroup("sleep", "bodySleepReason"),
+    body: { ...body, other: journalFieldValue("bodyOtherNote") },
+    sleep: {
+      ...sleep,
+      duration: sleepValue("duration"),
+      quality: sleepValue("quality"),
+      energy: sleepValue("energy"),
+    },
   };
 }
 
@@ -2823,8 +2891,23 @@ function syncBodyReasonVisibility(check) {
     const reason = document.querySelector(`[data-body-reason="${name}"]`);
     if (!reason) return;
     const group = data[name] || {};
-    const show = name === "sleep" ? Boolean((group.flags || []).length) : Boolean((group.flags || []).length);
+    if (name === "sleep") {
+      reason.hidden = !(group.duration || group.quality || group.energy || (group.flags || []).length);
+      return;
+    }
+    const show = Boolean((group.flags || []).filter((flag) => flag !== "其他").length);
     reason.hidden = !show;
+  });
+  const other = document.querySelector("[data-body-other='body']");
+  if (other) other.hidden = !((data.body?.flags || []).includes("其他") || String(data.body?.other || "").trim());
+}
+
+function fillSleepChips(sleep) {
+  ["duration", "quality", "energy"].forEach((field) => {
+    const value = String(sleep?.[field] || "");
+    document.querySelectorAll(`[data-sleep-field="${field}"] .sleep-chip`).forEach((btn) => {
+      btn.classList.toggle("is-on", btn.dataset.sleepValue === value);
+    });
   });
 }
 
@@ -2839,12 +2922,15 @@ function fillBodyCheck(check) {
       btn.classList.toggle("is-on", flagSet.has(btn.dataset.bodyFlag));
     });
   });
+  fillSleepChips(data.sleep);
   const moodReason = document.getElementById("bodyMoodReason");
   const bodyReason = document.getElementById("bodyBodyReason");
   const sleepReason = document.getElementById("bodySleepReason");
+  const bodyOther = document.getElementById("bodyOtherNote");
   if (moodReason) moodReason.value = data.mood.reason || "";
   if (bodyReason) bodyReason.value = data.body.reason || "";
   if (sleepReason) sleepReason.value = data.sleep.reason || "";
+  if (bodyOther) bodyOther.value = data.body.other || "";
   syncBodyReasonVisibility(data);
 }
 
@@ -2852,7 +2938,14 @@ function bodyCheckHasSignal(check) {
   const data = check || emptyBodyCheck();
   return ["mood", "body", "sleep"].some((name) => {
     const group = data[name] || {};
-    return Boolean((group.flags || []).length || String(group.reason || "").trim());
+    return Boolean(
+      (group.flags || []).length ||
+        String(group.reason || "").trim() ||
+        String(group.other || "").trim() ||
+        String(group.duration || "").trim() ||
+        String(group.quality || "").trim() ||
+        String(group.energy || "").trim()
+    );
   });
 }
 
@@ -2933,6 +3026,7 @@ function journalHasContent(journal) {
     journal.event,
     journal.mood,
     journal.bodyNote,
+    journal.smallestStep,
     ...(journal.awareness || []),
     ...(journal.execution || []),
     journal.manifest,
@@ -2964,6 +3058,7 @@ function journalBlob(journal) {
     journal.event,
     journal.mood,
     journal.bodyNote,
+    journal.smallestStep,
     ...(journal.awareness || []),
     ...(journal.execution || []),
   ]
@@ -2980,6 +3075,20 @@ function joinJournalAnswers(answers) {
 
 function coreAnswerFilled(answers) {
   return joinJournalAnswers(answers).length >= 4;
+}
+
+function awarenessReady(answers, mode = state.journalMode) {
+  const list = Array.isArray(answers) ? answers : [];
+  if (mode === "quick") return String(list[0] || "").trim().length >= 4;
+  return list.filter((item) => String(item || "").trim()).length >= 3;
+}
+
+function fillAwarenessAnswers(answers) {
+  const list = Array.isArray(answers) ? answers.map((item) => String(item || "")) : [];
+  ["aware1", "aware2", "aware3"].forEach((id, index) => {
+    const el = document.getElementById(id);
+    if (el) el.value = list[index] || "";
+  });
 }
 
 function fillCoreAnswer(id, answers) {
@@ -3149,8 +3258,9 @@ async function generateJournalChecklist(kind, options = {}) {
   if (state.checklistBusy[kind]) return;
   const journal = collectJournal();
   const answers = isAware ? journal.awareness : journal.execution;
-  if (!coreAnswerFilled(answers)) {
-    if (!options.auto) showToast("先把左側這道核心題寫完，再整理勾勾表。");
+  const ready = isAware ? awarenessReady(answers) : coreAnswerFilled(answers);
+  if (!ready) {
+    if (!options.auto) showToast(isAware ? "先把覺察題寫完，再整理勾勾表。" : "先把左側這道核心題寫完，再整理勾勾表。");
     return;
   }
   const sig = checklistSignature(answers);
@@ -3174,17 +3284,19 @@ async function generateJournalChecklist(kind, options = {}) {
       date: currentIso(),
       answers,
       questions: isAware
-        ? [CORE_AWARENESS_PROMPT.question]
+        ? AWARENESS_QUESTIONS.map((item) => item.question)
         : [CORE_EXECUTION_PROMPT.question],
       context: {
         event: journal.event,
         mood: journal.mood,
         bodyTags: journal.bodyTags,
         bodyNote: journal.bodyNote,
+        bodyCheck: journal.bodyCheck,
         openActions: getTasks()
           .filter((task) => task.status !== "done")
           .slice(0, 6)
           .map((task) => task.title),
+        smallestStep: journal.smallestStep,
       },
       text: answers.join("\n"),
     });
@@ -3203,8 +3315,8 @@ async function generateJournalChecklist(kind, options = {}) {
 }
 
 function maybeAutoGenerateChecklists(journal) {
-  if (state.journalHydrating) return;
-  if (coreAnswerFilled(journal.awareness) && state.journalMeta.awarenessAiSig !== checklistSignature(journal.awareness)) {
+  if (state.journalHydrating || state.journalMode === "quick") return;
+  if (awarenessReady(journal.awareness, "deep") && state.journalMeta.awarenessAiSig !== checklistSignature(journal.awareness)) {
     generateJournalChecklist("awareness", { auto: true });
   }
   if (coreAnswerFilled(journal.execution) && state.journalMeta.executionAiSig !== checklistSignature(journal.execution)) {
@@ -3285,12 +3397,17 @@ function maybeAutoGenerateManifest(journal) {
 }
 
 function insightReady(journal) {
+  if (state.journalMode === "quick") return false;
   const data = journal || collectJournal();
-  return Boolean(
-    String(data.event || "").trim() &&
-      data.mood &&
-      ((data.bodyTags || []).length || String(data.bodyNote || "").trim())
-  );
+  const check = normalizeBodyCheck(data.bodyCheck, data.bodyTags, data.bodyNote);
+  const hasBody =
+    (data.bodyTags || []).length ||
+    String(data.bodyNote || "").trim() ||
+    check.sleep.duration ||
+    check.sleep.quality ||
+    check.sleep.energy ||
+    check.body.other;
+  return Boolean(String(data.event || "").trim() && data.mood && hasBody);
 }
 
 function insightSignature(journal) {
@@ -3390,7 +3507,7 @@ async function generateJournalInsight(options = {}) {
 }
 
 function maybeAutoGenerateInsight(journal) {
-  if (state.journalHydrating) return;
+  if (state.journalHydrating || state.journalMode === "quick") return;
   if (insightReady(journal) && state.journalMeta.insightSig !== insightSignature(journal)) {
     generateJournalInsight({ auto: true });
   }
@@ -3522,7 +3639,7 @@ async function generateBodyCoach(options = {}) {
 }
 
 function maybeAutoGenerateBodyCoach(journal) {
-  if (state.journalHydrating) return;
+  if (state.journalHydrating || state.journalMode === "quick") return;
   if (bodyCoachReady(journal, { auto: true }) && state.journalMeta.bodyCoachSig !== bodyCoachSignature(journal)) {
     generateBodyCoach({ auto: true });
   }
@@ -3725,31 +3842,8 @@ function renderExecutionQuestions(prompts, options = {}) {
   fillCoreAnswer("exec1", options.answers);
 }
 
-function renderDeepThemes(prompts, options = {}) {
-  const root = document.getElementById("deepList");
-  if (!root) return;
-  const items = normalizeDeepPrompts(prompts);
-  const deep = options.deep || [1, 2, 3, 4].map((index) => {
-    try {
-      return collectDeepSlot(index);
-    } catch {
-      return { plain: "", deep: "", followups: [], notes: ["", "", "", ""] };
-    }
-  });
-  const openSet = new Set(
-    [...root.querySelectorAll("details.deep-item[open]")].map((el, index) => Number(el.dataset.deepIndex || index + 1))
-  );
-  if (!items.length) {
-    root.classList.add("is-waiting");
-    root.innerHTML = `<p class="deep-empty">寫完今日事件、心情與身體狀況後，會依你的成長進度生成今天的四個深度思考主題。</p>`;
-    return;
-  }
-  root.classList.remove("is-waiting");
-  root.innerHTML = items
-    .map((item, i) => {
-      const index = i + 1;
-      const slot = deep[i] || { plain: "", deep: "", followups: [], notes: [] };
-      return `
+function renderDeepItemHtml(item, index, slot, openSet) {
+  return `
         <details class="deep-item" data-deep-index="${index}" ${openSet.has(index) ? "open" : ""}>
           <summary>${escapeHtml(item.title)}</summary>
           <div class="deep-block">
@@ -3768,12 +3862,67 @@ function renderDeepThemes(prompts, options = {}) {
           <div class="deep-follow" id="deep${index}Follow"></div>
         </details>
       `;
-    })
+}
+
+function deepSlotHasContent(slot) {
+  const data = slot || {};
+  return Boolean(
+    String(data.plain || "").trim() ||
+      String(data.deep || "").trim() ||
+      (data.followups || []).some((item) => String(item || "").trim()) ||
+      (data.notes || []).some((item) => String(item || "").trim())
+  );
+}
+
+function renderDeepThemes(prompts, options = {}) {
+  const root = document.getElementById("deepList");
+  const moreBtn = document.getElementById("btnDeepMore");
+  if (!root) return;
+  const items = normalizeDeepPrompts(prompts);
+  const deep = options.deep || [1, 2, 3, 4].map((index) => {
+    try {
+      return collectDeepSlot(index);
+    } catch {
+      return { plain: "", deep: "", followups: [], notes: ["", "", "", ""] };
+    }
+  });
+  const openSet = new Set(
+    [...root.querySelectorAll("details.deep-item[open]")].map((el) => Number(el.dataset.deepIndex || 0))
+  );
+  if (!items.length) {
+    root.classList.add("is-waiting");
+    root.innerHTML = `<p class="deep-empty">寫完今日事件、心情與身體狀況後，會依你今天的狀態生成一個最值得深挖的主題。</p>`;
+    if (moreBtn) moreBtn.hidden = true;
+    return;
+  }
+  const extraFilled = deep.slice(1).some(deepSlotHasContent);
+  if (extraFilled) state.deepExpanded = true;
+  root.classList.remove("is-waiting");
+  const first = items[0];
+  const rest = items.slice(1);
+  const firstHtml = renderDeepItemHtml(first, 1, deep[0] || {}, openSet);
+  const restHtml = rest
+    .map((item, i) => renderDeepItemHtml(item, i + 2, deep[i + 1] || {}, openSet))
     .join("");
+  root.innerHTML =
+    firstHtml +
+    (rest.length
+      ? `<div class="deep-more" id="deepMore" ${state.deepExpanded ? "" : "hidden"}>${restHtml}</div>`
+      : "");
   items.forEach((_, i) => {
     const slot = deep[i] || {};
     renderDeepFollow(i + 1, slot.followups, slot.notes);
   });
+  if (moreBtn) moreBtn.hidden = state.deepExpanded || rest.length === 0;
+}
+
+function expandDeepThemes() {
+  state.deepExpanded = true;
+  const more = document.getElementById("deepMore");
+  const btn = document.getElementById("btnDeepMore");
+  if (more) more.hidden = false;
+  if (btn) btn.hidden = true;
+  persistJournalQuietly();
 }
 
 function setPromptsLoading(loading, scope = "all") {
@@ -3871,7 +4020,7 @@ async function generateJournalPrompts(options = {}) {
 }
 
 function maybeAutoGeneratePrompts(journal) {
-  if (state.journalHydrating) return;
+  if (state.journalHydrating || state.journalMode === "quick") return;
   const data = journal || collectJournal();
   if (!insightReady(data)) return;
   if (state.deepPrompts.length === 4 && state.journalMeta.promptsSig === promptsSignature(data)) return;
@@ -3986,6 +4135,32 @@ async function generateDeepFollow(index) {
   }
 }
 
+function inferJournalMode(data) {
+  if (data?.mode === "quick" || data?.mode === "deep") return data.mode;
+  const deepBits = [...(data?.awareness || []).slice(1), ...(data?.execution || []), data?.manifest];
+  if (deepBits.some((item) => String(item || "").trim())) return "deep";
+  if (deepHasContent(data?.deep) || String(data?.insight?.conclusion || "").trim()) return "deep";
+  if (bodyCheckHasSignal(normalizeBodyCheck(data?.bodyCheck, data?.bodyTags, data?.bodyNote))) return "deep";
+  return state.journalMode === "quick" ? "quick" : "deep";
+}
+
+function applyJournalMode(mode, options = {}) {
+  const next = mode === "quick" ? "quick" : "deep";
+  state.journalMode = next;
+  document.body.dataset.journalMode = next;
+  document.querySelectorAll(".journal-mode__btn").forEach((btn) => {
+    const on = btn.dataset.journalMode === next;
+    btn.classList.toggle("is-on", on);
+    btn.setAttribute("aria-selected", on ? "true" : "false");
+  });
+  try {
+    localStorage.setItem(STORAGE_KEYS.journalMode, next);
+  } catch {
+    /* 偏好寫入失敗不擋畫面 */
+  }
+  if (!options.silent && !state.journalHydrating) persistJournalQuietly();
+}
+
 function collectJournal() {
   const bodyCheck = collectBodyCheck();
   const journal = {
@@ -3996,12 +4171,15 @@ function collectJournal() {
     bodyTags: deriveBodyTags(bodyCheck),
     bodyNote: deriveBodyNote(bodyCheck),
     bodyCoach: state.journalBodyCoach || emptyBodyCoach(),
-    awareness: [journalFieldValue("aware1")],
+    awareness: ["aware1", "aware2", "aware3"].map(journalFieldValue),
     awarenessChecks: checkedValues("awareChecks"),
     awarenessCheckItems: checklistItems("awareChecks"),
     execution: [journalFieldValue("exec1")],
     executionChecks: checkedValues("execChecks"),
     executionCheckItems: checklistItems("execChecks"),
+    smallestStep: journalFieldValue("execNext"),
+    mode: state.journalMode === "quick" ? "quick" : "deep",
+    deepExpanded: Boolean(state.deepExpanded),
     awarenessAi: Boolean(state.journalMeta.awarenessAi),
     executionAi: Boolean(state.journalMeta.executionAi),
     awarenessAiSig: state.journalMeta.awarenessAiSig || "",
@@ -4035,7 +4213,11 @@ function composeJournalRawText(journal) {
   if (check.mood.flags.length) lines.push(`今日心情檢核：${check.mood.flags.join("、")}`);
   if (check.mood.reason) lines.push(`心情原因：${check.mood.reason}`);
   if (check.body.flags.length) lines.push(`今日身體檢核：${check.body.flags.join("、")}`);
+  if (check.body.other) lines.push(`其他身體感受：${check.body.other}`);
   if (check.body.reason) lines.push(`身體原因：${check.body.reason}`);
+  if (check.sleep.duration) lines.push(`睡眠時間：${check.sleep.duration}`);
+  if (check.sleep.quality) lines.push(`睡眠品質：${check.sleep.quality}`);
+  if (check.sleep.energy) lines.push(`起床精神：${check.sleep.energy}`);
   if (check.sleep.flags.length) lines.push(`昨日睡眠檢核：${check.sleep.flags.join("、")}`);
   if (check.sleep.reason) lines.push(`睡眠說明：${check.sleep.reason}`);
   const bodyCoach = normalizeBodyCoach(journal.bodyCoach);
@@ -4052,13 +4234,15 @@ function composeJournalRawText(journal) {
     if (insight.logic) lines.push(insight.logic);
     if (insight.bodyLink) lines.push(insight.bodyLink);
   }
-  const awareQs = (journal.awarenessPrompts || [CORE_AWARENESS_PROMPT]).map((item) => item.question || item);
-  const awareAnswer = joinJournalAnswers(journal.awareness);
-  if (awareAnswer) lines.push(`${awareQs[0] || "核心反思"} ${awareAnswer}`);
+  AWARENESS_QUESTIONS.forEach((item, index) => {
+    const answer = String((journal.awareness || [])[index] || "").trim();
+    if (answer) lines.push(`${item.question} ${answer}`);
+  });
   if ((journal.awarenessChecks || []).length) lines.push(`今天我覺察到：${journal.awarenessChecks.join("、")}`);
   const execQs = (journal.executionPrompts || [CORE_EXECUTION_PROMPT]).map((item) => item.question || item);
   const execAnswer = joinJournalAnswers(journal.execution);
   if (execAnswer) lines.push(`${execQs[0] || "核心行動"} ${execAnswer}`);
+  if (String(journal.smallestStep || "").trim()) lines.push(`明天最小的一步：${String(journal.smallestStep).trim()}`);
   if ((journal.executionChecks || []).length) lines.push(`我的行動卡點：${journal.executionChecks.join("、")}`);
   if (String(journal.manifest || "").trim()) lines.push(`明天想顯化：${journal.manifest.trim()}`);
   if ((journal.manifestChecks || []).length) lines.push(`顯化執行目標：${journal.manifestChecks.join("、")}`);
@@ -4139,6 +4323,8 @@ function fillJournal(journal) {
   state.awarenessPrompts = [CORE_AWARENESS_PROMPT];
   state.executionPrompts = [CORE_EXECUTION_PROMPT];
   state.deepPrompts = normalizeDeepPrompts(data.deepPrompts);
+  state.deepExpanded = Boolean(data.deepExpanded) || normalizeDeep(data.deep).slice(1).some(deepSlotHasContent);
+  applyJournalMode(inferJournalMode(data), { silent: true });
   const hasPromptAnswers =
     (data.awareness || []).some((item) => String(item || "").trim()) || deepHasContent(data.deep);
   if (!state.deepPrompts.length && hasPromptAnswers) state.deepPrompts = LEGACY_DEEP_PROMPTS;
@@ -4152,8 +4338,10 @@ function fillJournal(journal) {
   fillBodyCheck(normalizeBodyCheck(data.bodyCheck, data.bodyTags, data.bodyNote));
   const manifestVision = document.getElementById("manifestVision");
   if (manifestVision) manifestVision.value = data.manifest || "";
-  fillCoreAnswer("aware1", data.awareness);
+  fillAwarenessAnswers(data.awareness);
   fillCoreAnswer("exec1", data.execution);
+  const execNext = document.getElementById("execNext");
+  if (execNext) execNext.value = data.smallestStep || "";
   renderDeepThemes(state.deepPrompts, { deep: normalizeDeep(data.deep) });
   refreshJournalChecklists(data, { useSaved: true });
   renderInsightCard(state.journalInsight);
@@ -5252,7 +5440,7 @@ function completeToday() {
 
   updateStats();
   syncReviewsToCloud();
-  showToast("今日復盤已完成，勾選的覺察、行動與顯化步驟已同步到側邊欄。");
+  showToast("今日復盤已完成，勾選項目與明天最小一步已同步到側邊欄。");
 }
 
 function inferSfmType(text) {
@@ -5689,16 +5877,22 @@ function historyBodyCheckHtml(journal) {
   const check = normalizeBodyCheck(journal.bodyCheck, journal.bodyTags, journal.bodyNote);
   const lines = [];
   const moodFlags = (check.mood.flags || []).join("、");
-  const bodyFlags = (check.body.flags || []).join("、");
-  const sleepFlags = (check.sleep.flags || []).join("、");
+  const bodyFlags = (check.body.flags || []).filter((flag) => flag !== "其他").join("、");
   if (moodFlags || check.mood.reason) {
     lines.push(`心情：${moodFlags || "狀態平穩"}${check.mood.reason ? `｜${check.mood.reason}` : ""}`);
   }
-  if (bodyFlags || check.body.reason) {
-    lines.push(`身體：${bodyFlags || "狀態平穩"}${check.body.reason ? `｜${check.body.reason}` : ""}`);
+  if (bodyFlags || check.body.other || check.body.reason) {
+    const bodyLine = [bodyFlags, check.body.other ? `其他：${check.body.other}` : ""]
+      .filter(Boolean)
+      .join("、") || "狀態平穩";
+    lines.push(`身體：${bodyLine}${check.body.reason ? `｜${check.body.reason}` : ""}`);
   }
-  if (sleepFlags || check.sleep.reason) {
-    lines.push(`睡眠：${sleepFlags || "未特別勾選"}${check.sleep.reason ? `｜${check.sleep.reason}` : ""}`);
+  if (check.sleep.duration || check.sleep.quality || check.sleep.energy || check.sleep.reason) {
+    lines.push(
+      `睡眠：時間 ${check.sleep.duration || "未填"}｜品質 ${check.sleep.quality || "未填"}｜起床精神 ${check.sleep.energy || "未填"}${
+        check.sleep.reason ? `｜${check.sleep.reason}` : ""
+      }`
+    );
   }
   const coach = normalizeBodyCoach(journal.bodyCoach);
   if (coach.analysis) lines.push(coach.analysis);
@@ -5709,16 +5903,19 @@ function historyBodyCheckHtml(journal) {
 function renderHistoryJournal(review) {
   const journal = review?.journal && typeof review.journal === "object" ? review.journal : emptyJournal();
   const insight = normalizeInsight(journal.insight);
-  const awareAnswer = joinJournalAnswers(journal.awareness);
   const execAnswer = joinJournalAnswers(journal.execution);
   const parts = [
     historyListBlock("今日感謝", journal.thanks),
     historyTextBlock("今日事件", journal.event),
     journal.mood ? historyTextBlock("心情", journal.mood) : "",
     historyBodyCheckHtml(journal),
-    awareAnswer ? historyTextBlock("覺察力", awareAnswer) : "",
+    ...AWARENESS_QUESTIONS.map((item, index) => {
+      const answer = String((journal.awareness || [])[index] || "").trim();
+      return answer ? historyTextBlock(item.question, answer) : "";
+    }),
     historyListBlock("今天我覺察到", journal.awarenessChecks),
     execAnswer ? historyTextBlock("執行力", execAnswer) : "",
+    historyTextBlock("明天最小的一步", journal.smallestStep),
     historyListBlock("行動卡點／解法", journal.executionChecks),
     insight.conclusion
       ? historyBlock(
@@ -5984,6 +6181,12 @@ function bindEvents() {
   document.getElementById("btnManifestAi")?.addEventListener("click", () => generateJournalChecklist("manifest"));
   document.getElementById("btnInsightAi")?.addEventListener("click", () => generateJournalInsight());
   document.getElementById("btnBodyCoach")?.addEventListener("click", () => generateBodyCoach());
+  document.querySelector(".journal-mode")?.addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-journal-mode]");
+    if (!btn) return;
+    applyJournalMode(btn.dataset.journalMode);
+  });
+  document.getElementById("btnDeepMore")?.addEventListener("click", expandDeepThemes);
   document.getElementById("section-deep")?.addEventListener("click", (event) => {
     const btn = event.target.closest("[data-deepen]");
     if (!btn) return;
@@ -6002,9 +6205,18 @@ function bindEvents() {
   });
 
   document.getElementById("section-body")?.addEventListener("click", (event) => {
-    const btn = event.target.closest(".body-flag-btn");
-    if (!btn) return;
-    btn.classList.toggle("is-on");
+    const sleep = event.target.closest(".sleep-chip");
+    if (sleep) {
+      const field = sleep.dataset.sleepField;
+      const turningOn = !sleep.classList.contains("is-on");
+      document.querySelectorAll(`.sleep-chip[data-sleep-field="${field}"]`).forEach((btn) => {
+        btn.classList.toggle("is-on", turningOn && btn === sleep);
+      });
+    } else {
+      const btn = event.target.closest(".body-flag-btn");
+      if (!btn) return;
+      btn.classList.toggle("is-on");
+    }
     syncBodyReasonVisibility();
     persistJournalQuietly();
     refreshJournalChecklists();
@@ -6016,8 +6228,8 @@ function bindEvents() {
 
   document.getElementById("page-today")?.addEventListener("input", (event) => {
     const id = event.target && event.target.id;
-    if (/^(aware|exec)\d$|^eventText$|^bodyNote$|^bodyMoodReason$|^bodyBodyReason$|^bodySleepReason$|^manifestVision$/.test(id || "")) {
-      if (/^(aware|exec)\d$|^body(Mood|Body|Sleep)Reason$/.test(id || "")) persistJournalQuietly();
+    if (/^(aware|exec)\d$|^execNext$|^eventText$|^bodyNote$|^bodyOtherNote$|^bodyMoodReason$|^bodyBodyReason$|^bodySleepReason$|^manifestVision$/.test(id || "")) {
+      if (/^(aware|exec)\d$|^execNext$|^bodyOtherNote$|^body(Mood|Body|Sleep)Reason$/.test(id || "")) persistJournalQuietly();
       scheduleJournalChecklists();
     }
   });
@@ -6322,6 +6534,12 @@ function init() {
     document.getElementById("headerDate").textContent = formatHeaderDate(new Date());
     document.getElementById("reviewDate").value = toInputDate(new Date());
     updateJournalDateLabel(toInputDate(new Date()));
+    try {
+      const storedMode = localStorage.getItem(STORAGE_KEYS.journalMode);
+      applyJournalMode(storedMode === "quick" ? "quick" : "deep", { silent: true });
+    } catch {
+      applyJournalMode("deep", { silent: true });
+    }
     const closed =
       localStorage.getItem("rv_sidebar") === "closed" || localStorage.getItem(STORAGE_KEYS.sidebar) === "1";
     if (closed && !isMobile()) {

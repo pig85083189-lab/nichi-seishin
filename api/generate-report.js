@@ -16,14 +16,18 @@ const { ensureTrial, isEntitled, getSubscription, supabaseAdminConfigured } = re
 
 const REPORT_SYSTEM = `你是「日精進」的成長教練。使用者會給你一段期間內的復盤摘要，以及覺察力、執行力、顯化力的勾選量與完成頻率。
 
-請寫一份冷靜、精準、可執行的成長報告。對事不對人。禁止雞湯、禁止空話。必須貼近數據與原文。
+請寫一份冷靜、精準、可執行的個人心理模式報告。對事不對人。禁止雞湯、禁止空話。必須貼近數據與原文。你要比使用者更懂他自己：不只複述當週發生什麼，更要抓出跨天重複出現、他自己可能還沒命名的隱性模式。
 
 【必須寫滿】
 1. highlights「本期閃光點」：2-4 條。肯定他做得很棒、進步顯著的地方，要具體，不要空泛誇獎。
 2. breakthroughs「成長突破口」：2-3 條。客觀指出盲點、停滯或三力失衡，每條含一個明天做得到的改進建議。
-3. insights：關鍵洞察，2-4 條。
-4. progress：進步軌跡，2-4 條。
-5. nextPlan：下週／下月規劃，2-4 條，必須做得到。
+3. patterns「隱性模式」：2-4 條。這是報告的核心。要像一位長期陪伴的分析師，把身心與行為的重複劇本講出來。例如：
+   - 「你最近常因為『事情未如預期』而導致腸胃不適與焦慮。」
+   - 「你的拖延往往發生在需要做決策的星期三。」
+   必須結合星期幾、心情、身體訊號（腸胃、頭痛、睡眠時間／品質／起床精神）、事件主題、最小行動是否落地。不要寫成空泛性格評論。
+4. insights：關鍵洞察，2-4 條。
+5. progress：進步軌跡，2-4 條。
+6. nextPlan：下週／下月規劃，2-4 條，必須做得到。
 
 另外給 title（報告標題）與 summary（一句總述）。
 只輸出 JSON，繁體中文，不要 markdown。
@@ -32,6 +36,7 @@ const REPORT_SYSTEM = `你是「日精進」的成長教練。使用者會給你
   "summary": "一句總述",
   "highlights": ["閃光點1", "閃光點2"],
   "breakthroughs": ["突破口1（含具體建議）", "突破口2"],
+  "patterns": ["隱性模式1", "隱性模式2"],
   "insights": ["洞察1", "洞察2"],
   "progress": ["軌跡1", "軌跡2"],
   "nextPlan": ["規劃1", "規劃2"]
@@ -119,14 +124,24 @@ function rangeFor(type, options = {}) {
   return { fromIso, toIso: today, period: fromIso, label: "本週" };
 }
 
+function weekdayZh(iso) {
+  const names = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
+  const [y, m, d] = String(iso).split("-").map(Number);
+  if (!y || !m || !d) return "";
+  return names[new Date(Date.UTC(y, m - 1, d)).getUTCDay()] || "";
+}
+
 function reviewsInRange(all, fromIso, toIso) {
   return Object.entries(all || {})
     .filter(([iso, review]) => iso >= fromIso && iso <= toIso && review && typeof review === "object")
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([iso, review]) => {
       const journal = review.journal && typeof review.journal === "object" ? review.journal : {};
+      const bodyCheck = journal.bodyCheck && typeof journal.bodyCheck === "object" ? journal.bodyCheck : {};
+      const sleep = bodyCheck.sleep && typeof bodyCheck.sleep === "object" ? bodyCheck.sleep : {};
       return {
         date: iso,
+        weekday: weekdayZh(iso),
         rawText: String(review.rawText || "").slice(0, 800),
         themeTitle: review.themeTitle || review.organize?.themeTitle || "",
         conclusion: review.conclusion || review.organize?.conclusion || "",
@@ -138,6 +153,19 @@ function reviewsInRange(all, fromIso, toIso) {
           executionChecks: Array.isArray(journal.executionChecks) ? journal.executionChecks.slice(0, 8) : [],
           manifestChecks: Array.isArray(journal.manifestChecks) ? journal.manifestChecks.slice(0, 8) : [],
           manifest: String(journal.manifest || "").slice(0, 120),
+          mood: String(journal.mood || "").slice(0, 20),
+          event: String(journal.event || "").slice(0, 160),
+          bodyTags: Array.isArray(journal.bodyTags) ? journal.bodyTags.slice(0, 8) : [],
+          bodyNote: String(journal.bodyNote || "").slice(0, 180),
+          smallestStep: String(journal.smallestStep || "").slice(0, 120),
+          awareness: Array.isArray(journal.awareness)
+            ? journal.awareness.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 3).map((item) => item.slice(0, 120))
+            : [],
+          sleep: {
+            duration: String(sleep.duration || "").slice(0, 20),
+            quality: String(sleep.quality || "").slice(0, 20),
+            energy: String(sleep.energy || "").slice(0, 20),
+          },
         },
       };
     });
@@ -170,13 +198,23 @@ async function buildAiReport({ type, fromIso, toIso, period, label, entries, sta
       const quotes = Array.isArray(item.quotes) ? item.quotes.filter(Boolean).join("／") : "";
       const journal = item.journal && typeof item.journal === "object" ? item.journal : {};
       const checks = [
+        item.weekday ? `星期：${item.weekday}` : "",
+        journal.mood ? `心情：${journal.mood}` : "",
+        journal.event ? `事件：${journal.event}` : "",
+        journal.bodyTags?.length ? `身體標籤：${journal.bodyTags.join("、")}` : "",
+        journal.bodyNote ? `身心備註：${journal.bodyNote}` : "",
+        journal.sleep?.duration || journal.sleep?.quality || journal.sleep?.energy
+          ? `睡眠：時間 ${journal.sleep.duration || "未填"}／品質 ${journal.sleep.quality || "未填"}／起床精神 ${journal.sleep.energy || "未填"}`
+          : "",
+        journal.awareness?.length ? `覺察：${journal.awareness.join("／")}` : "",
+        journal.smallestStep ? `明天最小一步：${journal.smallestStep}` : "",
         journal.awarenessChecks?.length ? `覺察勾選：${journal.awarenessChecks.join("、")}` : "",
         journal.executionChecks?.length ? `執行勾選：${journal.executionChecks.join("、")}` : "",
         journal.manifestChecks?.length ? `顯化勾選：${journal.manifestChecks.join("、")}` : "",
         journal.manifest ? `顯化願景：${journal.manifest}` : "",
       ].filter(Boolean);
       return [
-        `【${item.date}】${item.themeCategory || ""} ${item.themeTitle || ""}`.trim(),
+        `【${item.date}${item.weekday ? ` ${item.weekday}` : ""}】${item.themeCategory || ""} ${item.themeTitle || ""}`.trim(),
         item.conclusion ? `結論：${item.conclusion}` : "",
         item.rawText ? `原文：${String(item.rawText).slice(0, 280)}` : "",
         quotes ? `金句：${quotes}` : "",
@@ -192,7 +230,7 @@ async function buildAiReport({ type, fromIso, toIso, period, label, entries, sta
       { role: "system", content: REPORT_SYSTEM },
       {
         role: "user",
-        content: `這是「${label}」成長報告（${fromIso} 至 ${toIso}），共 ${entries.length} 天復盤。\n\n【三力數據】\n${formatStatsPrompt(stats)}\n\n【復盤摘要】\n${digest || "（這段期間沒有復盤摘要，請只根據三力數據寫）"}`,
+        content: `這是「${label}」成長報告（${fromIso} 至 ${toIso}），共 ${entries.length} 天復盤。\n請特別抓出跨天重複的隱性模式：身心連鎖（例如事情未如預期→腸胃／焦慮）、星期節奏（例如星期三決策拖延）、睡眠與執行力的連動。\n\n【三力數據】\n${formatStatsPrompt(stats)}\n\n【復盤摘要】\n${digest || "（這段期間沒有復盤摘要，請只根據三力數據寫）"}`,
       },
     ],
     25000
@@ -210,6 +248,7 @@ async function buildAiReport({ type, fromIso, toIso, period, label, entries, sta
     summary: data.summary || "",
     highlights: lines(data.highlights, 4),
     breakthroughs: lines(data.breakthroughs, 3),
+    patterns: lines(data.patterns, 4),
     insights: lines(data.insights, 6),
     progress: lines(data.progress, 6),
     nextPlan: lines(data.nextPlan, 6),

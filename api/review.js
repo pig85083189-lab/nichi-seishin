@@ -152,8 +152,12 @@ actions 的 detail 必須是可開口的完整一句，用「」包起來。
 title 必須是有質感的思考主題，例如「先看見，才能改變」，不要寫「深度思考」。stars 為 1-5。
 points 給 1-3 個，每個 conclusion 只能一句。actions 給 3 個。若已是最後一輪，question 改成收束。`;
 
-const CHECKLIST_AWARENESS_SYSTEM = `你是「日精進」的高階心靈教練與諮詢師。使用者剛寫下今天的一道核心反思題：把今天讓內心波動、有所省思，或看清盲點與核心信念的全盤覺察一次寫下來。
-請依這段全面性的深度回答做拆解與分析，整理成「今天我覺察到」勾選清單。
+const CHECKLIST_AWARENESS_SYSTEM = `你是「日精進」的高階心靈教練與諮詢師。使用者剛用三個循序漸進的白話問題，慢慢看清今天被碰到的地方：
+1. 今天哪一件事最觸動你？
+2. 你當時真正的感受是什麼？
+3. 如果再往內看一層，你覺得自己真正介意的是什麼？
+
+請依這三層回答做拆解與分析，整理成「今天我覺察到」勾選清單。
 
 規則：
 - 只輸出 JSON：{"items":["..."]}
@@ -249,27 +253,38 @@ function formatBodyCheckPrompt(ctx) {
   }
   const groupLine = (label, group) => {
     const data = group && typeof group === "object" ? group : {};
-    const flags = Array.isArray(data.flags) ? data.flags.filter(Boolean).join("、") : "";
-    if (flags) return `${label}：${flags}${data.reason ? `；原因：${data.reason}` : ""}`;
+    const flags = Array.isArray(data.flags) ? data.flags.filter((flag) => flag && flag !== "其他").join("、") : "";
+    const extra = data.other ? `其他感受：${data.other}` : "";
+    const bits = [flags, extra].filter(Boolean).join("；");
+    if (bits) return `${label}：${bits}${data.reason ? `；原因：${data.reason}` : ""}`;
     return `${label}：未勾選（視為狀態平穩）${data.reason ? `；說明：${data.reason}` : ""}`;
   };
+  const sleep = check.sleep && typeof check.sleep === "object" ? check.sleep : {};
+  const sleepBits = [
+    sleep.duration ? `時間 ${sleep.duration}` : "",
+    sleep.quality ? `品質 ${sleep.quality}` : "",
+    sleep.energy ? `起床精神 ${sleep.energy}` : "",
+  ].filter(Boolean);
+  const sleepLine = sleepBits.length
+    ? `昨晚睡眠：${sleepBits.join("、")}${sleep.reason ? `；說明：${sleep.reason}` : ""}`
+    : groupLine("昨日睡眠檢核", sleep);
   return `${groupLine("今日心情檢核", check.mood)}
 ${groupLine("今日身體檢核", check.body)}
-${groupLine("昨日睡眠檢核", check.sleep)}`;
+${sleepLine}`;
 }
 
 const BODY_COACH_SYSTEM = `你是「日精進」的專業身心健康與教練顧問。使用者剛勾選今天的心情、身體與睡眠狀況，並可能寫下原因。
 
 心情可能包含：出現焦慮、脾氣暴躁、普通、好心情。
-身體可能包含：腸胃不適、頭痛、全身痠痛、身體疲勞。
-睡眠可能包含：10:00以前入睡、睡不著、睡得很好。
+身體可能包含：腸胃不適、頭痛、全身痠痛、身體疲勞，以及使用者自填的其他身體感受。
+睡眠改為三個長期紀錄欄位：睡眠時間、睡眠品質、起床精神。
 
-請把這三件事做邏輯串聯分析：例如焦慮如何牽動腸胃或頭痛、睡不著如何讓脾氣更薄、提早入睡或睡得很好又如何保護身體。然後給 3 個具體、今晚就做得到的照顧建議。
+請把這三件事做邏輯串聯分析：例如事情未如預期如何牽動腸胃或焦慮、睡不著或起床疲憊如何讓脾氣更薄、睡得夠或精神好又如何保護身體。然後給 3 個具體、今晚就做得到的照顧建議。
 
 規則：
 - 只輸出 JSON
 - 口吻溫暖、清楚、可執行。禁止雞湯、禁止說教、禁止診斷疾病或開藥
-- 若勾選的是正向或平穩狀態（好心情、普通、睡得很好、10:00以前入睡），要肯定它並給維持節奏的建議，不要硬找問題
+- 若勾選的是正向或平穩狀態（好心情、普通、睡眠品質很好、起床精神很好），要肯定它並給維持節奏的建議，不要硬找問題
 - 若有不適訊號，再串因果並給照顧動作
 - 建議必須是實際動作，例如調整呼吸、補充水分、伸展、提早放鬆、放下手機、溫水洗手臂
 - suggestions 必須剛好 3 條，每條 18-42 字
@@ -372,6 +387,7 @@ function checklistUserPrompt(kind, body) {
 
 核心行動題：${questions[0] || "今天在執行目標時遇到了什麼實質卡點？你打算採取什麼全面性的行動或突破策略來解決它？"}
 深度回答：${answer || "（未填）"}
+明天最小的一步：${ctx.smallestStep || "未寫"}
 
 背景補充：
 心情：${ctx.mood || "未選"}
@@ -380,10 +396,14 @@ function checklistUserPrompt(kind, body) {
 身體提醒：${ctx.bodyNote || "未寫"}
 尚未完成的行動：${openActions.slice(0, 6).join("、") || "尚無"}`;
   }
-  return `請分析這個人今天的全盤覺察，產出 4 到 6 條「今天我覺察到」勾選項目。
+  const labeled = questions.length
+    ? questions
+        .map((question, index) => `${index + 1}. ${question}\n回答：${answers[index] || "（未填）"}`)
+        .join("\n\n")
+    : `深度回答：${answer || "（未填）"}`;
+  return `請分析這個人今天的三層覺察，產出 4 到 6 條「今天我覺察到」勾選項目。
 
-核心反思題：${questions[0] || "今天發生了什麼讓你內心波動、有所省思，或看清了自己哪個盲點與核心信念的全盤覺察？"}
-深度回答：${answer || "（未填）"}
+${labeled}
 
 背景補充：
 心情：${ctx.mood || "未選"}
@@ -398,6 +418,7 @@ const PROMPTS_SYSTEM = `你是「日精進」的高階心靈教練。請依這�
 
 【任務】
 - deep：4 個深度思考主題。每個主題含標題、白話引導、深挖引導。
+- 第一題必須是今天最值得深挖、最貼近當下狀態的主題（會單獨顯示在主畫面）。其餘三題作為「還想繼續探索」時才展開。
 
 【必須遵守】
 - 只輸出 JSON
