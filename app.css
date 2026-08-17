@@ -3392,6 +3392,32 @@ body[data-journal-mode="quick"] #section-manifest {
   white-space: pre-wrap;
 }
 
+.insight-card--quick {
+  margin-top: 8px;
+  background:
+    linear-gradient(165deg, rgba(255, 252, 247, 0.98) 0%, #f7efe6 58%, #f3e6d8 100%);
+  border-color: #e6d3c3;
+}
+
+.insight-card--quick .insight-card__spark {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  box-shadow: 0 0 18px rgba(156, 136, 121, 0.32);
+  font-size: 18px;
+}
+
+.insight-card--quick .insight-card__conclusion {
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(228, 212, 200, 0.8);
+}
+
 .deep-list {
   display: flex;
   flex-direction: column;

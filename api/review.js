@@ -225,8 +225,38 @@ const INSIGHT_SYSTEM = `你是「日精進」的高階心靈教練：溫柔，�
   "bodyLink": "身體反應與心理壓力的關聯，1到2句。"
 }`;
 
+const QUICK_INSIGHT_SYSTEM = `你是「日精進」的陪伴者：溫柔、精準、不說教。使用者剛用「快速復盤」寫下今日感謝、今天發生的事，以及心情。
+請立刻給他一句簡鍊、有深度、有溫暖引導力的「深度洞察」結論。
+
+規則：
+- 只輸出 JSON
+- 必須貼近他的感謝與事件原文，不要空泛雞湯、不要說教、不要病例腔
+- 先接住今天的感受，再輕輕點出真正被碰到、或真正被滋養的那一層
+- title 10-18 字；conclusion 必須是 1 到 2 句，總長約 40-90 字，像一句能被記住的核心總結
+- 不要分析身體、不要開檢查清單、不要給一堆行動建議
+- 繁體中文
+{
+  "title": "一句有質感的洞察標題，10-18字",
+  "conclusion": "今日核心總結，1到2句。"
+}`;
+
+function isQuickInsightRequest(body) {
+  const ctx = body && body.context && typeof body.context === "object" ? body.context : {};
+  return body?.variant === "quick" || ctx.variant === "quick";
+}
+
 function insightUserPrompt(body) {
   const ctx = body.context && typeof body.context === "object" ? body.context : {};
+  if (isQuickInsightRequest(body)) {
+    const thanks = Array.isArray(ctx.thanks)
+      ? ctx.thanks.map((item) => String(item || "").trim()).filter(Boolean).join("、")
+      : String(ctx.thanks || "").trim();
+    return `這是快速復盤。請只根據感謝、事件與心情，生成一句今日深度洞察。
+
+今日感謝：${thanks || "（未寫）"}
+今日事件：${ctx.event || body.text || "（未寫）"}
+心情：${ctx.mood || "未選"}`;
+  }
   return `請為這個人生成今日核心結論。
 
 今日事件：${ctx.event || body.text || "（未寫）"}
@@ -655,10 +685,20 @@ module.exports = async function handler(req, res) {
       const ctx = body.context && typeof body.context === "object" ? body.context : {};
       const event = String(ctx.event || text || "").trim();
       const mood = String(ctx.mood || "").trim();
-      const hasBody = (Array.isArray(ctx.bodyTags) && ctx.bodyTags.length) || String(ctx.bodyNote || "").trim();
-      if (!event || !mood || !hasBody) {
-        res.status(400).json({ ok: false, error: "請先寫下今日事件、選擇心情，並標出身體狀況" });
-        return;
+      if (isQuickInsightRequest(body)) {
+        const thanks = Array.isArray(ctx.thanks)
+          ? ctx.thanks.map((item) => String(item || "").trim()).filter(Boolean)
+          : [];
+        if (!event || !mood || !thanks.length) {
+          res.status(400).json({ ok: false, error: "請先寫下今日感謝、事件，並選擇心情" });
+          return;
+        }
+      } else {
+        const hasBody = (Array.isArray(ctx.bodyTags) && ctx.bodyTags.length) || String(ctx.bodyNote || "").trim();
+        if (!event || !mood || !hasBody) {
+          res.status(400).json({ ok: false, error: "請先寫下今日事件、選擇心情，並標出身體狀況" });
+          return;
+        }
       }
     } else if (mode === "deepen") {
       const plain = String(body.plain || "").trim();
@@ -702,7 +742,7 @@ module.exports = async function handler(req, res) {
       ];
     } else if (mode === "insight") {
       messages = [
-        { role: "system", content: INSIGHT_SYSTEM },
+        { role: "system", content: isQuickInsightRequest(body) ? QUICK_INSIGHT_SYSTEM : INSIGHT_SYSTEM },
         { role: "user", content: insightUserPrompt(body) },
       ];
     } else if (mode === "deepen") {

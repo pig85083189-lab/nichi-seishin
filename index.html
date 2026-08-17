@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=81" />
+    <link rel="stylesheet" href="app.css?v=82" />
     <style>
       .splash {
         position: fixed;
@@ -462,6 +462,24 @@
             </div>
           </section>
 
+          <section class="insight-card insight-card--quick js-quick-only" id="section-quick-insight">
+            <header class="insight-card__head">
+              <span class="insight-card__spark" aria-hidden="true">✨</span>
+              <div>
+                <h2 class="insight-card__title">✨ 深度洞察</h2>
+                <p class="insight-card__lead">寫完今日感謝、事件與心情後，會為你梳理一句今日核心總結。</p>
+              </div>
+            </header>
+            <button class="ai-check-btn" id="btnQuickInsight" type="button">生成今日洞察</button>
+            <div class="check-loading" id="quickInsightLoading" hidden>
+              <p class="check-loading__label">正在為你梳理今天的核心總結…</p>
+              <div class="ai-thinking__bar"><i></i></div>
+            </div>
+            <div class="insight-card__body" id="quickInsightBody">
+              <p class="insight-card__empty">先寫下感謝、今天發生的事，並選好心情，再點按鈕或等它自動生成。</p>
+            </div>
+          </section>
+
           <div class="journal-footer" id="journalFooter">
             <div class="journal-footer__actions">
               <button class="btn btn--wide" id="btnCompleteToday" type="button">完成今日復盤</button>
@@ -676,6 +694,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=97"></script>
+    <script src="app.js?v=98"></script>
   </body>
 </html>

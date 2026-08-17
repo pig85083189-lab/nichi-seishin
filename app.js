@@ -103,6 +103,7 @@ const state = {
   checklistToken: { awareness: 0, execution: 0, manifest: 0 },
   insightBusy: false,
   insightToken: 0,
+  completeBusy: false,
   journalInsight: null,
   bodyCoachBusy: false,
   bodyCoachToken: 0,
@@ -3396,9 +3397,18 @@ function maybeAutoGenerateManifest(journal) {
   }
 }
 
-function insightReady(journal) {
-  if (state.journalMode === "quick") return false;
+function thanksFilled(journal) {
+  return (journal?.thanks || []).some((item) => String(item || "").trim());
+}
+
+function quickInsightReady(journal) {
   const data = journal || collectJournal();
+  return Boolean(thanksFilled(data) && String(data.event || "").trim() && data.mood);
+}
+
+function insightReady(journal) {
+  const data = journal || collectJournal();
+  if ((data.mode || state.journalMode) === "quick") return quickInsightReady(data);
   const check = normalizeBodyCheck(data.bodyCheck, data.bodyTags, data.bodyNote);
   const hasBody =
     (data.bodyTags || []).length ||
@@ -3412,44 +3422,94 @@ function insightReady(journal) {
 
 function insightSignature(journal) {
   const data = journal || collectJournal();
-  return [String(data.event || "").trim(), data.mood || "", (data.bodyTags || []).join("、"), String(data.bodyNote || "").trim()].join("\n");
+  const thanks = (data.thanks || []).map((item) => String(item || "").trim()).filter(Boolean).join("、");
+  if ((data.mode || state.journalMode) === "quick") {
+    return ["quick", thanks, String(data.event || "").trim(), data.mood || ""].join("\n");
+  }
+  return ["deep", String(data.event || "").trim(), data.mood || "", (data.bodyTags || []).join("、"), String(data.bodyNote || "").trim()].join("\n");
 }
 
-function renderInsightCard(insight) {
-  const root = document.getElementById("insightBody");
-  if (!root) return;
-  const data = normalizeInsight(insight);
+function insightEmptyCopy(quick) {
+  return quick
+    ? "先寫下感謝、今天發生的事，並選好心情，再點按鈕或等它自動生成。"
+    : "先把事件、心情與身體反應寫下來，再點按鈕或等它自動生成。";
+}
+
+function renderInsightResultHtml(data, quick) {
   if (!data.conclusion) {
-    root.innerHTML = `<p class="insight-card__empty">先把事件、心情與身體反應寫下來，再點按鈕或等它自動生成。</p>`;
-    return;
+    return `<p class="insight-card__empty">${insightEmptyCopy(quick)}</p>`;
   }
-  root.innerHTML = `
+  return `
     <article class="insight-card__result">
-      <p class="insight-card__kicker">【核心結論】</p>
+      <p class="insight-card__kicker">${quick ? "✨ 今日核心總結" : "【核心結論】"}</p>
       ${data.title ? `<h3 class="insight-card__headline">${escapeHtml(data.title)}</h3>` : ""}
       <p class="insight-card__conclusion">${escapeHtml(data.conclusion)}</p>
-      ${data.logic ? `<p class="insight-card__note">${escapeHtml(data.logic)}</p>` : ""}
-      ${data.bodyLink ? `<p class="insight-card__note">${escapeHtml(data.bodyLink)}</p>` : ""}
+      ${!quick && data.logic ? `<p class="insight-card__note">${escapeHtml(data.logic)}</p>` : ""}
+      ${!quick && data.bodyLink ? `<p class="insight-card__note">${escapeHtml(data.bodyLink)}</p>` : ""}
     </article>
   `;
 }
 
+function renderInsightCard(insight) {
+  const data = normalizeInsight(insight);
+  const deepRoot = document.getElementById("insightBody");
+  const quickRoot = document.getElementById("quickInsightBody");
+  if (deepRoot) deepRoot.innerHTML = renderInsightResultHtml(data, false);
+  if (quickRoot) quickRoot.innerHTML = renderInsightResultHtml(data, true);
+}
+
+function syncCompleteButtonLabel() {
+  const btn = document.getElementById("btnCompleteToday");
+  if (!btn || state.completeBusy) return;
+  btn.textContent = state.journalMode === "quick" ? "完成快速復盤" : "完成今日復盤";
+}
+
+function setCompleteBusy(loading) {
+  state.completeBusy = loading;
+  const btn = document.getElementById("btnCompleteToday");
+  if (!btn) return;
+  btn.disabled = loading;
+  if (loading) btn.textContent = "正在生成今日洞察…";
+  else syncCompleteButtonLabel();
+}
+
 function setInsightLoading(loading) {
-  const btn = document.getElementById("btnInsightAi");
-  const loader = document.getElementById("insightLoading");
-  const body = document.getElementById("insightBody");
+  const deepBtn = document.getElementById("btnInsightAi");
+  const quickBtn = document.getElementById("btnQuickInsight");
+  const deepLoader = document.getElementById("insightLoading");
+  const quickLoader = document.getElementById("quickInsightLoading");
+  const deepBody = document.getElementById("insightBody");
+  const quickBody = document.getElementById("quickInsightBody");
   state.insightBusy = loading;
-  if (btn) {
-    btn.disabled = loading;
-    btn.textContent = loading ? "分析中…" : "生成深度洞察";
+  if (deepBtn) {
+    deepBtn.disabled = loading;
+    deepBtn.textContent = loading ? "分析中…" : "生成深度洞察";
   }
-  if (loader) loader.hidden = !loading;
-  if (body) body.classList.toggle("is-loading", loading);
+  if (quickBtn) {
+    quickBtn.disabled = loading;
+    quickBtn.textContent = loading ? "梳理中…" : "生成今日洞察";
+  }
+  if (deepLoader) deepLoader.hidden = !loading;
+  if (quickLoader) quickLoader.hidden = !loading;
+  if (deepBody) deepBody.classList.toggle("is-loading", loading);
+  if (quickBody) quickBody.classList.toggle("is-loading", loading);
 }
 
 function localInsightFallback(journal) {
-  const mood = journal.mood || "這份情緒";
+  const mood = journal.mood || "這份心情";
+  const thanks = (journal.thanks || []).map((item) => String(item || "").trim()).filter(Boolean);
   const tags = (journal.bodyTags || []).join("、") || "身體的訊號";
+  if (state.journalMode === "quick") {
+    return {
+      title: "先被接住的那一句",
+      conclusion: thanks.length
+        ? `今天心情停在「${mood}」。你寫下的感謝裡，已經有一處柔軟的光；事件再難，也不必把這道光蓋掉。`
+        : `今天這件事碰到你時，心情停在「${mood}」。真正要被看見的，是你願意停下來寫下它。`,
+      logic: "",
+      bodyLink: "",
+      sig: insightSignature(journal),
+    };
+  }
   return {
     title: "身體比念頭更早開口",
     conclusion: `今天這件事碰到你時，心情停在「${mood}」。真正要被看見的，不一定是表面上發生了什麼，而是你當下用什麼方式保護自己。`,
@@ -3460,54 +3520,68 @@ function localInsightFallback(journal) {
 }
 
 async function generateJournalInsight(options = {}) {
-  if (state.insightBusy) return;
+  if (state.insightBusy) return false;
   const journal = collectJournal();
   if (!insightReady(journal)) {
-    if (!options.auto) showToast("請先寫下今日事件、選擇心情，並標出身體狀況。");
-    return;
+    if (!options.auto) {
+      showToast(
+        state.journalMode === "quick"
+          ? "請先寫下今日感謝、事件，並選擇心情。"
+          : "請先寫下今日事件、選擇心情，並標出身體狀況。"
+      );
+    }
+    return false;
   }
   const sig = insightSignature(journal);
-  if (options.auto && state.journalMeta.insightSig === sig) return;
+  if (options.auto && state.journalMeta.insightSig === sig) return false;
 
   const token = (state.insightToken || 0) + 1;
   state.insightToken = token;
   setInsightLoading(true);
+  const isQuick = state.journalMode === "quick";
 
   try {
     if (!state.user) throw new Error("請先登入，才能使用雲端分析。");
     const remote = await postReview({
       mode: "insight",
+      variant: isQuick ? "quick" : "deep",
       date: currentIso(),
       text: journal.event,
       context: {
+        variant: isQuick ? "quick" : "deep",
         event: journal.event,
         mood: journal.mood,
+        thanks: journal.thanks,
         bodyTags: journal.bodyTags,
         bodyNote: journal.bodyNote,
         bodyCheck: journal.bodyCheck,
       },
     });
-    if (state.insightToken !== token) return;
+    if (state.insightToken !== token) return false;
     const insight = { ...normalizeInsight(remote), sig };
     if (!insight.conclusion) throw new Error("雲端回傳格式不完整");
     state.journalInsight = insight;
     state.journalMeta.insightSig = sig;
     renderInsightCard(insight);
-    showToast("今日核心結論已生成。");
+    persistJournalQuietly();
+    if (!options.fromComplete) showToast("今日核心總結已生成。");
+    return true;
   } catch (error) {
-    if (state.insightToken !== token) return;
+    if (state.insightToken !== token) return false;
     const fallback = localInsightFallback(journal);
     state.journalInsight = fallback;
     state.journalMeta.insightSig = sig;
     renderInsightCard(fallback);
-    showToast(`雲端分析失敗：${formatApiError(error)}，先留下本地洞察。`);
+    persistJournalQuietly();
+    if (!options.fromComplete) showToast(`雲端分析失敗：${formatApiError(error)}，先留下本地洞察。`);
+    return true;
   } finally {
     if (state.insightToken === token) setInsightLoading(false);
   }
 }
 
 function maybeAutoGenerateInsight(journal) {
-  if (state.journalHydrating || state.journalMode === "quick") return;
+  if (state.journalHydrating) return;
   if (insightReady(journal) && state.journalMeta.insightSig !== insightSignature(journal)) {
     generateJournalInsight({ auto: true });
   }
@@ -4158,7 +4232,11 @@ function applyJournalMode(mode, options = {}) {
   } catch {
     /* 偏好寫入失敗不擋畫面 */
   }
+  syncCompleteButtonLabel();
   if (!options.silent && !state.journalHydrating) persistJournalQuietly();
+  if (!options.silent && !state.journalHydrating && next === "quick") {
+    maybeAutoGenerateInsight(collectJournal());
+  }
 }
 
 function collectJournal() {
@@ -5383,6 +5461,41 @@ async function enhanceThinkWithApi(nextRound, selected, reply, token) {
 }
 
 function completeToday() {
+  finishTodayReview();
+}
+
+function waitForInsightIdle(timeoutMs = 25000) {
+  const started = Date.now();
+  return new Promise((resolve) => {
+    const tick = () => {
+      if (!state.insightBusy || Date.now() - started >= timeoutMs) {
+        resolve();
+        return;
+      }
+      setTimeout(tick, 120);
+    };
+    tick();
+  });
+}
+
+async function finishTodayReview() {
+  if (state.completeBusy) return;
+  if (state.journalMode === "quick") {
+    const journal = collectJournal();
+    if (quickInsightReady(journal)) {
+      document.getElementById("section-quick-insight")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      setCompleteBusy(true);
+      try {
+        await waitForInsightIdle();
+        const hasInsight = Boolean(normalizeInsight(state.journalInsight).conclusion);
+        if (!hasInsight || state.journalMeta.insightSig !== insightSignature(journal)) {
+          await generateJournalInsight({ auto: false, fromComplete: true });
+        }
+      } finally {
+        setCompleteBusy(false);
+      }
+    }
+  }
   const iso = currentIso();
   const collected = document.getElementById("thanks1") ? syncHiddenReviewText() : { journal: null, rawText: "" };
   const rawText = collected.rawText || document.getElementById("reviewText")?.value.trim() || state.rawText;
@@ -5440,7 +5553,11 @@ function completeToday() {
 
   updateStats();
   syncReviewsToCloud();
-  showToast("今日復盤已完成，勾選項目與明天最小一步已同步到側邊欄。");
+  showToast(
+    state.journalMode === "quick"
+      ? "快速復盤已完成，今日洞察已存入歷史紀錄。"
+      : "今日復盤已完成，勾選項目與明天最小一步已同步到側邊欄。"
+  );
 }
 
 function inferSfmType(text) {
@@ -6180,6 +6297,7 @@ function bindEvents() {
   document.getElementById("btnExecAi")?.addEventListener("click", () => generateJournalChecklist("execution"));
   document.getElementById("btnManifestAi")?.addEventListener("click", () => generateJournalChecklist("manifest"));
   document.getElementById("btnInsightAi")?.addEventListener("click", () => generateJournalInsight());
+  document.getElementById("btnQuickInsight")?.addEventListener("click", () => generateJournalInsight());
   document.getElementById("btnBodyCoach")?.addEventListener("click", () => generateBodyCoach());
   document.querySelector(".journal-mode")?.addEventListener("click", (event) => {
     const btn = event.target.closest("[data-journal-mode]");
@@ -6228,8 +6346,8 @@ function bindEvents() {
 
   document.getElementById("page-today")?.addEventListener("input", (event) => {
     const id = event.target && event.target.id;
-    if (/^(aware|exec)\d$|^execNext$|^eventText$|^bodyNote$|^bodyOtherNote$|^bodyMoodReason$|^bodyBodyReason$|^bodySleepReason$|^manifestVision$/.test(id || "")) {
-      if (/^(aware|exec)\d$|^execNext$|^bodyOtherNote$|^body(Mood|Body|Sleep)Reason$/.test(id || "")) persistJournalQuietly();
+    if (/^thanks\d$|^(aware|exec)\d$|^execNext$|^eventText$|^bodyNote$|^bodyOtherNote$|^bodyMoodReason$|^bodyBodyReason$|^bodySleepReason$|^manifestVision$/.test(id || "")) {
+      if (/^thanks\d$|^(aware|exec)\d$|^execNext$|^eventText$|^bodyOtherNote$|^body(Mood|Body|Sleep)Reason$/.test(id || "")) persistJournalQuietly();
       scheduleJournalChecklists();
     }
   });
