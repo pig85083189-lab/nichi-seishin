@@ -2526,7 +2526,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "03 身體覺察",
-        description: "用心情、身體、睡眠三個檢核看今天的狀態。身體可加寫「其他感受」；睡眠改記時間、品質與起床精神，方便長期累積。",
+        description: "用心情、身體、睡眠三個檢核看今天的狀態。勾選後，右側會生成溫暖的身心療癒建議，給你今晚就能放鬆的小動作。",
         side: "bottom",
       },
     },
@@ -3881,7 +3881,7 @@ function renderBodyCoachCard(coach) {
   if (!root) return;
   const data = normalizeBodyCoach(coach);
   if (!data.analysis && !data.suggestions.length) {
-    root.innerHTML = `<p class="insight-card__empty">有狀況再勾選。沒勾選就代表今天大致平穩，也可直接點按鈕生成建議。</p>`;
+    root.innerHTML = `<p class="insight-card__empty">有狀況再勾選。沒勾選就代表今天大致平穩，也可直接點按鈕生成身心療癒建議。</p>`;
     return;
   }
   const tips = data.suggestions
@@ -3900,7 +3900,7 @@ function setBodyCoachLoading(loading) {
   state.bodyCoachBusy = loading;
   if (btn) {
     btn.disabled = loading;
-    btn.textContent = loading ? "分析中…" : "生成身心建議";
+    btn.textContent = loading ? "療癒整理中…" : "生成身心療癒建議";
   }
   if (loader) loader.hidden = !loading;
   if (body) body.classList.toggle("is-loading", loading);
@@ -3943,8 +3943,8 @@ function localBodyCoachFallback(journal) {
   }
   const analysis =
     moodIssue || bodyIssue || sleepIssue
-      ? `今天是${moodBits}，同時${bodyBits}；睡眠這邊是「${sleepBits}」。身心往往同一條線：情緒一緊，腸胃、頭與入睡就會跟著被拉住。先照顧身體節奏，心情才有地方落地。`
-      : `今天是${moodBits}，同時${bodyBits}；睡眠這邊是「${sleepBits}」。狀態偏穩，就用小動作把這份節奏守住，不必等到緊了才開始照顧自己。`;
+      ? `今天是${moodBits}，同時${bodyBits}；睡眠這邊是「${sleepBits}」。心情、身體與睡眠常常一起緊、也一起鬆。先讓身體有一小段被好好對待的時間，情緒才有地方慢慢落地。`
+      : `今天是${moodBits}，同時${bodyBits}；睡眠這邊是「${sleepBits}」。狀態偏穩，就用輕柔的小動作把這份安放守住，不必等到緊了才開始照顧自己。`;
   return {
     analysis,
     suggestions: suggestions.slice(0, 3),
@@ -3967,7 +3967,7 @@ async function generateBodyCoach(options = {}) {
   setBodyCoachLoading(true);
 
   try {
-    if (!state.user) throw new Error("請先登入，才能使用雲端分析。");
+    if (!state.user) throw new Error("請先登入，才能使用雲端身心療癒建議。");
     const remote = await postReview({
       mode: "bodycoach",
       date: currentIso(),
@@ -3987,7 +3987,7 @@ async function generateBodyCoach(options = {}) {
     state.journalMeta.bodyCoachSig = sig;
     renderBodyCoachCard(coach);
     persistJournalQuietly();
-    showToast("身心建議已生成。");
+    showToast("身心療癒建議已生成。");
   } catch (error) {
     if (state.bodyCoachToken !== token) return;
     const fallback = localBodyCoachFallback(journal);
@@ -3995,7 +3995,7 @@ async function generateBodyCoach(options = {}) {
     state.journalMeta.bodyCoachSig = sig;
     renderBodyCoachCard(fallback);
     persistJournalQuietly();
-    showToast(`雲端分析失敗：${formatApiError(error)}，先留下本地建議。`);
+    showToast(`雲端療癒建議失敗：${formatApiError(error)}，先留下本地身心療癒建議。`);
   } finally {
     if (state.bodyCoachToken === token) setBodyCoachLoading(false);
   }
@@ -4881,7 +4881,7 @@ function composeJournalRawText(journal) {
   if (check.sleep.reason) lines.push(`睡眠說明：${check.sleep.reason}`);
   const bodyCoach = normalizeBodyCoach(journal.bodyCoach);
   if (bodyCoach.analysis) {
-    lines.push("身心智慧分析");
+    lines.push("身心療癒建議");
     lines.push(bodyCoach.analysis);
     bodyCoach.suggestions.forEach((item, index) => lines.push(`建議 ${index + 1}：${item}`));
   }
