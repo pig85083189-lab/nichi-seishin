@@ -2473,7 +2473,7 @@ function tourSteps() {
     {
       popover: {
         title: "歡迎來到日精進",
-        description: "這是一份互動式使用說明。接下來會帶你走過日期切換、01 到 07 的復盤與洞察，再到側邊欄各頁。隨時可以按「略過導覽」。",
+        description: "這是一份互動式導覽。接下來會帶你走過日期切換、01 到 07 的復盤與洞察，再到側邊欄各頁。完整文字手冊在「使用說明」。隨時可以按「略過導覽」。",
         side: "over",
         align: "center",
       },
@@ -6401,15 +6401,19 @@ function bindEvents() {
   document.querySelectorAll(".side-item").forEach((btn) => {
     btn.addEventListener("click", (event) => {
       event.preventDefault();
-      if (btn.id === "btnGuide") {
-        startOnboardingTour();
-        return;
-      }
       if (!btn.dataset.page) return;
       switchPage(btn.dataset.page);
     });
   });
   document.getElementById("topGuideBtn")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    switchPage("guide");
+  });
+  document.getElementById("btnStartFirstReview")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    switchPage("today");
+  });
+  document.getElementById("btnStartTour")?.addEventListener("click", (event) => {
     event.preventDefault();
     startOnboardingTour();
   });

@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=84" />
+    <link rel="stylesheet" href="app.css?v=85" />
     <style>
       .splash {
         position: fixed;
@@ -156,14 +156,14 @@
             </svg>
             <span>歷史紀錄</span>
           </a>
-          <button class="side-item" id="btnGuide" type="button">
+          <a class="side-item" id="btnGuide" data-page="guide" href="#guide">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="8.5" />
               <path d="M12 16.2v.2" />
               <path d="M9.8 9.4a2.2 2.2 0 1 1 3.4 1.85c-.7.42-1.2.9-1.2 1.75" />
             </svg>
             <span>使用說明</span>
-          </button>
+          </a>
         </div>
 
         <div class="side-auth" id="sideAuth">
@@ -599,6 +599,54 @@
 
           <div class="history-list" id="historyList"></div>
         </section>
+
+        <section class="page page--guide" id="page-guide" data-page="guide" hidden>
+          <header class="page__header">
+            <p class="guide-kicker">進行式 ING 使用手冊</p>
+            <h2 class="page__title">四個步驟，開始認識自己</h2>
+            <p class="page__subtitle">用溫柔、清楚的節奏走完今日復盤。時間不夠就走快速模式，想深挖再走完整模組。</p>
+          </header>
+
+          <ol class="guide-steps">
+            <li class="guide-step">
+              <span class="guide-step__num" aria-hidden="true">1</span>
+              <div class="guide-step__body">
+                <h3 class="guide-step__title">選擇復盤模式</h3>
+                <p class="guide-step__text">「今日復盤」提供「⚡ 快速復盤（3-5分鐘）」與「🌙 深度復盤（10-15分鐘）」兩種模式，可依當天精神狀態自由切換。</p>
+                <div class="guide-pills">
+                  <span class="guide-pill"><strong>⚡ 快速復盤</strong> 3–5 分鐘</span>
+                  <span class="guide-pill"><strong>🌙 深度復盤</strong> 10–15 分鐘</span>
+                </div>
+              </div>
+            </li>
+            <li class="guide-step">
+              <span class="guide-step__num" aria-hidden="true">2</span>
+              <div class="guide-step__body">
+                <h3 class="guide-step__title">填寫心靈軌跡與身心覺察</h3>
+                <p class="guide-step__text">完成感謝、事件、心情與身心狀態的記錄。身心狀態包含情緒、身體、睡眠品質與原因。</p>
+              </div>
+            </li>
+            <li class="guide-step">
+              <span class="guide-step__num" aria-hidden="true">3</span>
+              <div class="guide-step__body">
+                <h3 class="guide-step__title">AI 智慧深度洞察</h3>
+                <p class="guide-step__text">點擊生成後，系統將提供包含「深層心理盲點解析、客觀檢討反思、具體突破建議與核心重點整理」的完整教練級報告。</p>
+              </div>
+            </li>
+            <li class="guide-step">
+              <span class="guide-step__num" aria-hidden="true">4</span>
+              <div class="guide-step__body">
+                <h3 class="guide-step__title">覺察、執行與顯化力同步</h3>
+                <p class="guide-step__text">填寫並勾選動態生成的覺察與執行清單、輸入顯化願景。點擊「完成今日復盤」後，所有勾選項目將自動同步至側邊欄的個人資料庫與週月報中。</p>
+              </div>
+            </li>
+          </ol>
+
+          <div class="guide-cta">
+            <button class="btn btn--wide" id="btnStartFirstReview" type="button">開始第一次復盤</button>
+            <button class="btn btn--outline" id="btnStartTour" type="button">跟著畫面走一遍</button>
+          </div>
+        </section>
       </div>
     </div>
 
@@ -694,6 +742,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=100"></script>
+    <script src="app.js?v=101"></script>
   </body>
 </html>
