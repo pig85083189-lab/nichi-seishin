@@ -2185,13 +2185,44 @@ function renderAiReportBlock(ai, status) {
     ai.fromIso && ai.toIso
       ? `${formatDisplayDate(ai.fromIso)} — ${formatDisplayDate(ai.toIso)}`
       : "";
-  const highlights = ai.highlights && ai.highlights.length ? ai.highlights : ai.insights;
+  const highlights = ai.highlights && ai.highlights.length ? ai.highlights : [];
   const breakthroughs = ai.breakthroughs && ai.breakthroughs.length ? ai.breakthroughs : ai.nextPlan;
+  const takeaways = ai.insights && ai.insights.length ? ai.insights : [];
+  const analysis = String(ai.analysis || "").trim();
+  const summary = String(ai.summary || "").trim();
+  const psychology = analysis || summary;
   return `
     <article class="report-card report-card--ai report-card--coach">
       <h3>💡 深度洞察</h3>
       ${rangeNote ? `<p class="report-range">${escapeHtml(rangeNote)}</p>` : ""}
-      ${ai.summary ? `<p class="rv-card__conclusion">${escapeHtml(ai.summary)}</p>` : ""}
+      ${ai.title ? `<p class="insight-card__headline">${escapeHtml(ai.title)}</p>` : ""}
+      ${summary && summary !== psychology ? `<p class="rv-card__conclusion">${escapeHtml(summary)}</p>` : ""}
+      <div class="report-insight">
+        ${
+          psychology
+            ? `<section class="insight-block">
+          <p class="insight-block__label">① 深層心理與盲點解析</p>
+          <p class="insight-block__text">${escapeHtml(psychology)}</p>
+        </section>`
+            : ""
+        }
+        ${
+          breakthroughs && breakthroughs.length
+            ? `<section class="insight-block insight-block--tips">
+          <p class="insight-block__label">② 具體突破建議</p>
+          ${list(breakthroughs)}
+        </section>`
+            : ""
+        }
+        ${
+          takeaways.length
+            ? `<section class="insight-block insight-block--focus">
+          <p class="insight-block__label">💡 本期核心重點整理</p>
+          ${list(takeaways)}
+        </section>`
+            : ""
+        }
+      </div>
       <p class="sfm-hint">${ai.generatedAt ? `生成於 ${escapeHtml(String(ai.generatedAt).replace("T", " ").slice(0, 16))}` : "雲端聚合"}</p>
     </article>
     <article class="report-card report-card--glow">
@@ -2490,7 +2521,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "深度洞察",
-        description: "寫完事件、心情與身體後，點「生成深度洞察」，或等它自動生成今日核心結論。",
+        description: "寫完事件、心情與身體後，會生成三層洞察：深層心理與盲點解析、具體突破建議，以及今日核心重點。",
         side: "bottom",
       },
     },
@@ -2754,7 +2785,7 @@ function emptyDeep() {
 }
 
 function emptyInsight() {
-  return { title: "", conclusion: "", logic: "", bodyLink: "", sig: "" };
+  return { title: "", conclusion: "", psychology: "", logic: "", bodyLink: "", suggestions: [], takeaways: [], sig: "" };
 }
 
 function emptyBodyCheck() {
@@ -2980,13 +3011,25 @@ function normalizeBodyCoach(raw) {
   };
 }
 
+function normalizeInsightList(raw, max = 4) {
+  return (Array.isArray(raw) ? raw : [])
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+    .slice(0, max);
+}
+
 function normalizeInsight(insight) {
   const data = insight && typeof insight === "object" ? insight : {};
+  const psychology = String(data.psychology || data.analysis || data.logic || "").trim();
+  const conclusion = String(data.conclusion || data.summary || "").trim();
   return {
     title: String(data.title || "").trim(),
-    conclusion: String(data.conclusion || "").trim(),
+    conclusion: conclusion || psychology,
+    psychology: psychology || conclusion,
     logic: String(data.logic || "").trim(),
     bodyLink: String(data.bodyLink || "").trim(),
+    suggestions: normalizeInsightList(data.suggestions || data.actions, 3),
+    takeaways: normalizeInsightList(data.takeaways || data.keyPoints, 4),
     sig: String(data.sig || "").trim(),
   };
 }
@@ -3034,7 +3077,8 @@ function journalHasContent(journal) {
   ];
   if (textBits.some((item) => String(item || "").trim())) return true;
   if (deepHasContent(journal.deep)) return true;
-  if (String(journal.insight?.conclusion || "").trim()) return true;
+  if (String(journal.insight?.conclusion || journal.insight?.psychology || "").trim()) return true;
+  if ((journal.insight?.suggestions || []).length || (journal.insight?.takeaways || []).length) return true;
   return Boolean((journal.bodyTags || []).length || (journal.awarenessChecks || []).length || (journal.executionChecks || []).length || (journal.manifestChecks || []).length);
 }
 
@@ -3431,31 +3475,65 @@ function insightSignature(journal) {
 
 function insightEmptyCopy(quick) {
   return quick
-    ? "先寫下感謝、今天發生的事，並選好心情，再點按鈕或等它自動生成。"
-    : "先把事件、心情與身體反應寫下來，再點按鈕或等它自動生成。";
+    ? "先寫下感謝、今天發生的事，並選好心情，再點按鈕或等它自動生成三層洞察。"
+    : "先把事件、心情與身體反應寫下來，再點按鈕或等它自動生成三層洞察。";
 }
 
-function renderInsightResultHtml(data, quick) {
-  if (!data.conclusion) {
-    return `<p class="insight-card__empty">${insightEmptyCopy(quick)}</p>`;
+function insightListHtml(items, className) {
+  const list = Array.isArray(items) ? items.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  if (!list.length) return "";
+  return `<${className.includes("takeaways") ? "ul" : "ol"} class="${className}">${list
+    .map((item) => `<li>${escapeHtml(item)}</li>`)
+    .join("")}</${className.includes("takeaways") ? "ul" : "ol"}>`;
+}
+
+function renderInsightResultHtml(data) {
+  const analysis = String(data.psychology || data.conclusion || "").trim();
+  const hasBody = Boolean(String(data.bodyLink || "").trim());
+  const suggestions = data.suggestions || [];
+  const takeaways = data.takeaways || [];
+  if (!analysis && !suggestions.length && !takeaways.length) {
+    return `<p class="insight-card__empty">${insightEmptyCopy(state.journalMode === "quick")}</p>`;
   }
   return `
     <article class="insight-card__result">
-      <p class="insight-card__kicker">${quick ? "✨ 今日核心總結" : "【核心結論】"}</p>
       ${data.title ? `<h3 class="insight-card__headline">${escapeHtml(data.title)}</h3>` : ""}
-      <p class="insight-card__conclusion">${escapeHtml(data.conclusion)}</p>
-      ${!quick && data.logic ? `<p class="insight-card__note">${escapeHtml(data.logic)}</p>` : ""}
-      ${!quick && data.bodyLink ? `<p class="insight-card__note">${escapeHtml(data.bodyLink)}</p>` : ""}
+      ${
+        analysis
+          ? `<section class="insight-block">
+        <p class="insight-block__label">① 深層心理與盲點解析</p>
+        <p class="insight-block__text">${escapeHtml(analysis)}</p>
+        ${hasBody ? `<p class="insight-block__note">${escapeHtml(data.bodyLink)}</p>` : ""}
+      </section>`
+          : ""
+      }
+      ${
+        suggestions.length
+          ? `<section class="insight-block insight-block--tips">
+        <p class="insight-block__label">② 具體突破建議</p>
+        ${insightListHtml(suggestions, "insight-block__list")}
+      </section>`
+          : ""
+      }
+      ${
+        takeaways.length
+          ? `<section class="insight-block insight-block--focus">
+        <p class="insight-block__label">💡 今日核心重點整理</p>
+        ${insightListHtml(takeaways, "insight-block__takeaways")}
+      </section>`
+          : ""
+      }
     </article>
   `;
 }
 
 function renderInsightCard(insight) {
   const data = normalizeInsight(insight);
+  const html = renderInsightResultHtml(data);
   const deepRoot = document.getElementById("insightBody");
   const quickRoot = document.getElementById("quickInsightBody");
-  if (deepRoot) deepRoot.innerHTML = renderInsightResultHtml(data, false);
-  if (quickRoot) quickRoot.innerHTML = renderInsightResultHtml(data, true);
+  if (deepRoot) deepRoot.innerHTML = html;
+  if (quickRoot) quickRoot.innerHTML = html;
 }
 
 function syncCompleteButtonLabel() {
@@ -3499,22 +3577,47 @@ function localInsightFallback(journal) {
   const mood = journal.mood || "這份心情";
   const thanks = (journal.thanks || []).map((item) => String(item || "").trim()).filter(Boolean);
   const tags = (journal.bodyTags || []).join("、") || "身體的訊號";
+  const eventBit = String(journal.event || "").trim().slice(0, 18);
   if (state.journalMode === "quick") {
+    const psychology = thanks.length
+      ? `今天心情停在「${mood}」。事件本身也許嘈雜，但你寫下的感謝已經透露：你並不是只有被碰到的那一面，還有一處願意被滋養的柔軟。真正觸動你的，往往不是事情成不成功，而是有沒有被看見、被珍惜。`
+      : `今天這件事碰到你時，心情停在「${mood}」。願意把它寫下來，本身就是防衛稍微鬆開的時刻。真正要被看見的，是你對「被好好對待」或「把事情做對」的潛在期待。`;
     return {
       title: "先被接住的那一句",
-      conclusion: thanks.length
-        ? `今天心情停在「${mood}」。你寫下的感謝裡，已經有一處柔軟的光；事件再難，也不必把這道光蓋掉。`
-        : `今天這件事碰到你時，心情停在「${mood}」。真正要被看見的，是你願意停下來寫下它。`,
-      logic: "",
+      psychology,
+      conclusion: psychology,
+      logic: psychology,
       bodyLink: "",
+      suggestions: [
+        "今晚用一句話對自己說：我看見今天被碰到的地方了，先不用立刻修好。",
+        "把感謝裡最溫的那一件，再寫成一句可以留給明天的話。",
+        thanks.length ? "明天用 5 分鐘，只做一件能讓這份感謝落地的小事。" : "明天用 5 分鐘，只把今天卡住的第一個動作做完。",
+      ],
+      takeaways: [
+        `心情「${mood}」不是噪音，是入口。`,
+        "被觸動，往往因為有還沒被滿足的期待。",
+        "感謝與事件可以同時存在，不必互相取消。",
+      ],
       sig: insightSignature(journal),
     };
   }
+  const psychology = `今天這件事碰到你時，心情停在「${mood}」。真正要被看見的，不一定是表面上發生了什麼${eventBit ? `（${eventBit}…）` : ""}，而是你當下用什麼方式保護自己。防衛不一定是錯的，它常常是在來不及說清楚之前，先幫你把關係或面子守住。`;
   return {
     title: "身體比念頭更早開口",
-    conclusion: `今天這件事碰到你時，心情停在「${mood}」。真正要被看見的，不一定是表面上發生了什麼，而是你當下用什麼方式保護自己。`,
-    logic: "防衛不一定是錯的。它常常是在來不及說清楚之前，先幫你把關係或面子守住。",
+    psychology,
+    conclusion: psychology,
+    logic: psychology,
     bodyLink: `${tags} 往往不是多餘的噪音，而是壓力已經先走到身上。`,
+    suggestions: [
+      "今晚先做 8 次「吸 4 秒、吐 6 秒」，讓身體確認現在是安全的。",
+      "把「我以為對方在否定我」改寫成一句更接近事實的話，只寫給自己看。",
+      "明天只做一件 5 分鐘內能完成、跟今天這件事有關的最小動作。",
+    ],
+    takeaways: [
+      "被觸動，是期待被碰到了。",
+      "身體比念頭更早開口。",
+      "先接住自己，再決定要不要行動。",
+    ],
     sig: insightSignature(journal),
   };
 }
@@ -3552,6 +3655,8 @@ async function generateJournalInsight(options = {}) {
         event: journal.event,
         mood: journal.mood,
         thanks: journal.thanks,
+        awareness: journal.awareness,
+        smallestStep: journal.smallestStep,
         bodyTags: journal.bodyTags,
         bodyNote: journal.bodyNote,
         bodyCheck: journal.bodyCheck,
@@ -3559,12 +3664,12 @@ async function generateJournalInsight(options = {}) {
     });
     if (state.insightToken !== token) return false;
     const insight = { ...normalizeInsight(remote), sig };
-    if (!insight.conclusion) throw new Error("雲端回傳格式不完整");
+    if (!insight.psychology && !insight.conclusion) throw new Error("雲端回傳格式不完整");
     state.journalInsight = insight;
     state.journalMeta.insightSig = sig;
     renderInsightCard(insight);
     persistJournalQuietly();
-    if (!options.fromComplete) showToast("今日核心總結已生成。");
+    if (!options.fromComplete) showToast("今日深度洞察已生成。");
     return true;
   } catch (error) {
     if (state.insightToken !== token) return false;
@@ -4305,12 +4410,22 @@ function composeJournalRawText(journal) {
     bodyCoach.suggestions.forEach((item, index) => lines.push(`建議 ${index + 1}：${item}`));
   }
   const insight = normalizeInsight(journal.insight);
-  if (insight.conclusion) {
+  if (insight.psychology || insight.conclusion || insight.suggestions.length || insight.takeaways.length) {
     lines.push("深度洞察");
     if (insight.title) lines.push(insight.title);
-    lines.push(insight.conclusion);
-    if (insight.logic) lines.push(insight.logic);
+    if (insight.psychology || insight.conclusion) {
+      lines.push("① 深層心理與盲點解析");
+      lines.push(insight.psychology || insight.conclusion);
+    }
     if (insight.bodyLink) lines.push(insight.bodyLink);
+    if (insight.suggestions.length) {
+      lines.push("② 具體突破建議");
+      insight.suggestions.forEach((item, index) => lines.push(`${index + 1}. ${item}`));
+    }
+    if (insight.takeaways.length) {
+      lines.push("③ 今日核心重點整理");
+      insight.takeaways.forEach((item) => lines.push(`- ${item}`));
+    }
   }
   AWARENESS_QUESTIONS.forEach((item, index) => {
     const answer = String((journal.awareness || [])[index] || "").trim();
@@ -5951,8 +6066,10 @@ function historyHighlight(review) {
   const insight = normalizeInsight(journal.insight);
   const organize = review?.organize && typeof review.organize === "object" ? review.organize : {};
   const candidates = [
+    insight.psychology,
     insight.conclusion,
     insight.title,
+    ...(insight.takeaways || []),
     organize.themeInsight,
     organize.conclusion,
     organize.themeTitle,
@@ -6034,12 +6151,26 @@ function renderHistoryJournal(review) {
     execAnswer ? historyTextBlock("執行力", execAnswer) : "",
     historyTextBlock("明天最小的一步", journal.smallestStep),
     historyListBlock("行動卡點／解法", journal.executionChecks),
-    insight.conclusion
+    insight.conclusion || insight.psychology
       ? historyBlock(
           "深度洞察",
-          `${insight.title ? `<p class="history-journal__headline">${escapeHtml(insight.title)}</p>` : ""}<p class="history-journal__text">${escapeHtml(insight.conclusion)}</p>${
-            insight.logic ? `<p class="history-journal__note">${escapeHtml(insight.logic)}</p>` : ""
-          }${insight.bodyLink ? `<p class="history-journal__note">${escapeHtml(insight.bodyLink)}</p>` : ""}`
+          `${insight.title ? `<p class="history-journal__headline">${escapeHtml(insight.title)}</p>` : ""}${
+            insight.psychology || insight.conclusion
+              ? `<p class="history-journal__label">① 深層心理與盲點解析</p><p class="history-journal__text">${escapeHtml(insight.psychology || insight.conclusion)}</p>`
+              : ""
+          }${insight.bodyLink ? `<p class="history-journal__note">${escapeHtml(insight.bodyLink)}</p>` : ""}${
+            insight.suggestions.length
+              ? `<p class="history-journal__label">② 具體突破建議</p><ul class="history-journal__list">${insight.suggestions
+                  .map((item) => `<li>${escapeHtml(item)}</li>`)
+                  .join("")}</ul>`
+              : ""
+          }${
+            insight.takeaways.length
+              ? `<p class="history-journal__label">💡 今日核心重點整理</p><ul class="history-journal__list">${insight.takeaways
+                  .map((item) => `<li>${escapeHtml(item)}</li>`)
+                  .join("")}</ul>`
+              : ""
+          }`
         )
       : "",
     historyTextBlock("明天想顯化", journal.manifest),

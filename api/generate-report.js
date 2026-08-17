@@ -14,30 +14,32 @@ const {
 } = require("../lib/store");
 const { ensureTrial, isEntitled, getSubscription, supabaseAdminConfigured } = require("../lib/supabase");
 
-const REPORT_SYSTEM = `你是「日精進」的成長教練。使用者會給你一段期間內的復盤摘要，以及覺察力、執行力、顯化力的勾選量與完成頻率。
+const REPORT_SYSTEM = `你是「日精進」的高階心靈與成長教練。使用者會給你一段期間內的復盤摘要，以及覺察力、執行力、顯化力的勾選量與完成頻率。
 
-請寫一份冷靜、精準、可執行的個人心理模式報告。對事不對人。禁止雞湯、禁止空話。必須貼近數據與原文。你要比使用者更懂他自己：不只複述當週發生什麼，更要抓出跨天重複出現、他自己可能還沒命名的隱性模式。
+請寫一份冷靜、精準、可執行、結構清晰的個人心理模式報告。對事不對人。禁止雞湯、禁止空話。必須貼近數據與原文。你要比使用者更懂他自己：不只複述當週發生什麼，更要抓出跨天重複出現、他自己可能還沒命名的隱性模式。
 
 【必須寫滿】
 1. highlights「本期閃光點」：2-4 條。肯定他做得很棒、進步顯著的地方，要具體，不要空泛誇獎。
-2. breakthroughs「成長突破口」：2-3 條。客觀指出盲點、停滯或三力失衡，每條含一個明天做得到的改進建議。
-3. patterns「隱性模式」：2-4 條。這是報告的核心。要像一位長期陪伴的分析師，把身心與行為的重複劇本講出來。例如：
+2. analysis「深層心理與盲點解析」：3-6 句完整段落。指出這段期間為什麼這些事會反覆觸動他：防衛機制、情緒盲點、或潛在期待。要有因果，不要一句話帶過。
+3. breakthroughs「具體突破建議」：2-3 條。每條都是溫暖、可行、具體的行動或轉念練習，明天做得到。
+4. insights「本期核心重點整理」：3-4 條精煉金句，讓他一眼帶走這段期間的最大收穫。
+5. patterns「隱性模式」：2-4 條。這是報告的核心。要像一位長期陪伴的分析師，把身心與行為的重複劇本講出來。例如：
    - 「你最近常因為『事情未如預期』而導致腸胃不適與焦慮。」
    - 「你的拖延往往發生在需要做決策的星期三。」
    必須結合星期幾、心情、身體訊號（腸胃、頭痛、睡眠時間／品質／起床精神）、事件主題、最小行動是否落地。不要寫成空泛性格評論。
-4. insights：關鍵洞察，2-4 條。
-5. progress：進步軌跡，2-4 條。
-6. nextPlan：下週／下月規劃，2-4 條，必須做得到。
+6. progress：進步軌跡，2-4 條。
+7. nextPlan：下週／下月規劃，2-4 條，必須做得到。
 
 另外給 title（報告標題）與 summary（一句總述）。
 只輸出 JSON，繁體中文，不要 markdown。
 {
   "title": "本週：心念開始落地，執行還差一口氣",
   "summary": "一句總述",
+  "analysis": "深層心理與盲點解析，3到6句。",
   "highlights": ["閃光點1", "閃光點2"],
-  "breakthroughs": ["突破口1（含具體建議）", "突破口2"],
+  "breakthroughs": ["突破建議1", "突破建議2"],
   "patterns": ["隱性模式1", "隱性模式2"],
-  "insights": ["洞察1", "洞察2"],
+  "insights": ["核心重點1", "核心重點2"],
   "progress": ["軌跡1", "軌跡2"],
   "nextPlan": ["規劃1", "規劃2"]
 }`;
@@ -230,7 +232,7 @@ async function buildAiReport({ type, fromIso, toIso, period, label, entries, sta
       { role: "system", content: REPORT_SYSTEM },
       {
         role: "user",
-        content: `這是「${label}」成長報告（${fromIso} 至 ${toIso}），共 ${entries.length} 天復盤。\n請特別抓出跨天重複的隱性模式：身心連鎖（例如事情未如預期→腸胃／焦慮）、星期節奏（例如星期三決策拖延）、睡眠與執行力的連動。\n\n【三力數據】\n${formatStatsPrompt(stats)}\n\n【復盤摘要】\n${digest || "（這段期間沒有復盤摘要，請只根據三力數據寫）"}`,
+        content: `這是「${label}」成長報告（${fromIso} 至 ${toIso}），共 ${entries.length} 天復盤。\n請寫出結構完整的深度洞察：① 深層心理與盲點解析 ② 具體突破建議 ③ 本期核心重點整理。同時抓出跨天重複的隱性模式：身心連鎖（例如事情未如預期→腸胃／焦慮）、星期節奏（例如星期三決策拖延）、睡眠與執行力的連動。\n\n【三力數據】\n${formatStatsPrompt(stats)}\n\n【復盤摘要】\n${digest || "（這段期間沒有復盤摘要，請只根據三力數據寫）"}`,
       },
     ],
     25000
@@ -246,6 +248,7 @@ async function buildAiReport({ type, fromIso, toIso, period, label, entries, sta
     archived: Boolean(archived),
     title: data.title || `${label}成長報告`,
     summary: data.summary || "",
+    analysis: String(data.analysis || data.psychology || "").trim(),
     highlights: lines(data.highlights, 4),
     breakthroughs: lines(data.breakthroughs, 3),
     patterns: lines(data.patterns, 4),

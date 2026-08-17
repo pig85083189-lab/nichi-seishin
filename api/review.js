@@ -205,40 +205,56 @@ const CHECKLIST_EXECUTION_SYSTEM = `你是「日精進」的高階心靈教練�
 - 禁止空泛激勵、禁止「你要更努力」
 - 繁體中文`;
 
-const INSIGHT_SYSTEM = `你是「日精進」的高階心靈教練：溫柔，但犀利。使用者剛寫下今天的事件、心情，以及身體狀況。
-請根據事件、情緒與身體反應，生成一段有深度思考與邏輯分析的核心結論。
+const INSIGHT_JSON_SHAPE = `{
+  "title": "一句有質感的洞察標題，12-22字",
+  "psychology": "① 深層心理與盲點解析：3到6句。必須回答「為什麼這件事會觸動他」：點出防衛機制、情緒盲點、或潛在期待。要貼近原文，有畫面、有因果。",
+  "bodyLink": "身體與心理的關聯，1到2句。若沒有身體訊號可給空字串。",
+  "suggestions": ["具體突破建議1", "具體突破建議2", "具體突破建議3"],
+  "takeaways": ["今日核心重點1", "今日核心重點2", "今日核心重點3"],
+  "conclusion": "一段總述，2到4句，把今天最該被看見的事收成可帶走的結論。"
+}`;
 
-請點出其中一到兩層：
-- 事件背後的心理防衛機制
-- 情緒盲點（我以為／其實在怕什麼）
-- 身體緊繃、疲憊、不適與心理壓力的關聯
+const INSIGHT_SYSTEM = `你是「日精進」的高階心靈與成長教練：溫柔，但犀利；陪伴，但不討好。使用者剛寫下今天的事件、心情，以及身體狀況。
+請根據事件、情緒與身體反應，生成一份結構完整、有深度的「深度洞察」。禁止只給一句空泛金句。
+
+【必須寫滿三個維度】
+① 深層心理與盲點解析（psychology）：
+- 指出事件背後的心理防衛機制、情緒盲點或潛在期待
+- 必須回答：為什麼這件事會觸動他？
+- 可點出「我以為／其實在怕什麼」、還沒說出口的需求、身體訊號如何幫腔
+② 具體突破建議（suggestions）：
+- 給 2 到 3 條溫暖、可行、具體的行動或轉念練習
+- 每條 18-42 字，今晚或明天做得到，不要口號
+③ 今日核心重點整理（takeaways）：
+- 給 2 到 4 條精煉金句或條列重點
+- 讓他一眼帶走今天的最大收穫
 
 規則：
 - 只輸出 JSON
 - 口吻像一對一諮詢：先接住，再點破。禁止雞湯、禁止說教、禁止病例腔
-- 必須貼近使用者原文，不要空泛
+- 必須貼近使用者原文，寫出具體場景與用詞，不要空泛
 - 繁體中文
-{
-  "title": "一句有質感的洞察標題，12-22字",
-  "conclusion": "核心結論，2到4句。這是今天最該被看見的一句總結。",
-  "logic": "邏輯分析：防衛機制或情緒盲點為什麼會這樣運作，2到3句。",
-  "bodyLink": "身體反應與心理壓力的關聯，1到2句。"
-}`;
+${INSIGHT_JSON_SHAPE}`;
 
-const QUICK_INSIGHT_SYSTEM = `你是「日精進」的陪伴者：溫柔、精準、不說教。使用者剛用「快速復盤」寫下今日感謝、今天發生的事，以及心情。
-請立刻給他一句簡鍊、有深度、有溫暖引導力的「深度洞察」結論。
+const QUICK_INSIGHT_SYSTEM = `你是「日精進」的高階心靈與成長教練：溫柔、精準、不說教。使用者剛用「快速復盤」寫下今日感謝、今天發生的事，以及心情。
+請生成一份結構完整、有深度的「深度洞察」。即使是快速復盤，也禁止只給一句話。
+
+【必須寫滿三個維度】
+① 深層心理與盲點解析（psychology）：
+- 結合他寫下的感謝與事件，指出為什麼這件事會觸動他
+- 點出防衛機制、情緒盲點、或潛在期待；若感謝裡已有滋養，也要看見那道光
+② 具體突破建議（suggestions）：
+- 給 2 到 3 條溫暖、可行、具體的行動或轉念練習
+- 每條 18-42 字，5 到 15 分鐘內做得到
+③ 今日核心重點整理（takeaways）：
+- 給 2 到 4 條精煉金句或條列重點，讓他一眼帶走今天的最大收穫
 
 規則：
 - 只輸出 JSON
-- 必須貼近他的感謝與事件原文，不要空泛雞湯、不要說教、不要病例腔
-- 先接住今天的感受，再輕輕點出真正被碰到、或真正被滋養的那一層
-- title 10-18 字；conclusion 必須是 1 到 2 句，總長約 40-90 字，像一句能被記住的核心總結
-- 不要分析身體、不要開檢查清單、不要給一堆行動建議
+- 必須貼近感謝與事件原文，不要空泛雞湯、不要說教、不要病例腔
+- bodyLink 可為空字串（快速復盤沒有身體檢核）
 - 繁體中文
-{
-  "title": "一句有質感的洞察標題，10-18字",
-  "conclusion": "今日核心總結，1到2句。"
-}`;
+${INSIGHT_JSON_SHAPE}`;
 
 function isQuickInsightRequest(body) {
   const ctx = body && body.context && typeof body.context === "object" ? body.context : {};
@@ -247,30 +263,52 @@ function isQuickInsightRequest(body) {
 
 function insightUserPrompt(body) {
   const ctx = body.context && typeof body.context === "object" ? body.context : {};
+  const thanks = Array.isArray(ctx.thanks)
+    ? ctx.thanks.map((item) => String(item || "").trim()).filter(Boolean).join("、")
+    : String(ctx.thanks || "").trim();
+  const awareness = Array.isArray(ctx.awareness)
+    ? ctx.awareness.map((item) => String(item || "").trim()).filter(Boolean).join("／")
+    : "";
   if (isQuickInsightRequest(body)) {
-    const thanks = Array.isArray(ctx.thanks)
-      ? ctx.thanks.map((item) => String(item || "").trim()).filter(Boolean).join("、")
-      : String(ctx.thanks || "").trim();
-    return `這是快速復盤。請只根據感謝、事件與心情，生成一句今日深度洞察。
+    return `這是快速復盤。請生成包含三個完整維度的深度洞察：① 深層心理與盲點解析 ② 具體突破建議 ③ 今日核心重點整理。
 
 今日感謝：${thanks || "（未寫）"}
 今日事件：${ctx.event || body.text || "（未寫）"}
-心情：${ctx.mood || "未選"}`;
+心情：${ctx.mood || "未選"}
+今日覺察：${awareness || "未寫"}
+明天最小的一步：${ctx.smallestStep || "未寫"}`;
   }
-  return `請為這個人生成今日核心結論。
+  return `請為這個人生成包含三個完整維度的深度洞察：① 深層心理與盲點解析 ② 具體突破建議 ③ 今日核心重點整理。
 
+今日感謝：${thanks || "未寫"}
 今日事件：${ctx.event || body.text || "（未寫）"}
 心情：${ctx.mood || "未選"}
+今日覺察：${awareness || "未寫"}
+明天最小的一步：${ctx.smallestStep || "未寫"}
 ${formatBodyCheckPrompt(ctx)}`;
+}
+
+function normalizeStringList(raw, max = 4) {
+  return (Array.isArray(raw) ? raw : [])
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+    .slice(0, max);
 }
 
 function normalizeInsightResult(raw) {
   const data = raw && typeof raw === "object" ? raw : {};
+  const psychology = String(data.psychology || data.analysis || data.logic || "").trim();
+  const conclusion = String(data.conclusion || data.summary || data.core || "").trim();
+  const suggestions = normalizeStringList(data.suggestions || data.actions || data.tips, 3);
+  const takeaways = normalizeStringList(data.takeaways || data.keyPoints || data.highlights, 4);
   return {
     title: String(data.title || data.headline || "").trim().slice(0, 48),
-    conclusion: String(data.conclusion || data.summary || data.core || "").trim(),
-    logic: String(data.logic || data.analysis || "").trim(),
+    psychology,
+    conclusion: conclusion || psychology,
+    logic: String(data.logic || "").trim() || psychology,
     bodyLink: String(data.bodyLink || data.body || data.link || "").trim(),
+    suggestions,
+    takeaways,
   };
 }
 
@@ -800,8 +838,8 @@ module.exports = async function handler(req, res) {
     }
     if (mode === "insight") {
       const insight = normalizeInsightResult(data);
-      if (!insight.conclusion) {
-        res.status(502).json({ ok: false, error: "AI 洞察格式不完整，請再試一次" });
+      if (!insight.conclusion && !insight.psychology) {
+        res.status(502).json({ ok: false, error: "洞察格式不完整，請再試一次" });
         return;
       }
       res.status(200).json({ ok: true, source: "openai", data: insight });
