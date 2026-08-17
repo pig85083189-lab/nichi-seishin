@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=87" />
+    <link rel="stylesheet" href="app.css?v=88" />
     <style>
       .splash {
         position: fixed;
@@ -222,8 +222,8 @@
 
           <section class="journal-card" id="section-thanks">
             <h2 class="journal-card__title"><span>01</span> 今日感謝</h2>
-            <p class="journal-guide">寫下今天想感謝的人、事、物，三件就好，不用寫得很完整。</p>
-            <div class="thanks-list">
+            <p class="journal-guide">寫下今天想感謝的人、事、物。先寫三件就好，想再說也可以再加。</p>
+            <div class="thanks-list" id="thanksList">
               <div class="thanks-row">
                 <span>人</span>
                 <input class="input" id="thanks1" type="text" placeholder="今天想感謝的一個人…" data-journal="thanks" />
@@ -237,6 +237,7 @@
                 <input class="input" id="thanks3" type="text" placeholder="今天想感謝的一個物、空間或片刻…" data-journal="thanks" />
               </div>
             </div>
+            <button class="thanks-add" id="btnAddThanks" type="button">＋ 再加一個</button>
           </section>
 
           <section class="journal-card" id="section-event">
@@ -744,6 +745,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=103"></script>
+    <script src="app.js?v=104"></script>
   </body>
 </html>

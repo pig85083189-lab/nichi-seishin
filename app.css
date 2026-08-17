@@ -3025,6 +3025,32 @@ body[data-journal-mode="quick"] #section-manifest {
   width: 100%;
 }
 
+.thanks-add {
+  margin-top: 12px;
+  min-height: 42px;
+  padding: 8px 14px;
+  border: 1px dashed var(--cream-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.thanks-add:hover {
+  background: var(--cream);
+  border-color: #d9cbb8;
+  color: var(--text);
+}
+
+.thanks-add:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .mood-row {
   display: flex;
   flex-wrap: wrap;

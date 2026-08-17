@@ -2502,7 +2502,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "01 今日感謝",
-        description: "從人、事、物各寫一件今天想感謝的。不用完整，寫下名字或片刻就好。",
+        description: "從人、事、物各寫一件今天想感謝的。想再說，也可以再加一欄。",
         side: "bottom",
       },
     },
@@ -2745,6 +2745,65 @@ const CORE_EXECUTION_PROMPT = {
   question: "今天在執行目標時遇到了什麼實質卡點？你打算採取什麼全面性的行動或突破策略來解決它？",
   placeholder: "寫下卡點、卡住的真正原因，以及你打算採取的突破策略…",
 };
+
+const THANKS_PRESETS = [
+  { mark: "人", placeholder: "今天想感謝的一個人…" },
+  { mark: "事", placeholder: "今天想感謝的一件事…" },
+  { mark: "物", placeholder: "今天想感謝的一個物、空間或片刻…" },
+];
+const MAX_THANKS = 12;
+
+function normalizeThanks(list) {
+  const values = (Array.isArray(list) ? list : []).map((item) => String(item || ""));
+  while (values.length < 3) values.push("");
+  while (values.length > 3 && !String(values[values.length - 1] || "").trim()) values.pop();
+  return values.slice(0, MAX_THANKS);
+}
+
+function thanksRowHtml(index, value = "") {
+  const preset = THANKS_PRESETS[index];
+  const mark = preset ? preset.mark : String(index + 1);
+  const placeholder = preset ? preset.placeholder : "還想感謝的人、事、物…";
+  return `<div class="thanks-row">
+    <span>${escapeHtml(mark)}</span>
+    <input class="input" id="thanks${index + 1}" type="text" placeholder="${escapeHtml(placeholder)}" data-journal="thanks" value="${escapeHtml(value)}" />
+  </div>`;
+}
+
+function thanksFieldCount() {
+  return document.querySelectorAll("#thanksList input[data-journal='thanks']").length;
+}
+
+function syncThanksAddButton(count = thanksFieldCount()) {
+  const btn = document.getElementById("btnAddThanks");
+  if (!btn) return;
+  const atMax = count >= MAX_THANKS;
+  btn.disabled = atMax;
+  btn.textContent = atMax ? "已加到上限" : "＋ 再加一個";
+}
+
+function collectThanksValues() {
+  return normalizeThanks(
+    [...document.querySelectorAll("#thanksList input[data-journal='thanks']")].map((el) => String(el.value || ""))
+  );
+}
+
+function renderThanksFields(values) {
+  const list = document.getElementById("thanksList");
+  if (!list) return;
+  const items = normalizeThanks(values);
+  list.innerHTML = items.map((value, index) => thanksRowHtml(index, value)).join("");
+  syncThanksAddButton(items.length);
+}
+
+function addThanksField() {
+  const list = document.getElementById("thanksList");
+  if (!list || thanksFieldCount() >= MAX_THANKS) return;
+  list.insertAdjacentHTML("beforeend", thanksRowHtml(thanksFieldCount()));
+  syncThanksAddButton();
+  const input = list.querySelector(".thanks-row:last-child input");
+  input?.focus();
+}
 
 function emptyJournal() {
   return {
@@ -4381,7 +4440,7 @@ function applyJournalMode(mode, options = {}) {
 function collectJournal() {
   const bodyCheck = collectBodyCheck();
   const journal = {
-    thanks: ["thanks1", "thanks2", "thanks3"].map(journalFieldValue),
+    thanks: collectThanksValues(),
     event: journalFieldValue("eventText"),
     mood: document.querySelector("#moodRow .mood-btn.is-on")?.dataset.mood || "",
     bodyCheck,
@@ -4559,10 +4618,7 @@ function fillJournal(journal) {
   const hasPromptAnswers =
     (data.awareness || []).some((item) => String(item || "").trim()) || deepHasContent(data.deep);
   if (!state.deepPrompts.length && hasPromptAnswers) state.deepPrompts = LEGACY_DEEP_PROMPTS;
-  ["thanks1", "thanks2", "thanks3"].forEach((id, index) => {
-    const el = document.getElementById(id);
-    if (el) el.value = data.thanks[index] || "";
-  });
+  renderThanksFields(data.thanks);
   const eventText = document.getElementById("eventText");
   if (eventText) eventText.value = data.event || "";
   setActiveButtons("moodRow", ".mood-btn", data.mood ? [data.mood] : []);
@@ -6481,6 +6537,7 @@ function bindEvents() {
   }
   document.getElementById("btnCompleteToday")?.addEventListener("click", completeToday);
   document.getElementById("btnSaveDraft")?.addEventListener("click", saveJournalDraft);
+  document.getElementById("btnAddThanks")?.addEventListener("click", addThanksField);
   document.getElementById("btnAwareAi")?.addEventListener("click", () => generateJournalChecklist("awareness"));
   document.getElementById("btnExecAi")?.addEventListener("click", () => generateJournalChecklist("execution"));
   document.getElementById("btnManifestAi")?.addEventListener("click", () => generateJournalChecklist("manifest"));
@@ -6534,8 +6591,8 @@ function bindEvents() {
 
   document.getElementById("page-today")?.addEventListener("input", (event) => {
     const id = event.target && event.target.id;
-    if (/^thanks\d$|^(aware|exec)\d$|^execNext$|^eventText$|^bodyNote$|^bodyOtherNote$|^bodyMoodReason$|^bodyBodyReason$|^bodySleepReason$|^manifestVision$/.test(id || "")) {
-      if (/^thanks\d$|^(aware|exec)\d$|^execNext$|^eventText$|^bodyOtherNote$|^body(Mood|Body|Sleep)Reason$/.test(id || "")) persistJournalQuietly();
+    if (/^thanks\d+$|^(aware|exec)\d$|^execNext$|^eventText$|^bodyNote$|^bodyOtherNote$|^bodyMoodReason$|^bodyBodyReason$|^bodySleepReason$|^manifestVision$/.test(id || "")) {
+      if (/^thanks\d+$|^(aware|exec)\d$|^execNext$|^eventText$|^bodyOtherNote$|^body(Mood|Body|Sleep)Reason$/.test(id || "")) persistJournalQuietly();
       scheduleJournalChecklists();
     }
   });
