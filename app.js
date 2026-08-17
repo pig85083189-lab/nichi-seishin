@@ -6896,9 +6896,18 @@ function bindEvents() {
     event.preventDefault();
     switchPage("guide");
   });
-  document.getElementById("btnStartFirstReview")?.addEventListener("click", (event) => {
+  document.getElementById("page-guide")?.addEventListener("click", (event) => {
+    const start = event.target.closest(".js-guide-start");
+    if (start) {
+      event.preventDefault();
+      switchPage("today");
+      document.getElementById("view")?.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    const jump = event.target.closest("[data-guide-jump]");
+    if (!jump) return;
     event.preventDefault();
-    switchPage("today");
+    document.getElementById(jump.dataset.guideJump)?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
   document.getElementById("btnStartTour")?.addEventListener("click", (event) => {
     event.preventDefault();

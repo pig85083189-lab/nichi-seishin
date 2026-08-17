@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=91" />
+    <link rel="stylesheet" href="app.css?v=92" />
     <style>
       .splash {
         position: fixed;
@@ -614,51 +614,101 @@
         </section>
 
         <section class="page page--guide" id="page-guide" data-page="guide" hidden>
-          <header class="page__header">
-            <p class="guide-kicker">進行式 ING 使用手冊</p>
-            <h2 class="page__title">四個步驟，開始認識自己</h2>
-            <p class="page__subtitle">用溫柔、清楚的節奏走完今日復盤。時間不夠就走快速模式，想深挖再走完整模組。</p>
+          <header class="guide-hero">
+            <p class="guide-kicker">進行式 ING 核心操作手冊</p>
+            <h2 class="page__title">五個步驟，把今天過成成長</h2>
+            <p class="page__subtitle">用溫潤、清楚的節奏走完今日復盤。忙碌時走快速模式，想沉澱再展開完整七大模組。</p>
+            <button class="btn guide-start-btn js-guide-start" type="button">✨ 開始今日復盤</button>
           </header>
 
+          <nav class="guide-toc" aria-label="手冊五大步驟">
+            <button class="guide-toc__item" type="button" data-guide-jump="guide-step-1"><span>1</span>復盤模式</button>
+            <button class="guide-toc__item" type="button" data-guide-jump="guide-step-2"><span>2</span>感謝與事件</button>
+            <button class="guide-toc__item" type="button" data-guide-jump="guide-step-3"><span>3</span>身心洞察</button>
+            <button class="guide-toc__item" type="button" data-guide-jump="guide-step-4"><span>4</span>動態出題</button>
+            <button class="guide-toc__item" type="button" data-guide-jump="guide-step-5"><span>5</span>資料庫</button>
+          </nav>
+
           <ol class="guide-steps">
-            <li class="guide-step">
+            <li class="guide-step" id="guide-step-1">
               <span class="guide-step__num" aria-hidden="true">1</span>
               <div class="guide-step__body">
-                <h3 class="guide-step__title">選擇復盤模式</h3>
-                <p class="guide-step__text">「今日復盤」提供「⚡ 快速復盤（3-5分鐘）」與「🌙 深度復盤（10-15分鐘）」兩種模式，可依當天精神狀態自由切換。</p>
-                <div class="guide-pills">
-                  <span class="guide-pill"><strong>⚡ 快速復盤</strong> 3–5 分鐘</span>
-                  <span class="guide-pill"><strong>🌙 深度復盤</strong> 10–15 分鐘</span>
+                <p class="guide-step__label">第一步</p>
+                <h3 class="guide-step__title">選擇今日復盤模式</h3>
+                <p class="guide-step__text">進入「今日復盤」後，先依當天精神狀態切換模式。兩種路徑都會接到同一套 AI 教練，只是深度與時間不同。</p>
+                <div class="guide-mode-grid">
+                  <article class="guide-mode">
+                    <p class="guide-mode__tag">忙碌時段</p>
+                    <h4>⚡ 快速復盤（3-5分鐘）</h4>
+                    <p>適合時間不夠的日子。填寫感謝與事件後，自由選配身心、覺察或執行模組，即時獲得 AI 深度洞察。</p>
+                  </article>
+                  <article class="guide-mode guide-mode--deep">
+                    <p class="guide-mode__tag">完整沉澱</p>
+                    <h4>🌙 深度復盤（10-15分鐘）</h4>
+                    <p>提供完整的七大模組，從感謝、事件、身心、覺察、執行到顯化，徹底沉澱心靈。</p>
+                  </article>
                 </div>
               </div>
             </li>
-            <li class="guide-step">
+            <li class="guide-step" id="guide-step-2">
               <span class="guide-step__num" aria-hidden="true">2</span>
               <div class="guide-step__body">
-                <h3 class="guide-step__title">填寫心靈軌跡與身心覺察</h3>
-                <p class="guide-step__text">完成感謝、事件、心情與身心狀態的記錄。身心狀態包含情緒、身體、睡眠品質與原因。</p>
+                <p class="guide-step__label">第二步</p>
+                <h3 class="guide-step__title">填寫今日感謝與事件</h3>
+                <p class="guide-step__text">記錄想感謝的人事物（可動態新增欄位），並寫下今日事件與心情。這是啟動所有 AI 動態教練的基石：後面的洞察、覺察題與執行突破題，都會讀你今天真正寫下的內容。</p>
+                <div class="guide-pills">
+                  <span class="guide-pill"><strong>01</strong> 今日感謝</span>
+                  <span class="guide-pill"><strong>02</strong> 今日事件與心情</span>
+                </div>
               </div>
             </li>
-            <li class="guide-step">
+            <li class="guide-step" id="guide-step-3">
               <span class="guide-step__num" aria-hidden="true">3</span>
               <div class="guide-step__body">
-                <h3 class="guide-step__title">AI 智慧深度洞察</h3>
-                <p class="guide-step__text">點擊生成後，系統將提供包含「深層心理盲點解析、客觀檢討反思、具體突破建議與核心重點整理」的完整教練級報告。</p>
+                <p class="guide-step__label">第三步</p>
+                <h3 class="guide-step__title">身心覺察與 AI 深度洞察</h3>
+                <p class="guide-step__text">勾選心情、身體與睡眠狀況並寫下原因，系統將即時產出專業教練報告。快速復盤可加選身心模組；深度復盤會完整走過這一層。</p>
+                <ul class="guide-insight">
+                  <li>深層心理盲點解析</li>
+                  <li>客觀檢討反思</li>
+                  <li>具體突破建議</li>
+                  <li>核心重點整理</li>
+                </ul>
               </div>
             </li>
-            <li class="guide-step">
+            <li class="guide-step" id="guide-step-4">
               <span class="guide-step__num" aria-hidden="true">4</span>
               <div class="guide-step__body">
-                <h3 class="guide-step__title">覺察、執行與顯化力同步</h3>
-                <p class="guide-step__text">填寫並勾選動態生成的覺察與執行清單、輸入顯化願景。點擊「完成今日復盤」後，所有勾選項目將自動同步至側邊欄的個人資料庫與週月報中。</p>
+                <p class="guide-step__label">第四步</p>
+                <h3 class="guide-step__title">動態出題與智慧勾勾表</h3>
+                <p class="guide-step__text">覺察力與執行力會完全依據你今天寫下的感謝與事件自動出題，回答後一鍵生成專屬的行動與覺察勾勾表。快速復盤只要勾選對應模組，就會走同一套今天專屬的出題。</p>
+                <div class="guide-pills">
+                  <span class="guide-pill"><strong>覺察力</strong> 3 道今日反思題 → 勾勾表</span>
+                  <span class="guide-pill"><strong>執行力</strong> 3 道突破題 → 行動卡點</span>
+                </div>
+              </div>
+            </li>
+            <li class="guide-step" id="guide-step-5">
+              <span class="guide-step__num" aria-hidden="true">5</span>
+              <div class="guide-step__body">
+                <p class="guide-step__label">第五步</p>
+                <h3 class="guide-step__title">個人資料庫與週月報同步</h3>
+                <p class="guide-step__text">點擊「完成今日復盤」後，所有勾選的洞察與行動將自動同步至側邊欄的個人專屬資料庫，並在週月報中透過圖表與 AI 追蹤你的長期成長模式。</p>
+                <div class="guide-pills">
+                  <span class="guide-pill">覺察力資料庫</span>
+                  <span class="guide-pill">執行力清單</span>
+                  <span class="guide-pill">顯化力目標</span>
+                  <span class="guide-pill">週月報圖表</span>
+                </div>
               </div>
             </li>
           </ol>
 
-          <div class="guide-cta">
-            <button class="btn btn--wide" id="btnStartFirstReview" type="button">開始第一次復盤</button>
+          <footer class="guide-cta">
+            <p class="guide-cta__lead">讀完了，就把今天寫下來。</p>
+            <button class="btn guide-start-btn js-guide-start" id="btnStartFirstReview" type="button">✨ 開始今日復盤</button>
             <button class="btn btn--outline" id="btnStartTour" type="button">跟著畫面走一遍</button>
-          </div>
+          </footer>
         </section>
       </div>
     </div>
@@ -755,6 +805,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=107"></script>
+    <script src="app.js?v=108"></script>
   </body>
 </html>
