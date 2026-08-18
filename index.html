@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=108" />
+    <link rel="stylesheet" href="app.css?v=109" />
     <style>
       .splash {
         position: fixed;
@@ -206,15 +206,51 @@
             </div>
           </header>
 
-          <div class="journal-mode" role="tablist" aria-label="復盤模式">
-            <button class="journal-mode__btn" data-journal-mode="quick" type="button" role="tab" aria-selected="false">
-              <strong>⚡ 快速復盤</strong>
-              <span>3–5 分鐘 · 感謝、事件與心情，可加選模組</span>
-            </button>
-            <button class="journal-mode__btn is-on" data-journal-mode="deep" type="button" role="tab" aria-selected="true">
-              <strong>🌙 深度復盤</strong>
-              <span>10–15 分鐘 · 完整七大模組</span>
-            </button>
+          <div class="journal-mode-block">
+            <section class="mode-guide" aria-labelledby="modeGuideTitle">
+              <header class="mode-guide__head">
+                <p class="mode-guide__kicker">怎麼選</p>
+                <h2 class="mode-guide__title" id="modeGuideTitle">💡 復盤模式指南：我該怎麼選？</h2>
+                <p class="mode-guide__lead">依今天的心力選一條路。點卡片就會切換，下方按鈕也會跟著亮起。</p>
+              </header>
+              <div class="mode-guide__grid">
+                <button class="mode-guide__card" data-journal-mode="quick" type="button" aria-pressed="false">
+                  <span class="mode-guide__icon" aria-hidden="true">⚡</span>
+                  <span class="mode-guide__tag">高效 · 無負擔 · 日常隨寫</span>
+                  <strong>快速復盤</strong>
+                  <span class="mode-guide__when">時間有限、疲憊時，或只想快速記下今日感謝與幾個關鍵行動。</span>
+                  <span class="mode-guide__points">
+                    <span>精簡題型，幾分鐘內完成</span>
+                    <span>保持習慣不斷鏈</span>
+                    <span>需要時再加選模組</span>
+                  </span>
+                  <span class="mode-guide__cta">點此開始快速復盤</span>
+                </button>
+                <button class="mode-guide__card is-on" data-journal-mode="deep" type="button" aria-pressed="true">
+                  <span class="mode-guide__icon" aria-hidden="true">🌙</span>
+                  <span class="mode-guide__tag">全面覺察 · 靈魂對話 · 突破盲點</span>
+                  <strong>深度復盤</strong>
+                  <span class="mode-guide__when">週末、心力充沛時，或今天情緒波動、卡點需要好好梳理。</span>
+                  <span class="mode-guide__points">
+                    <span>完整身心覺察題</span>
+                    <span>AI 犀利金句與深度覆盤</span>
+                    <span>客製化執行突破</span>
+                  </span>
+                  <span class="mode-guide__cta">點此開始深度復盤</span>
+                </button>
+              </div>
+            </section>
+
+            <div class="journal-mode" role="tablist" aria-label="復盤模式">
+              <button class="journal-mode__btn" data-journal-mode="quick" type="button" role="tab" aria-selected="false">
+                <strong>⚡ 快速復盤</strong>
+                <span>3–5 分鐘 · 感謝、事件與心情，可加選模組</span>
+              </button>
+              <button class="journal-mode__btn is-on" data-journal-mode="deep" type="button" role="tab" aria-selected="true">
+                <strong>🌙 深度復盤</strong>
+                <span>10–15 分鐘 · 完整七大模組</span>
+              </button>
+            </div>
           </div>
 
           <textarea class="sr-only" id="reviewText" rows="3" tabindex="-1" aria-hidden="true"></textarea>
@@ -843,6 +879,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=126"></script>
+    <script src="app.js?v=127"></script>
   </body>
 </html>

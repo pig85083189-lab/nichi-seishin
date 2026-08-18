@@ -2576,11 +2576,11 @@ function tourSteps() {
       },
     },
     {
-      element: ".journal-mode",
+      element: ".mode-guide",
       tourPage: "today",
       popover: {
-        title: "快速或深度復盤",
-        description: "時間不夠就選「快速復盤」：感謝、事件與心情，再生成完整洞察。想加深，可加選身體覺察、覺察力、執行力或顯化力。",
+        title: "復盤模式指南",
+        description: "時間不夠、想輕鬆留下感謝就選快速復盤；心力夠、或今天波動比較大，就走深度復盤。點卡片即可切換。",
         side: "bottom",
       },
     },
@@ -5269,10 +5269,11 @@ function applyJournalMode(mode, options = {}) {
   const next = mode === "quick" ? "quick" : "deep";
   state.journalMode = next;
   document.body.dataset.journalMode = next;
-  document.querySelectorAll(".journal-mode__btn").forEach((btn) => {
+  document.querySelectorAll("[data-journal-mode]").forEach((btn) => {
     const on = btn.dataset.journalMode === next;
     btn.classList.toggle("is-on", on);
-    btn.setAttribute("aria-selected", on ? "true" : "false");
+    if (btn.classList.contains("journal-mode__btn")) btn.setAttribute("aria-selected", on ? "true" : "false");
+    if (btn.classList.contains("mode-guide__card")) btn.setAttribute("aria-pressed", on ? "true" : "false");
   });
   try {
     localStorage.setItem(STORAGE_KEYS.journalMode, next);
@@ -7589,7 +7590,7 @@ function bindEvents() {
   document.getElementById("btnInsightAi")?.addEventListener("click", () => generateJournalInsight());
   document.getElementById("btnQuickInsight")?.addEventListener("click", () => generateJournalInsight());
   document.getElementById("btnBodyCoach")?.addEventListener("click", () => generateBodyCoach());
-  document.querySelector(".journal-mode")?.addEventListener("click", (event) => {
+  document.querySelector(".journal-mode-block")?.addEventListener("click", (event) => {
     const btn = event.target.closest("[data-journal-mode]");
     if (!btn) return;
     applyJournalMode(btn.dataset.journalMode);
