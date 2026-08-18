@@ -6912,6 +6912,20 @@ function printArchivedReport() {
   window.setTimeout(() => document.body.classList.remove("printing-report"), 400);
 }
 
+function taskActionIcon(name) {
+  const icons = {
+    hold: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h16l-1.6 11H5.6L4 8z"/><path d="M4 8l2.2-3.5h11.6L20 8"/><path d="M9 13h6"/></svg>`,
+    back: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 8H4V3"/><path d="M4 8c2.4-3.2 6-5 10-5a9 9 0 1 1-9 9"/></svg>`,
+    done: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M8.5 12.2l2.3 2.3 4.7-5"/></svg>`,
+    trash: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7h14"/><path d="M10 7V5h4v2"/><path d="M8 7l.8 12h6.4L16 7"/></svg>`,
+  };
+  return icons[name] || "";
+}
+
+function renderTaskChip(label, variant, attrs, icon) {
+  return `<button class="task-chip-btn task-chip-btn--${variant}" ${attrs} type="button">${taskActionIcon(icon)}<span>${escapeHtml(label)}</span></button>`;
+}
+
 function renderTaskItem(task, options = {}) {
   const done = task.status === "done";
   const later = task.status === "later";
@@ -6921,16 +6935,17 @@ function renderTaskItem(task, options = {}) {
     Number.isInteger(options.index) && !done
       ? `${String(options.index + 1).padStart(2, "0")}｜${parts.title}`
       : parts.title;
+  const id = escapeHtml(task.id);
   const actionBtns = done
     ? ""
     : later
-      ? `<button class="task-hold-btn" data-task-status="${escapeHtml(task.id)}" data-to="doing" type="button">拿回來</button>
-        <button class="task-hold-btn task-hold-btn--done" data-task-status="${escapeHtml(task.id)}" data-to="done" type="button">完成</button>`
-      : `<button class="task-hold-btn" data-task-status="${escapeHtml(task.id)}" data-to="later" type="button">先放著</button>`;
+      ? `${renderTaskChip("拿回來", "back", `data-task-status="${id}" data-to="doing" aria-label="拿回進行中"`, "back")}
+        ${renderTaskChip("完成", "done", `data-task-status="${id}" data-to="done" aria-label="標記完成"`, "done")}`
+      : renderTaskChip("先放著", "hold", `data-task-status="${id}" data-to="later" aria-label="先放到暫存"`, "hold");
   return `
     <article class="task-card task-todo${done ? " is-done" : ""}${later ? " is-later" : ""}">
       <label class="task-todo__check">
-        <input type="checkbox" data-task-toggle="${escapeHtml(task.id)}" ${done ? "checked" : ""} />
+        <input type="checkbox" data-task-toggle="${id}" ${done ? "checked" : ""} />
         <span class="task-todo__box" aria-hidden="true"></span>
         <span class="task-todo__body">
           <span class="task-card__title">${escapeHtml(heading)}</span>
@@ -6942,9 +6957,9 @@ function renderTaskItem(task, options = {}) {
           </span>
         </span>
       </label>
-      <div class="task-todo__actions">
+      <div class="task-todo__actions" role="group" aria-label="行動操作">
         ${actionBtns}
-        <button class="task-todo__delete" data-task-delete="${escapeHtml(task.id)}" type="button">刪除</button>
+        ${renderTaskChip("刪除", "delete", `data-task-delete="${id}" aria-label="刪除這項行動"`, "trash")}
       </div>
     </article>
   `;
