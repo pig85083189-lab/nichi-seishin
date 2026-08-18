@@ -1637,7 +1637,7 @@ body.nav-closed .auth-pay {
 
 .add-task {
   display: grid;
-  grid-template-columns: 1fr 150px auto;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.3fr) 140px auto;
   gap: 10px;
   margin-bottom: 16px;
   align-items: center;
@@ -1661,6 +1661,21 @@ body.nav-closed .auth-pay {
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.14em;
+}
+
+.todo-hero {
+  padding: 4px 0 2px;
+}
+
+.todo-hero .page__title {
+  color: var(--text);
+}
+
+.todo-hero .page__subtitle {
+  max-width: 42em;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.75;
 }
 
 .todo-section {
@@ -1753,18 +1768,38 @@ body.nav-closed .auth-pay {
 }
 
 .task-todo .task-card__title {
-  margin: 0 0 6px;
+  display: block;
+  margin: 0;
   color: var(--text);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.5;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.22em;
   transition: color 0.18s ease, opacity 0.18s ease;
+}
+
+.task-todo .task-card__lead {
+  display: block;
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.7;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+
+.task-todo .task-card__meta {
+  margin-top: 8px;
 }
 
 .task-todo.is-done {
   background: var(--cream);
 }
 
-.task-todo.is-done .task-card__title {
+.task-todo.is-done .task-card__title,
+.task-todo.is-done .task-card__lead {
   color: var(--muted);
   text-decoration: line-through;
   text-decoration-color: rgba(122, 101, 86, 0.55);

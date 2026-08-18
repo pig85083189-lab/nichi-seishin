@@ -286,11 +286,22 @@ function saveTasks(tasks) {
   saveJson(STORAGE_KEYS.tasks, tasks);
 }
 
-function taskTitleFromParts(label, detail) {
-  const title = String(label || "").trim();
-  const body = String(detail || "").trim();
-  if (title && body) return `${title}：${body}`;
-  return title || body;
+function splitTaskText(text) {
+  const raw = String(text || "").trim();
+  const idx = raw.search(/[：:]/);
+  if (idx > 0 && idx < raw.length - 1) {
+    return { title: raw.slice(0, idx).trim(), detail: raw.slice(idx + 1).trim() };
+  }
+  return { title: raw, detail: "" };
+}
+
+function taskDisplayParts(task) {
+  const storedTitle = String(task && task.title ? task.title : "").trim();
+  const storedDetail = String((task && (task.detail || task.note || task.body)) || "").trim();
+  if (storedDetail && storedDetail !== storedTitle) {
+    return { title: storedTitle || storedDetail, detail: storedTitle ? storedDetail : "" };
+  }
+  return splitTaskText(storedTitle);
 }
 
 function findTaskBySourceKey(key) {
@@ -299,17 +310,20 @@ function findTaskBySourceKey(key) {
 }
 
 function addTaskFromGuide({ key, label, detail, source, date }) {
-  const title = taskTitleFromParts(label, detail);
+  const parsed = splitTaskText(label);
+  const title = parsed.title || String(detail || "").trim();
+  const note = String(detail || "").trim() || parsed.detail;
   if (!title) return { added: false };
   const iso = date || currentIso();
   const tasks = getTasks();
   if (key && tasks.some((task) => task.sourceKey === key)) return { added: false, exists: true };
-  if (tasks.some((task) => task.title === title && task.date === iso)) {
+  if (tasks.some((task) => task.title === title && task.date === iso && String(task.detail || "") === (note && note !== title ? note : ""))) {
     return { added: false, exists: true };
   }
   tasks.unshift({
     id: uid(),
     title,
+    detail: note && note !== title ? note : "",
     status: "doing",
     source: source || "今日復盤",
     sourceKey: key || "",
@@ -462,8 +476,8 @@ function syncJournalLibraries(iso, journal) {
   if (smallest) {
     addTaskFromGuide({
       key: `exec-step:${iso}`,
-      label: `明天最小一步：${smallest}`,
-      detail: "",
+      label: "明天最小一步",
+      detail: smallest,
       source: "今日最小行動",
       date: iso,
     });
@@ -6413,16 +6427,22 @@ function printArchivedReport() {
   window.setTimeout(() => document.body.classList.remove("printing-report"), 400);
 }
 
-function renderTaskItem(task) {
+function renderTaskItem(task, options = {}) {
   const done = task.status === "done";
   const dateLabel = task.date ? formatDisplayDate(task.date) : "";
+  const parts = taskDisplayParts(task);
+  const heading =
+    Number.isInteger(options.index) && !done
+      ? `${String(options.index + 1).padStart(2, "0")}｜${parts.title}`
+      : parts.title;
   return `
     <article class="task-card task-todo${done ? " is-done" : ""}">
       <label class="task-todo__check">
         <input type="checkbox" data-task-toggle="${escapeHtml(task.id)}" ${done ? "checked" : ""} />
         <span class="task-todo__box" aria-hidden="true"></span>
         <span class="task-todo__body">
-          <span class="task-card__title">${escapeHtml(task.title)}</span>
+          <span class="task-card__title">${escapeHtml(heading)}</span>
+          ${parts.detail ? `<span class="task-card__lead">${escapeHtml(parts.detail)}</span>` : ""}
           <span class="task-card__meta">
             <span class="tag">${escapeHtml(task.source || "自行新增")}</span>
             ${task.status === "later" ? `<span class="tag tag--later">先放著</span>` : ""}
@@ -6442,7 +6462,7 @@ function renderTaskSection(title, lead, items, emptyText) {
         <h3>${escapeHtml(title)}${items.length ? `（${items.length}）` : ""}</h3>
         <p>${escapeHtml(lead)}</p>
       </header>
-      ${items.length ? items.map(renderTaskItem).join("") : `<div class="empty">${escapeHtml(emptyText)}</div>`}
+      ${items.length ? items.map((task, index) => renderTaskItem(task, { index })).join("") : `<div class="empty">${escapeHtml(emptyText)}</div>`}
     </section>
   `;
 }
@@ -6501,6 +6521,7 @@ function addTask(event) {
   tasks.unshift({
     id: uid(),
     title,
+    detail: document.getElementById("taskDetail")?.value.trim() || "",
     status: "doing",
     source: document.getElementById("taskSource").value,
     date: currentIso(),
@@ -6509,6 +6530,8 @@ function addTask(event) {
   });
   saveTasks(tasks);
   document.getElementById("taskTitle").value = "";
+  const detailInput = document.getElementById("taskDetail");
+  if (detailInput) detailInput.value = "";
   renderTasks();
   showToast("行動已加入。");
 }
