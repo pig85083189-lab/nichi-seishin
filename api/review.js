@@ -152,16 +152,16 @@ actions 的 detail 必須是可開口的完整一句，用「」包起來。
 title 必須是有質感的思考主題，例如「先看見，才能改變」，不要寫「深度思考」。stars 為 1-5。
 points 給 1-3 個，每個 conclusion 只能一句。actions 給 3 個。若已是最後一輪，question 改成收束。`;
 
-const CHECKLIST_AWARENESS_SYSTEM = `你是「日精進」的高階心靈教練與諮詢師。使用者剛回答今天專屬的三道覺察反思題（題目會依他今日的感謝、事件與心情動態生成）。
+const CHECKLIST_AWARENESS_SYSTEM = `你是「日精進」的高階心靈教練與諮詢師。使用者剛完成今天專屬的 6 道自我覺察是非題（題目依他今日的感謝、事件與心情動態生成）。
 
-請把今天的狀態與回答精準煉結成一句「核心重點金句」：一段充滿深度、療癒、能引導覺察的深刻話語。讓他一看就能沈澱下來，看見真正被碰到的那一層。
+請根據這 6 題的「是／否」作答，以及今天的狀態，精準煉結成一句「核心重點金句」：一段充滿深度、療癒、能引導覺察的深刻話語。讓他一看就能沈澱下來，看見真正被碰到的那一層。
 
 規則：
 - 只輸出 JSON：{"quote":"..."}
 - quote 必須剛好 1 句，可含逗號或頓號，但不要拆成多段、不要條列、不要解釋
 - 28-52 字，直擊今天真正被碰到的核心
-- 口吻溫暖、有深度、能引導自我覺察，像一句可以放在心上的話
-- 必須貼近他剛寫的回答與今日事件，讓他認出「這是在說我今天」
+- 要讀懂「是」與「否」的組合：同意的題顯示他看見了什麼，否定的題顯示他還在保護或還沒準備好的地方
+- 必須貼近他今天的事件與作答，讓他認出「這是在說我今天」
 - 禁止長篇大論、禁止條列雜訊、禁止編號、禁止雞湯口號、禁止說教、禁止病例腔、禁止空泛「要愛自己」
 - 繁體中文`;
 
@@ -555,10 +555,10 @@ ${labeled}
   }
   const labeled = questions.length
     ? questions
-        .map((question, index) => `${index + 1}. ${question}\n回答：${answers[index] || "（未填）"}`)
+        .map((question, index) => `${index + 1}. ${question}\n作答：${answers[index] || "（未答）"}`)
         .join("\n\n")
-    : `深度回答：${answer || "（未填）"}`;
-  return `請依這個人今天的覺察回答，煉結出一句直擊核心的「核心重點金句」。只要一句深刻、療癒、能引導覺察的話，不要條列、不要長篇解釋。
+    : `是非題作答：${answer || "（未答）"}`;
+  return `請依這個人今天的 6 道覺察是非題作答，煉結出一句直擊核心的「核心重點金句」。只要一句深刻、療癒、能引導覺察的話，不要條列、不要長篇解釋。
 
 ${labeled}
 
@@ -668,7 +668,7 @@ ${avoid.length ? avoid.slice(0, 16).map((item) => `- ${compactLine(item, 60)}`).
 const CORE_PROMPTS_SYSTEM = `你是「日精進」的高階心靈教練。請精準讀取使用者今天寫下的感謝內容、事件經過與當下情緒，動態生成「只屬於今天」的覺察力與執行力題目。
 
 【任務】
-- awareness：3 道直擊心靈的覺察反思題。必須對準今天實際發生的畫面、情緒波動、感動或委屈，引導他看見背後的期待、防衛或盲點。由淺入深。
+- awareness：剛好 6 道自我覺察是非題。每題必須是一句可回答「是」或「否」的陳述句（不要開放問句、不要問「是什麼／為什麼」）。對準今天實際發生的畫面、情緒波動、感動或委屈，由淺入深：事件觸動 → 情緒 → 防衛 → 需求 → 身體 → 核心信念。
 - execution：3 道針對性的執行突破題。必須對準今天事件裡的卡點、生氣、拖延或做不下去的地方：具體盲點是什麼、卡住的真正原因、明天最快能採取的突破行動。
 
 【必須遵守】
@@ -686,13 +686,13 @@ const CORE_PROMPTS_SYSTEM = `你是「日精進」的高階心靈教練。請精
 
 {
   "awareness": [
-    { "question": "完整問句，18-40字", "placeholder": "8-18字" }
+    { "question": "可答是或否的陳述句，18-36字" }
   ],
   "execution": [
     { "question": "完整問句，18-40字", "placeholder": "8-18字" }
   ]
 }
-awareness 與 execution 都必須剛好 3 題。`;
+awareness 必須剛好 6 題，execution 必須剛好 3 題。`;
 
 function isCorePromptsRequest(body) {
   return body?.variant === "core" || body?.scope === "core" || body?.kind === "core";
@@ -704,7 +704,7 @@ function corePromptsUserPrompt(body) {
   const thanks = formatThanksForPrompt(ctx) || "未寫";
   const avoid = Array.isArray(progress.avoidQuestions) ? progress.avoidQuestions.filter(Boolean) : [];
   const openActions = Array.isArray(progress.openActions) ? progress.openActions.filter(Boolean) : [];
-  return `請精準讀取以下「今天的原文」，生成只屬於這一天的覺察力 3 題、執行力 3 題。題目必須能讓人認出今天的感謝、事件與情緒，不要出成萬用題。
+  return `請精準讀取以下「今天的原文」，生成只屬於這一天的覺察力 6 題是非題、執行力 3 題。題目必須能讓人認出今天的感謝、事件與情緒，不要出成萬用題。
 
 日期：${body.date || ""}
 連續復盤天數：${progress.streak || 0}
@@ -720,7 +720,7 @@ ${thanks}
 【請避開、不要再出相近的題】
 ${avoid.length ? avoid.slice(0, 16).map((item) => `- ${compactLine(item, 60)}`).join("\n") : "（無）"}
 
-覺察題：針對今天的情緒波動、感動或委屈，引導看見背後的期待或盲點。
+覺察是非題：6 句可答「是」或「否」的陳述，對準今天的情緒波動、感動或委屈，引導看見背後的期待或盲點。
 執行題：針對今天卡住、生氣或拖延的部分，問具體盲點，以及明天最快的突破行動。`;
 }
 
@@ -756,7 +756,7 @@ function normalizePromptsResult(raw) {
   const awareness = (Array.isArray(data.awareness) ? data.awareness : [])
     .map(normalizePromptItem)
     .filter(Boolean)
-    .slice(0, 3);
+    .slice(0, 6);
   const execution = (Array.isArray(data.execution) ? data.execution : [])
     .map(normalizePromptItem)
     .filter(Boolean)
@@ -1038,7 +1038,7 @@ module.exports = async function handler(req, res) {
     if (mode === "prompts") {
       const prompts = normalizePromptsResult(data);
       if (isCorePromptsRequest(body)) {
-        if (prompts.awareness.length < 3 || prompts.execution.length < 3) {
+        if (prompts.awareness.length < 6 || prompts.execution.length < 3) {
           res.status(502).json({ ok: false, error: "AI 題目格式不完整，請再試一次" });
           return;
         }

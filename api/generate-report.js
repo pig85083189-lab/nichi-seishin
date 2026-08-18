@@ -163,7 +163,7 @@ function reviewsInRange(all, fromIso, toIso) {
           bodyNote: String(journal.bodyNote || "").slice(0, 180),
           smallestStep: String(journal.smallestStep || "").slice(0, 120),
           awareness: Array.isArray(journal.awareness)
-            ? journal.awareness.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 3).map((item) => item.slice(0, 120))
+            ? journal.awareness.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 6).map((item) => item.slice(0, 120))
             : [],
           sleep: {
             duration: String(sleep.duration || "").slice(0, 20),

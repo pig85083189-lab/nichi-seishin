@@ -2598,16 +2598,16 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "04 覺察力",
-        description: "寫完今日感謝與事件後，會生成 3 道今天專屬的覺察題。寫完再煉結成一句核心覺察金句。",
+        description: "寫完今日感謝與事件後，會生成 6 道今天專屬的覺察是非題。逐題點是或否，答完再煉結核心金句。",
         side: "top",
       },
     },
     {
-      element: "#btnAwareAi",
+      element: "#awareChecks",
       tourPage: "today",
       popover: {
-        title: "生成核心覺察",
-        description: "點擊這裡，把今天的回答煉結成一句直擊核心的金句。可收藏進覺察力，或複製帶走。",
+        title: "核心金句",
+        description: "六題都點完後，這裡會解鎖。點一下，把今天的是／否煉結成一句直擊核心的金句。",
         side: "top",
       },
     },
@@ -2898,7 +2898,7 @@ function emptyJournal() {
     bodyNote: "",
     bodyCheck: emptyBodyCheck(),
     bodyCoach: emptyBodyCoach(),
-    awareness: ["", "", ""],
+    awareness: ["", "", "", "", "", ""],
     awarenessChecks: [],
     awarenessCheckItems: [],
     execution: ["", "", ""],
@@ -3281,11 +3281,27 @@ function threePromptAnswersReady(answers) {
   return (Array.isArray(answers) ? answers : []).filter((item) => String(item || "").trim()).length >= 3;
 }
 
-function awarenessReady(answers, mode = state.journalMode) {
-  const list = Array.isArray(answers) ? answers : [];
-  if (normalizeAwarenessPrompts(state.awarenessPrompts).length >= 3) return threePromptAnswersReady(list);
-  if (mode === "quick") return String(list[0] || "").trim().length >= 4;
-  return threePromptAnswersReady(list);
+function normalizeYesNo(value) {
+  const raw = String(value || "").trim();
+  const key = raw.toLowerCase();
+  if (raw === "是" || key === "yes" || key === "y" || key === "true") return "是";
+  if (raw === "否" || key === "no" || key === "n" || key === "false") return "否";
+  return "";
+}
+
+function collectAwarenessQuizAnswers() {
+  const items = [...document.querySelectorAll("#awareQuestions .aware-quiz__item")];
+  if (items.length) return items.map((el) => normalizeYesNo(el.dataset.answer));
+  const prev = getReview(currentIso())?.journal?.awareness;
+  return Array.isArray(prev) ? prev.map(normalizeYesNo) : ["", "", "", "", "", ""];
+}
+
+function awarenessQuizAnsweredCount(answers) {
+  return (Array.isArray(answers) ? answers : []).map(normalizeYesNo).filter(Boolean).length;
+}
+
+function awarenessReady(answers) {
+  return awarenessQuizAnsweredCount(answers) >= 6;
 }
 
 function executionReady(answers) {
@@ -3343,34 +3359,30 @@ function normalizeAwarenessQuote(raw, fallback) {
 }
 
 function collectAwareQuote() {
-  return String(document.querySelector("#awareChecks .aware-quote")?.dataset.quote || "").trim();
+  const fromDom = String(document.querySelector("#awareChecks .aware-quote")?.dataset.quote || "").trim();
+  if (fromDom) return fromDom;
+  const prev = getReview(currentIso())?.journal;
+  return pickAwarenessQuote(prev && prev.awarenessCheckItems);
 }
 
 function buildAwarenessQuote(journal) {
-  const answer = joinJournalAnswers(journal.awareness);
-  const blob = `${journalBlob(journal)}\n${answer}`;
+  const prompts = normalizeAwarenessPrompts(journal.awarenessPrompts || state.awarenessPrompts);
+  const answers = (journal.awareness || []).map(normalizeYesNo);
+  const yesItems = prompts.filter((_, index) => answers[index] === "是");
+  const noItems = prompts.filter((_, index) => answers[index] === "否");
+  if (yesItems.length >= 4) {
+    return "你今天其實已經看見了：那些點下去的「是」，都在指同一件還沒被好好接住的事。";
+  }
+  if (noItems.length >= 4) {
+    return "那些「否」不是冷漠，而是你還需要一點空間，才肯靠近真正被碰到的地方。";
+  }
+  if (yesItems[0]) {
+    const short = String(yesItems[0].question || "").replace(/[。！？]$/, "").slice(0, 16);
+    return `你承認的那一句「${short}」，正是今天最想被溫柔看見的地方。`;
+  }
   const mood = journal.mood || "";
-  if (/防衛|保護|武裝|硬撐|撐住/.test(blob)) {
-    return "你最用力撐住的地方，往往正是今天最需要被溫柔接住的地方。";
-  }
-  if (/怕|焦慮|不安|丟臉|被看/.test(blob)) {
-    return "害怕被看見的那一刻，其實是你最真實、也最值得被陪伴的地方。";
-  }
-  if (/委屈|難過|哭|失落/.test(blob) || mood === "難過") {
-    return "這份難過不是來懲罰你的，它是在告訴你：有些在意，還沒被好好接住。";
-  }
-  if (/怒|生氣|不爽/.test(blob) || mood === "生氣") {
-    return "怒氣底下，通常藏著一句還沒說出口的「我很在乎」。";
-  }
-  if (/累|疲|身體|緊繃|沒力/.test(blob)) {
-    return "身體先說話的時候，心其實已經撐很久了；今天允許自己慢下來，也是一種覺察。";
-  }
-  if (mood === "開心" || mood === "平靜" || /感謝|被愛|溫暖/.test(blob)) {
-    return "被滋養到的那些片刻，正提醒你：真正想留下的，不是完美，而是被溫柔對待的感覺。";
-  }
-  if (answer) {
-    const short = answer.length > 16 ? `${answer.slice(0, 16)}…` : answer;
-    return `今天真正被碰到的，不是事情本身，而是「${short}」背後還沒說出口的那一層。`;
+  if (mood === "生氣" || mood === "難過") {
+    return "這份不舒服不是來懲罰你的，它是在告訴你：有些在意，還沒被好好接住。";
   }
   return "慢下來時才會看見：情緒不是來搗亂的，它是在告訴你什麼還需要被照顧。";
 }
@@ -3384,26 +3396,63 @@ function renderAwareQuote(items, checked) {
   const root = document.getElementById("awareChecks");
   if (!root) return;
   const quote = pickAwarenessQuote(items);
-  if (!quote) {
-    root.innerHTML = `<p class="empty">寫完左側三題後，會為你煉結一句今日核心覺察。</p>`;
+  if (quote) {
+    const saved = new Set((checked || []).map((item) => String(item || "").trim()).filter(Boolean));
+    const kept = saved.has(quote) || [...saved].some((item) => quote.includes(item) || item.includes(quote));
+    root.innerHTML = `
+      <article class="aware-quote" data-quote="${escapeHtml(quote)}">
+        <p class="aware-quote__kicker">今日核心覺察</p>
+        <p class="aware-quote__text">${escapeHtml(quote)}</p>
+        <div class="aware-quote__actions">
+          <label class="aware-quote__keep">
+            <input type="checkbox" value="${escapeHtml(quote)}" ${kept ? "checked" : ""} />
+            <span class="aware-quote__box" aria-hidden="true"></span>
+            <span>收藏這句覺察</span>
+          </label>
+          <button class="btn btn--ghost btn--tiny" type="button" data-copy-aware-quote>複製金句</button>
+        </div>
+      </article>
+    `;
+    syncAwareQuoteGate();
     return;
   }
-  const saved = new Set((checked || []).map((item) => String(item || "").trim()).filter(Boolean));
-  const kept = saved.has(quote) || [...saved].some((item) => quote.includes(item) || item.includes(quote));
+  const answers = collectAwarenessQuizAnswers();
+  const done = awarenessQuizAnsweredCount(answers);
+  const ready = done >= 6;
+  const hasQuiz = normalizeAwarenessPrompts(state.awarenessPrompts).length >= 6;
   root.innerHTML = `
-    <article class="aware-quote" data-quote="${escapeHtml(quote)}">
-      <p class="aware-quote__kicker">今日核心覺察</p>
-      <p class="aware-quote__text">${escapeHtml(quote)}</p>
-      <div class="aware-quote__actions">
-        <label class="aware-quote__keep">
-          <input type="checkbox" value="${escapeHtml(quote)}" ${kept ? "checked" : ""} />
-          <span class="aware-quote__box" aria-hidden="true"></span>
-          <span>收藏這句覺察</span>
-        </label>
-        <button class="btn btn--ghost btn--tiny" type="button" data-copy-aware-quote>複製金句</button>
-      </div>
-    </article>
+    <div class="aware-quote-gate${ready ? " is-ready" : ""}">
+      <p class="aware-quote__kicker">${ready ? "可以煉結金句了" : "答完六題後解鎖"}</p>
+      <p class="aware-quote-gate__title">${
+        ready
+          ? "六題都看見了。現在把今天煉成一句話。"
+          : hasQuiz
+            ? "先誠實點完六題是非。"
+            : "先生成今日覺察是非題。"
+      }</p>
+      <p class="aware-quote-gate__meta">${Math.min(done, 6)} / 6</p>
+      <p class="aware-quote-gate__hint">${
+        ready
+          ? "點下方按鈕，AI 會依你的是／否與今日狀態煉結核心金句。"
+          : "每一題點「是」或「否」即可，沒有標準答案。"
+      }</p>
+    </div>
   `;
+  syncAwareQuoteGate();
+}
+
+function syncAwareQuoteGate() {
+  const btn = document.getElementById("btnAwareAi");
+  if (!btn) return;
+  const answers = collectAwarenessQuizAnswers();
+  const ready = awarenessReady(answers);
+  const quote = collectAwareQuote();
+  const sig = checklistSignature(answers);
+  const stale = Boolean(quote) && Boolean(state.journalMeta.awarenessAi) && state.journalMeta.awarenessAiSig !== sig;
+  const loading = Boolean(state.checklistBusy.awareness);
+  btn.hidden = !ready || (Boolean(quote) && !stale);
+  btn.disabled = !ready || loading;
+  btn.textContent = loading ? "分析中…" : stale ? "依新作答重煉金句" : "生成今日核心金句";
 }
 
 function buildExecutionCheckItems(journal) {
@@ -3505,7 +3554,7 @@ function refreshJournalChecklists(journal, options = {}) {
   const keepManifest = !options.forceLocal && (options.useSaved || data.manifestAi) && (data.manifestCheckItems || []).length;
   const awareItems = keepAware
     ? [pickAwarenessQuote(data.awarenessCheckItems)].filter(Boolean)
-    : buildAwarenessCheckItems(data);
+    : [];
   const execItems = keepExec
     ? normalizeExecCheckItems(data.executionCheckItems).slice(0, 4)
     : buildExecutionCheckItems(data);
@@ -3570,7 +3619,7 @@ function checklistUi(kind) {
     return { btn: "btnManifestAi", loader: "manifestLoading", list: "manifestChecks", idle: "生成執行目標" };
   }
   if (kind === "awareness") {
-    return { btn: "btnAwareAi", loader: "awareLoading", list: "awareChecks", idle: "生成今日核心覺察" };
+    return { btn: "btnAwareAi", loader: "awareLoading", list: "awareChecks", idle: "生成今日核心金句" };
   }
   return { btn: "btnExecAi", loader: "execLoading", list: "execChecks", idle: "生成專屬行動卡點勾勾表" };
 }
@@ -3587,6 +3636,7 @@ function setChecklistLoading(kind, loading) {
   }
   if (loader) loader.hidden = !loading;
   if (list) list.classList.toggle("is-loading", loading);
+  if (kind === "awareness") syncAwareQuoteGate();
 }
 
 function applyGeneratedChecklist(kind, items, sig) {
@@ -3614,7 +3664,7 @@ async function generateJournalChecklist(kind, options = {}) {
   const answers = isAware ? journal.awareness : journal.execution;
   const ready = isAware ? awarenessReady(answers) : executionReady(answers);
   if (!ready) {
-    if (!options.auto) showToast(isAware ? "先把三道覺察題寫完，再生成核心覺察。" : "先把三道執行突破題寫完，再生成勾勾表。");
+    if (!options.auto) showToast(isAware ? "先點完六題是非，再生成核心金句。" : "先把三道執行突破題寫完，再生成勾勾表。");
     return;
   }
   const sig = checklistSignature(answers);
@@ -3660,7 +3710,7 @@ async function generateJournalChecklist(kind, options = {}) {
       : normalizeAiExecItems(remote.items, min, max, fallback);
     if (items.length < min) throw new Error("雲端回傳格式不完整");
     applyGeneratedChecklist(kind, items, sig);
-    showToast(isAware ? "今日核心覺察已生成。" : "行動卡點與解法已生成。");
+    showToast(isAware ? "今日核心金句已生成。" : "行動卡點與解法已生成。");
   } catch (error) {
     if (state.checklistToken[kind] !== token) return;
     applyGeneratedChecklist(kind, fallback.slice(0, max), sig);
@@ -3673,9 +3723,6 @@ async function generateJournalChecklist(kind, options = {}) {
 function maybeAutoGenerateChecklists(journal) {
   if (state.journalHydrating) return;
   if (state.journalMode === "quick" && !state.quickModules?.aware && !state.quickModules?.exec) return;
-  if (quickModuleOn("aware", journal) && awarenessReady(journal.awareness, "deep") && state.journalMeta.awarenessAiSig !== checklistSignature(journal.awareness)) {
-    generateJournalChecklist("awareness", { auto: true });
-  }
   if (quickModuleOn("exec", journal) && executionReady(journal.execution) && state.journalMeta.executionAiSig !== checklistSignature(journal.execution)) {
     generateJournalChecklist("execution", { auto: true });
   }
@@ -4265,7 +4312,7 @@ const LEGACY_DEEP_PROMPTS = [
   },
 ];
 
-function normalizeAwarenessPrompts(list) {
+function normalizePromptQuestionList(list, max) {
   return (Array.isArray(list) ? list : [])
     .map((item) => {
       if (typeof item === "string") {
@@ -4280,11 +4327,15 @@ function normalizeAwarenessPrompts(list) {
       };
     })
     .filter(Boolean)
-    .slice(0, 3);
+    .slice(0, max);
+}
+
+function normalizeAwarenessPrompts(list) {
+  return normalizePromptQuestionList(list, 6);
 }
 
 function normalizeExecutionPrompts(list) {
-  return normalizeAwarenessPrompts(list).map((item) => ({
+  return normalizePromptQuestionList(list, 3).map((item) => ({
     ...item,
     placeholder: item.placeholder === "寫下那個時刻…" ? "寫下那個卡點或一小步…" : item.placeholder,
   }));
@@ -4448,7 +4499,7 @@ function collectGrowthProgress() {
   };
 }
 
-const CORE_WAIT_COPY = "請先完成上方今日感謝與事件，將為你生成今日專屬的覺察與執行反思題";
+const CORE_WAIT_COPY = "請先完成上方今日感謝與事件，將為你生成今日專屬的覺察與執行題";
 
 function currentAwarenessQuestions() {
   const prompts = normalizeAwarenessPrompts(state.awarenessPrompts);
@@ -4476,7 +4527,7 @@ function corePromptsSignature(journal) {
 function corePromptsHaveAnswers(journal) {
   const data = journal || collectJournal();
   return (
-    (data.awareness || []).some((item) => String(item || "").trim()) ||
+    awarenessQuizAnsweredCount(data.awareness) > 0 ||
     (data.execution || []).some((item) => String(item || "").trim())
   );
 }
@@ -4488,8 +4539,8 @@ function isStockCoreQuestion(question) {
   return q === CORE_EXECUTION_PROMPT.question;
 }
 
-function keepHydratedCorePrompts(prompts, hasAnswers, fromAi) {
-  if (prompts.length < 3) return false;
+function keepHydratedCorePrompts(prompts, hasAnswers, fromAi, min = 3) {
+  if (prompts.length < min) return false;
   if (hasAnswers) return true;
   if (!fromAi) return false;
   return !prompts.some((item) => isStockCoreQuestion(item.question));
@@ -4497,21 +4548,21 @@ function keepHydratedCorePrompts(prompts, hasAnswers, fromAi) {
 
 function hydrateAwarenessPrompts(data) {
   const prompts = normalizeAwarenessPrompts(data?.awarenessPrompts);
-  const hasAnswers = (data?.awareness || []).some((item) => String(item || "").trim());
-  if (keepHydratedCorePrompts(prompts, hasAnswers, data?.corePromptsAi)) return prompts.slice(0, 3);
+  const hasAnswers = (data?.awareness || []).some((item) => normalizeYesNo(item) || String(item || "").trim());
+  if (keepHydratedCorePrompts(prompts, hasAnswers, data?.corePromptsAi, 6)) return prompts.slice(0, 6);
   return [];
 }
 
 function hydrateExecutionPrompts(data) {
   const prompts = normalizeExecutionPrompts(data?.executionPrompts);
   const hasAnswers = (data?.execution || []).some((item) => String(item || "").trim());
-  if (keepHydratedCorePrompts(prompts, hasAnswers, data?.corePromptsAi)) return prompts.slice(0, 3);
+  if (keepHydratedCorePrompts(prompts, hasAnswers, data?.corePromptsAi, 3)) return prompts.slice(0, 3);
   return [];
 }
 
 function hasCorePromptSet() {
   return (
-    normalizeAwarenessPrompts(state.awarenessPrompts).length >= 3 &&
+    normalizeAwarenessPrompts(state.awarenessPrompts).length >= 6 &&
     normalizeExecutionPrompts(state.executionPrompts).length >= 3
   );
 }
@@ -4523,7 +4574,7 @@ function collectPromptAnswers(prefix, count = 3) {
 function syncCorePromptGate() {
   const ready = coreStoryReady();
   const loading = Boolean(state.corePromptsBusy);
-  const hasAware = normalizeAwarenessPrompts(state.awarenessPrompts).length >= 3;
+  const hasAware = normalizeAwarenessPrompts(state.awarenessPrompts).length >= 6;
   const hasExec = normalizeExecutionPrompts(state.executionPrompts).length >= 3;
   const awareEmpty = document.getElementById("awareEmpty");
   const execEmpty = document.getElementById("execEmpty");
@@ -4541,7 +4592,7 @@ function syncCorePromptGate() {
     awareBtn.hidden = hasAware;
     if (!awareBtn.hidden) {
       awareBtn.disabled = !ready || loading;
-      awareBtn.textContent = loading ? "出題中…" : "生成今日專屬反思題";
+      awareBtn.textContent = loading ? "出題中…" : "生成今日覺察是非題";
     }
   }
   if (execBtn) {
@@ -4591,16 +4642,44 @@ function renderDynamicQuestions(rootId, emptyId, genBtnId, checkBtnId, prompts, 
 }
 
 function renderAwarenessQuestions(prompts, options = {}) {
-  renderDynamicQuestions(
-    "awareQuestions",
-    "awareEmpty",
-    "btnAwarePrompts",
-    "btnAwareAi",
-    prompts,
-    "aware",
-    options.answers,
-    4
-  );
+  const root = document.getElementById("awareQuestions");
+  const empty = document.getElementById("awareEmpty");
+  const genBtn = document.getElementById("btnAwarePrompts");
+  const items = normalizeAwarenessPrompts(prompts);
+  if (!root) return;
+  if (!items.length) {
+    root.classList.remove("aware-quiz");
+    root.innerHTML = "";
+    if (empty) {
+      empty.textContent = "請先完成上方今日感謝與事件，將為你生成 6 道今日覺察是非題";
+      empty.hidden = Boolean(state.corePromptsBusy);
+    }
+    if (genBtn) {
+      genBtn.hidden = false;
+      genBtn.disabled = !coreStoryReady() || Boolean(state.corePromptsBusy);
+    }
+    syncAwareQuoteGate();
+    return;
+  }
+  if (empty) empty.hidden = true;
+  if (genBtn) genBtn.hidden = true;
+  const saved = Array.isArray(options.answers) ? options.answers.map(normalizeYesNo) : collectAwarenessQuizAnswers();
+  root.classList.add("aware-quiz");
+  root.innerHTML = items
+    .map((item, index) => {
+      const answer = normalizeYesNo(saved[index]);
+      return `
+        <article class="aware-quiz__item" data-index="${index}" data-answer="${escapeHtml(answer)}">
+          <p class="aware-quiz__q"><span>${String(index + 1).padStart(2, "0")}</span>${escapeHtml(item.question)}</p>
+          <div class="aware-quiz__opts" role="group" aria-label="第 ${index + 1} 題是非">
+            <button type="button" class="aware-quiz__opt${answer === "是" ? " is-on" : ""}" data-aware-answer="是">是</button>
+            <button type="button" class="aware-quiz__opt${answer === "否" ? " is-on" : ""}" data-aware-answer="否">否</button>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+  syncAwareQuoteGate();
 }
 
 function renderExecutionQuestions(prompts, options = {}) {
@@ -4720,7 +4799,7 @@ function applyGeneratedPrompts(awareness, deep, execution, sig, fromAi) {
 function applyGeneratedCorePrompts(awareness, execution, sig, fromAi) {
   const journal = collectJournal();
   const keepAnswers = corePromptsHaveAnswers(journal);
-  const awareAnswers = keepAnswers ? journal.awareness : ["", "", ""];
+  const awareAnswers = ["", "", "", "", "", ""];
   const execAnswers = keepAnswers ? journal.execution : ["", "", ""];
   state.awarenessPrompts = normalizeAwarenessPrompts(awareness);
   state.executionPrompts = normalizeExecutionPrompts(execution);
@@ -4730,6 +4809,7 @@ function applyGeneratedCorePrompts(awareness, execution, sig, fromAi) {
   renderAwarenessQuestions(state.awarenessPrompts, { answers: awareAnswers });
   renderExecutionQuestions(state.executionPrompts, { answers: execAnswers });
   persistJournalQuietly();
+  refreshJournalChecklists();
 }
 
 function setCorePromptsLoading(loading) {
@@ -4779,9 +4859,9 @@ async function generateCorePrompts(options = {}) {
     if (state.corePromptsToken !== token) return;
     const awareness = normalizeAwarenessPrompts(remote.awareness);
     const execution = normalizeExecutionPrompts(remote.execution);
-    if (awareness.length < 3 || execution.length < 3) throw new Error("雲端回傳格式不完整");
+    if (awareness.length < 6 || execution.length < 3) throw new Error("雲端回傳格式不完整");
     applyGeneratedCorePrompts(awareness, execution, sig, true);
-    if (!options.auto) showToast("今天的覺察與執行題已生成。");
+    if (!options.auto) showToast("今天的覺察是非題與執行題已生成。");
   } catch (error) {
     if (state.corePromptsToken !== token) return;
     if (options.auto) state.corePromptsFailedSig = sig;
@@ -5108,7 +5188,7 @@ function collectJournal() {
     bodyTags: deriveBodyTags(bodyCheck),
     bodyNote: deriveBodyNote(bodyCheck),
     bodyCoach: state.journalBodyCoach || emptyBodyCoach(),
-    awareness: ["aware1", "aware2", "aware3"].map(journalFieldValue),
+    awareness: collectAwarenessQuizAnswers(),
     awarenessChecks: checkedValues("awareChecks"),
     awarenessCheckItems: (() => {
       const quote = collectAwareQuote();
@@ -5198,7 +5278,7 @@ function composeJournalRawText(journal) {
     (item) => item.question || item.title || item
   );
   awareQs.forEach((question, index) => {
-    const answer = String((journal.awareness || [])[index] || "").trim();
+    const answer = normalizeYesNo((journal.awareness || [])[index]) || String((journal.awareness || [])[index] || "").trim();
     if (answer) lines.push(`${question} ${answer}`);
   });
   const awareQuote = pickAwarenessQuote(journal.awarenessCheckItems) || (journal.awarenessChecks || []).join("、");
@@ -6972,7 +7052,7 @@ function renderHistoryJournal(review) {
       ? journal.awarenessPrompts
       : AWARENESS_QUESTIONS
     ).map((item, index) => {
-      const answer = String((journal.awareness || [])[index] || "").trim();
+      const answer = normalizeYesNo((journal.awareness || [])[index]) || String((journal.awareness || [])[index] || "").trim();
       const question = item.question || item.title || item;
       return answer ? historyTextBlock(question, answer) : "";
     })),
@@ -7369,6 +7449,21 @@ function bindEvents() {
   });
 
   document.getElementById("page-today")?.addEventListener("click", (event) => {
+    const answerBtn = event.target.closest("[data-aware-answer]");
+    if (answerBtn) {
+      event.preventDefault();
+      const item = answerBtn.closest(".aware-quiz__item");
+      if (!item) return;
+      const value = normalizeYesNo(answerBtn.dataset.awareAnswer);
+      item.dataset.answer = value;
+      item.querySelectorAll(".aware-quiz__opt").forEach((btn) => {
+        btn.classList.toggle("is-on", btn === answerBtn);
+      });
+      persistJournalQuietly();
+      const journal = collectJournal();
+      renderAwareQuote(journal.awarenessCheckItems, journal.awarenessChecks);
+      return;
+    }
     const copyBtn = event.target.closest("[data-copy-aware-quote]");
     if (!copyBtn) return;
     event.preventDefault();

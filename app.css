@@ -3522,6 +3522,111 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   margin-top: 22px;
 }
 
+.aware-quiz {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.aware-quiz__item {
+  padding: 16px 16px 14px;
+  border: 1px solid var(--cream-border);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fffdf8 0%, var(--cream) 100%);
+}
+
+.aware-quiz__q {
+  margin: 0 0 12px;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.75;
+}
+
+.aware-quiz__q span {
+  margin-right: 8px;
+  color: var(--heading);
+  font-family: var(--serif);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.aware-quiz__opts {
+  display: flex;
+  gap: 8px;
+}
+
+.aware-quiz__opt {
+  appearance: none;
+  min-width: 72px;
+  min-height: 38px;
+  padding: 8px 16px;
+  border: 1px solid var(--cream-border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--heading);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.aware-quiz__opt:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.aware-quiz__opt.is-on {
+  background: var(--header);
+  border-color: var(--header);
+  color: var(--header-text);
+}
+
+.aware-quiz__opt:focus-visible {
+  outline: 2px solid var(--blush);
+  outline-offset: 2px;
+}
+
+.aware-quote-gate {
+  padding: 28px 24px 22px;
+  border: 1px dashed var(--cream-border);
+  border-radius: 18px;
+  background: var(--cream);
+}
+
+.aware-quote-gate.is-ready {
+  border-style: solid;
+  border-left: 4px solid var(--header);
+  background: linear-gradient(180deg, #fffdf8 0%, var(--cream) 100%);
+}
+
+.aware-quote-gate__title {
+  margin: 0 0 8px;
+  color: var(--text);
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.aware-quote-gate__meta {
+  margin: 0 0 8px;
+  color: var(--heading);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.aware-quote-gate__hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
 .deep-more-btn {
   width: 100%;
   margin-top: 12px;
