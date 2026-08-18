@@ -118,6 +118,7 @@ const state = {
   corePromptsFailedSig: "",
   awarenessPrompts: [],
   executionPrompts: [],
+  execQuestionTab: "open",
   deepPrompts: [],
   deepFollowBusy: [false, false, false, false],
   deepFollowToken: [0, 0, 0, 0],
@@ -354,6 +355,32 @@ function removeTaskFromGuide(key) {
     /* ignore */
   }
   return { removed: true };
+}
+
+function execCheckTaskKey(title, iso) {
+  const heading = String(title || "").trim();
+  if (!heading) return "";
+  return `exec:${iso || currentIso()}:${heading}`;
+}
+
+function syncExecCheckToSidebar({ checked, title, detail }) {
+  const heading = String(title || "").trim();
+  if (!heading) return;
+  const key = execCheckTaskKey(heading);
+  if (checked) {
+    const result = addTaskFromGuide({
+      key,
+      label: heading,
+      detail: String(detail || "").trim(),
+      source: "今日復盤",
+    });
+    if (result.added) showToast("已加入側邊欄『執行力』");
+    else if (result.exists) showToast("這項已在『執行力』");
+    return;
+  }
+  const result = removeTaskFromGuide(key);
+  if (result.removed) showToast("已從『執行力』拿掉");
+  else if (result.kept) showToast("這項已在清單裡，改由你手動管理");
 }
 
 function syncGuideToNextSteps(input, checked) {
@@ -2616,7 +2643,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "05 執行力",
-        description: "寫完今日感謝與事件後，會生成 3 道今天專屬的執行題，對準卡點與明天最快能做的事。完成復盤後會進到側邊欄「執行力」。",
+        description: "寫完今日感謝與事件後，會生成 3 道今天專屬的執行題。右側行動卡一打勾，就會立刻同步到側邊欄「執行力」。",
         side: "top",
       },
     },
@@ -2683,7 +2710,7 @@ function tourSteps() {
       tourSidebar: true,
       popover: {
         title: "執行力清單",
-        description: "勾選的行動卡點與解法會變成個人行動清單。可標示進行中、先放著或已完成。",
+        description: "復盤裡打勾的行動卡會匯集到這裡。還沒想做的可點「先放著」，收到上方的暫存專區。",
         side: "right",
       },
     },
@@ -2920,6 +2947,7 @@ function emptyJournal() {
     deep: emptyDeep(),
     awarenessPrompts: [],
     executionPrompts: [],
+    executionQuestionTab: "open",
     deepPrompts: [],
     promptsSig: "",
     promptsAi: false,
@@ -3305,8 +3333,13 @@ function awarenessReady(answers) {
 }
 
 function executionReady(answers) {
+  const prompts = normalizeExecutionPrompts(state.executionPrompts);
   const list = Array.isArray(answers) ? answers : [];
-  if (normalizeExecutionPrompts(state.executionPrompts).length >= 3) return threePromptAnswersReady(list);
+  if (prompts.length >= 3) {
+    const allDealt = prompts.every((item, index) => item.parked || String(list[index] || "").trim());
+    const hasUsableAnswer = prompts.some((_, index) => String(list[index] || "").trim());
+    return allDealt && hasUsableAnswer;
+  }
   return coreAnswerFilled(list);
 }
 
@@ -3680,7 +3713,13 @@ async function generateJournalChecklist(kind, options = {}) {
   const answers = isAware ? journal.awareness : journal.execution;
   const ready = isAware ? awarenessReady(answers) : executionReady(answers);
   if (!ready) {
-    if (!options.auto) showToast(isAware ? "先點完六題是非，再生成核心金句。" : "先把三道執行突破題寫完，再生成勾勾表。");
+    if (!options.auto) {
+      showToast(
+        isAware
+          ? "先點完六題是非，再生成核心金句。"
+          : "先把進行中的執行突破題寫完（或不想答的先放到「先放著」），再生成勾勾表。"
+      );
+    }
     return;
   }
   const sig = checklistSignature(answers);
@@ -3702,7 +3741,14 @@ async function generateJournalChecklist(kind, options = {}) {
       mode: "checklist",
       kind,
       date: currentIso(),
-      answers,
+      answers: isAware
+        ? answers
+        : answers.map((item, index) => {
+            const text = String(item || "").trim();
+            if (text) return String(item || "");
+            const prompt = normalizeExecutionPrompts(journal.executionPrompts || state.executionPrompts)[index];
+            return prompt?.parked ? "先放著（今日先不答）" : String(item || "");
+          }),
       questions: isAware
         ? currentAwarenessQuestions()
         : currentExecutionQuestions(),
@@ -4351,10 +4397,40 @@ function normalizeAwarenessPrompts(list) {
 }
 
 function normalizeExecutionPrompts(list) {
-  return normalizePromptQuestionList(list, 3).map((item) => ({
-    ...item,
-    placeholder: item.placeholder === "寫下那個時刻…" ? "寫下那個卡點或一小步…" : item.placeholder,
-  }));
+  return (Array.isArray(list) ? list : [])
+    .map((item) => {
+      if (typeof item === "string") {
+        const question = item.trim();
+        return question
+          ? { question: question.slice(0, 120), placeholder: "寫下那個卡點或一小步…", parked: false }
+          : null;
+      }
+      const question = String(item?.question || item?.title || "").trim();
+      if (!question) return null;
+      return {
+        question: question.slice(0, 120),
+        placeholder:
+          String(item?.placeholder || "寫下那個卡點或一小步…").trim().slice(0, 48) || "寫下那個卡點或一小步…",
+        parked: Boolean(item?.parked),
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 3);
+}
+
+function normalizeExecQuestionTab(value) {
+  return value === "later" ? "later" : "open";
+}
+
+function collectExecutionAnswers() {
+  const prompts = normalizeExecutionPrompts(state.executionPrompts);
+  const prev = getReview(currentIso())?.journal?.execution || [];
+  const count = Math.max(prompts.length, 3);
+  return Array.from({ length: count }, (_, index) => {
+    const el = document.getElementById(`exec${index + 1}`);
+    if (el) return String(el.value || "");
+    return String(prev[index] || "");
+  });
 }
 
 function normalizeDeepPrompts(list) {
@@ -4525,7 +4601,9 @@ function currentAwarenessQuestions() {
 
 function currentExecutionQuestions() {
   const prompts = normalizeExecutionPrompts(state.executionPrompts);
-  if (prompts.length) return prompts.map((item) => item.question);
+  if (prompts.length) {
+    return prompts.map((item) => (item.parked ? `${item.question}（先放著，今日先不答）` : item.question));
+  }
   return [CORE_EXECUTION_PROMPT.question];
 }
 
@@ -4544,7 +4622,8 @@ function corePromptsHaveAnswers(journal) {
   const data = journal || collectJournal();
   return (
     awarenessQuizAnsweredCount(data.awareness) > 0 ||
-    (data.execution || []).some((item) => String(item || "").trim())
+    (data.execution || []).some((item) => String(item || "").trim()) ||
+    normalizeExecutionPrompts(data.executionPrompts || state.executionPrompts).some((item) => item.parked)
   );
 }
 
@@ -4571,7 +4650,8 @@ function hydrateAwarenessPrompts(data) {
 
 function hydrateExecutionPrompts(data) {
   const prompts = normalizeExecutionPrompts(data?.executionPrompts);
-  const hasAnswers = (data?.execution || []).some((item) => String(item || "").trim());
+  const hasAnswers =
+    (data?.execution || []).some((item) => String(item || "").trim()) || prompts.some((item) => item.parked);
   if (keepHydratedCorePrompts(prompts, hasAnswers, data?.corePromptsAi, 3)) return prompts.slice(0, 3);
   return [];
 }
@@ -4699,16 +4779,90 @@ function renderAwarenessQuestions(prompts, options = {}) {
 }
 
 function renderExecutionQuestions(prompts, options = {}) {
-  renderDynamicQuestions(
-    "execQuestions",
-    "execEmpty",
-    "btnExecPrompts",
-    "btnExecAi",
-    prompts,
-    "exec",
-    options.answers,
-    4
-  );
+  const root = document.getElementById("execQuestions");
+  const empty = document.getElementById("execEmpty");
+  const genBtn = document.getElementById("btnExecPrompts");
+  const checkBtn = document.getElementById("btnExecAi");
+  const items = normalizeExecutionPrompts(prompts);
+  if (!root) return;
+  if (!items.length) {
+    root.innerHTML = "";
+    if (empty) {
+      empty.textContent = CORE_WAIT_COPY;
+      empty.hidden = Boolean(state.corePromptsBusy);
+    }
+    if (genBtn) {
+      genBtn.hidden = false;
+      genBtn.disabled = !coreStoryReady() || Boolean(state.corePromptsBusy);
+    }
+    if (checkBtn) checkBtn.hidden = true;
+    return;
+  }
+  if (empty) empty.hidden = true;
+  if (genBtn) genBtn.hidden = true;
+  if (checkBtn) checkBtn.hidden = false;
+  const saved = Array.isArray(options.answers)
+    ? options.answers.map((item) => String(item || ""))
+    : collectExecutionAnswers();
+  const tab = normalizeExecQuestionTab(state.execQuestionTab);
+  const openCount = items.filter((item) => !item.parked).length;
+  const laterCount = items.filter((item) => item.parked).length;
+  const visible = items
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => (tab === "later" ? item.parked : !item.parked));
+  const emptyCopy =
+    tab === "later"
+      ? "還沒有先放著的題。點進行中題目旁的「先放著」，就會移到這裡。"
+      : laterCount
+        ? "進行中的題都先放著了。可到「先放著」拿回來繼續寫。"
+        : "目前沒有進行中的題。";
+  root.innerHTML = `
+    <div class="exec-q-tabs chips" role="tablist" aria-label="執行力題目分類">
+      <button class="chip${tab === "open" ? " is-active" : ""}" data-exec-q-tab="open" type="button" role="tab" aria-selected="${tab === "open"}">進行中${openCount ? `（${openCount}）` : ""}</button>
+      <button class="chip${tab === "later" ? " is-active" : ""}" data-exec-q-tab="later" type="button" role="tab" aria-selected="${tab === "later"}">先放著${laterCount ? `（${laterCount}）` : ""}</button>
+    </div>
+    ${
+      visible.length
+        ? visible
+            .map(
+              ({ item, index }) => `
+        <div class="aware-q exec-q" data-exec-index="${index}">
+          <div class="exec-q__head">
+            <p class="journal-core-q">${escapeHtml(item.question)}</p>
+            ${
+              item.parked
+                ? `<button class="btn btn--ghost btn--tiny exec-q__park" data-exec-unpark="${index}" type="button">拿回來</button>`
+                : `<button class="btn btn--ghost btn--tiny exec-q__park" data-exec-park="${index}" type="button">先放著</button>`
+            }
+          </div>
+          <textarea class="textarea" id="exec${index + 1}" rows="4" placeholder="${escapeHtml(item.placeholder || "寫下今天的行動卡點…")}">${escapeHtml(saved[index] || "")}</textarea>
+        </div>
+      `
+            )
+            .join("")
+        : `<p class="exec-q-empty">${escapeHtml(emptyCopy)}</p>`
+    }
+  `;
+}
+
+function setExecQuestionTab(tab) {
+  persistJournalQuietly();
+  const answers = collectExecutionAnswers();
+  state.execQuestionTab = normalizeExecQuestionTab(tab);
+  renderExecutionQuestions(state.executionPrompts, { answers });
+  persistJournalQuietly();
+}
+
+function setExecutionParked(index, parked) {
+  const prompts = normalizeExecutionPrompts(state.executionPrompts);
+  if (!Number.isInteger(index) || index < 0 || index >= prompts.length) return;
+  persistJournalQuietly();
+  const answers = collectExecutionAnswers();
+  state.executionPrompts = prompts.map((item, i) => (i === index ? { ...item, parked: Boolean(parked) } : item));
+  state.execQuestionTab = parked ? "later" : "open";
+  renderExecutionQuestions(state.executionPrompts, { answers });
+  persistJournalQuietly();
+  showToast(parked ? "已移到「先放著」。" : "已拿回進行中。");
 }
 
 function renderDeepItemHtml(item, index, slot, openSet) {
@@ -4819,6 +4973,7 @@ function applyGeneratedCorePrompts(awareness, execution, sig, fromAi) {
   const execAnswers = keepAnswers ? journal.execution : ["", "", ""];
   state.awarenessPrompts = normalizeAwarenessPrompts(awareness);
   state.executionPrompts = normalizeExecutionPrompts(execution);
+  state.execQuestionTab = "open";
   state.journalMeta.corePromptsSig = sig;
   state.journalMeta.corePromptsAi = Boolean(fromAi);
   if (fromAi) state.corePromptsFailedSig = "";
@@ -5210,7 +5365,7 @@ function collectJournal() {
       const quotes = collectAwareQuotes();
       return quotes.length ? quotes : normalizeAwarenessQuotes(checklistItems("awareChecks"));
     })(),
-    execution: ["exec1", "exec2", "exec3"].map(journalFieldValue),
+    execution: collectExecutionAnswers(),
     executionChecks: checkedValues("execChecks"),
     executionCheckItems: (() => {
       const collected = collectExecCheckItems();
@@ -5231,7 +5386,8 @@ function collectJournal() {
     insight: state.journalInsight || emptyInsight(),
     deep: [1, 2, 3, 4].map(collectDeepSlot),
     awarenessPrompts: state.awarenessPrompts || [],
-    executionPrompts: state.executionPrompts || [],
+    executionPrompts: normalizeExecutionPrompts(state.executionPrompts),
+    executionQuestionTab: normalizeExecQuestionTab(state.execQuestionTab),
     deepPrompts: state.deepPrompts || [],
     promptsSig: state.journalMeta.promptsSig || "",
     promptsAi: Boolean(state.journalMeta.promptsAi),
@@ -5299,13 +5455,16 @@ function composeJournalRawText(journal) {
   });
   const awareQuotes = normalizeAwarenessQuotes(journal.awarenessCheckItems);
   awareQuotes.forEach((quote, index) => lines.push(`核心金句 ${index + 1}：${quote}`));
-  const execQs = (journal.executionPrompts || state.executionPrompts || [CORE_EXECUTION_PROMPT]).map(
-    (item) => item.question || item.title || item
-  );
-  (journal.execution || []).forEach((item, index) => {
-    const answer = String(item || "").trim();
-    if (answer) lines.push(`${execQs[index] || `執行力 ${index + 1}`} ${answer}`);
-  });
+  const execPrompts = normalizeExecutionPrompts(journal.executionPrompts || state.executionPrompts);
+  const execAnswers = Array.isArray(journal.execution) ? journal.execution : [];
+  const execCount = Math.max(execPrompts.length, execAnswers.length);
+  for (let index = 0; index < execCount; index += 1) {
+    const prompt = execPrompts[index];
+    const answer = String(execAnswers[index] || "").trim();
+    const question = prompt?.question || `執行力 ${index + 1}`;
+    if (answer) lines.push(`${question} ${answer}`);
+    else if (prompt?.parked) lines.push(`${question} 先放著`);
+  }
   if (String(journal.smallestStep || "").trim()) lines.push(`明天最小的一步：${String(journal.smallestStep).trim()}`);
   const execLines = execCheckHistoryLines(journal);
   if (execLines.length) lines.push(`我的行動卡點：${execLines.join("、")}`);
@@ -5392,6 +5551,7 @@ function fillJournal(journal) {
   state.journalBodyCoach = normalizeBodyCoach(data.bodyCoach);
   state.awarenessPrompts = hydrateAwarenessPrompts(data);
   state.executionPrompts = hydrateExecutionPrompts(data);
+  state.execQuestionTab = normalizeExecQuestionTab(data.executionQuestionTab);
   state.deepPrompts = normalizeDeepPrompts(data.deepPrompts);
   state.deepExpanded = Boolean(data.deepExpanded) || normalizeDeep(data.deep).slice(1).some(deepSlotHasContent);
   state.quickModules = normalizeQuickModules(data.quickModules);
@@ -6730,14 +6890,21 @@ function printArchivedReport() {
 
 function renderTaskItem(task, options = {}) {
   const done = task.status === "done";
+  const later = task.status === "later";
   const dateLabel = task.date ? formatDisplayDate(task.date) : "";
   const parts = taskDisplayParts(task);
   const heading =
     Number.isInteger(options.index) && !done
       ? `${String(options.index + 1).padStart(2, "0")}｜${parts.title}`
       : parts.title;
+  const actionBtns = done
+    ? ""
+    : later
+      ? `<button class="task-hold-btn" data-task-status="${escapeHtml(task.id)}" data-to="doing" type="button">拿回來</button>
+        <button class="task-hold-btn task-hold-btn--done" data-task-status="${escapeHtml(task.id)}" data-to="done" type="button">完成</button>`
+      : `<button class="task-hold-btn" data-task-status="${escapeHtml(task.id)}" data-to="later" type="button">先放著</button>`;
   return `
-    <article class="task-card task-todo${done ? " is-done" : ""}">
+    <article class="task-card task-todo${done ? " is-done" : ""}${later ? " is-later" : ""}">
       <label class="task-todo__check">
         <input type="checkbox" data-task-toggle="${escapeHtml(task.id)}" ${done ? "checked" : ""} />
         <span class="task-todo__box" aria-hidden="true"></span>
@@ -6746,12 +6913,15 @@ function renderTaskItem(task, options = {}) {
           ${parts.detail ? `<span class="task-card__lead">${escapeHtml(parts.detail)}</span>` : ""}
           <span class="task-card__meta">
             <span class="tag">${escapeHtml(task.source || "自行新增")}</span>
-            ${task.status === "later" ? `<span class="tag tag--later">先放著</span>` : ""}
+            ${later ? `<span class="tag tag--later">先放著（暫存）</span>` : ""}
             ${dateLabel ? `<span class="tag">${escapeHtml(dateLabel)}</span>` : ""}
           </span>
         </span>
       </label>
-      <button class="task-todo__delete" data-task-delete="${escapeHtml(task.id)}" type="button">刪除</button>
+      <div class="task-todo__actions">
+        ${actionBtns}
+        <button class="task-todo__delete" data-task-delete="${escapeHtml(task.id)}" type="button">刪除</button>
+      </div>
     </article>
   `;
 }
@@ -6768,50 +6938,81 @@ function renderTaskSection(title, lead, items, emptyText) {
   `;
 }
 
+function renderTaskHold(laterItems) {
+  const list = document.getElementById("taskHoldList");
+  const count = document.getElementById("taskHoldCount");
+  if (count) count.textContent = laterItems.length ? `（${laterItems.length}）` : "";
+  if (!list) return;
+  if (!laterItems.length) {
+    list.innerHTML = `<p class="todo-hold__empty">還沒有暫存的行動。點主清單項目旁的「先放著」，就會收到這裡。</p>`;
+    return;
+  }
+  list.innerHTML = laterItems.map((task, index) => renderTaskItem(task, { index })).join("");
+}
+
 function renderTasks() {
   const list = document.getElementById("taskList");
   if (!list) return;
   const all = getTasks();
-  const open = all
-    .filter((task) => task.status !== "done")
+  const later = all
+    .filter((task) => task.status === "later")
+    .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
+  const doing = all
+    .filter((task) => task.status === "doing")
     .sort((a, b) => String(b.createdAt || b.date || "").localeCompare(String(a.createdAt || a.date || "")));
   const done = all
     .filter((task) => task.status === "done")
     .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
   const filter = state.taskFilter;
+  renderTaskHold(later);
 
   if (!all.length) {
-    list.innerHTML = `<div class="empty"><p class="empty__title">執行力還是空的</p>在今日復盤勾選行動卡點或解法，完成復盤後就會出現在這裡。</div>`;
+    list.innerHTML = `<div class="empty"><p class="empty__title">執行力還是空的</p>在今日復盤勾選行動卡點或解法，完成復盤後就會匯集到這裡。</div>`;
     return;
   }
 
-  const showOpen = filter === "all" || filter === "doing" || filter === "later";
+  const showDoing = filter === "all" || filter === "doing";
   const showDone = filter === "all" || filter === "done";
-  const openItems =
-    filter === "doing" ? open.filter((task) => task.status === "doing") : filter === "later" ? open.filter((task) => task.status === "later") : open;
-
-  if (filter !== "all" && ((showOpen && !openItems.length && !showDone) || (showDone && !done.length && !showOpen))) {
-    list.innerHTML = `<div class="empty">這個分類目前是空的。</div>`;
+  if (filter === "later") {
+    list.innerHTML = `<div class="empty">暫存的行動都在上方專區。可從那裡拿回進行中，或直接標記完成。</div>`;
     return;
   }
 
   list.innerHTML = [
-    showOpen
-      ? renderTaskSection("待完成", "勾選後，這一步會走到下方的已完成。", openItems, "目前沒有待完成的行動。")
+    showDoing
+      ? renderTaskSection(
+          "進行中",
+          "勾選後會走到已完成。還沒想做的，點「先放著」會移到上方暫存專區。",
+          doing,
+          "目前沒有進行中的行動。"
+        )
       : "",
     showDone ? renderTaskSection("已完成", "這些已經被你做完了。取消勾選就能再拿回來。", done, "還沒有完成的行動。") : "",
   ].join("");
 }
 
-function setTaskDone(id, done) {
+function setTaskFilter(filter) {
+  const next = ["all", "doing", "later", "done"].includes(filter) ? filter : "all";
+  state.taskFilter = next;
+  document.querySelectorAll("#taskFilters .chip").forEach((item) => {
+    item.classList.toggle("is-active", item.dataset.filter === next);
+  });
+}
+
+function setTaskStatus(id, status) {
+  const allowed = new Set(["doing", "later", "done"]);
+  const next = allowed.has(status) ? status : "doing";
   saveTasks(
     getTasks().map((task) =>
-      task.id === id
-        ? { ...task, status: done ? "done" : "doing", updatedAt: new Date().toISOString() }
-        : task
+      task.id === id ? { ...task, status: next, updatedAt: new Date().toISOString() } : task
     )
   );
+  if (state.taskFilter === "later" && next !== "later") setTaskFilter("all");
   renderTasks();
+}
+
+function setTaskDone(id, done) {
+  setTaskStatus(id, done ? "done" : "doing");
 }
 
 function addTask(event) {
@@ -7075,13 +7276,19 @@ function renderHistoryJournal(review) {
     historyListBlock("今日核心金句", normalizeAwarenessQuotes(journal.awarenessCheckItems).length
       ? normalizeAwarenessQuotes(journal.awarenessCheckItems)
       : journal.awarenessChecks),
-    ...((journal.execution || []).map((item, index) => {
-      const answer = String(item || "").trim();
-      if (!answer) return "";
-      const prompt = (journal.executionPrompts || [])[index];
-      const question = prompt?.question || prompt?.title || prompt || `執行力 ${index + 1}`;
-      return historyTextBlock(question, answer);
-    })),
+    ...(() => {
+      const prompts = normalizeExecutionPrompts(journal.executionPrompts);
+      const answers = Array.isArray(journal.execution) ? journal.execution : [];
+      const count = Math.max(prompts.length, answers.length);
+      return Array.from({ length: count }, (_, index) => {
+        const prompt = prompts[index];
+        const answer = String(answers[index] || "").trim();
+        const question = prompt?.question || prompt?.title || prompt || `執行力 ${index + 1}`;
+        if (answer) return historyTextBlock(question, answer);
+        if (prompt?.parked) return historyTextBlock(question, "先放著");
+        return "";
+      });
+    })(),
     historyTextBlock("明天最小的一步", journal.smallestStep),
     historyListBlock("行動卡點／解法", execCheckHistoryLines(journal)),
     insight.conclusion || insight.psychology || insight.reflection
@@ -7446,10 +7653,19 @@ function bindEvents() {
 
   document.getElementById("page-today")?.addEventListener("change", (event) => {
     if (event.target && event.target.matches("#awareChecks input, #execChecks input, #manifestChecks input")) {
+      const execInput = event.target.matches("#execChecks input") ? event.target : null;
+      const execPayload = execInput
+        ? {
+            checked: execInput.checked,
+            title: String(execInput.value || execInput.closest(".exec-check")?.dataset.title || "").trim(),
+            detail: String(execInput.closest(".exec-check")?.dataset.detail || "").trim(),
+          }
+        : null;
       persistJournalQuietly();
-      if (event.target.matches("#execChecks input")) {
+      if (execPayload) {
         const journal = collectJournal();
         renderExecChecklist(journal.executionCheckItems, journal.executionChecks);
+        syncExecCheckToSidebar(execPayload);
       }
       if (event.target.matches("#awareChecks input") && event.target.checked) {
         const quote = String(event.target.value || "").trim();
@@ -7480,6 +7696,24 @@ function bindEvents() {
       persistJournalQuietly();
       const journal = collectJournal();
       renderAwareQuote(journal.awarenessCheckItems, journal.awarenessChecks);
+      return;
+    }
+    const execTab = event.target.closest("[data-exec-q-tab]");
+    if (execTab) {
+      event.preventDefault();
+      setExecQuestionTab(execTab.dataset.execQTab);
+      return;
+    }
+    const parkBtn = event.target.closest("[data-exec-park]");
+    if (parkBtn) {
+      event.preventDefault();
+      setExecutionParked(Number(parkBtn.dataset.execPark), true);
+      return;
+    }
+    const unparkBtn = event.target.closest("[data-exec-unpark]");
+    if (unparkBtn) {
+      event.preventDefault();
+      setExecutionParked(Number(unparkBtn.dataset.execUnpark), false);
       return;
     }
     const copyBtn = event.target.closest("[data-copy-aware-quote]");
@@ -7593,20 +7827,24 @@ function bindEvents() {
   document.getElementById("taskFilters")?.addEventListener("click", (event) => {
     const chip = event.target.closest("[data-filter]");
     if (!chip) return;
-    state.taskFilter = chip.dataset.filter;
-    document.querySelectorAll("#taskFilters .chip").forEach((item) => item.classList.toggle("is-active", item === chip));
+    setTaskFilter(chip.dataset.filter);
     renderTasks();
   });
-  document.getElementById("taskList")?.addEventListener("change", (event) => {
+  document.getElementById("page-sfm")?.addEventListener("change", (event) => {
     const toggle = event.target.closest("[data-task-toggle]");
     if (!toggle) return;
     setTaskDone(toggle.dataset.taskToggle, toggle.checked);
   });
-  document.getElementById("taskList")?.addEventListener("click", (event) => {
+  document.getElementById("page-sfm")?.addEventListener("click", (event) => {
     const statusBtn = event.target.closest("[data-task-status]");
     const deleteBtn = event.target.closest("[data-task-delete]");
     if (statusBtn) {
-      setTaskDone(statusBtn.dataset.taskStatus, statusBtn.dataset.to === "done");
+      event.preventDefault();
+      const to = statusBtn.dataset.to;
+      setTaskStatus(statusBtn.dataset.taskStatus, to);
+      showToast(
+        to === "later" ? "已移到「先放著（暫存）」。" : to === "doing" ? "已拿回進行中。" : to === "done" ? "已標記完成。" : "已更新這項行動。"
+      );
       return;
     }
     if (deleteBtn) {

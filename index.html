@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=105" />
+    <link rel="stylesheet" href="app.css?v=108" />
     <style>
       .splash {
         position: fixed;
@@ -401,7 +401,7 @@
             <h2 class="journal-card__title js-quick-only"><span>04</span> 今日最小行動</h2>
             <h2 class="journal-card__title js-deep-only"><span>05</span> 執行力</h2>
             <p class="journal-guide js-quick-only">明天只要做一件小到 5 分鐘內能完成的事。完成復盤後會進到側邊欄「執行力」清單，方便追蹤。</p>
-            <p class="journal-guide js-deep-only">完成上方感謝與事件後，會依今天的卡點、生氣或拖延動態生成 3 道執行突破題。寫完再一鍵生成專屬行動卡點勾勾表，並同步至側邊欄「執行力」。</p>
+            <p class="journal-guide js-deep-only">完成上方感謝與事件後，會依今天的卡點、生氣或拖延動態生成 3 道執行突破題。先不想答的可點「先放著」；寫完再一鍵生成專屬行動卡點勾勾表，並同步至側邊欄「執行力」。</p>
             <div class="journal-split">
               <div class="journal-col">
                 <div class="js-deep-only">
@@ -422,7 +422,7 @@
               </div>
               <div class="journal-col js-deep-only">
                 <p class="journal-label">我的行動卡點／解法</p>
-                <p class="journal-guide journal-guide--tight">寫完左側後，會生成 3 到 4 張專屬行動卡，每張都有行動名稱與「怎麼做會比較好」的具體作法。勾選後會加上刪除線並移到已完成；完成今日復盤會同步到側邊欄執行力清單。</p>
+                <p class="journal-guide journal-guide--tight">寫完左側後，會生成 3 到 4 張專屬行動卡，每張都有行動名稱與「怎麼做會比較好」的具體作法。勾選後會加上刪除線、移到已完成，並立刻同步到側邊欄「執行力」。</p>
                 <div class="check-loading" id="execLoading" hidden>
                   <p class="check-loading__label">正在分析你的行動卡點與解法…</p>
                   <div class="ai-thinking__bar"><i></i></div>
@@ -530,7 +530,7 @@
           <header class="page__header todo-hero">
             <p class="todo-kicker">執行力</p>
             <h2 class="page__title">執行力行動清單</h2>
-            <p class="page__subtitle">將覺察化為具體行動。點擊左側勾選框完成任務，系統將自動為你歸納至已完成區塊。</p>
+            <p class="page__subtitle">今日復盤打勾的行動卡，完成復盤後會匯集到這裡。還沒想馬上做的，可先收到「先放著（暫存）」專區。</p>
           </header>
 
           <form class="panel add-task" id="taskForm">
@@ -556,10 +556,19 @@
             <button class="btn" type="submit">加入</button>
           </form>
 
+          <section class="todo-hold" id="taskHold" aria-label="先放著暫存">
+            <header class="todo-hold__head">
+              <p class="todo-hold__kicker">暫存專區</p>
+              <h3>先放著（暫存）<span id="taskHoldCount"></span></h3>
+              <p>目前還不想做、又想留下來的任務，先收在這裡。主清單就能專心做眼前這一步。</p>
+            </header>
+            <div class="todo-hold__list" id="taskHoldList"></div>
+          </section>
+
           <div class="chips" role="tablist" aria-label="行動分類" id="taskFilters">
             <button class="chip is-active" data-filter="all" type="button">全部</button>
             <button class="chip" data-filter="doing" type="button">進行中</button>
-            <button class="chip" data-filter="later" type="button">先放著</button>
+            <button class="chip" data-filter="later" type="button">先放著（暫存）</button>
             <button class="chip" data-filter="done" type="button">已完成</button>
           </div>
 
@@ -834,6 +843,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=123"></script>
+    <script src="app.js?v=126"></script>
   </body>
 </html>
