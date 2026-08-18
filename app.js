@@ -7391,7 +7391,7 @@ function historySection(title, icon, blocks) {
 
 function historyBlock(label, bodyHtml) {
   if (!String(bodyHtml || "").trim()) return "";
-  return `<div class="history-journal__field">${
+  return `<div class="history-journal__tile">${
     label ? `<p class="history-journal__label">${escapeHtml(label)}</p>` : ""
   }${bodyHtml}</div>`;
 }
@@ -7415,6 +7415,14 @@ function historyListBlock(label, items) {
   const html = historyItemsHtml(items);
   if (!html) return "";
   return historyBlock(label, html);
+}
+
+function historyGroup(label, html) {
+  if (!String(html || "").trim()) return "";
+  return `<div class="history-journal__group">
+    ${label ? `<p class="history-journal__group-title">${escapeHtml(label)}</p>` : ""}
+    <div class="history-journal__group-body">${html}</div>
+  </div>`;
 }
 
 function historyQuotesHtml(quotes) {
@@ -7486,11 +7494,11 @@ function renderHistoryJournal(review) {
   })();
   const insightHtml =
     insight.conclusion || insight.psychology || insight.reflection
-      ? `${insight.title ? `<p class="history-journal__headline">${escapeHtml(insight.title)}</p>` : ""}${
+      ? `${insight.title ? historyBlock("", `<p class="history-journal__headline">${escapeHtml(insight.title)}</p>`) : ""}${
           insight.psychology || insight.conclusion
             ? historyBlock("① 今天的身心訊號", `<p class="history-journal__text">${escapeHtml(insight.psychology || insight.conclusion)}</p>`)
             : ""
-        }${insight.bodyLink ? `<p class="history-journal__note">${escapeHtml(insight.bodyLink)}</p>` : ""}${
+        }${insight.bodyLink ? historyBlock("", `<p class="history-journal__note">${escapeHtml(insight.bodyLink)}</p>`) : ""}${
           insight.reflection
             ? historyBlock("② 客觀檢討與反思", `<p class="history-journal__text">${escapeHtml(insight.reflection)}</p>`)
             : ""
@@ -7511,23 +7519,25 @@ function renderHistoryJournal(review) {
         }`
       : "";
   const parts = [
-    historySection("今日感謝", "thanks", thanks),
-    historySection("今日事件與情緒", "event", [
-      String(journal.event || "").trim() ? `<p class="history-journal__text">${escapeHtml(String(journal.event).trim())}</p>` : "",
+    historySection("① 今日感謝", "thanks", historyBlock("", thanks)),
+    historySection("② 今日事件與情緒", "event", [
+      String(journal.event || "").trim()
+        ? historyBlock("", `<p class="history-journal__text">${escapeHtml(String(journal.event).trim())}</p>`)
+        : "",
       journal.mood ? historyBlock("心情", `<p class="history-journal__mood"><span class="tag">${escapeHtml(journal.mood)}</span></p>`) : "",
     ]),
-    historySection("身心覺察與金句", "aware", [
-      historyBodyCheckHtml(journal),
-      awareFields,
-      quotes,
+    historySection("③ 身心覺察與金句", "aware", [
+      historyGroup("身心檢核", historyBlock("", historyBodyCheckHtml(journal))),
+      historyGroup("覺察作答", awareFields),
+      historyGroup("今日金句", historyBlock("", quotes)),
     ]),
-    historySection("執行力行動清單", "exec", [
+    historySection("④ 執行力行動清單", "exec", [
       ...execFields,
       historyTextBlock("明天最小的一步", journal.smallestStep),
       historyListBlock("行動卡點／解法", execCheckHistoryLines(journal)),
     ]),
     historySection("深度洞察", "insight", insightHtml),
-    historySection("顯化力願景", "manifest", [
+    historySection("⑤ 顯化力願景", "manifest", [
       historyTextBlock("明天想顯化", journal.manifest),
       historyListBlock("顯化執行目標", journal.manifestChecks),
     ]),

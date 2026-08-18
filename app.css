@@ -2237,17 +2237,17 @@ body.nav-closed .auth-pay {
 .history-journal {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
   margin: 0 18px;
-  padding: 12px 0 4px;
+  padding: 14px 0 6px;
   border-top: 1px solid var(--cream-border);
 }
 
 .history-subcard {
-  padding: 16px 16px 14px;
+  padding: 18px 16px 16px;
   border: 1px solid var(--cream-border);
-  border-radius: var(--radius-sm);
-  background: #fff;
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, #fffdf8 0%, #fff 100%);
   box-shadow: 0 1px 2px rgba(92, 74, 58, 0.04);
 }
 
@@ -2255,14 +2255,16 @@ body.nav-closed .auth-pay {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 0 0 12px;
+  margin: 0 0 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--cream-border);
 }
 
 .history-subcard__icon {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   flex-shrink: 0;
   border-radius: 999px;
   background: var(--accent-soft);
@@ -2277,19 +2279,51 @@ body.nav-closed .auth-pay {
 .history-subcard__title {
   margin: 0;
   color: var(--heading);
-  font-size: 15px;
+  font-family: var(--serif);
+  font-size: 16px;
   font-weight: 700;
   letter-spacing: 0.02em;
+  line-height: 1.4;
 }
 
 .history-subcard__body {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
-.history-journal__field {
+.history-journal__group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.history-journal__group + .history-journal__group {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--cream-border);
+}
+
+.history-journal__group-title {
+  margin: 0;
+  color: var(--heading);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.history-journal__group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.history-journal__tile {
   min-width: 0;
+  padding: 12px 13px;
+  border: 1px solid var(--cream-border);
+  border-radius: 10px;
+  background: #fff;
 }
 
 .history-journal__label {
