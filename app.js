@@ -3371,20 +3371,20 @@ function buildAwarenessQuote(journal) {
   const yesItems = prompts.filter((_, index) => answers[index] === "是");
   const noItems = prompts.filter((_, index) => answers[index] === "否");
   if (yesItems.length >= 4) {
-    return "你今天其實已經看見了：那些點下去的「是」，都在指同一件還沒被好好接住的事。";
+    return "你不是今天才看見，你是終於沒辦法再裝沒看見：那些「是」，全在指同一個你一直躲開的結。";
   }
   if (noItems.length >= 4) {
-    return "那些「否」不是冷漠，而是你還需要一點空間，才肯靠近真正被碰到的地方。";
+    return "連連點「否」不是清醒，是防衛先舉手：真正的結一靠近，你就先把自己關在門外。";
   }
   if (yesItems[0]) {
-    const short = String(yesItems[0].question || "").replace(/[。！？]$/, "").slice(0, 16);
-    return `你承認的那一句「${short}」，正是今天最想被溫柔看見的地方。`;
+    const short = String(yesItems[0].question || "").replace(/[。！？]$/, "").slice(0, 14);
+    return `你承認「${short}」的那一秒，盲點已經露餡：你最用力否認的，往往就是最痛的那層。`;
   }
   const mood = journal.mood || "";
   if (mood === "生氣" || mood === "難過") {
-    return "這份不舒服不是來懲罰你的，它是在告訴你：有些在意，還沒被好好接住。";
+    return "這份不舒服不是情緒失控，是內心的結在敲門：你一直以為在忍事，其實在忍自己。";
   }
-  return "慢下來時才會看見：情緒不是來搗亂的，它是在告訴你什麼還需要被照顧。";
+  return "別再用「還好」把今天帶過。你最不想承認的那一層，才是今天真正的主詞。";
 }
 
 function buildAwarenessCheckItems(journal) {
@@ -3401,7 +3401,7 @@ function renderAwareQuote(items, checked) {
     const kept = saved.has(quote) || [...saved].some((item) => quote.includes(item) || item.includes(quote));
     root.innerHTML = `
       <article class="aware-quote" data-quote="${escapeHtml(quote)}">
-        <p class="aware-quote__kicker">今日核心覺察</p>
+        <p class="aware-quote__kicker">今日核心金句</p>
         <p class="aware-quote__text">${escapeHtml(quote)}</p>
         <div class="aware-quote__actions">
           <label class="aware-quote__keep">

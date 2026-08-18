@@ -4193,7 +4193,7 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
 }
 
 .aware-quote {
-  padding: 28px 24px 20px;
+  padding: 36px 32px 24px;
   border: 1px solid var(--cream-border);
   border-left: 4px solid var(--header);
   border-radius: 18px;
@@ -4202,7 +4202,7 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
 }
 
 .aware-quote__kicker {
-  margin: 0 0 14px;
+  margin: 0 0 18px;
   color: var(--heading);
   font-size: 12px;
   font-weight: 700;
@@ -4212,9 +4212,9 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
 .aware-quote__text {
   margin: 0;
   font-family: var(--serif);
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 700;
-  line-height: 1.75;
+  line-height: 1.8;
   color: var(--text);
 }
 
@@ -4234,8 +4234,8 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-top: 20px;
-  padding-top: 16px;
+  margin-top: 28px;
+  padding-top: 18px;
   border-top: 1px solid var(--cream-border);
 }
 
@@ -4296,11 +4296,11 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
 
 @media (max-width: 640px) {
   .aware-quote {
-    padding: 22px 18px 18px;
+    padding: 28px 20px 20px;
   }
 
   .aware-quote__text {
-    font-size: 19px;
+    font-size: 20px;
   }
 }
 
