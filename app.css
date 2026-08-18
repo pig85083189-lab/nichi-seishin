@@ -1523,7 +1523,7 @@ body.nav-closed .auth-pay {
 .report-content {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
 }
 
 .report-card {
@@ -1564,29 +1564,6 @@ body.nav-closed .auth-pay {
 .report-rhythm {
   margin: 0;
   background: var(--banner);
-}
-
-.report-keywords {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.keyword {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 100%;
-  min-height: 28px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: var(--cream);
-  color: var(--ink-soft);
-  font-size: 12px;
-}
-
-.keyword__count {
-  color: var(--muted);
 }
 
 .highlight-list {

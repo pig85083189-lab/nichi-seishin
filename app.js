@@ -50,16 +50,6 @@ const STATUS_LABEL = {
   done: "已完成",
 };
 
-const REPORT_STOP_WORDS = new Set([
-  "的", "了", "是", "在", "我", "你", "他", "她", "它", "也", "都", "就", "而", "及", "與", "或",
-  "但", "並", "被", "把", "讓", "從", "到", "對", "為", "以", "和", "跟", "很", "更", "最", "還",
-  "再", "又", "才", "已", "會", "能", "要", "想", "有", "沒", "不", "這", "那", "此", "其", "之",
-  "等", "著", "過", "來", "去", "做", "說", "看", "寫", "今天", "昨天", "明天", "因為", "所以",
-  "但是", "如果", "雖然", "然後", "以及", "一個", "這個", "那個", "自己", "什麼", "怎麼", "可以",
-  "真的", "已經", "還是", "還有", "比較", "一些", "一樣", "時候", "東西", "事情", "感覺", "覺得",
-  "開始", "繼續", "完成", "復盤", "我們", "你們", "他們", "發生", "地方", "調整", "下一步", "最小",
-]);
-
 const state = {
   page: "today",
   reportType: "week",
@@ -994,22 +984,6 @@ function updateStats() {
   document.getElementById("statMonth").textContent = `${countInRange(dates, monthStart, todayIso)}/${monthDays}`;
 }
 
-function extractKeywords(texts, limit = 8) {
-  const counts = new Map();
-  texts.forEach((text) => {
-    const chunks = String(text || "").match(/[\u4e00-\u9fff]{2,6}|[A-Za-z]{3,}/g) || [];
-    chunks.forEach((word) => {
-      if (REPORT_STOP_WORDS.has(word)) return;
-      counts.set(word, (counts.get(word) || 0) + 1);
-    });
-  });
-  return [...counts.entries()]
-    .filter(([, count]) => count >= 2 || counts.size <= 8)
-    .sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)
-    .slice(0, limit)
-    .map(([word, count]) => ({ word, count }));
-}
-
 function formatCharCount(count) {
   if (count >= 10000) return `${(count / 10000).toFixed(1)} 萬字`;
   return `${count} 字`;
@@ -1216,11 +1190,10 @@ function buildReport(type, rangeOverride) {
 
   const filledDays = entries.length;
   const totalChars = entries.reduce((sum, item) => sum + item.text.replace(/\s/g, "").length, 0);
-  const keywords = extractKeywords(entries.map((item) => item.text));
   const stats = buildGrowthStats(fromIso, toIso);
   const period = type === "month" ? fromIso.slice(0, 7) : fromIso;
 
-  return { type, label, fromIso, toIso, period, days, filledDays, totalChars, keywords, entries, stats };
+  return { type, label, fromIso, toIso, period, days, filledDays, totalChars, entries, stats };
 }
 
 function getStoredReports() {
@@ -2499,16 +2472,6 @@ function renderReportBody(report, options = {}) {
     </article>
     ${renderChartCard(report.stats, chartPrefix)}
     <div id="${options.aiId || "reportAi"}">${renderAiReportBlock(cachedAi, cachedAi ? undefined : "loading")}</div>
-    <article class="report-card">
-      <h3>高頻關鍵字</h3>
-      <div class="report-keywords">
-        ${
-          (report.keywords || []).length
-            ? report.keywords.map((item) => `<span class="keyword">${escapeHtml(item.word)}<span class="keyword__count">${item.count}</span></span>`).join("")
-            : `<p class="report-empty">字還不夠多，關鍵字會在你繼續寫之後長出來。</p>`
-        }
-      </div>
-    </article>
     <article class="report-card">
       <h3>逐日回顧</h3>
       ${
