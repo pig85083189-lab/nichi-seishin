@@ -2207,8 +2207,8 @@ function renderAiReportBlock(ai, status) {
         ${
           psychology
             ? `<section class="insight-block">
-          <p class="insight-block__label">① 深層心理與盲點解析</p>
-          <p class="insight-block__text">${escapeHtml(psychology)}</p>
+          <p class="insight-block__label">① 今天的身心訊號</p>
+          ${emphasizeLeadHtml(psychology)}
         </section>`
             : ""
         }
@@ -2216,7 +2216,7 @@ function renderAiReportBlock(ai, status) {
           String(ai.reflection || "").trim()
             ? `<section class="insight-block insight-block--review">
           <p class="insight-block__label">② 客觀檢討與反思</p>
-          <p class="insight-block__text">${escapeHtml(String(ai.reflection).trim())}</p>
+          ${emphasizeLeadHtml(String(ai.reflection).trim())}
         </section>`
             : ""
         }
@@ -2224,15 +2224,15 @@ function renderAiReportBlock(ai, status) {
           breakthroughs && breakthroughs.length
             ? `<section class="insight-block insight-block--tips">
           <p class="insight-block__label">③ 具體突破建議（怎麼做會更好）</p>
-          ${list(breakthroughs)}
+          ${actionStepsHtml(breakthroughs)}
         </section>`
             : ""
         }
         ${
           takeaways.length
             ? `<section class="insight-block insight-block--focus">
-          <p class="insight-block__label">💡 本期核心重點整理</p>
-          ${list(takeaways)}
+          <p class="insight-block__label">💡 今日核心重點整理</p>
+          ${insightListHtml(takeaways, "insight-block__takeaways")}
         </section>`
             : ""
         }
@@ -2535,7 +2535,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "深度洞察",
-        description: "寫完事件、心情與身體後，會生成四層洞察：深層心理、客觀檢討、具體突破建議，以及今日核心重點。",
+        description: "寫完事件、心情與身體後，會生成四層洞察：今天的身心訊號、客觀檢討、具體突破建議，以及今日核心重點。",
         side: "bottom",
       },
     },
@@ -3648,11 +3648,50 @@ function insightEmptyCopy(quick) {
     : "先把事件、心情與身體反應寫下來，再點按鈕或等它自動生成四層洞察。";
 }
 
+function emphasizeLeadHtml(text, className = "insight-block__text") {
+  const raw = String(text || "").trim();
+  if (!raw) return "";
+  const match = raw.match(/^([\s\S]{8,80}?[。！？])([\s\S]*)$/);
+  if (match && String(match[2] || "").trim()) {
+    return `<p class="${className}"><strong class="insight-emph">${escapeHtml(match[1])}</strong>${escapeHtml(match[2])}</p>`;
+  }
+  return `<p class="${className}"><strong class="insight-emph">${escapeHtml(raw)}</strong></p>`;
+}
+
+function splitActionLine(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return { title: "", body: "" };
+  const punct = raw.search(/[，。：:、]/);
+  if (punct >= 2 && punct <= 16) {
+    return { title: raw.slice(0, punct), body: raw.slice(punct + 1).replace(/^[，。：:\s]+/, "") };
+  }
+  if (raw.length <= 18) return { title: raw.replace(/[。！？]+$/, ""), body: "" };
+  return { title: raw.slice(0, 10), body: raw };
+}
+
+function actionStepsHtml(items) {
+  const list = Array.isArray(items) ? items.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  if (!list.length) return "";
+  return `<ol class="action-steps">${list
+    .map((item, index) => {
+      const { title, body } = splitActionLine(item);
+      const num = String(index + 1).padStart(2, "0");
+      return `<li class="action-steps__item">
+        <div class="action-steps__copy">
+          <p class="action-steps__title">${num}｜${escapeHtml(title)}</p>
+          ${body ? `<p class="action-steps__body">${escapeHtml(body)}</p>` : ""}
+        </div>
+      </li>`;
+    })
+    .join("")}</ol>`;
+}
+
 function insightListHtml(items, className) {
   const list = Array.isArray(items) ? items.map((item) => String(item || "").trim()).filter(Boolean) : [];
   if (!list.length) return "";
+  if (className.includes("list") && !className.includes("takeaways")) return actionStepsHtml(list);
   return `<${className.includes("takeaways") ? "ul" : "ol"} class="${className}">${list
-    .map((item) => `<li>${escapeHtml(item)}</li>`)
+    .map((item) => `<li><strong class="insight-emph">${escapeHtml(item)}</strong></li>`)
     .join("")}</${className.includes("takeaways") ? "ul" : "ol"}>`;
 }
 
@@ -3665,14 +3704,15 @@ function renderInsightResultHtml(data) {
   if (!analysis && !reflection && !suggestions.length && !takeaways.length) {
     return `<p class="insight-card__empty">${insightEmptyCopy(state.journalMode === "quick")}</p>`;
   }
+  const coreLine = String(data.title || takeaways[0] || "").trim();
   return `
     <article class="insight-card__result">
-      ${data.title ? `<h3 class="insight-card__headline">${escapeHtml(data.title)}</h3>` : ""}
+      ${coreLine ? renderConclusionCallout(coreLine) : ""}
       ${
         analysis
           ? `<section class="insight-block">
-        <p class="insight-block__label">① 深層心理與盲點解析</p>
-        <p class="insight-block__text">${escapeHtml(analysis)}</p>
+        <p class="insight-block__label">① 今天的身心訊號</p>
+        ${emphasizeLeadHtml(analysis)}
         ${hasBody ? `<p class="insight-block__note">${escapeHtml(data.bodyLink)}</p>` : ""}
       </section>`
           : ""
@@ -3681,7 +3721,7 @@ function renderInsightResultHtml(data) {
         reflection
           ? `<section class="insight-block insight-block--review">
         <p class="insight-block__label">② 客觀檢討與反思</p>
-        <p class="insight-block__text">${escapeHtml(reflection)}</p>
+        ${emphasizeLeadHtml(reflection)}
       </section>`
           : ""
       }
@@ -3689,7 +3729,7 @@ function renderInsightResultHtml(data) {
         suggestions.length
           ? `<section class="insight-block insight-block--tips">
         <p class="insight-block__label">③ 具體突破建議（怎麼做會更好）</p>
-        ${insightListHtml(suggestions, "insight-block__list")}
+        ${actionStepsHtml(suggestions)}
       </section>`
           : ""
       }
@@ -3884,12 +3924,28 @@ function renderBodyCoachCard(coach) {
     root.innerHTML = `<p class="insight-card__empty">有狀況再勾選。沒勾選就代表今天大致平穩，也可直接點按鈕生成身心療癒建議。</p>`;
     return;
   }
-  const tips = data.suggestions
-    .map((item, index) => `<li data-step="${index + 1}">${escapeHtml(item)}</li>`)
-    .join("");
+  const tips = actionStepsHtml(data.suggestions);
+  const core = String(data.analysis || "").split(/[。！？]/).map((item) => item.trim()).filter(Boolean)[0];
   root.innerHTML = `
-    ${data.analysis ? `<p class="body-coach__analysis">${escapeHtml(data.analysis)}</p>` : ""}
-    ${tips ? `<ol class="body-coach__list">${tips}</ol>` : ""}
+    <article class="insight-card__result">
+      ${core ? renderConclusionCallout(/[。！？]$/.test(core) ? core : `${core}。`) : ""}
+      ${
+        data.analysis
+          ? `<section class="insight-block">
+        <p class="insight-block__label">① 今天的身心訊號</p>
+        ${emphasizeLeadHtml(data.analysis)}
+      </section>`
+          : ""
+      }
+      ${
+        tips
+          ? `<section class="insight-block insight-block--tips">
+        <p class="insight-block__label">③ 具體突破建議（怎麼做會更好）</p>
+        ${tips}
+      </section>`
+          : ""
+      }
+    </article>
   `;
 }
 
@@ -4890,7 +4946,7 @@ function composeJournalRawText(journal) {
     lines.push("深度洞察");
     if (insight.title) lines.push(insight.title);
     if (insight.psychology || insight.conclusion) {
-      lines.push("① 深層心理與盲點解析");
+      lines.push("① 今天的身心訊號");
       lines.push(insight.psychology || insight.conclusion);
     }
     if (insight.bodyLink) lines.push(insight.bodyLink);
@@ -5103,7 +5159,7 @@ function renderConclusionCallout(text) {
   if (!line) return "";
   return `
     <aside class="conclusion-callout">
-      <p class="conclusion-callout__label">【核心結論】</p>
+      <p class="conclusion-callout__label">核心結論</p>
       <p class="conclusion-callout__text">${escapeHtml(line)}</p>
     </aside>
   `;
@@ -5338,15 +5394,15 @@ function renderAiStage() {
     ? `
       <div class="thought-timeline">${timelineHtml}</div>
       <div class="think-panel" id="thinkCurrent">
-        ${think.question ? `<p class="sfm-hint">下一層可以接著想：${escapeHtml(think.question)}</p>` : ""}
+        ${think.question ? `<p class="think-prompt">${escapeHtml(think.question)}</p>` : ""}
         <p class="chips-label">勾選你願意練習或已經說過的句子</p>
         <div class="check-list">${thinkActions}</div>
-        <label class="field" style="margin-top:16px">
+        <label class="field" style="margin-top:24px">
           <span class="field__label">你想接續回覆的（選填）</span>
           <textarea class="textarea" id="thinkReply" rows="3" placeholder="勾選行動後，也可以再寫一句你現在想到的…"></textarea>
         </label>
         <div class="ai-actions">
-          ${state.think.round < state.think.max ? `<button class="btn btn--ghost" id="btnThinkSubmit" type="button">送出，進入下一輪</button>` : ""}
+          ${state.think.round < state.think.max ? `<button class="btn btn--think" id="btnThinkSubmit" type="button">接著回答</button>` : ""}
         </div>
       </div>
     `
@@ -5355,27 +5411,28 @@ function renderAiStage() {
         <p class="think-card__round">引導式互動</p>
         <p>整理完成後會立刻出現可勾選的下一步。若沒看到，再按一次開始整理即可。</p>
         <div class="ai-actions">
-          <button class="btn btn--ai-ghost" id="btnThink" type="button">開始深度思考</button>
+          <button class="btn btn--think" id="btnThink" type="button">繼續深度思考</button>
         </div>
       </div>
     `;
 
   root.innerHTML = `
-    <div class="review-board">
+    <div class="review-board ${think ? "review-board--think" : ""}">
+      ${renderReviewCard({
+        title: "今日金句",
+        variant: "insight",
+        body: `
+          ${quoteCards || `<p class="gold-quote">對過程全力以赴，對結果保持開放。</p>`}
+          <p class="sfm-hint">勾選收藏後會收入『執行力』；也可直接複製。</p>
+          <div class="quote-list">${quoteChecks || ""}</div>
+        `,
+      })}
       ${renderReviewCard({
         title: "核心洞察區",
         variant: "insight",
         body: `
           <p class="rv-card__kicker">${state.organizeSource === "cloud" ? "雲端復盤" : "本地草稿"}</p>
           <p class="theme-inline">【${escapeHtml(ai.themeCategory || "覺察")}】${escapeHtml(ai.themeTitle || "今天的復盤")} <span class="stars">[${starsText(ai.themeStars)}]</span></p>
-          ${renderSub(
-            "今日金句",
-            `
-              ${quoteCards || `<p class="gold-quote">把今天寫下來，不是給別人看成績，是讓這一天確實被過過。</p>`}
-              <p class="sfm-hint">可直接複製當標題或筆記；勾選後會收入『執行力』</p>
-              <div class="quote-list">${quoteChecks || ""}</div>
-            `
-          )}
         `,
       })}
       ${renderReviewCard({
@@ -5409,16 +5466,14 @@ function renderAiStage() {
       ${renderPracticeChecks(ai.nextScripts, ai.howNext)}
       ${renderReviewCard({
         title: "深度思考",
+        variant: think ? "think" : "",
         body: thinkBody,
       })}
-      ${renderReviewCard({
-        title: "原始輸入紀錄",
-        variant: "muted",
-        body: `
-          <p class="raw-record">${escapeHtml(rawText || "（尚未留下原文）")}</p>
-          <p class="sfm-hint">這段原文會永久保存在本機歷史紀錄，不會被整理結果覆蓋。</p>
-        `,
-      })}
+      <details class="raw-record-fold">
+        <summary>查看我的原始紀錄</summary>
+        <p class="raw-record">${escapeHtml(rawText || "（尚未留下原文）")}</p>
+        <p class="sfm-hint">這段原文會永久保存，整理後不可修改。</p>
+      </details>
     </div>
     <div class="ai-actions">
       <button class="btn" id="btnComplete" type="button">完成今日復盤</button>
@@ -6668,7 +6723,7 @@ function renderHistoryJournal(review) {
           "深度洞察",
           `${insight.title ? `<p class="history-journal__headline">${escapeHtml(insight.title)}</p>` : ""}${
             insight.psychology || insight.conclusion
-              ? `<p class="history-journal__label">① 深層心理與盲點解析</p><p class="history-journal__text">${escapeHtml(insight.psychology || insight.conclusion)}</p>`
+              ? `<p class="history-journal__label">① 今天的身心訊號</p><p class="history-journal__text">${escapeHtml(insight.psychology || insight.conclusion)}</p>`
               : ""
           }${insight.bodyLink ? `<p class="history-journal__note">${escapeHtml(insight.bodyLink)}</p>` : ""}${
             insight.reflection
@@ -6808,9 +6863,9 @@ function renderHistoryReport(review) {
 function reminderLabel() {
   const reminder = loadJson(STORAGE_KEYS.reminder, null);
   if (reminder?.enabled && reminder.time) {
-    return `復盤提醒：每晚 ${reminder.time} — 點此更改`;
+    return `🔔 每晚 ${reminder.time}`;
   }
-  return "你還沒開啟提醒，可能會忘記復盤 — 點這裡一分鐘設定";
+  return "🔔 開啟每日覺察提醒";
 }
 
 function initReminder() {
