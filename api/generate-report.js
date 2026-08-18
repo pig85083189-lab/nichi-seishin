@@ -357,7 +357,7 @@ async function handler(req, res, forced = {}) {
       try {
         const sub = await ensureTrial(user);
         if (sub && !isEntitled(sub)) {
-          res.status(402).json({ ok: false, error: "試用已結束，請升級訂閱後繼續使用。", paywall: true });
+          res.status(402).json({ ok: false, error: "您的 7 天免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限", paywall: true });
           return;
         }
       } catch (error) {

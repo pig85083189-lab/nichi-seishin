@@ -364,9 +364,66 @@ body.is-locked #notice-bar {
 
 .paywall__copy {
   margin: 0 0 22px;
-  color: var(--ink-soft);
+  color: var(--text);
   font-size: 15px;
   line-height: 1.75;
+}
+
+.paywall[data-mode="guest"] .js-lock-expired,
+.paywall[data-mode="guest"] .js-lock-pending,
+.paywall[data-mode="expired"] .js-lock-guest,
+.paywall[data-mode="expired"] .js-lock-pending,
+.paywall[data-mode="pending"] .js-lock-guest,
+.paywall[data-mode="pending"] .js-lock-expired,
+.paywall[data-mode="pending"] .paywall__banner {
+  display: none !important;
+}
+
+.paywall__plans {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.paywall__plan {
+  appearance: none;
+  -webkit-appearance: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 10px 12px;
+  border: 1px solid var(--cream-border);
+  border-radius: 16px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.paywall__plan span {
+  color: var(--heading);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.paywall__plan strong {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.paywall__plan:hover {
+  border-color: var(--header);
+  background: var(--tea-wash);
+}
+
+.paywall__plan--featured {
+  border-color: var(--header);
+  background: #efe6d9;
 }
 
 .paywall__btn {
@@ -400,6 +457,20 @@ body.is-locked #notice-bar {
   width: 100%;
   min-height: 46px;
   font-size: 15px;
+}
+
+.paywall__btn--google {
+  gap: 10px;
+  background: #fff;
+  color: var(--text);
+  border-color: var(--cream-border);
+  box-shadow: 0 8px 20px rgba(92, 74, 58, 0.08);
+}
+
+.paywall__btn--google:hover {
+  background: var(--tea-wash);
+  border-color: var(--header);
+  color: var(--text);
 }
 
 body.nav-closed .paywall__banner,
@@ -4733,6 +4804,10 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   .ai-actions .btn {
     width: 100%;
     box-sizing: border-box;
+  }
+
+  .paywall__plans {
+    grid-template-columns: 1fr;
   }
 
   .body-flags,

@@ -128,6 +128,7 @@ const state = {
   authConfigured: false,
   payConfigured: false,
   membership: null,
+  authReady: false,
   syncing: false,
 };
 
@@ -627,10 +628,10 @@ function formatApiError(error) {
   if (error?.name === "AbortError" || /請求逾時|逾時/.test(message)) return "雲端通道逾時。請確認 Vercel 已 Redeploy，且 OPENAI_API_KEY 設在 Production。";
   if (/file:|本機 HTML/.test(message)) return message;
   if (/401|請先使用 Google|未登入|未授權/i.test(message)) {
-    return "請先登入，才能使用雲端分析與同步備份。";
+    return "請先使用 Google 登入，即可解鎖 7 天完整免費試用";
   }
   if (/402|試用已結束|免費體驗已結束|paywall/i.test(message)) {
-    return "您的 3 天免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限";
+    return "您的 7 天免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限";
   }
   if (/404|Failed to fetch|fetch 失敗|NetworkError/i.test(message)) {
     return "找不到 /api/review。請用 Vercel 網址開啟，並重新部署後端函式。";
@@ -687,7 +688,7 @@ async function fetchWithTimeout(url, options, timeoutMs) {
 async function postReview(body, timeoutMs = 28000) {
   if (isAccessLocked()) {
     applyAccessLock();
-    throw new Error("您的 3 天免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限");
+    throw new Error(accessLockMessage());
   }
   const url = reviewApiUrl();
   console.log("[日精進 API] POST", url, body && body.mode);
@@ -1200,7 +1201,7 @@ async function generateCloudReport(type, fromIso, toIso, period, options = {}) {
   if (!state.user) return null;
   if (isAccessLocked()) {
     applyAccessLock();
-    throw new Error("您的 3 天免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限");
+    throw new Error(accessLockMessage());
   }
   const reviews = compactReviewsForRange(fromIso, toIso);
   const stats = options.stats || buildGrowthStats(fromIso, toIso);
@@ -1405,7 +1406,7 @@ function renderAuth() {
   const top = document.getElementById("topAuthBtn");
   const user = state.user;
   if (top) {
-    top.textContent = user ? user.name || user.email || "已登入" : "登入";
+    top.textContent = user ? user.name || user.email || "已登入" : "Google 登入";
     top.title = user ? "登出" : "使用 Google 帳號登入";
   }
   if (!side) {
@@ -1424,7 +1425,7 @@ function renderAuth() {
         <span>使用 Google 帳號登入</span>
       </button>
       <p class="auth-form__error" id="authError" hidden></p>
-      <p class="auth-hint">Google 登入後享有 3 天完整功能免費試用。</p>
+      <p class="auth-hint">Google 登入後享有 7 天完整功能免費試用。</p>
     `;
     if (lastAuthError) setAuthError(lastAuthError);
     applyAccessLock();
@@ -1441,12 +1442,12 @@ function renderAuth() {
     ? `<button class="auth-pay is-paid" type="button" disabled><span>已解鎖無限暢用</span></button>`
     : `<button class="auth-pay" id="btnNewebPay" type="button" data-open-pricing><span>${status === "trialing" || status === "pending" ? "選擇方案升級" : "選擇方案解鎖"}</span></button>`;
   const trialHint = membership.trialEndsAt && (status === "trialing" || entitled && !membership.paid && !membership.isPaid)
-    ? `<p class="auth-hint">3 天免費試用至 ${escapeHtml(formatTrialDate(membership.trialEndsAt))}${membership.daysLeft != null ? `，還有 ${membership.daysLeft} 天` : ""}。</p>`
+    ? `<p class="auth-hint">7 天免費試用至 ${escapeHtml(formatTrialDate(membership.trialEndsAt))}${membership.daysLeft != null ? `，還有 ${membership.daysLeft} 天` : ""}。</p>`
     : entitled && (status === "active" || membership.paid || membership.isPaid)
       ? `<p class="auth-hint">一次付清已完成，功能已全部解鎖。</p>`
       : status === "expired" || status === "cancelled" || status === "past_due" || (!entitled && status)
-        ? `<p class="auth-hint">3 天免費體驗已結束，可選月繳 $599 或季繳 $1,197 解鎖暢用。</p>`
-        : `<p class="auth-hint">登入後享有 3 天完整功能免費試用。</p>`;
+        ? `<p class="auth-hint">7 天免費體驗已結束，可選月繳 $599 或季繳 $1,197 解鎖暢用。</p>`
+        : `<p class="auth-hint">登入後享有 7 天完整功能免費試用。</p>`;
   side.innerHTML = `
     <div class="auth-user">
       ${avatar}
@@ -1675,12 +1676,29 @@ function submitNewebPayForm(gateway, fields) {
   form.submit();
 }
 
-function isAccessLocked() {
-  if (!state.user) return false;
-  const membership = state.membership;
+function isMembershipLive(membership) {
   if (!membership) return false;
-  if (membership.entitled || membership.paid || membership.isPaid) return false;
-  return true;
+  if (membership.paid || membership.isPaid) return true;
+  const ends = Date.parse(membership.trialEndsAt || "");
+  if (Number.isFinite(ends)) return Date.now() < ends;
+  return Boolean(membership.entitled);
+}
+
+function accessLockMode() {
+  if (!state.user) return "guest";
+  if (state.membership == null && !state.authReady) return "pending";
+  if (!state.membership) return "";
+  return isMembershipLive(state.membership) ? "" : "expired";
+}
+
+function isAccessLocked() {
+  return Boolean(accessLockMode());
+}
+
+function accessLockMessage() {
+  return accessLockMode() === "expired"
+    ? "您的 7 天免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限"
+    : "請先使用 Google 登入，即可解鎖 7 天完整免費試用";
 }
 
 function applyPaywallFromPayload(response, payload) {
@@ -1699,11 +1717,14 @@ function applyPaywallFromPayload(response, payload) {
 }
 
 function applyAccessLock() {
-  const locked = isAccessLocked();
+  const mode = accessLockMode();
+  const locked = Boolean(mode);
   document.body.classList.toggle("is-locked", locked);
+  document.body.dataset.lockMode = mode || "";
   const paywall = document.getElementById("paywall");
   if (paywall) {
     paywall.hidden = !locked;
+    paywall.dataset.mode = mode || "guest";
     if (locked) {
       paywall.querySelectorAll("[data-newebpay]").forEach((el) => {
         el.setAttribute("href", NEWEBPAY_EPG_URL);
@@ -1741,7 +1762,7 @@ function onSubscribeClick(event) {
 function startNewebPay(planId) {
   if (!state.user) {
     closePricingModal();
-    showToast("請先用 Google 登入，即可享有 3 天完整試用。");
+    showToast("請先用 Google 登入，即可享有 7 天完整試用。");
     signInWithGoogle();
     return;
   }
@@ -1907,6 +1928,7 @@ async function refreshAuth() {
       if (payload.membershipError) setAuthError(payload.membershipError);
       if (!state.user && payload.user) state.user = payload.user;
     }
+    state.authReady = true;
     renderAuth();
     applyAccessLock();
     if (state.user) {
@@ -1914,9 +1936,23 @@ async function refreshAuth() {
       await pushCloudData();
     }
   } catch {
+    state.authReady = true;
     renderAuth();
     applyAccessLock();
   }
+}
+
+async function watchPaidUnlock() {
+  showToast("付款已送出。正在確認會員狀態…");
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, attempt === 0 ? 900 : 2000));
+    await refreshAuth();
+    if (state.membership && (state.membership.paid || state.membership.isPaid)) {
+      showToast("付款成功，功能已全部解鎖。");
+      return;
+    }
+  }
+  showToast("若畫面尚未解鎖，請稍候再重新整理。藍新通知到達後會自動開通。");
 }
 
 function handleAuthQuery() {
@@ -1933,7 +1969,7 @@ function handleAuthQuery() {
       storedAuthError = "";
     }
     if (!auth && !pay && !oauthError && !storedAuthError) return;
-    if (auth === "ok") showToast("已登入，資料會跟著你的帳號備份。");
+    if (auth === "ok") showToast("已登入，7 天完整免費試用已開始。");
     if (auth === "out") showToast("已登出。本機草稿仍在這台裝置上。");
     if (auth === "error" || oauthError || storedAuthError) {
       const raw = storedAuthError || oauthError || params.get("reason") || "請再試一次";
@@ -1941,7 +1977,7 @@ function handleAuthQuery() {
       setAuthError(message);
       showToast(`登入失敗：${message}`);
     }
-    if (pay === "ok") showToast("付款已送出。會員狀態會在藍新通知後更新。");
+    if (pay === "ok") watchPaidUnlock();
     if (pay === "fail" || pay === "error") {
       const code = params.get("code") || "";
       const reason = params.get("reason") || "請再試一次";
@@ -6917,7 +6953,7 @@ function bindEvents() {
   document.addEventListener("click", (event) => {
     const target = event.target.closest ? event.target : event.target.parentElement;
     if (!target || !target.closest) return;
-    if (target.closest("#btnGoogleLogin")) {
+    if (target.closest("#btnGoogleLogin") || target.closest("[data-google-login]")) {
       event.preventDefault();
       signInWithGoogle();
       return;
@@ -7329,7 +7365,7 @@ function bindEvents() {
     "click",
     (event) => {
       if (!isAccessLocked()) return;
-      if (event.target.closest && event.target.closest("[data-newebpay], #paywall")) return;
+      if (event.target.closest && event.target.closest("[data-newebpay], #paywall, [data-google-login]")) return;
       event.preventDefault();
       event.stopPropagation();
     },
@@ -7370,6 +7406,7 @@ function initSplash() {
 function init() {
   try {
     initSplash();
+    applyAccessLock();
     bindEvents();
   } catch {
     const btn = document.getElementById("btnOrganize");
@@ -7399,8 +7436,12 @@ function init() {
     initReminder();
     setInterval(tickReminder, 20000);
     probeReviewApi();
+    applyAccessLock();
     refreshAuth();
     handleAuthQuery();
+    setInterval(() => {
+      if (state.user) applyAccessLock();
+    }, 30000);
   } catch {
     /* 其餘初始化失敗也不擋「開始整理」 */
   }

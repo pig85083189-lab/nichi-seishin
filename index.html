@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=93" />
+    <link rel="stylesheet" href="app.css?v=94" />
     <style>
       .splash {
         position: fixed;
@@ -177,7 +177,7 @@
             <span>使用 Google 帳號登入</span>
           </button>
           <p class="auth-form__error" id="authError" hidden></p>
-          <p class="auth-hint">Google 登入後享有 3 天完整功能免費試用。</p>
+          <p class="auth-hint">Google 登入後享有 7 天完整功能免費試用。</p>
         </div>
       </nav>
 
@@ -719,14 +719,14 @@
         <header class="pricing-modal__head">
           <p class="pricing-modal__kicker">進行式ING方案</p>
           <h2 class="pricing-modal__title" id="pricingTitle">選擇適合你的節奏</h2>
-          <p class="pricing-modal__lead">Google 登入後享有 3 天完整功能免費試用。到期後可月繳或一次訂滿一季，隨時都能升級。</p>
+          <p class="pricing-modal__lead">Google 登入後享有 7 天完整功能免費試用。到期後可月繳或一次訂滿一季，隨時都能升級。</p>
         </header>
         <div class="pricing-grid">
           <article class="pricing-card" data-plan-card="monthly">
             <p class="pricing-card__name">標準版</p>
             <h3 class="pricing-card__plan">月訂閱</h3>
             <p class="pricing-card__price"><span>$599</span> <small>/ 月</small></p>
-            <p class="pricing-card__desc">不綁約，隨時可取消，享有 3 天免費完整體驗。</p>
+            <p class="pricing-card__desc">不綁約，隨時可取消，享有 7 天免費完整體驗。</p>
             <ul class="pricing-card__list">
               <li>每日復盤無限暢用</li>
               <li>動態生成（覺察力、執行力、顯化力）</li>
@@ -780,17 +780,50 @@
       </div>
     </dialog>
 
-    <div class="paywall" id="paywall" hidden>
-      <div class="paywall__banner" role="status">
-        <p>您的 3 天免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限</p>
+    <div class="paywall" id="paywall" hidden data-mode="guest">
+      <div class="paywall__banner js-lock-guest" role="status">
+        <p>請先使用 Google 登入，即可解鎖 7 天完整免費試用</p>
+        <button class="paywall__btn" type="button" data-google-login>Google 登入</button>
+      </div>
+      <div class="paywall__banner js-lock-expired" role="status">
+        <p>您的 7 天免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限</p>
         <button class="paywall__btn" id="paywallBannerPay" type="button" data-open-pricing>選擇方案</button>
       </div>
       <div class="paywall__veil">
-        <div class="paywall__card" role="dialog" aria-labelledby="paywallTitle" aria-modal="true">
+        <div class="paywall__card js-lock-guest" role="dialog" aria-labelledby="paywallGuestTitle" aria-modal="true">
+          <p class="paywall__kicker">7 天完整免費試用</p>
+          <h2 class="paywall__title" id="paywallGuestTitle">先登入，再把日子寫下來</h2>
+          <p class="paywall__copy">請先使用 Google 登入，即可解鎖 7 天完整免費試用。今日感謝、事件、洞察、覺察、執行與顯化都會為你打開。</p>
+          <button class="paywall__btn paywall__btn--primary paywall__btn--google" type="button" data-google-login>
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path fill="#4285F4" d="M22.6 12.25c0-.8-.07-1.57-.2-2.31H12v4.37h5.95a5.08 5.08 0 0 1-2.2 3.34v2.77h3.56c2.08-1.92 3.29-4.75 3.29-8.17Z" />
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.56-2.77c-.99.66-2.26 1.05-3.72 1.05-2.86 0-5.29-1.93-6.16-4.53H2.18v2.85A10.99 10.99 0 0 0 12 23Z" />
+              <path fill="#FBBC05" d="M5.84 14.09A6.6 6.6 0 0 1 5.5 12c0-.72.12-1.43.34-2.09V7.06H2.18A11 11 0 0 0 1 12c0 1.78.43 3.46 1.18 4.94l3.66-2.85Z" />
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.07.56 4.21 1.64l3.16-3.16C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.85C6.71 7.31 9.14 5.38 12 5.38Z" />
+            </svg>
+            <span>使用 Google 帳號登入</span>
+          </button>
+        </div>
+        <div class="paywall__card js-lock-expired" role="dialog" aria-labelledby="paywallTitle" aria-modal="true">
           <p class="paywall__kicker">免費體驗已結束</p>
           <h2 class="paywall__title" id="paywallTitle">升級即可無限暢用</h2>
-          <p class="paywall__copy">您的 3 天免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限</p>
-          <button class="paywall__btn paywall__btn--primary" id="paywallCardPay" type="button" data-open-pricing>選擇方案並解鎖</button>
+          <p class="paywall__copy">您的 7 天免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限</p>
+          <div class="paywall__plans">
+            <button class="paywall__plan" type="button" data-plan="monthly" data-plan-cta>
+              <span>月繳</span>
+              <strong>$599</strong>
+            </button>
+            <button class="paywall__plan paywall__plan--featured" type="button" data-plan="quarter" data-plan-cta>
+              <span>季繳 · 最多人選</span>
+              <strong>$1,197</strong>
+            </button>
+          </div>
+          <button class="paywall__btn paywall__btn--primary" id="paywallCardPay" type="button" data-open-pricing>比較方案並解鎖</button>
+        </div>
+        <div class="paywall__card js-lock-pending" role="status">
+          <p class="paywall__kicker">會員權限確認中</p>
+          <h2 class="paywall__title">正在為你解鎖試用</h2>
+          <p class="paywall__copy">稍候一下，我們正在確認你的登入與 7 天免費試用狀態。</p>
         </div>
       </div>
     </div>
@@ -805,6 +838,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=110"></script>
+    <script src="app.js?v=111"></script>
   </body>
 </html>
