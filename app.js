@@ -7364,9 +7364,36 @@ function historyHighlight(review) {
   return "這天留下了一筆復盤。";
 }
 
+function historyJournalIcon(name) {
+  const icons = {
+    thanks: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2 4 4 0 0 1 7 2c0 5.6-7 10-7 10z"/></svg>`,
+    event: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 5h12v14H6z"/><path d="M9 9h6M9 13h4"/></svg>`,
+    aware: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>`,
+    exec: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h12M8 12h12M8 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg>`,
+    insight: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 1 4 10c-.8.7-1 1.4-1 2H9c0-.6-.2-1.3-1-2A6 6 0 0 1 12 3z"/></svg>`,
+    manifest: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.2 6.6H21l-5.4 4 2.1 6.4L12 16.6 6.3 20l2.1-6.4L3 9.6h6.8z"/></svg>`,
+    note: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v16l-5-2.4L7 20V4z"/></svg>`,
+  };
+  return icons[name] || icons.note;
+}
+
+function historySection(title, icon, blocks) {
+  const body = (Array.isArray(blocks) ? blocks : [blocks]).filter(Boolean).join("");
+  if (!body.trim()) return "";
+  return `<section class="history-subcard">
+    <header class="history-subcard__head">
+      <span class="history-subcard__icon" aria-hidden="true">${historyJournalIcon(icon)}</span>
+      <h3 class="history-subcard__title">${escapeHtml(title)}</h3>
+    </header>
+    <div class="history-subcard__body">${body}</div>
+  </section>`;
+}
+
 function historyBlock(label, bodyHtml) {
   if (!String(bodyHtml || "").trim()) return "";
-  return `<section class="history-journal__block"><p class="history-journal__label">${escapeHtml(label)}</p>${bodyHtml}</section>`;
+  return `<div class="history-journal__field">${
+    label ? `<p class="history-journal__label">${escapeHtml(label)}</p>` : ""
+  }${bodyHtml}</div>`;
 }
 
 function historyTextBlock(label, value) {
@@ -7375,15 +7402,27 @@ function historyTextBlock(label, value) {
   return historyBlock(label, `<p class="history-journal__text">${escapeHtml(text)}</p>`);
 }
 
-function historyListBlock(label, items) {
+function historyItemsHtml(items) {
   const list = (Array.isArray(items) ? items : [items])
     .map((item) => String(item || "").trim())
     .filter(Boolean);
   if (!list.length) return "";
-  return historyBlock(
-    label,
-    `<ul class="history-journal__list">${list.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
-  );
+  if (list.length === 1) return `<p class="history-journal__text">${escapeHtml(list[0])}</p>`;
+  return `<ul class="history-journal__list">${list.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
+}
+
+function historyListBlock(label, items) {
+  const html = historyItemsHtml(items);
+  if (!html) return "";
+  return historyBlock(label, html);
+}
+
+function historyQuotesHtml(quotes) {
+  const list = (Array.isArray(quotes) ? quotes : []).map((item) => String(item || "").trim()).filter(Boolean);
+  if (!list.length) return "";
+  return `<div class="history-journal__quotes">${list
+    .map((quote) => `<blockquote class="history-journal__quote">${escapeHtml(quote)}</blockquote>`)
+    .join("")}</div>`;
 }
 
 function historyBodyCheckHtml(journal) {
@@ -7410,78 +7449,95 @@ function historyBodyCheckHtml(journal) {
   const coach = normalizeBodyCoach(journal.bodyCoach);
   if (coach.analysis) lines.push(coach.analysis);
   (coach.suggestions || []).forEach((item, index) => lines.push(`建議 ${index + 1}：${item}`));
-  return historyListBlock("身心覺察", lines);
+  return historyItemsHtml(lines);
 }
 
 function renderHistoryJournal(review) {
   const journal = review?.journal && typeof review.journal === "object" ? review.journal : emptyJournal();
   const insight = normalizeInsight(journal.insight);
-  const parts = [
-    historyListBlock("今日感謝", thanksItemsFrom(journal.thanksText || journal.thanks)),
-    historyTextBlock("今日事件", journal.event),
-    journal.mood ? historyTextBlock("心情", journal.mood) : "",
-    historyBodyCheckHtml(journal),
-    ...((journal.awarenessPrompts && journal.awarenessPrompts.length
-      ? journal.awarenessPrompts
-      : AWARENESS_QUESTIONS
-    ).map((item, index) => {
+  const thanks = historyItemsHtml(thanksItemsFrom(journal.thanksText || journal.thanks));
+  const awareFields = (
+    journal.awarenessPrompts && journal.awarenessPrompts.length ? journal.awarenessPrompts : AWARENESS_QUESTIONS
+  )
+    .map((item, index) => {
       const answer = normalizeYesNo((journal.awareness || [])[index]) || String((journal.awareness || [])[index] || "").trim();
       const question = item.question || item.title || item;
       return answer ? historyTextBlock(question, answer) : "";
-    })),
-    historyListBlock("今日核心金句", normalizeAwarenessQuotes(journal.awarenessCheckItems).length
+    })
+    .filter(Boolean)
+    .join("");
+  const quotes = historyQuotesHtml(
+    normalizeAwarenessQuotes(journal.awarenessCheckItems).length
       ? normalizeAwarenessQuotes(journal.awarenessCheckItems)
-      : journal.awarenessChecks),
-    ...(() => {
-      const prompts = normalizeExecutionPrompts(journal.executionPrompts);
-      const answers = Array.isArray(journal.execution) ? journal.execution : [];
-      const count = Math.max(prompts.length, answers.length);
-      return Array.from({ length: count }, (_, index) => {
-        const prompt = prompts[index];
-        const answer = String(answers[index] || "").trim();
-        const question = prompt?.question || prompt?.title || prompt || `執行力 ${index + 1}`;
-        if (answer) return historyTextBlock(question, answer);
-        if (prompt?.parked) return historyTextBlock(question, "先放著");
-        return "";
-      });
-    })(),
-    historyTextBlock("明天最小的一步", journal.smallestStep),
-    historyListBlock("行動卡點／解法", execCheckHistoryLines(journal)),
+      : journal.awarenessChecks
+  );
+  const execFields = (() => {
+    const prompts = normalizeExecutionPrompts(journal.executionPrompts);
+    const answers = Array.isArray(journal.execution) ? journal.execution : [];
+    const count = Math.max(prompts.length, answers.length);
+    return Array.from({ length: count }, (_, index) => {
+      const prompt = prompts[index];
+      const answer = String(answers[index] || "").trim();
+      const question = prompt?.question || prompt?.title || prompt || `執行力 ${index + 1}`;
+      if (answer) return historyTextBlock(question, answer);
+      if (prompt?.parked) return historyTextBlock(question, "先放著");
+      return "";
+    }).filter(Boolean);
+  })();
+  const insightHtml =
     insight.conclusion || insight.psychology || insight.reflection
-      ? historyBlock(
-          "深度洞察",
-          `${insight.title ? `<p class="history-journal__headline">${escapeHtml(insight.title)}</p>` : ""}${
-            insight.psychology || insight.conclusion
-              ? `<p class="history-journal__label">① 今天的身心訊號</p><p class="history-journal__text">${escapeHtml(insight.psychology || insight.conclusion)}</p>`
-              : ""
-          }${insight.bodyLink ? `<p class="history-journal__note">${escapeHtml(insight.bodyLink)}</p>` : ""}${
-            insight.reflection
-              ? `<p class="history-journal__label">② 客觀檢討與反思</p><p class="history-journal__text">${escapeHtml(insight.reflection)}</p>`
-              : ""
-          }${
-            insight.suggestions.length
-              ? `<p class="history-journal__label">③ 具體突破建議（怎麼做會更好）</p><ul class="history-journal__list">${insight.suggestions
-                  .map((item) => `<li>${escapeHtml(item)}</li>`)
-                  .join("")}</ul>`
-              : ""
-          }${
-            insight.takeaways.length
-              ? `<p class="history-journal__label">💡 今日核心重點整理</p><ul class="history-journal__list">${insight.takeaways
-                  .map((item) => `<li>${escapeHtml(item)}</li>`)
-                  .join("")}</ul>`
-              : ""
-          }`
-        )
-      : "",
-    historyTextBlock("明天想顯化", journal.manifest),
-    historyListBlock("顯化執行目標", journal.manifestChecks),
+      ? `${insight.title ? `<p class="history-journal__headline">${escapeHtml(insight.title)}</p>` : ""}${
+          insight.psychology || insight.conclusion
+            ? historyBlock("① 今天的身心訊號", `<p class="history-journal__text">${escapeHtml(insight.psychology || insight.conclusion)}</p>`)
+            : ""
+        }${insight.bodyLink ? `<p class="history-journal__note">${escapeHtml(insight.bodyLink)}</p>` : ""}${
+          insight.reflection
+            ? historyBlock("② 客觀檢討與反思", `<p class="history-journal__text">${escapeHtml(insight.reflection)}</p>`)
+            : ""
+        }${
+          insight.suggestions.length
+            ? historyBlock(
+                "③ 具體突破建議（怎麼做會更好）",
+                `<ul class="history-journal__list">${insight.suggestions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+              )
+            : ""
+        }${
+          insight.takeaways.length
+            ? historyBlock(
+                "今日核心重點整理",
+                `<ul class="history-journal__list">${insight.takeaways.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+              )
+            : ""
+        }`
+      : "";
+  const parts = [
+    historySection("今日感謝", "thanks", thanks),
+    historySection("今日事件與情緒", "event", [
+      String(journal.event || "").trim() ? `<p class="history-journal__text">${escapeHtml(String(journal.event).trim())}</p>` : "",
+      journal.mood ? historyBlock("心情", `<p class="history-journal__mood"><span class="tag">${escapeHtml(journal.mood)}</span></p>`) : "",
+    ]),
+    historySection("身心覺察與金句", "aware", [
+      historyBodyCheckHtml(journal),
+      awareFields,
+      quotes,
+    ]),
+    historySection("執行力行動清單", "exec", [
+      ...execFields,
+      historyTextBlock("明天最小的一步", journal.smallestStep),
+      historyListBlock("行動卡點／解法", execCheckHistoryLines(journal)),
+    ]),
+    historySection("深度洞察", "insight", insightHtml),
+    historySection("顯化力願景", "manifest", [
+      historyTextBlock("明天想顯化", journal.manifest),
+      historyListBlock("顯化執行目標", journal.manifestChecks),
+    ]),
   ].filter(Boolean);
 
   if (!parts.length) {
     const fallback = String(review?.rawText || "").trim();
     const organize = review?.organize;
-    if (organize) return `<div class="history-journal">${renderHistoryReport(review)}</div>`;
-    if (fallback) return `<div class="history-journal">${historyTextBlock("當天紀錄", fallback)}</div>`;
+    if (organize) return `<div class="history-journal">${historySection("當天紀錄", "note", renderHistoryReport(review))}</div>`;
+    if (fallback) return `<div class="history-journal">${historySection("當天紀錄", "note", historyTextBlock("", fallback))}</div>`;
     return `<div class="history-journal"><p class="history-journal__empty">這天還沒有留下完整復盤內容。</p></div>`;
   }
 
