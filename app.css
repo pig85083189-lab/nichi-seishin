@@ -2221,20 +2221,37 @@ body.nav-closed .auth-pay {
 }
 
 .history-subcard {
-  padding: 18px 16px 16px;
+  padding: 0;
+  overflow: hidden;
   border: 1px solid var(--cream-border);
   border-radius: var(--radius);
   background: linear-gradient(180deg, #fffdf8 0%, #fff 100%);
   box-shadow: 0 1px 2px rgba(92, 74, 58, 0.04);
 }
 
-.history-subcard__head {
+.history-subcard__toggle {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 0 0 14px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--cream-border);
+  width: 100%;
+  margin: 0;
+  padding: 14px 16px;
+  border: 0;
+  appearance: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.history-subcard__toggle:hover {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.history-subcard__toggle:focus-visible {
+  outline: 2px solid var(--blush);
+  outline-offset: -2px;
 }
 
 .history-subcard__icon {
@@ -2254,6 +2271,8 @@ body.nav-closed .auth-pay {
 }
 
 .history-subcard__title {
+  flex: 1;
+  min-width: 0;
   margin: 0;
   color: var(--heading);
   font-family: var(--serif);
@@ -2263,10 +2282,56 @@ body.nav-closed .auth-pay {
   line-height: 1.4;
 }
 
+.history-subcard__chevron {
+  position: relative;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  transition: transform 0.28s ease, background 0.28s ease;
+}
+
+.history-subcard__chevron::after {
+  content: "";
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 8px;
+  height: 8px;
+  border-right: 1.5px solid var(--heading);
+  border-bottom: 1.5px solid var(--heading);
+  transform: rotate(45deg);
+}
+
+.history-subcard.is-open .history-subcard__chevron {
+  transform: rotate(180deg);
+  background: #efe8dc;
+}
+
+.history-subcard__panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.32s ease;
+}
+
+.history-subcard.is-open .history-subcard__panel {
+  grid-template-rows: 1fr;
+}
+
 .history-subcard__body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 16px;
+  border-top: 1px solid transparent;
+}
+
+.history-subcard.is-open .history-subcard__body {
+  padding: 12px 16px 16px;
+  border-top-color: var(--cream-border);
 }
 
 .history-journal__group {
@@ -2389,7 +2454,9 @@ body.nav-closed .auth-pay {
 @media (prefers-reduced-motion: reduce) {
   .history-card,
   .history-card__chevron,
-  .history-card__panel {
+  .history-card__panel,
+  .history-subcard__chevron,
+  .history-subcard__panel {
     transition: none;
   }
 }

@@ -7340,16 +7340,33 @@ function historyJournalIcon(name) {
   return icons[name] || icons.note;
 }
 
-function historySection(title, icon, blocks) {
-  const body = (Array.isArray(blocks) ? blocks : [blocks]).filter(Boolean).join("");
-  if (!body.trim()) return "";
-  return `<section class="history-subcard">
-    <header class="history-subcard__head">
+function historySectionMarkup(title, icon, body, open) {
+  return `<section class="history-subcard${open ? " is-open" : ""}">
+    <button class="history-subcard__toggle" type="button" data-history-section aria-expanded="${open ? "true" : "false"}">
       <span class="history-subcard__icon" aria-hidden="true">${historyJournalIcon(icon)}</span>
       <h3 class="history-subcard__title">${escapeHtml(title)}</h3>
-    </header>
-    <div class="history-subcard__body">${body}</div>
+      <span class="history-subcard__chevron" aria-hidden="true"></span>
+    </button>
+    <div class="history-subcard__panel"${open ? "" : " inert"} aria-hidden="${open ? "false" : "true"}">
+      <div class="history-subcard__body">${body}</div>
+    </div>
   </section>`;
+}
+
+function historySection(title, icon, blocks, open = false) {
+  const body = (Array.isArray(blocks) ? blocks : [blocks]).filter(Boolean).join("");
+  if (!body.trim()) return "";
+  return historySectionMarkup(title, icon, body, open);
+}
+
+function historySectionsHtml(items) {
+  const sections = items
+    .map(([title, icon, blocks]) => {
+      const body = (Array.isArray(blocks) ? blocks : [blocks]).filter(Boolean).join("");
+      return body.trim() ? { title, icon, body } : null;
+    })
+    .filter(Boolean);
+  return sections.map((item, index) => historySectionMarkup(item.title, item.icon, item.body, index === 0)).join("");
 }
 
 function historyBlock(label, bodyHtml) {
@@ -7481,40 +7498,49 @@ function renderHistoryJournal(review) {
             : ""
         }`
       : "";
-  const parts = [
-    historySection("① 今日感謝", "thanks", historyBlock("", thanks)),
-    historySection("② 今日事件與情緒", "event", [
-      String(journal.event || "").trim()
-        ? historyBlock("", `<p class="history-journal__text">${escapeHtml(String(journal.event).trim())}</p>`)
-        : "",
-      journal.mood ? historyBlock("心情", `<p class="history-journal__mood"><span class="tag">${escapeHtml(journal.mood)}</span></p>`) : "",
-    ]),
-    historySection("③ 身心覺察與金句", "aware", [
-      historyGroup("身心檢核", historyBlock("", historyBodyCheckHtml(journal))),
-      historyGroup("覺察作答", awareFields),
-      historyGroup("今日金句", historyBlock("", quotes)),
-    ]),
-    historySection("④ 執行力行動清單", "exec", [
-      ...execFields,
-      historyTextBlock("明天最小的一步", journal.smallestStep),
-      historyListBlock("行動卡點／解法", execCheckHistoryLines(journal)),
-    ]),
-    historySection("深度洞察", "insight", insightHtml),
-    historySection("⑤ 顯化力願景", "manifest", [
-      historyTextBlock("明天想顯化", journal.manifest),
-      historyListBlock("顯化執行目標", journal.manifestChecks),
-    ]),
-  ].filter(Boolean);
+  const parts = historySectionsHtml([
+    ["① 今日感謝", "thanks", historyBlock("", thanks)],
+    [
+      "② 今日事件與情緒",
+      "event",
+      [
+        String(journal.event || "").trim()
+          ? historyBlock("", `<p class="history-journal__text">${escapeHtml(String(journal.event).trim())}</p>`)
+          : "",
+        journal.mood ? historyBlock("心情", `<p class="history-journal__mood"><span class="tag">${escapeHtml(journal.mood)}</span></p>`) : "",
+      ],
+    ],
+    [
+      "③ 身心覺察與金句",
+      "aware",
+      [
+        historyGroup("身心檢核", historyBlock("", historyBodyCheckHtml(journal))),
+        historyGroup("覺察作答", awareFields),
+        historyGroup("今日金句", historyBlock("", quotes)),
+      ],
+    ],
+    [
+      "④ 執行力行動清單",
+      "exec",
+      [...execFields, historyTextBlock("明天最小的一步", journal.smallestStep), historyListBlock("行動卡點／解法", execCheckHistoryLines(journal))],
+    ],
+    ["深度洞察", "insight", insightHtml],
+    [
+      "⑤ 顯化力願景",
+      "manifest",
+      [historyTextBlock("明天想顯化", journal.manifest), historyListBlock("顯化執行目標", journal.manifestChecks)],
+    ],
+  ]);
 
-  if (!parts.length) {
+  if (!parts) {
     const fallback = String(review?.rawText || "").trim();
     const organize = review?.organize;
-    if (organize) return `<div class="history-journal">${historySection("當天紀錄", "note", renderHistoryReport(review))}</div>`;
-    if (fallback) return `<div class="history-journal">${historySection("當天紀錄", "note", historyTextBlock("", fallback))}</div>`;
+    if (organize) return `<div class="history-journal">${historySection("當天紀錄", "note", renderHistoryReport(review), true)}</div>`;
+    if (fallback) return `<div class="history-journal">${historySection("當天紀錄", "note", historyTextBlock("", fallback), true)}</div>`;
     return `<div class="history-journal"><p class="history-journal__empty">這天還沒有留下完整復盤內容。</p></div>`;
   }
 
-  return `<div class="history-journal">${parts.join("")}</div>`;
+  return `<div class="history-journal">${parts}</div>`;
 }
 
 function renderHistory() {
@@ -8142,6 +8168,22 @@ function bindEvents() {
       document.getElementById("reviewDate").value = open.dataset.open;
       loadReviewForDate(open.dataset.open);
       switchPage("today");
+      return;
+    }
+    const sectionToggle = event.target.closest("[data-history-section]");
+    if (sectionToggle) {
+      event.preventDefault();
+      event.stopPropagation();
+      const card = sectionToggle.closest(".history-subcard");
+      if (!card) return;
+      const next = !card.classList.contains("is-open");
+      card.classList.toggle("is-open", next);
+      sectionToggle.setAttribute("aria-expanded", next ? "true" : "false");
+      const panel = card.querySelector(".history-subcard__panel");
+      if (panel) {
+        panel.inert = !next;
+        panel.setAttribute("aria-hidden", next ? "false" : "true");
+      }
       return;
     }
     const toggle = event.target.closest("[data-history-toggle]");
