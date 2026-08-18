@@ -193,9 +193,10 @@ const CHECKLIST_EXECUTION_SYSTEM = `你是「日精進」的高階心靈教練�
 請依這三題的深度回答，整理成「行動卡點／解法」勾選清單。勾選後會進入他的個人行動清單。
 
 規則：
-- 只輸出 JSON：{"items":["..."]}
+- 只輸出 JSON：{"items":[{"title":"...","detail":"..."}]}
 - items 必須 3 到 4 條，不可少於 3、不可超過 4
-- 每一條 12-28 字，必須是今天專屬、可勾選的行動或卡點解法，不要空泛分類
+- title：4-12 字，核心行動名稱。不要編號、不要句號
+- detail：18-36 字，作為「引言／具體作法說明」。用溫暖、具體、好執行的口吻告訴他這件事「怎麼做會比較好」，不要只重複 title
 - 至少 2 條是明天做得到的最小解法（具體動作），其餘可以是真正卡住的點
 - 必須貼近他剛寫的回答與今日事件，不要重複他已經列在「尚未完成的行動」裡的句子
 - 禁止固定題庫口吻（例如只寫「任務太大」「害怕被看見」「先做 5 分鐘」這種萬用句）
@@ -466,6 +467,49 @@ function normalizeChecklistItems(raw, min, max) {
   return items.slice(0, max);
 }
 
+function splitChecklistTitle(text) {
+  const raw = String(text || "").trim();
+  const idx = raw.search(/[：:]/);
+  if (idx > 0 && idx < raw.length - 1) {
+    return { title: raw.slice(0, idx).trim(), detail: raw.slice(idx + 1).trim() };
+  }
+  return { title: raw, detail: "" };
+}
+
+function normalizeExecutionChecklistItems(raw, min, max) {
+  const list = Array.isArray(raw)
+    ? raw
+    : Array.isArray(raw?.items)
+      ? raw.items
+      : [];
+  const items = [];
+  const seen = new Set();
+  list.forEach((item) => {
+    let title = "";
+    let detail = "";
+    if (typeof item === "string") {
+      const parts = splitChecklistTitle(item);
+      title = parts.title;
+      detail = parts.detail;
+    } else if (item && typeof item === "object") {
+      title = String(item.title || item.label || item.text || "").trim();
+      detail = String(item.detail || item.lead || item.how || item.note || "").trim();
+      if (!detail && title) {
+        const parts = splitChecklistTitle(title);
+        title = parts.title;
+        detail = parts.detail;
+      }
+    }
+    title = title.replace(/^[\d.、｜|\-\s]+/, "").slice(0, 18);
+    detail = detail.slice(0, 48);
+    if (!title || seen.has(title)) return;
+    if (!detail) detail = "用最小、明天做得到的方式先走一步。";
+    seen.add(title);
+    items.push({ title, detail });
+  });
+  return items.slice(0, max);
+}
+
 function checklistUserPrompt(kind, body) {
   const answers = Array.isArray(body.answers) ? body.answers.map((item) => String(item || "").trim()) : [];
   const answer = answers.filter(Boolean).join("\n\n") || String(body.text || "").trim();
@@ -479,7 +523,7 @@ function checklistUserPrompt(kind, body) {
           .map((question, index) => `${index + 1}. ${question}\n回答：${answers[index] || "（未填）"}`)
           .join("\n\n")
       : `深度回答：${answer || "（未填）"}`;
-    return `請依這個人今天的執行力回答，產出 3 到 4 條「行動卡點／解法」勾選項目。勾選後會進入行動清單，所以解法要具體、明天做得到。
+    return `請依這個人今天的執行力回答，產出 3 到 4 條「行動卡點／解法」勾選項目。每一條都要有「行動標題」與「怎麼做會比較好」的具體作法說明。勾選後會進入行動清單，所以解法要具體、明天做得到。
 
 ${labeled}
 
@@ -939,7 +983,7 @@ module.exports = async function handler(req, res) {
       const kind = body.kind === "execution" ? "execution" : "awareness";
       const min = kind === "execution" ? 3 : 4;
       const max = kind === "execution" ? 4 : 6;
-      const items = normalizeChecklistItems(data, min, max);
+      const items = kind === "execution" ? normalizeExecutionChecklistItems(data, min, max) : normalizeChecklistItems(data, min, max);
       if (items.length < min) {
         res.status(502).json({ ok: false, error: "AI 勾勾表格式不完整，請再試一次" });
         return;

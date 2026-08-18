@@ -463,11 +463,15 @@ function syncJournalLibraries(iso, journal) {
       source: "今日復盤",
     });
   });
+  const execItems = normalizeExecCheckItems(data.executionCheckItems);
   (data.executionChecks || []).forEach((label) => {
+    const title = String(label || "").trim();
+    if (!title) return;
+    const item = execItems.find((entry) => entry.title === title);
     addTaskFromGuide({
-      key: `exec:${iso}:${label}`,
-      label,
-      detail: "",
+      key: `exec:${iso}:${title}`,
+      label: title,
+      detail: item?.detail || "",
       source: "今日復盤",
       date: iso,
     });
@@ -3342,19 +3346,69 @@ function buildExecutionCheckItems(journal) {
   const blob = `${answer}\n${journal.event || ""}\n${journal.bodyNote || ""}`;
   if (answer) {
     const short = answer.length > 18 ? `${answer.slice(0, 18)}…` : answer;
-    pushUnique(items, `先處理：${short}`, 4);
+    pushUniqueExec(items, "先處理今天最卡的那一步", `把「${short}」收成明天第一個 5 分鐘動作，做完再停。`, 4);
   }
-  if (/累|疲|睡|沒力|能量|頭痛|緊繃/.test(blob)) pushUnique(items, "先讓身體休息 10 分鐘再開工", 4);
-  if (/怕|完美|失敗|丟臉|被看/.test(blob)) pushUnique(items, "只做醜一點的第一版，不求一次做好", 4);
-  if (/卡|拖|大|不知|從哪|複雜|太多/.test(blob)) pushUnique(items, "把任務拆成明天只做的最小一步", 4);
-  if (/策略|突破|行動|下一步/.test(blob)) pushUnique(items, "把突破策略寫成明天第一個動作", 4);
+  if (/累|疲|睡|沒力|能量|頭痛|緊繃/.test(blob)) {
+    pushUniqueExec(items, "先讓身體休息", "先停十分鐘，喝口水、鬆開肩膀，再決定下一小步。", 4);
+  }
+  if (/怕|完美|失敗|丟臉|被看/.test(blob)) {
+    pushUniqueExec(items, "只做醜一點的第一版", "設 10 分鐘計時，只交出能開始的草稿，不求一次做好。", 4);
+  }
+  if (/卡|拖|大|不知|從哪|複雜|太多/.test(blob)) {
+    pushUniqueExec(items, "拆成最小一步", "在紙上寫下「明天只做的一件小事」，做完就收工。", 4);
+  }
+  if (/策略|突破|行動|下一步/.test(blob)) {
+    pushUniqueExec(items, "把策略變成動作", "把突破策略改寫成明天第一個具體動作，寫到行事曆。", 4);
+  }
   answers.slice(0, 2).forEach((item) => {
-    if (items.length < 3) pushUnique(items, item.slice(0, 28), 4);
+    const parts = splitTaskText(item.slice(0, 36));
+    if (items.length < 3) pushUniqueExec(items, parts.title, parts.detail || "用最小、明天做得到的方式先走一步。", 4);
   });
   return items.slice(0, 4);
 }
 
+function renderExecCheckCard(item, index, done) {
+  const heading = done ? item.title : `${String(index + 1).padStart(2, "0")}｜${item.title}`;
+  return `
+    <label class="check-line exec-check${done ? " is-done" : ""}" data-title="${escapeHtml(item.title)}" data-detail="${escapeHtml(item.detail || "")}">
+      <input type="checkbox" value="${escapeHtml(item.title)}" ${done ? "checked" : ""} />
+      <span class="exec-check__box" aria-hidden="true"></span>
+      <span class="exec-check__body">
+        <span class="exec-check__title">${escapeHtml(heading)}</span>
+        ${item.detail ? `<span class="exec-check__lead">${escapeHtml(item.detail)}</span>` : ""}
+      </span>
+    </label>
+  `;
+}
+
+function renderExecChecklist(items, checked) {
+  const root = document.getElementById("execChecks");
+  if (!root) return;
+  const normalized = normalizeExecCheckItems(items);
+  const set = new Set((checked || []).map((item) => (typeof item === "string" ? item : item && item.title)).filter(Boolean));
+  const open = [];
+  const done = [];
+  normalized.forEach((item) => (set.has(item.title) ? done : open).push(item));
+  root.innerHTML = `
+    <div class="exec-check-open">
+      ${open.map((item, index) => renderExecCheckCard(item, index, false)).join("") || (done.length ? "" : `<p class="empty">目前沒有待完成的行動。</p>`)}
+    </div>
+    ${
+      done.length
+        ? `<div class="exec-check-done">
+            <h4 class="exec-check-done__title">已完成</h4>
+            ${done.map((item, index) => renderExecCheckCard(item, index, true)).join("")}
+          </div>`
+        : ""
+    }
+  `;
+}
+
 function renderChecklist(rootId, items, checked) {
+  if (rootId === "execChecks") {
+    renderExecChecklist(items, checked);
+    return;
+  }
   const root = document.getElementById(rootId);
   if (!root) return;
   const set = new Set(checked || []);
@@ -3379,7 +3433,9 @@ function refreshJournalChecklists(journal, options = {}) {
   const keepExec = !options.forceLocal && (options.useSaved || data.executionAi) && (data.executionCheckItems || []).length;
   const keepManifest = !options.forceLocal && (options.useSaved || data.manifestAi) && (data.manifestCheckItems || []).length;
   const awareItems = keepAware ? data.awarenessCheckItems.slice(0, 6) : buildAwarenessCheckItems(data);
-  const execItems = keepExec ? data.executionCheckItems.slice(0, 4) : buildExecutionCheckItems(data);
+  const execItems = keepExec
+    ? normalizeExecCheckItems(data.executionCheckItems).slice(0, 4)
+    : buildExecutionCheckItems(data);
   const manifestItems = keepManifest ? data.manifestCheckItems.slice(0, 5) : [];
   const awareChecked = options.useSaved ? data.awarenessChecks : checkedValues("awareChecks");
   const execChecked = options.useSaved ? data.executionChecks : checkedValues("execChecks");
@@ -3411,6 +3467,14 @@ function threeAnswersFilled(answers) {
 
 function checklistSignature(answers) {
   return (answers || []).map((item) => String(item || "").trim()).join("\n");
+}
+
+function normalizeAiExecItems(raw, min, max, fallback) {
+  const items = normalizeExecCheckItems(raw);
+  normalizeExecCheckItems(fallback).forEach((item) => {
+    if (items.length < min && !items.some((entry) => entry.title === item.title)) items.push(item);
+  });
+  return items.slice(0, max);
 }
 
 function normalizeAiChecklistItems(raw, min, max, fallback) {
@@ -3518,7 +3582,9 @@ async function generateJournalChecklist(kind, options = {}) {
       text: answers.join("\n"),
     });
     if (state.checklistToken[kind] !== token) return;
-    const items = normalizeAiChecklistItems(remote.items, min, max, fallback);
+    const items = isAware
+      ? normalizeAiChecklistItems(remote.items, min, max, fallback)
+      : normalizeAiExecItems(remote.items, min, max, fallback);
     if (items.length < min) throw new Error("雲端回傳格式不完整");
     applyGeneratedChecklist(kind, items, sig);
     showToast(isAware ? "覺察勾勾表已生成。" : "行動卡點與解法已生成。");
@@ -4900,6 +4966,64 @@ function applyJournalMode(mode, options = {}) {
   }
 }
 
+function collectExecCheckItems() {
+  return [...document.querySelectorAll("#execChecks .exec-check")]
+    .map((el) => ({
+      title: String(el.dataset.title || "").trim(),
+      detail: String(el.dataset.detail || "").trim(),
+    }))
+    .filter((item) => item.title);
+}
+
+function normalizeExecCheckItem(item) {
+  if (!item) return null;
+  if (typeof item === "string") {
+    const parts = splitTaskText(item);
+    return parts.title ? { title: parts.title, detail: parts.detail } : null;
+  }
+  if (typeof item !== "object") return null;
+  const title = String(item.title || item.label || item.text || "").trim();
+  const detail = String(item.detail || item.lead || item.note || "").trim();
+  if (!title && !detail) return null;
+  if (!title) return splitTaskText(detail);
+  if (detail && detail !== title) return { title, detail };
+  const parts = splitTaskText(title);
+  return { title: parts.title, detail: parts.detail || detail };
+}
+
+function normalizeExecCheckItems(list) {
+  const items = [];
+  const seen = new Set();
+  (Array.isArray(list) ? list : []).forEach((item) => {
+    const next = normalizeExecCheckItem(item);
+    if (!next || seen.has(next.title)) return;
+    seen.add(next.title);
+    items.push(next);
+  });
+  return items;
+}
+
+function pushUniqueExec(list, title, detail, max) {
+  const heading = String(title || "").trim();
+  if (!heading || list.some((item) => item.title === heading) || list.length >= max) return list;
+  list.push({ title: heading, detail: String(detail || "").trim() });
+  return list;
+}
+
+function formatExecCheckLine(item) {
+  const next = normalizeExecCheckItem(item);
+  if (!next) return "";
+  return next.detail ? `${next.title}：${next.detail}` : next.title;
+}
+
+function execCheckHistoryLines(journal) {
+  const items = normalizeExecCheckItems(journal && journal.executionCheckItems);
+  if (items.length) return items.map(formatExecCheckLine).filter(Boolean);
+  return (journal && journal.executionChecks ? journal.executionChecks : [])
+    .map(formatExecCheckLine)
+    .filter(Boolean);
+}
+
 function collectJournal() {
   const bodyCheck = collectBodyCheck();
   const journal = {
@@ -4916,7 +5040,10 @@ function collectJournal() {
     awarenessCheckItems: checklistItems("awareChecks"),
     execution: ["exec1", "exec2", "exec3"].map(journalFieldValue),
     executionChecks: checkedValues("execChecks"),
-    executionCheckItems: checklistItems("execChecks"),
+    executionCheckItems: (() => {
+      const collected = collectExecCheckItems();
+      return collected.length ? collected : normalizeExecCheckItems(checklistItems("execChecks"));
+    })(),
     smallestStep: journalFieldValue("execNext"),
     mode: state.journalMode === "quick" ? "quick" : "deep",
     deepExpanded: Boolean(state.deepExpanded),
@@ -5007,7 +5134,8 @@ function composeJournalRawText(journal) {
     if (answer) lines.push(`${execQs[index] || `執行力 ${index + 1}`} ${answer}`);
   });
   if (String(journal.smallestStep || "").trim()) lines.push(`明天最小的一步：${String(journal.smallestStep).trim()}`);
-  if ((journal.executionChecks || []).length) lines.push(`我的行動卡點：${journal.executionChecks.join("、")}`);
+  const execLines = execCheckHistoryLines(journal);
+  if (execLines.length) lines.push(`我的行動卡點：${execLines.join("、")}`);
   if (String(journal.manifest || "").trim()) lines.push(`明天想顯化：${journal.manifest.trim()}`);
   if ((journal.manifestChecks || []).length) lines.push(`顯化執行目標：${journal.manifestChecks.join("、")}`);
   const deepQs = (journal.deepPrompts || state.deepPrompts || []).map((item) => item.title || item.question || item);
@@ -6780,7 +6908,7 @@ function renderHistoryJournal(review) {
       return historyTextBlock(question, answer);
     })),
     historyTextBlock("明天最小的一步", journal.smallestStep),
-    historyListBlock("行動卡點／解法", journal.executionChecks),
+    historyListBlock("行動卡點／解法", execCheckHistoryLines(journal)),
     insight.conclusion || insight.psychology || insight.reflection
       ? historyBlock(
           "深度洞察",
@@ -7144,6 +7272,10 @@ function bindEvents() {
   document.getElementById("page-today")?.addEventListener("change", (event) => {
     if (event.target && event.target.matches("#awareChecks input, #execChecks input, #manifestChecks input")) {
       persistJournalQuietly();
+      if (event.target.matches("#execChecks input")) {
+        const journal = collectJournal();
+        renderExecChecklist(journal.executionCheckItems, journal.executionChecks);
+      }
     }
   });
 

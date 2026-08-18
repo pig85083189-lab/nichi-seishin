@@ -3896,6 +3896,131 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   accent-color: var(--accent);
 }
 
+.exec-check-open,
+.exec-check-done {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.exec-check-done {
+  margin-top: 6px;
+  padding-top: 16px;
+  border-top: 1px solid var(--cream-border);
+}
+
+.exec-check-done__title {
+  margin: 0 0 2px;
+  color: var(--heading);
+  font-family: var(--serif);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.exec-check {
+  position: relative;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 14px 16px;
+  border: 1px solid var(--cream-border);
+  border-radius: 14px;
+  background: #fff;
+  font-weight: 400;
+}
+
+.exec-check:hover {
+  background: var(--cream);
+}
+
+.exec-check:has(input:checked),
+.exec-check.is-done {
+  background: var(--cream);
+  border-color: var(--cream-border);
+  font-weight: 400;
+}
+
+.exec-check input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.exec-check__box {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-top: 2px;
+  border: 1.5px solid var(--header);
+  border-radius: 6px;
+  background: #fff;
+  color: #fff;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.exec-check__box::after {
+  content: "";
+  width: 11px;
+  height: 7px;
+  border-left: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg) translate(1px, -1px);
+  opacity: 0;
+}
+
+.exec-check input:checked + .exec-check__box {
+  background: var(--header);
+  border-color: var(--header);
+}
+
+.exec-check input:checked + .exec-check__box::after {
+  opacity: 1;
+}
+
+.exec-check input:focus-visible + .exec-check__box {
+  outline: 2px solid var(--blush);
+  outline-offset: 2px;
+}
+
+.exec-check__body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.exec-check__title {
+  display: block;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.5;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
+}
+
+.exec-check__lead {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.7;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+
+.exec-check.is-done .exec-check__title,
+.exec-check.is-done .exec-check__lead {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: rgba(122, 101, 86, 0.55);
+  opacity: 0.72;
+}
+
 .ai-check-btn {
   display: inline-flex;
   align-items: center;
