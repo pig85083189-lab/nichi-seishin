@@ -454,6 +454,49 @@ function addManifest({ key, title, vision, date }) {
   return { added: true };
 }
 
+function removeManifestFromGuide(key) {
+  if (!key) return { removed: false };
+  const items = getManifests();
+  const index = items.findIndex((item) => item.sourceKey === key);
+  if (index === -1) return { removed: false };
+  if (items[index].status !== "doing") return { removed: false, kept: true };
+  items.splice(index, 1);
+  saveManifests(items);
+  try {
+    renderManifests();
+  } catch {
+    /* ignore */
+  }
+  return { removed: true };
+}
+
+function manifestCheckKey(title, iso) {
+  const heading = String(title || "").trim();
+  if (!heading) return "";
+  return `manifest:${iso || currentIso()}:${heading}`;
+}
+
+function syncManifestCheckToSidebar({ checked, title }) {
+  const heading = String(title || "").trim();
+  if (!heading) return;
+  const vision = String(document.getElementById("manifestVision")?.value || "").trim();
+  const key = manifestCheckKey(heading);
+  if (checked) {
+    const result = addManifest({
+      key,
+      title: heading,
+      vision,
+      date: currentIso(),
+    });
+    if (result.added) showToast("已加入側邊欄『顯化力』");
+    else if (result.exists) showToast("這項已在『顯化力』");
+    return;
+  }
+  const result = removeManifestFromGuide(key);
+  if (result.removed) showToast("已從『顯化力』拿掉");
+  else if (result.kept) showToast("這項已在清單裡，改由你手動管理");
+}
+
 function addInsight({ key, title, date, source }) {
   const text = String(title || "").trim();
   if (!text) return { added: false };
@@ -2661,7 +2704,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "07 顯化力",
-        description: "左側寫下明天想顯化的心念，點「生成執行目標」，右側會拆成 3 到 5 個做得到的步驟。勾選後會進到側邊欄「顯化力」。",
+        description: "左側寫下明天想顯化的心念，右側會拆成做得到的步驟。勾選後會立刻同步到側邊欄「顯化力」，完成復盤也會再匯集一次。",
         side: "top",
       },
     },
@@ -2720,7 +2763,7 @@ function tourSteps() {
       tourSidebar: true,
       popover: {
         title: "顯化力清單",
-        description: "心念拆成的執行步驟會收在這裡，讓願景對應到每天做得到的行動。",
+        description: "復盤裡勾選的顯化目標會匯集到這裡。還沒想推進的可先放著，完成後也能長期追蹤。",
         side: "right",
       },
     },
@@ -7134,55 +7177,129 @@ function renderInsights() {
     .join("");
 }
 
-function renderManifests() {
-  const list = document.getElementById("manifestList");
+function renderManifestItem(item) {
+  const done = item.status === "done";
+  const later = item.status === "later";
+  const dateLabel = item.date ? formatDisplayDate(item.date) : "";
+  const vision = String(item.vision || "").trim();
+  const id = escapeHtml(item.id);
+  const actionBtns = done
+    ? ""
+    : later
+      ? `${renderTaskChip("拿回來", "back", `data-manifest-status="${id}" data-to="doing" aria-label="拿回進行中"`, "back")}
+        ${renderTaskChip("完成", "done", `data-manifest-status="${id}" data-to="done" aria-label="標記完成"`, "done")}`
+      : `${renderTaskChip("先放著", "hold", `data-manifest-status="${id}" data-to="later" aria-label="先放到暫存"`, "hold")}
+        ${renderTaskChip("完成", "done", `data-manifest-status="${id}" data-to="done" aria-label="標記完成"`, "done")}`;
+  return `
+    <article class="task-card task-todo${done ? " is-done" : ""}${later ? " is-later" : ""}">
+      <label class="task-todo__check">
+        <input type="checkbox" data-manifest-toggle="${id}" ${done ? "checked" : ""} />
+        <span class="task-todo__box" aria-hidden="true"></span>
+        <span class="task-todo__body">
+          <span class="task-card__title">${escapeHtml(item.title)}</span>
+          ${vision ? `<span class="task-card__lead">${escapeHtml(vision)}</span>` : ""}
+          <span class="task-card__meta">
+            <span class="tag">顯化力</span>
+            ${later ? `<span class="tag tag--later">先放著（暫存）</span>` : ""}
+            <span class="tag">${escapeHtml(item.source || "今日復盤")}</span>
+            ${dateLabel ? `<span class="tag">${escapeHtml(dateLabel)}</span>` : ""}
+          </span>
+        </span>
+      </label>
+      <div class="task-todo__actions" role="group" aria-label="顯化操作">
+        ${actionBtns}
+        ${renderTaskChip("刪除", "delete", `data-manifest-delete="${id}" aria-label="刪除這項顯化目標"`, "trash")}
+      </div>
+    </article>
+  `;
+}
+
+function renderManifestHold(laterItems) {
+  const list = document.getElementById("manifestHoldList");
+  const count = document.getElementById("manifestHoldCount");
+  if (count) count.textContent = laterItems.length ? `（${laterItems.length}）` : "";
   if (!list) return;
-  const all = getManifests();
-  const items = all.filter((item) => state.manifestFilter === "all" || item.status === state.manifestFilter);
-  if (!all.length) {
-    list.innerHTML = `<div class="empty"><p class="empty__title">顯化力還是空的</p>在今日復盤寫下願景、勾選執行目標，完成復盤後就會出現在這裡。</div>`;
+  if (!laterItems.length) {
+    list.innerHTML = `<p class="todo-hold__empty">還沒有暫存的顯化目標。點主清單項目旁的「先放著」，就會收到這裡。</p>`;
     return;
   }
-  if (!items.length) {
-    list.innerHTML = `<div class="empty">這個分類目前是空的。</div>`;
-    return;
-  }
+  list.innerHTML = laterItems.map((item) => renderManifestItem(item)).join("");
+}
+
+function renderManifestGroups(items) {
   const grouped = new Map();
   items.forEach((item) => {
     const iso = item.date || String(item.createdAt || "").slice(0, 10) || "";
     if (!grouped.has(iso)) grouped.set(iso, []);
     grouped.get(iso).push(item);
   });
-  list.innerHTML = [...grouped.entries()]
+  return [...grouped.entries()]
     .sort((a, b) => String(b[0]).localeCompare(String(a[0])))
     .map(([iso, rows]) => {
-      const cards = rows
-        .map((item) => {
-          const vision = String(item.vision || "").trim();
-          return `
-            <article class="task-card">
-              <div>
-                <p class="task-card__title">${escapeHtml(item.title)}</p>
-                <div class="task-card__meta">
-                  <span class="tag">顯化力</span>
-                  <span class="tag tag--${escapeHtml(item.status || "doing")}">${escapeHtml(STATUS_LABEL[item.status] || item.status || "進行中")}</span>
-                  <span class="tag">${escapeHtml(item.source || "今日復盤")}</span>
-                  ${vision ? `<span class="tag">${escapeHtml(vision.length > 18 ? `${vision.slice(0, 18)}…` : vision)}</span>` : ""}
-                </div>
-              </div>
-              <div class="task-card__actions">
-                <button class="btn btn--ghost btn--tiny" data-manifest-status="${item.id}" data-to="doing" type="button">進行中</button>
-                <button class="btn btn--ghost btn--tiny" data-manifest-status="${item.id}" data-to="later" type="button">先放著</button>
-                <button class="btn btn--ghost btn--tiny" data-manifest-status="${item.id}" data-to="done" type="button">已完成</button>
-                <button class="btn btn--ghost btn--tiny" data-manifest-delete="${item.id}" type="button">刪除</button>
-              </div>
-            </article>
-          `;
-        })
-        .join("");
+      const cards = rows.map((item) => renderManifestItem(item)).join("");
       return `<section class="library-group"><h3 class="library-group__date">${escapeHtml(iso ? formatDisplayDate(iso) : "未標日期")}</h3>${cards}</section>`;
     })
     .join("");
+}
+
+function renderManifests() {
+  const list = document.getElementById("manifestList");
+  if (!list) return;
+  const all = getManifests();
+  const later = all
+    .filter((item) => item.status === "later")
+    .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
+  const doing = all
+    .filter((item) => item.status === "doing")
+    .sort((a, b) => String(b.createdAt || b.date || "").localeCompare(String(a.createdAt || a.date || "")));
+  const done = all
+    .filter((item) => item.status === "done")
+    .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
+  const filter = state.manifestFilter;
+  renderManifestHold(later);
+
+  if (!all.length) {
+    list.innerHTML = `<div class="empty"><p class="empty__title">顯化力還是空的</p>在今日復盤勾選顯化執行目標，完成復盤後就會匯集到這裡。</div>`;
+    return;
+  }
+
+  const showDoing = filter === "all" || filter === "doing";
+  const showDone = filter === "all" || filter === "done";
+  if (filter === "later") {
+    list.innerHTML = `<div class="empty">暫存的顯化目標都在上方專區。可從那裡拿回進行中，或直接標記完成。</div>`;
+    return;
+  }
+
+  list.innerHTML = [
+    showDoing
+      ? `<section class="todo-section"><header class="todo-section__head"><h3>進行中${doing.length ? `（${doing.length}）` : ""}</h3><p>勾選或點完成，就會走到已完成。還沒想推進的，可先放到上方暫存專區。</p></header>${
+          doing.length ? renderManifestGroups(doing) : `<div class="empty">目前沒有進行中的顯化目標。</div>`
+        }</section>`
+      : "",
+    showDone
+      ? `<section class="todo-section"><header class="todo-section__head"><h3>已完成${done.length ? `（${done.length}）` : ""}</h3><p>這些願景步驟已經被你做完了。取消勾選就能再拿回來。</p></header>${
+          done.length ? renderManifestGroups(done) : `<div class="empty">還沒有完成的顯化目標。</div>`
+        }</section>`
+      : "",
+  ].join("");
+}
+
+function setManifestFilter(filter) {
+  const next = ["all", "doing", "later", "done"].includes(filter) ? filter : "all";
+  state.manifestFilter = next;
+  document.querySelectorAll("#manifestFilters .chip").forEach((item) => {
+    item.classList.toggle("is-active", item.dataset.manifestFilter === next);
+  });
+}
+
+function setManifestStatus(id, status) {
+  const allowed = new Set(["doing", "later", "done"]);
+  const next = allowed.has(status) ? status : "doing";
+  saveManifests(
+    getManifests().map((item) => (item.id === id ? { ...item, status: next, updatedAt: new Date().toISOString() } : item))
+  );
+  if (state.manifestFilter === "later" && next !== "later") setManifestFilter("all");
+  renderManifests();
 }
 
 function renderSfm() {
@@ -7691,7 +7808,7 @@ function bindEvents() {
   document.getElementById("page-today")?.addEventListener("input", (event) => {
     const id = event.target && event.target.id;
     if (/^thanksText$|^thanks\d+$|^(aware|exec)\d$|^execNext$|^eventText$|^bodyNote$|^bodyOtherNote$|^bodyMoodReason$|^bodyBodyReason$|^bodySleepReason$|^manifestVision$/.test(id || "")) {
-      if (/^thanksText$|^thanks\d+$|^(aware|exec)\d$|^execNext$|^eventText$|^bodyOtherNote$|^body(Mood|Body|Sleep)Reason$/.test(id || "")) persistJournalQuietly();
+      if (/^thanksText$|^thanks\d+$|^(aware|exec)\d$|^execNext$|^eventText$|^bodyOtherNote$|^body(Mood|Body|Sleep)Reason$|^manifestVision$/.test(id || "")) persistJournalQuietly();
       scheduleJournalChecklists();
     }
   });
@@ -7711,6 +7828,12 @@ function bindEvents() {
         const journal = collectJournal();
         renderExecChecklist(journal.executionCheckItems, journal.executionChecks);
         syncExecCheckToSidebar(execPayload);
+      }
+      if (event.target.matches("#manifestChecks input")) {
+        syncManifestCheckToSidebar({
+          checked: event.target.checked,
+          title: String(event.target.value || "").trim(),
+        });
       }
       if (event.target.matches("#awareChecks input") && event.target.checked) {
         const quote = String(event.target.value || "").trim();
@@ -7917,25 +8040,28 @@ function bindEvents() {
   document.getElementById("manifestFilters")?.addEventListener("click", (event) => {
     const chip = event.target.closest("[data-manifest-filter]");
     if (!chip) return;
-    state.manifestFilter = chip.dataset.manifestFilter;
-    document.querySelectorAll("#manifestFilters .chip").forEach((item) => item.classList.toggle("is-active", item === chip));
+    setManifestFilter(chip.dataset.manifestFilter);
     renderManifests();
   });
-  document.getElementById("manifestList")?.addEventListener("click", (event) => {
+  document.getElementById("page-manifest")?.addEventListener("change", (event) => {
+    const toggle = event.target.closest("[data-manifest-toggle]");
+    if (!toggle) return;
+    setManifestStatus(toggle.dataset.manifestToggle, toggle.checked ? "done" : "doing");
+  });
+  document.getElementById("page-manifest")?.addEventListener("click", (event) => {
     const statusBtn = event.target.closest("[data-manifest-status]");
     const deleteBtn = event.target.closest("[data-manifest-delete]");
-    let items = getManifests();
     if (statusBtn) {
-      items = items.map((item) =>
-        item.id === statusBtn.dataset.manifestStatus
-          ? { ...item, status: statusBtn.dataset.to, updatedAt: new Date().toISOString() }
-          : item
+      event.preventDefault();
+      const to = statusBtn.dataset.to;
+      setManifestStatus(statusBtn.dataset.manifestStatus, to);
+      showToast(
+        to === "later" ? "已移到「先放著（暫存）」。" : to === "doing" ? "已拿回進行中。" : to === "done" ? "已標記完成。" : "已更新這項顯化目標。"
       );
-      saveManifests(items);
-      renderManifests();
+      return;
     }
     if (deleteBtn) {
-      saveManifests(items.filter((item) => item.id !== deleteBtn.dataset.manifestDelete));
+      saveManifests(getManifests().filter((item) => item.id !== deleteBtn.dataset.manifestDelete));
       renderManifests();
       showToast("已刪除這項顯化目標。");
     }
