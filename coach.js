@@ -602,7 +602,7 @@ function renderAiStage() {
         <div class="check-list">${thinkActions}</div>
         <label class="field" style="margin-top:16px">
           <span class="field__label">你想接續回覆的（選填）</span>
-          <textarea class="textarea" id="thinkReply" rows="3"></textarea>
+          <textarea class="textarea" id="thinkReply" rows="3" placeholder="再寫一句當下想到的…"></textarea>
         </label>
         <div class="ai-actions">
           ${state.think.round < state.think.max ? `<button class="btn btn--ghost" id="btnThinkSubmit" type="button">送出，進入下一輪</button>` : ""}
@@ -655,7 +655,7 @@ function renderAiStage() {
     <article class="ai-block gratitude-box">
       <h3>今日沒提到了感恩</h3>
       <p>${escapeHtml(ai.gratitudeNote || "留一句感謝，今天才算被完整接住。")}</p>
-      <textarea class="textarea" id="gratitudeInput" rows="3">${escapeHtml(state.gratitude)}</textarea>
+      <textarea class="textarea" id="gratitudeInput" rows="3" placeholder="補一句感謝…">${escapeHtml(state.gratitude)}</textarea>
     </article>
     ${sfmChecks ? `
     <article class="ai-block">

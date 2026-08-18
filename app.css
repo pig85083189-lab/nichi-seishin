@@ -1335,6 +1335,18 @@ body.nav-closed .auth-pay {
   line-height: var(--lh-body);
 }
 
+.input::placeholder,
+.textarea::placeholder,
+.select::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.input::-webkit-input-placeholder,
+.textarea::-webkit-input-placeholder {
+  color: var(--muted);
+}
+
 .input:focus,
 .textarea:focus,
 .select:focus {
