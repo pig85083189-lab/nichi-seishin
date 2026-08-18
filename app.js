@@ -7118,22 +7118,20 @@ function renderInsights() {
     .sort((a, b) => String(b[0]).localeCompare(String(a[0])))
     .map(([iso, rows]) => {
       const cards = rows
-        .map(
-          (item) => `
-            <article class="task-card">
+        .map((item) => {
+          const dateLabel = iso ? formatDisplayDate(iso) : item.date ? formatDisplayDate(item.date) : "";
+          return `
+            <article class="task-card insight-saved">
               <div>
                 <p class="task-card__title insight-saved__quote">${escapeHtml(item.title)}</p>
-                <div class="task-card__meta">
-                  <span class="tag">核心覺察</span>
-                  <span class="tag">${escapeHtml(item.source || "今日復盤")}</span>
-                </div>
+                ${dateLabel ? `<div class="task-card__meta"><span class="tag tag--date">${escapeHtml(dateLabel)}</span></div>` : ""}
               </div>
               <div class="task-card__actions">
                 <button class="btn btn--ghost btn--tiny" data-insight-delete="${item.id}" type="button">刪除</button>
               </div>
             </article>
-          `
-        )
+          `;
+        })
         .join("");
       return `<section class="library-group"><h3 class="library-group__date">${escapeHtml(iso ? formatDisplayDate(iso) : "未標日期")}</h3>${cards}</section>`;
     })

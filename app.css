@@ -1988,11 +1988,25 @@ body.nav-closed .auth-pay {
 }
 
 .insight-saved__quote {
+  margin: 0 0 10px;
   font-family: var(--serif);
   font-size: 17px;
   font-weight: 700;
   line-height: 1.7;
   color: var(--text);
+}
+
+.insight-saved .task-card__meta {
+  gap: 0;
+}
+
+.tag--date {
+  height: 26px;
+  padding: 0 10px;
+  background: var(--accent-soft);
+  color: var(--heading);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
 }
 
 .task-card__meta,
