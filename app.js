@@ -4429,9 +4429,7 @@ function renderDynamicQuestions(rootId, emptyId, genBtnId, checkBtnId, prompts, 
       (item, index) => `
         <div class="aware-q">
           <p class="journal-core-q">${escapeHtml(item.question)}</p>
-          <textarea class="textarea" id="${prefix}${index + 1}" rows="${rows}" placeholder="${escapeHtml(
-            item.placeholder || "寫下你的回答…"
-          )}">${escapeHtml(saved[index] || "")}</textarea>
+          <textarea class="textarea" id="${prefix}${index + 1}" rows="${rows}">${escapeHtml(saved[index] || "")}</textarea>
         </div>
       `
     )
@@ -4470,11 +4468,11 @@ function renderDeepItemHtml(item, index, slot, openSet) {
           <summary>${escapeHtml(item.title)}</summary>
           <div class="deep-block">
             <p class="deep-guide"><strong>白話想一想</strong>${escapeHtml(String(item.plainGuide || "").replace(/^白話想一想[:：]?\s*/, ""))}</p>
-            <textarea class="textarea" id="deep${index}plain" rows="3" placeholder="${escapeHtml(item.placeholderPlain)}">${escapeHtml(slot.plain || "")}</textarea>
+            <textarea class="textarea" id="deep${index}plain" rows="3">${escapeHtml(slot.plain || "")}</textarea>
           </div>
           <div class="deep-block">
             <p class="deep-guide"><strong>深挖一點點</strong>${escapeHtml(String(item.deepGuide || "").replace(/^深挖一點點[:：]?\s*/, ""))}</p>
-            <textarea class="textarea" id="deep${index}deep" rows="3" placeholder="${escapeHtml(item.placeholderDeep)}">${escapeHtml(slot.deep || "")}</textarea>
+            <textarea class="textarea" id="deep${index}deep" rows="3">${escapeHtml(slot.deep || "")}</textarea>
           </div>
           <button class="ai-check-btn" data-deepen="${index}" type="button">帶我再深入思考</button>
           <div class="check-loading" id="deep${index}Loading" hidden>
@@ -4776,7 +4774,7 @@ function renderDeepFollow(index, questions, notes) {
         (question, i) => `
           <article class="deep-probe">
             <p class="deep-probe__q" data-followup="${escapeHtml(question)}">${i + 1}. ${escapeHtml(question)}</p>
-            <textarea class="textarea" id="deep${index}note${i + 1}" rows="3" placeholder="針對這一題，我還想寫下的是…">${escapeHtml(saved[i] || "")}</textarea>
+            <textarea class="textarea" id="deep${index}note${i + 1}" rows="3">${escapeHtml(saved[i] || "")}</textarea>
           </article>
         `
       )
@@ -5414,7 +5412,7 @@ function renderAiStage() {
         <div class="check-list">${thinkActions}</div>
         <label class="field" style="margin-top:24px">
           <span class="field__label">你想接續回覆的（選填）</span>
-          <textarea class="textarea" id="thinkReply" rows="3" placeholder="勾選行動後，也可以再寫一句你現在想到的…"></textarea>
+          <textarea class="textarea" id="thinkReply" rows="3"></textarea>
         </label>
         <div class="ai-actions">
           ${state.think.round < state.think.max ? `<button class="btn btn--think" id="btnThinkSubmit" type="button">接著回答</button>` : ""}
@@ -5464,7 +5462,7 @@ function renderAiStage() {
         body: `
           ${gratitudeList.length ? renderBulletList(gratitudeList) : `<p>${escapeHtml(ai.gratitudeNote || "從今天這件事裡，先留一句具體的感謝。")}</p>`}
           ${ai.gratitudeNote && gratitudeList.length ? `<p class="sfm-hint">${escapeHtml(ai.gratitudeNote)}</p>` : ""}
-          <textarea class="textarea" id="gratitudeInput" rows="3" placeholder="你還想補一句感謝的是…">${escapeHtml(state.gratitude)}</textarea>
+          <textarea class="textarea" id="gratitudeInput" rows="3">${escapeHtml(state.gratitude)}</textarea>
         `,
       })}
       ${

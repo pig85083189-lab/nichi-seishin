@@ -237,7 +237,7 @@
             <div class="journal-split">
               <label class="journal-col">
                 <span class="journal-label">寫下今天發生的事（開心、生氣、難過）</span>
-                <textarea class="textarea" id="eventText" rows="5" placeholder="今天真正卡住、或真正被碰到的那件事是…"></textarea>
+                <textarea class="textarea" id="eventText" rows="5"></textarea>
               </label>
               <div class="journal-col">
                 <p class="journal-label">今天的心情是...</p>
@@ -277,7 +277,7 @@
                   </div>
                   <label class="body-reason" data-body-reason="mood" hidden>
                     <span class="journal-label">原因是什麼？</span>
-                    <textarea class="textarea" id="bodyMoodReason" rows="3" placeholder="是什麼人、事、念頭把這份心情勾出來？"></textarea>
+                    <textarea class="textarea" id="bodyMoodReason" rows="3"></textarea>
                   </label>
                 </div>
                 <div class="body-check-group" data-body-group="body">
@@ -291,11 +291,11 @@
                   </div>
                   <label class="body-other" data-body-other="body" hidden>
                     <span class="journal-label">其他身體感受</span>
-                    <input class="input" id="bodyOtherNote" type="text" placeholder="例如：胸悶、肩頸緊、眼睛痠…" />
+                    <input class="input" id="bodyOtherNote" type="text" />
                   </label>
                   <label class="body-reason" data-body-reason="body" hidden>
                     <span class="journal-label">原因是什麼？</span>
-                    <textarea class="textarea" id="bodyBodyReason" rows="3" placeholder="從什麼時候開始、吃了什麼、還是緊了很久？"></textarea>
+                    <textarea class="textarea" id="bodyBodyReason" rows="3"></textarea>
                   </label>
                 </div>
                 <div class="body-check-group" data-body-group="sleep">
@@ -323,7 +323,7 @@
                   </div>
                   <label class="body-reason" data-body-reason="sleep" hidden>
                     <span class="journal-label">補充說明（選填）</span>
-                    <textarea class="textarea" id="bodySleepReason" rows="2" placeholder="幾點躺下、中間有沒有醒、腦子還在轉什麼？"></textarea>
+                    <textarea class="textarea" id="bodySleepReason" rows="2"></textarea>
                   </label>
                 </div>
               </div>
@@ -417,7 +417,7 @@
                 <div class="exec-next">
                   <p class="journal-label">明天最小的一步</p>
                   <p class="journal-core-q">一件微小、具體、5 分鐘內能做完的事。</p>
-                  <textarea class="textarea" id="execNext" rows="3" placeholder="例如：打開文件寫第一句、傳一句話給對方、把杯子洗掉…"></textarea>
+                  <textarea class="textarea" id="execNext" rows="3"></textarea>
                 </div>
               </div>
               <div class="journal-col js-deep-only">
@@ -449,7 +449,7 @@
             <div class="journal-split">
               <div class="journal-col">
                 <p class="journal-label">明天想顯化的事情</p>
-                <textarea class="textarea" id="manifestVision" rows="5" placeholder="我想顯化的是……例如：更穩定的收入、被好好對待的關係、睡得著的夜晚…"></textarea>
+                <textarea class="textarea" id="manifestVision" rows="5"></textarea>
                 <button class="ai-check-btn" id="btnManifestAi" type="button">生成執行目標</button>
               </div>
               <div class="journal-col">
@@ -537,7 +537,6 @@
               class="input"
               id="taskTitle"
               type="text"
-              placeholder="新增行動，例如：明天只做一件最小的事"
               required
             />
             <select class="input select" id="taskSource" aria-label="來源">
@@ -588,7 +587,7 @@
                 <circle cx="11" cy="11" r="6.5" />
                 <path d="M16 16l4.5 4.5" />
               </svg>
-              <input class="input" id="historySearch" type="search" placeholder="搜尋人物、事件、日期…" />
+              <input class="input" id="historySearch" type="search" />
             </label>
             <div class="chips" id="historyTags" aria-label="標籤篩選">
               <button class="chip is-active" data-tag="all" type="button">全部</button>
@@ -827,6 +826,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=113"></script>
+    <script src="app.js?v=114"></script>
   </body>
 </html>
