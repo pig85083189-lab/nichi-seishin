@@ -2809,10 +2809,6 @@ function collectThanksText() {
   return String(document.getElementById("thanksText")?.value || "");
 }
 
-function collectThanksValues() {
-  return thanksItemsFrom(collectThanksText());
-}
-
 function renderThanksFields(journalOrValues) {
   const field = document.getElementById("thanksText");
   if (!field) return;
@@ -2876,7 +2872,7 @@ function toggleQuickModule(key) {
 
 function emptyJournal() {
   return {
-    thanks: [],
+    thanks: "",
     thanksText: "",
     event: "",
     mood: "",
@@ -3207,8 +3203,7 @@ function deepHasContent(deep) {
 function journalHasContent(journal) {
   if (!journal || typeof journal !== "object") return false;
   const textBits = [
-    ...(journal.thanks || []),
-    journal.thanksText,
+    thanksTextFrom(journal),
     journal.event,
     journal.mood,
     journal.bodyNote,
@@ -3241,8 +3236,7 @@ function pushUnique(list, item, max) {
 
 function journalBlob(journal) {
   return [
-    ...(journal.thanks || []),
-    journal.thanksText,
+    thanksTextFrom(journal),
     journal.event,
     journal.mood,
     journal.bodyNote,
@@ -3891,8 +3885,8 @@ async function generateJournalInsight(options = {}) {
         modules: Object.keys(mods).filter((key) => mods[key]),
         event: journal.event,
         mood: journal.mood,
-        thanks: journal.thanks,
-        thanksText: journal.thanksText || thanksTextFrom(journal),
+        thanks: thanksTextFrom(journal),
+        thanksText: thanksTextFrom(journal),
         awareness: mods.aware ? journal.awareness : [],
         execution: mods.exec ? journal.execution : [],
         smallestStep: mods.exec ? journal.smallestStep : "",
@@ -4050,8 +4044,8 @@ async function generateBodyCoach(options = {}) {
         bodyCheck: journal.bodyCheck,
         bodyTags: journal.bodyTags,
         bodyNote: journal.bodyNote,
-        thanks: journal.thanks,
-        thanksText: journal.thanksText || thanksTextFrom(journal),
+        thanks: thanksTextFrom(journal),
+        thanksText: thanksTextFrom(journal),
       },
     });
     if (state.bodyCoachToken !== token) return;
@@ -4623,8 +4617,8 @@ async function generateCorePrompts(options = {}) {
       date: currentIso(),
       text: journal.event,
       context: {
-        thanks: journal.thanks,
-        thanksText: journal.thanksText || thanksTextFrom(journal),
+        thanks: thanksTextFrom(journal),
+        thanksText: thanksTextFrom(journal),
         event: journal.event,
         mood: journal.mood,
       },
@@ -4717,8 +4711,8 @@ async function generateJournalPrompts(options = {}) {
       date: currentIso(),
       text: journal.event,
       context: {
-        thanks: journal.thanks,
-        thanksText: journal.thanksText || thanksTextFrom(journal),
+        thanks: thanksTextFrom(journal),
+        thanksText: thanksTextFrom(journal),
         event: journal.event,
         mood: journal.mood,
         bodyTags: journal.bodyTags,
@@ -4896,7 +4890,7 @@ function applyJournalMode(mode, options = {}) {
 function collectJournal() {
   const bodyCheck = collectBodyCheck();
   const journal = {
-    thanks: collectThanksValues(),
+    thanks: collectThanksText(),
     thanksText: collectThanksText(),
     event: journalFieldValue("eventText"),
     mood: document.querySelector("#moodRow .mood-btn.is-on")?.dataset.mood || "",
