@@ -2580,7 +2580,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "復盤模式指南",
-        description: "時間不夠、想輕鬆留下感謝就選快速復盤；心力夠、或今天波動比較大，就走深度復盤。點卡片即可切換。",
+        description: "預設收合，保持畫面簡潔。點標題橫幅即可展開，比較快速與深度復盤，再點卡片切換。",
         side: "bottom",
       },
     },
@@ -5265,6 +5265,29 @@ function inferJournalMode(data) {
   return state.journalMode === "quick" ? "quick" : "deep";
 }
 
+function setModeGuideOpen(open) {
+  const root = document.querySelector(".mode-guide");
+  const toggle = document.getElementById("modeGuideToggle");
+  const panel = document.getElementById("modeGuidePanel");
+  if (!root) return;
+  const next = Boolean(open);
+  root.classList.toggle("is-open", next);
+  if (toggle) toggle.setAttribute("aria-expanded", next ? "true" : "false");
+  if (panel) {
+    panel.inert = !next;
+    panel.setAttribute("aria-hidden", next ? "false" : "true");
+  }
+  root.querySelectorAll(".mode-guide__card").forEach((btn) => {
+    btn.tabIndex = next ? 0 : -1;
+  });
+}
+
+function toggleModeGuide() {
+  const root = document.querySelector(".mode-guide");
+  if (!root) return;
+  setModeGuideOpen(!root.classList.contains("is-open"));
+}
+
 function applyJournalMode(mode, options = {}) {
   const next = mode === "quick" ? "quick" : "deep";
   state.journalMode = next;
@@ -7591,6 +7614,12 @@ function bindEvents() {
   document.getElementById("btnQuickInsight")?.addEventListener("click", () => generateJournalInsight());
   document.getElementById("btnBodyCoach")?.addEventListener("click", () => generateBodyCoach());
   document.querySelector(".journal-mode-block")?.addEventListener("click", (event) => {
+    const fold = event.target.closest("[data-mode-guide-toggle]");
+    if (fold) {
+      event.preventDefault();
+      toggleModeGuide();
+      return;
+    }
     const btn = event.target.closest("[data-journal-mode]");
     if (!btn) return;
     applyJournalMode(btn.dataset.journalMode);
@@ -8032,6 +8061,7 @@ function init() {
     } catch {
       applyJournalMode("deep", { silent: true });
     }
+    setModeGuideOpen(false);
     const closed =
       localStorage.getItem("rv_sidebar") === "closed" || localStorage.getItem(STORAGE_KEYS.sidebar) === "1";
     if (closed && !isMobile()) {

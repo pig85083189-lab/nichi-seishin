@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=109" />
+    <link rel="stylesheet" href="app.css?v=110" />
     <style>
       .splash {
         position: fixed;
@@ -208,36 +208,44 @@
 
           <div class="journal-mode-block">
             <section class="mode-guide" aria-labelledby="modeGuideTitle">
-              <header class="mode-guide__head">
-                <p class="mode-guide__kicker">怎麼選</p>
-                <h2 class="mode-guide__title" id="modeGuideTitle">💡 復盤模式指南：我該怎麼選？</h2>
-                <p class="mode-guide__lead">依今天的心力選一條路。點卡片就會切換，下方按鈕也會跟著亮起。</p>
-              </header>
-              <div class="mode-guide__grid">
-                <button class="mode-guide__card" data-journal-mode="quick" type="button" aria-pressed="false">
-                  <span class="mode-guide__icon" aria-hidden="true">⚡</span>
-                  <span class="mode-guide__tag">高效 · 無負擔 · 日常隨寫</span>
-                  <strong>快速復盤</strong>
-                  <span class="mode-guide__when">時間有限、疲憊時，或只想快速記下今日感謝與幾個關鍵行動。</span>
-                  <span class="mode-guide__points">
-                    <span>精簡題型，幾分鐘內完成</span>
-                    <span>保持習慣不斷鏈</span>
-                    <span>需要時再加選模組</span>
-                  </span>
-                  <span class="mode-guide__cta">點此開始快速復盤</span>
-                </button>
-                <button class="mode-guide__card is-on" data-journal-mode="deep" type="button" aria-pressed="true">
-                  <span class="mode-guide__icon" aria-hidden="true">🌙</span>
-                  <span class="mode-guide__tag">全面覺察 · 靈魂對話 · 突破盲點</span>
-                  <strong>深度復盤</strong>
-                  <span class="mode-guide__when">週末、心力充沛時，或今天情緒波動、卡點需要好好梳理。</span>
-                  <span class="mode-guide__points">
-                    <span>完整身心覺察題</span>
-                    <span>AI 犀利金句與深度覆盤</span>
-                    <span>客製化執行突破</span>
-                  </span>
-                  <span class="mode-guide__cta">點此開始深度復盤</span>
-                </button>
+              <button class="mode-guide__toggle" id="modeGuideToggle" type="button" aria-expanded="false" aria-controls="modeGuidePanel" data-mode-guide-toggle>
+                <span class="mode-guide__toggle-copy">
+                  <span class="mode-guide__kicker">怎麼選</span>
+                  <span class="mode-guide__title" id="modeGuideTitle">💡 點擊查看：快速復盤與深度復盤的差別與選擇指南</span>
+                </span>
+                <span class="mode-guide__chevron" aria-hidden="true"></span>
+              </button>
+              <div class="mode-guide__panel" id="modeGuidePanel" inert aria-hidden="true">
+                <div class="mode-guide__panel-inner">
+                  <p class="mode-guide__lead">依今天的心力選一條路。點卡片就會切換，下方按鈕也會跟著亮起。</p>
+                  <div class="mode-guide__grid">
+                    <button class="mode-guide__card" data-journal-mode="quick" type="button" aria-pressed="false" tabindex="-1">
+                      <span class="mode-guide__icon" aria-hidden="true">⚡</span>
+                      <span class="mode-guide__tag">高效 · 無負擔 · 日常隨寫</span>
+                      <strong>快速復盤</strong>
+                      <span class="mode-guide__when">時間有限、疲憊時，或只想快速記下今日感謝與幾個關鍵行動。</span>
+                      <span class="mode-guide__points">
+                        <span>精簡題型，幾分鐘內完成</span>
+                        <span>保持習慣不斷鏈</span>
+                        <span>需要時再加選模組</span>
+                      </span>
+                      <span class="mode-guide__cta">點此開始快速復盤</span>
+                    </button>
+                    <button class="mode-guide__card is-on" data-journal-mode="deep" type="button" aria-pressed="true" tabindex="-1">
+                      <span class="mode-guide__icon" aria-hidden="true">🌙</span>
+                      <span class="mode-guide__tag">全面覺察 · 靈魂對話 · 突破盲點</span>
+                      <strong>深度復盤</strong>
+                      <span class="mode-guide__when">週末、心力充沛時，或今天情緒波動、卡點需要好好梳理。</span>
+                      <span class="mode-guide__points">
+                        <span>完整身心覺察題</span>
+                        <span>AI 犀利金句與深度覆盤</span>
+                        <span>客製化執行突破</span>
+                      </span>
+                      <span class="mode-guide__cta">點此開始深度復盤</span>
+                    </button>
+                  </div>
+                  <button class="mode-guide__fold" type="button" data-mode-guide-toggle>收合指南</button>
+                </div>
               </div>
             </section>
 
@@ -879,6 +887,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=127"></script>
+    <script src="app.js?v=128"></script>
   </body>
 </html>
