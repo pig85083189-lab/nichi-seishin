@@ -6413,58 +6413,84 @@ function printArchivedReport() {
   window.setTimeout(() => document.body.classList.remove("printing-report"), 400);
 }
 
+function renderTaskItem(task) {
+  const done = task.status === "done";
+  const dateLabel = task.date ? formatDisplayDate(task.date) : "";
+  return `
+    <article class="task-card task-todo${done ? " is-done" : ""}">
+      <label class="task-todo__check">
+        <input type="checkbox" data-task-toggle="${escapeHtml(task.id)}" ${done ? "checked" : ""} />
+        <span class="task-todo__box" aria-hidden="true"></span>
+        <span class="task-todo__body">
+          <span class="task-card__title">${escapeHtml(task.title)}</span>
+          <span class="task-card__meta">
+            <span class="tag">${escapeHtml(task.source || "自行新增")}</span>
+            ${task.status === "later" ? `<span class="tag tag--later">先放著</span>` : ""}
+            ${dateLabel ? `<span class="tag">${escapeHtml(dateLabel)}</span>` : ""}
+          </span>
+        </span>
+      </label>
+      <button class="task-todo__delete" data-task-delete="${escapeHtml(task.id)}" type="button">刪除</button>
+    </article>
+  `;
+}
+
+function renderTaskSection(title, lead, items, emptyText) {
+  return `
+    <section class="todo-section">
+      <header class="todo-section__head">
+        <h3>${escapeHtml(title)}${items.length ? `（${items.length}）` : ""}</h3>
+        <p>${escapeHtml(lead)}</p>
+      </header>
+      ${items.length ? items.map(renderTaskItem).join("") : `<div class="empty">${escapeHtml(emptyText)}</div>`}
+    </section>
+  `;
+}
+
 function renderTasks() {
   const list = document.getElementById("taskList");
   if (!list) return;
-  const tasks = getTasks().filter((task) => state.taskFilter === "all" || task.status === state.taskFilter);
+  const all = getTasks();
+  const open = all
+    .filter((task) => task.status !== "done")
+    .sort((a, b) => String(b.createdAt || b.date || "").localeCompare(String(a.createdAt || a.date || "")));
+  const done = all
+    .filter((task) => task.status === "done")
+    .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
+  const filter = state.taskFilter;
 
-  if (!getTasks().length) {
+  if (!all.length) {
     list.innerHTML = `<div class="empty"><p class="empty__title">執行力還是空的</p>在今日復盤勾選行動卡點或解法，完成復盤後就會出現在這裡。</div>`;
     return;
   }
-  if (!tasks.length) {
+
+  const showOpen = filter === "all" || filter === "doing" || filter === "later";
+  const showDone = filter === "all" || filter === "done";
+  const openItems =
+    filter === "doing" ? open.filter((task) => task.status === "doing") : filter === "later" ? open.filter((task) => task.status === "later") : open;
+
+  if (filter !== "all" && ((showOpen && !openItems.length && !showDone) || (showDone && !done.length && !showOpen))) {
     list.innerHTML = `<div class="empty">這個分類目前是空的。</div>`;
     return;
   }
 
-  const grouped = new Map();
-  tasks.forEach((task) => {
-    const iso = task.date || String(task.createdAt || "").slice(0, 10) || "";
-    if (!grouped.has(iso)) grouped.set(iso, []);
-    grouped.get(iso).push(task);
-  });
-  const sections = [...grouped.entries()].sort((a, b) => String(b[0]).localeCompare(String(a[0])));
+  list.innerHTML = [
+    showOpen
+      ? renderTaskSection("待完成", "勾選後，這一步會走到下方的已完成。", openItems, "目前沒有待完成的行動。")
+      : "",
+    showDone ? renderTaskSection("已完成", "這些已經被你做完了。取消勾選就能再拿回來。", done, "還沒有完成的行動。") : "",
+  ].join("");
+}
 
-  list.innerHTML = sections
-    .map(([iso, items]) => {
-      const dateLabel = iso ? formatDisplayDate(iso) : "未標日期";
-      const cards = items
-        .map((task) => {
-          const created = task.createdAt ? formatDisplayDate(task.createdAt.slice(0, 10)) : "";
-          return `
-            <article class="task-card">
-              <div>
-                <p class="task-card__title">${escapeHtml(task.title)}</p>
-                <div class="task-card__meta">
-                  <span class="tag">行動清單</span>
-                  <span class="tag tag--${escapeHtml(task.status)}">${escapeHtml(STATUS_LABEL[task.status] || task.status)}</span>
-                  <span class="tag">${escapeHtml(task.source || "自行新增")}</span>
-                  ${created && created !== dateLabel ? `<span class="tag">${created}</span>` : ""}
-                </div>
-              </div>
-              <div class="task-card__actions">
-                <button class="btn btn--ghost btn--tiny" data-task-status="${task.id}" data-to="doing" type="button">進行中</button>
-                <button class="btn btn--ghost btn--tiny" data-task-status="${task.id}" data-to="later" type="button">先放著</button>
-                <button class="btn btn--ghost btn--tiny" data-task-status="${task.id}" data-to="done" type="button">已完成</button>
-                <button class="btn btn--ghost btn--tiny" data-task-delete="${task.id}" type="button">刪除</button>
-              </div>
-            </article>
-          `;
-        })
-        .join("");
-      return `<section class="library-group"><h3 class="library-group__date">${escapeHtml(dateLabel)}</h3>${cards}</section>`;
-    })
-    .join("");
+function setTaskDone(id, done) {
+  saveTasks(
+    getTasks().map((task) =>
+      task.id === id
+        ? { ...task, status: done ? "done" : "doing", updatedAt: new Date().toISOString() }
+        : task
+    )
+  );
+  renderTasks();
 }
 
 function addTask(event) {
@@ -7202,21 +7228,20 @@ function bindEvents() {
     document.querySelectorAll("#taskFilters .chip").forEach((item) => item.classList.toggle("is-active", item === chip));
     renderTasks();
   });
+  document.getElementById("taskList")?.addEventListener("change", (event) => {
+    const toggle = event.target.closest("[data-task-toggle]");
+    if (!toggle) return;
+    setTaskDone(toggle.dataset.taskToggle, toggle.checked);
+  });
   document.getElementById("taskList")?.addEventListener("click", (event) => {
     const statusBtn = event.target.closest("[data-task-status]");
     const deleteBtn = event.target.closest("[data-task-delete]");
-    let tasks = getTasks();
     if (statusBtn) {
-      tasks = tasks.map((task) =>
-        task.id === statusBtn.dataset.taskStatus
-          ? { ...task, status: statusBtn.dataset.to, updatedAt: new Date().toISOString() }
-          : task
-      );
-      saveTasks(tasks);
-      renderTasks();
+      setTaskDone(statusBtn.dataset.taskStatus, statusBtn.dataset.to === "done");
+      return;
     }
     if (deleteBtn) {
-      saveTasks(tasks.filter((task) => task.id !== deleteBtn.dataset.taskDelete));
+      saveTasks(getTasks().filter((task) => task.id !== deleteBtn.dataset.taskDelete));
       renderTasks();
       showToast("已刪除這項行動。");
     }
