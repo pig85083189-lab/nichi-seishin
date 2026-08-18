@@ -2544,7 +2544,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "01 今日感謝",
-        description: "從人、事、物各寫一件今天想感謝的。想再說，也可以再加一欄。",
+        description: "把今天想感謝的人、事、物寫在同一格。換行就能繼續下一件。",
         side: "bottom",
       },
     },
@@ -2788,63 +2788,39 @@ const CORE_EXECUTION_PROMPT = {
   placeholder: "寫下卡點、卡住的真正原因，以及你打算採取的突破策略…",
 };
 
-const THANKS_PRESETS = [
-  { mark: "人", placeholder: "今天想感謝的一個人…" },
-  { mark: "事", placeholder: "今天想感謝的一件事…" },
-  { mark: "物", placeholder: "今天想感謝的一個物、空間或片刻…" },
-];
-const MAX_THANKS = 12;
-
-function normalizeThanks(list) {
-  const values = (Array.isArray(list) ? list : []).map((item) => String(item || ""));
-  while (values.length < 3) values.push("");
-  while (values.length > 3 && !String(values[values.length - 1] || "").trim()) values.pop();
-  return values.slice(0, MAX_THANKS);
+function thanksItemsFrom(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || "").trim()).filter(Boolean);
+  }
+  return String(value || "")
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
-function thanksRowHtml(index, value = "") {
-  const preset = THANKS_PRESETS[index];
-  const mark = preset ? preset.mark : String(index + 1);
-  const placeholder = preset ? preset.placeholder : "還想感謝的人、事、物…";
-  return `<div class="thanks-row">
-    <span>${escapeHtml(mark)}</span>
-    <input class="input" id="thanks${index + 1}" type="text" placeholder="${escapeHtml(placeholder)}" data-journal="thanks" value="${escapeHtml(value)}" />
-  </div>`;
+function thanksTextFrom(journal) {
+  if (!journal || typeof journal !== "object") return "";
+  if (typeof journal.thanksText === "string" && journal.thanksText.trim()) return journal.thanksText;
+  if (typeof journal.thanks === "string") return journal.thanks;
+  return thanksItemsFrom(journal.thanks).join("\n");
 }
 
-function thanksFieldCount() {
-  return document.querySelectorAll("#thanksList input[data-journal='thanks']").length;
-}
-
-function syncThanksAddButton(count = thanksFieldCount()) {
-  const btn = document.getElementById("btnAddThanks");
-  if (!btn) return;
-  const atMax = count >= MAX_THANKS;
-  btn.disabled = atMax;
-  btn.textContent = atMax ? "已加到上限" : "＋ 再加一個";
+function collectThanksText() {
+  return String(document.getElementById("thanksText")?.value || "");
 }
 
 function collectThanksValues() {
-  return normalizeThanks(
-    [...document.querySelectorAll("#thanksList input[data-journal='thanks']")].map((el) => String(el.value || ""))
-  );
+  return thanksItemsFrom(collectThanksText());
 }
 
-function renderThanksFields(values) {
-  const list = document.getElementById("thanksList");
-  if (!list) return;
-  const items = normalizeThanks(values);
-  list.innerHTML = items.map((value, index) => thanksRowHtml(index, value)).join("");
-  syncThanksAddButton(items.length);
-}
-
-function addThanksField() {
-  const list = document.getElementById("thanksList");
-  if (!list || thanksFieldCount() >= MAX_THANKS) return;
-  list.insertAdjacentHTML("beforeend", thanksRowHtml(thanksFieldCount()));
-  syncThanksAddButton();
-  const input = list.querySelector(".thanks-row:last-child input");
-  input?.focus();
+function renderThanksFields(journalOrValues) {
+  const field = document.getElementById("thanksText");
+  if (!field) return;
+  if (journalOrValues && typeof journalOrValues === "object" && !Array.isArray(journalOrValues)) {
+    field.value = thanksTextFrom(journalOrValues);
+    return;
+  }
+  field.value = thanksItemsFrom(journalOrValues).join("\n");
 }
 
 function emptyQuickModules() {
@@ -2900,7 +2876,8 @@ function toggleQuickModule(key) {
 
 function emptyJournal() {
   return {
-    thanks: ["", "", ""],
+    thanks: [],
+    thanksText: "",
     event: "",
     mood: "",
     bodyTags: [],
@@ -3231,6 +3208,7 @@ function journalHasContent(journal) {
   if (!journal || typeof journal !== "object") return false;
   const textBits = [
     ...(journal.thanks || []),
+    journal.thanksText,
     journal.event,
     journal.mood,
     journal.bodyNote,
@@ -3264,6 +3242,7 @@ function pushUnique(list, item, max) {
 function journalBlob(journal) {
   return [
     ...(journal.thanks || []),
+    journal.thanksText,
     journal.event,
     journal.mood,
     journal.bodyNote,
@@ -3629,7 +3608,7 @@ function maybeAutoGenerateManifest(journal) {
 }
 
 function thanksFilled(journal) {
-  return (journal?.thanks || []).some((item) => String(item || "").trim());
+  return thanksItemsFrom(journal?.thanksText || journal?.thanks).length > 0;
 }
 
 function quickInsightReady(journal) {
@@ -3653,7 +3632,7 @@ function insightReady(journal) {
 
 function insightSignature(journal) {
   const data = journal || collectJournal();
-  const thanks = (data.thanks || []).map((item) => String(item || "").trim()).filter(Boolean).join("、");
+  const thanks = thanksItemsFrom(data.thanksText || data.thanks).join("\n");
   const check = normalizeBodyCheck(data.bodyCheck, data.bodyTags, data.bodyNote);
   const bodySig = [
     (check.mood.flags || []).join("、"),
@@ -3829,7 +3808,7 @@ function setInsightLoading(loading) {
 
 function localInsightFallback(journal) {
   const mood = journal.mood || "這份心情";
-  const thanks = (journal.thanks || []).map((item) => String(item || "").trim()).filter(Boolean);
+  const thanks = thanksItemsFrom(journal.thanksText || journal.thanks);
   const tags = (journal.bodyTags || []).join("、") || "身體的訊號";
   const eventBit = String(journal.event || "").trim().slice(0, 18);
   if (state.journalMode === "quick") {
@@ -3913,6 +3892,7 @@ async function generateJournalInsight(options = {}) {
         event: journal.event,
         mood: journal.mood,
         thanks: journal.thanks,
+        thanksText: journal.thanksText || thanksTextFrom(journal),
         awareness: mods.aware ? journal.awareness : [],
         execution: mods.exec ? journal.execution : [],
         smallestStep: mods.exec ? journal.smallestStep : "",
@@ -4070,6 +4050,8 @@ async function generateBodyCoach(options = {}) {
         bodyCheck: journal.bodyCheck,
         bodyTags: journal.bodyTags,
         bodyNote: journal.bodyNote,
+        thanks: journal.thanks,
+        thanksText: journal.thanksText || thanksTextFrom(journal),
       },
     });
     if (state.bodyCoachToken !== token) return;
@@ -4340,7 +4322,7 @@ function coreStoryReady(journal) {
 
 function corePromptsSignature(journal) {
   const data = journal || collectJournal();
-  const thanks = (data.thanks || []).map((item) => String(item || "").trim()).filter(Boolean).join("、");
+  const thanks = thanksItemsFrom(data.thanksText || data.thanks).join("\n");
   return ["core", thanks, String(data.event || "").trim(), data.mood || ""].join("\n");
 }
 
@@ -4642,6 +4624,7 @@ async function generateCorePrompts(options = {}) {
       text: journal.event,
       context: {
         thanks: journal.thanks,
+        thanksText: journal.thanksText || thanksTextFrom(journal),
         event: journal.event,
         mood: journal.mood,
       },
@@ -4735,6 +4718,7 @@ async function generateJournalPrompts(options = {}) {
       text: journal.event,
       context: {
         thanks: journal.thanks,
+        thanksText: journal.thanksText || thanksTextFrom(journal),
         event: journal.event,
         mood: journal.mood,
         bodyTags: journal.bodyTags,
@@ -4913,6 +4897,7 @@ function collectJournal() {
   const bodyCheck = collectBodyCheck();
   const journal = {
     thanks: collectThanksValues(),
+    thanksText: collectThanksText(),
     event: journalFieldValue("eventText"),
     mood: document.querySelector("#moodRow .mood-btn.is-on")?.dataset.mood || "",
     bodyCheck,
@@ -4953,10 +4938,10 @@ function collectJournal() {
 
 function composeJournalRawText(journal) {
   const lines = [];
-  const thanks = (journal.thanks || []).map((item) => String(item || "").trim()).filter(Boolean);
-  if (thanks.length) {
+  const thanksText = String(journal.thanksText || "").trim() || thanksItemsFrom(journal.thanks).join("\n");
+  if (thanksText) {
     lines.push("今日感謝");
-    thanks.forEach((item, index) => lines.push(`${index + 1}. ${item}`));
+    lines.push(thanksText);
   }
   if (String(journal.event || "").trim()) lines.push(`今日事件：${journal.event.trim()}`);
   if (journal.mood) lines.push(`心情：${journal.mood}`);
@@ -5106,7 +5091,7 @@ function fillJournal(journal) {
   const hasPromptAnswers =
     (data.awareness || []).some((item) => String(item || "").trim()) || deepHasContent(data.deep);
   if (!state.deepPrompts.length && hasPromptAnswers) state.deepPrompts = LEGACY_DEEP_PROMPTS;
-  renderThanksFields(data.thanks);
+  renderThanksFields(data);
   const eventText = document.getElementById("eventText");
   if (eventText) eventText.value = data.event || "";
   setActiveButtons("moodRow", ".mood-btn", data.mood ? [data.mood] : []);
@@ -6008,7 +5993,7 @@ function runOrganize(event) {
     purgeThinkingUi();
 
     const input = document.getElementById("reviewText");
-    if (document.getElementById("thanks1")) syncHiddenReviewText();
+    if (document.getElementById("thanksText")) syncHiddenReviewText();
     const rawText = String(input && input.value ? input.value : "").trim();
     if (!rawText) {
       showToast("先用講的或寫的，留一段今天的話。");
@@ -6205,7 +6190,7 @@ async function finishTodayReview() {
     }
   }
   const iso = currentIso();
-  const collected = document.getElementById("thanks1") ? syncHiddenReviewText() : { journal: null, rawText: "" };
+  const collected = document.getElementById("thanksText") ? syncHiddenReviewText() : { journal: null, rawText: "" };
   const rawText = collected.rawText || document.getElementById("reviewText")?.value.trim() || state.rawText;
   if (!rawText && !state.organize && !journalHasContent(collected.journal)) {
     showToast("還沒有內容可以完成。");
@@ -6732,7 +6717,7 @@ function renderHistoryJournal(review) {
   const journal = review?.journal && typeof review.journal === "object" ? review.journal : emptyJournal();
   const insight = normalizeInsight(journal.insight);
   const parts = [
-    historyListBlock("今日感謝", journal.thanks),
+    historyListBlock("今日感謝", thanksItemsFrom(journal.thanksText || journal.thanks)),
     historyTextBlock("今日事件", journal.event),
     journal.mood ? historyTextBlock("心情", journal.mood) : "",
     historyBodyCheckHtml(journal),
@@ -7044,7 +7029,6 @@ function bindEvents() {
   }
   document.getElementById("btnCompleteToday")?.addEventListener("click", completeToday);
   document.getElementById("btnSaveDraft")?.addEventListener("click", saveJournalDraft);
-  document.getElementById("btnAddThanks")?.addEventListener("click", addThanksField);
   document.getElementById("btnAwarePrompts")?.addEventListener("click", () => generateCorePrompts());
   document.getElementById("btnExecPrompts")?.addEventListener("click", () => generateCorePrompts());
   document.getElementById("btnAwareAi")?.addEventListener("click", () => generateJournalChecklist("awareness"));
@@ -7109,8 +7093,8 @@ function bindEvents() {
 
   document.getElementById("page-today")?.addEventListener("input", (event) => {
     const id = event.target && event.target.id;
-    if (/^thanks\d+$|^(aware|exec)\d$|^execNext$|^eventText$|^bodyNote$|^bodyOtherNote$|^bodyMoodReason$|^bodyBodyReason$|^bodySleepReason$|^manifestVision$/.test(id || "")) {
-      if (/^thanks\d+$|^(aware|exec)\d$|^execNext$|^eventText$|^bodyOtherNote$|^body(Mood|Body|Sleep)Reason$/.test(id || "")) persistJournalQuietly();
+    if (/^thanksText$|^thanks\d+$|^(aware|exec)\d$|^execNext$|^eventText$|^bodyNote$|^bodyOtherNote$|^bodyMoodReason$|^bodyBodyReason$|^bodySleepReason$|^manifestVision$/.test(id || "")) {
+      if (/^thanksText$|^thanks\d+$|^(aware|exec)\d$|^execNext$|^eventText$|^bodyOtherNote$|^body(Mood|Body|Sleep)Reason$/.test(id || "")) persistJournalQuietly();
       scheduleJournalChecklists();
     }
   });

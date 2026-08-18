@@ -271,9 +271,7 @@ function isQuickInsightRequest(body) {
 
 function insightUserPrompt(body) {
   const ctx = body.context && typeof body.context === "object" ? body.context : {};
-  const thanks = Array.isArray(ctx.thanks)
-    ? ctx.thanks.map((item) => String(item || "").trim()).filter(Boolean).join("、")
-    : String(ctx.thanks || "").trim();
+  const thanks = formatThanksForPrompt(ctx);
   const awareness = Array.isArray(ctx.awareness)
     ? ctx.awareness.map((item) => String(item || "").trim()).filter(Boolean).join("／")
     : "";
@@ -390,6 +388,7 @@ function bodyCoachUserPrompt(body) {
   const ctx = body.context && typeof body.context === "object" ? body.context : {};
   return `請針對這個人今天的身心狀態，寫出溫暖放鬆的「身心療癒建議」，並給 3 個今晚就能安放自己的動作。
 
+今日感謝：${formatThanksForPrompt(ctx) || "（未寫）"}
 今日事件：${ctx.event || body.text || "（未寫）"}
 心情標籤：${ctx.mood || "未選"}
 ${formatBodyCheckPrompt(ctx)}`;
@@ -545,11 +544,29 @@ function compactLine(value, max) {
   return String(value || "").replace(/\s+/g, " ").trim().slice(0, max || 160);
 }
 
+function thanksItems(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || "").trim()).filter(Boolean);
+  }
+  return String(value || "")
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function formatThanksForPrompt(ctx) {
+  const raw = String((ctx && ctx.thanksText) || "").trim();
+  if (raw) return raw;
+  const items = thanksItems(ctx && ctx.thanks);
+  if (!items.length) return "";
+  return items.length === 1 ? items[0] : items.map((item, index) => `${index + 1}. ${item}`).join("\n");
+}
+
 function promptsUserPrompt(body) {
   const ctx = body.context && typeof body.context === "object" ? body.context : {};
   const progress = body.progress && typeof body.progress === "object" ? body.progress : {};
   const bodyTags = Array.isArray(ctx.bodyTags) ? ctx.bodyTags.join("、") : "";
-  const thanks = Array.isArray(ctx.thanks) ? ctx.thanks.filter(Boolean).join("、") : "";
+  const thanks = formatThanksForPrompt(ctx);
   const recent = Array.isArray(progress.recentReviews) ? progress.recentReviews : [];
   const recentInsights = Array.isArray(progress.recentInsights) ? progress.recentInsights : [];
   const avoid = Array.isArray(progress.avoidQuestions) ? progress.avoidQuestions.filter(Boolean) : [];
@@ -623,10 +640,7 @@ function isCorePromptsRequest(body) {
 function corePromptsUserPrompt(body) {
   const ctx = body.context && typeof body.context === "object" ? body.context : {};
   const progress = body.progress && typeof body.progress === "object" ? body.progress : {};
-  const thanksList = Array.isArray(ctx.thanks)
-    ? ctx.thanks.map((item) => String(item || "").trim()).filter(Boolean)
-    : [];
-  const thanks = thanksList.map((item, index) => `${index + 1}. ${item}`).join("\n") || "未寫";
+  const thanks = formatThanksForPrompt(ctx) || "未寫";
   const avoid = Array.isArray(progress.avoidQuestions) ? progress.avoidQuestions.filter(Boolean) : [];
   const openActions = Array.isArray(progress.openActions) ? progress.openActions.filter(Boolean) : [];
   return `請精準讀取以下「今天的原文」，生成只屬於這一天的覺察力 3 題、執行力 3 題。題目必須能讓人認出今天的感謝、事件與情緒，不要出成萬用題。
@@ -815,9 +829,7 @@ module.exports = async function handler(req, res) {
       const event = String(ctx.event || text || "").trim();
       const mood = String(ctx.mood || "").trim();
       if (isQuickInsightRequest(body)) {
-        const thanks = Array.isArray(ctx.thanks)
-          ? ctx.thanks.map((item) => String(item || "").trim()).filter(Boolean)
-          : [];
+        const thanks = thanksItems(ctx.thanksText || ctx.thanks);
         if (!event || !mood || !thanks.length) {
           res.status(400).json({ ok: false, error: "請先寫下今日感謝、事件，並選擇心情" });
           return;
@@ -841,9 +853,7 @@ module.exports = async function handler(req, res) {
       const event = String(ctx.event || text || "").trim();
       const mood = String(ctx.mood || "").trim();
       if (isCorePromptsRequest(body)) {
-        const thanks = Array.isArray(ctx.thanks)
-          ? ctx.thanks.map((item) => String(item || "").trim()).filter(Boolean)
-          : [];
+        const thanks = thanksItems(ctx.thanksText || ctx.thanks);
         if (!event || !mood || !thanks.length) {
           res.status(400).json({ ok: false, error: "請先寫下今日感謝、事件，並選擇心情" });
           return;

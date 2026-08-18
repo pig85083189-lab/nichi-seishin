@@ -3409,59 +3409,19 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   min-width: 0;
 }
 
-.thanks-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.thanks-box {
+  display: block;
 }
 
-.thanks-row {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
-}
-
-.thanks-row > span {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--accent-soft);
-  color: var(--header);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.thanks-row .input {
-  width: 100%;
-}
-
-.thanks-add {
-  margin-top: 12px;
-  min-height: 42px;
-  padding: 8px 14px;
-  border: 1px dashed var(--cream-border);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--ink-soft);
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
-}
-
-.thanks-add:hover {
+.textarea--thanks {
+  min-height: 220px;
+  padding: 18px 18px 20px;
   background: var(--cream);
-  border-color: #d9cbb8;
+  border-color: var(--cream-border);
   color: var(--text);
-}
-
-.thanks-add:disabled {
-  opacity: 0.45;
-  cursor: default;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  letter-spacing: 0.01em;
 }
 
 .mood-row {

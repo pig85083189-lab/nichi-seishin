@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=94" />
+    <link rel="stylesheet" href="app.css?v=95" />
     <style>
       .splash {
         position: fixed;
@@ -222,22 +222,20 @@
 
           <section class="journal-card" id="section-thanks">
             <h2 class="journal-card__title"><span>01</span> 今日感謝</h2>
-            <p class="journal-guide">寫下今天想感謝的人、事、物。先寫三件就好，想再說也可以再加。</p>
-            <div class="thanks-list" id="thanksList">
-              <div class="thanks-row">
-                <span>人</span>
-                <input class="input" id="thanks1" type="text" placeholder="今天想感謝的一個人…" data-journal="thanks" />
-              </div>
-              <div class="thanks-row">
-                <span>事</span>
-                <input class="input" id="thanks2" type="text" placeholder="今天想感謝的一件事…" data-journal="thanks" />
-              </div>
-              <div class="thanks-row">
-                <span>物</span>
-                <input class="input" id="thanks3" type="text" placeholder="今天想感謝的一個物、空間或片刻…" data-journal="thanks" />
-              </div>
-            </div>
-            <button class="thanks-add" id="btnAddThanks" type="button">＋ 再加一個</button>
+            <p class="journal-guide">把今天想感謝的人、事、物寫在同一格就好。換行即可繼續下一件，想寫幾件都可以。</p>
+            <label class="thanks-box">
+              <span class="sr-only">今日感謝</span>
+              <textarea
+                class="textarea textarea--thanks"
+                id="thanksText"
+                rows="8"
+                placeholder="例如：
+謝謝媽媽今晚熱好的湯
+感謝自己有把那句話說出來
+那杯熱茶讓我慢慢回來"
+                data-journal="thanks"
+              ></textarea>
+            </label>
           </section>
 
           <section class="journal-card" id="section-event">
@@ -655,7 +653,7 @@
               <div class="guide-step__body">
                 <p class="guide-step__label">第二步</p>
                 <h3 class="guide-step__title">填寫今日感謝與事件</h3>
-                <p class="guide-step__text">記錄想感謝的人事物（可動態新增欄位），並寫下今日事件與心情。這是啟動所有 AI 動態教練的基石：後面的洞察、覺察題與執行突破題，都會讀你今天真正寫下的內容。</p>
+                <p class="guide-step__text">在同一格大型輸入框裡自由寫下今天想感謝的人事物（換行即可繼續下一件），並寫下今日事件與心情。這是啟動所有 AI 動態教練的基石：後面的洞察、覺察題與執行突破題，都會讀你今天真正寫下的內容。</p>
                 <div class="guide-pills">
                   <span class="guide-pill"><strong>01</strong> 今日感謝</span>
                   <span class="guide-pill"><strong>02</strong> 今日事件與心情</span>
@@ -838,6 +836,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=111"></script>
+    <script src="app.js?v=112"></script>
   </body>
 </html>
