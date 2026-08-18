@@ -4193,18 +4193,27 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
 }
 
 .aware-quote {
-  padding: 36px 32px 24px;
-  border: 1px solid var(--cream-border);
+  padding: 22px 20px 16px;
+  border: 1px solid rgba(228, 212, 200, 0.95);
   border-left: 4px solid var(--header);
-  border-radius: 18px;
-  background: linear-gradient(180deg, #fffdf8 0%, var(--cream) 100%);
-  box-shadow: 0 10px 28px rgba(122, 101, 86, 0.08);
+  border-radius: 16px;
+  background: rgba(247, 239, 230, 0.92);
+}
+
+.aware-quote-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+#awareChecks.check-list {
+  gap: 12px;
 }
 
 .aware-quote__kicker {
-  margin: 0 0 18px;
+  margin: 0 0 10px;
   color: var(--heading);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.16em;
 }
@@ -4212,20 +4221,10 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
 .aware-quote__text {
   margin: 0;
   font-family: var(--serif);
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 700;
-  line-height: 1.8;
+  line-height: 1.7;
   color: var(--text);
-}
-
-.aware-quote__text::before {
-  content: "「";
-  color: var(--header);
-}
-
-.aware-quote__text::after {
-  content: "」";
-  color: var(--header);
 }
 
 .aware-quote__actions {
@@ -4234,9 +4233,9 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-top: 28px;
-  padding-top: 18px;
-  border-top: 1px solid var(--cream-border);
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(228, 212, 200, 0.85);
 }
 
 .aware-quote__keep {
@@ -4296,11 +4295,11 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
 
 @media (max-width: 640px) {
   .aware-quote {
-    padding: 28px 20px 20px;
+    padding: 18px 16px 14px;
   }
 
   .aware-quote__text {
-    font-size: 20px;
+    font-size: 18px;
   }
 }
 
