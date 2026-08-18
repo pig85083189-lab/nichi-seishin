@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=101" />
+    <link rel="stylesheet" href="app.css?v=102" />
     <style>
       .splash {
         position: fixed;
@@ -373,7 +373,7 @@
             <h2 class="journal-card__title js-quick-only"><span>03</span> 今日覺察</h2>
             <h2 class="journal-card__title js-deep-only"><span>04</span> 覺察力</h2>
             <p class="journal-guide js-quick-only">用一句話看見今天真正被碰到的地方。寫完就可以走向明天最小的一步。</p>
-            <p class="journal-guide js-deep-only">完成上方「01 今日感謝」與「02 今日事件與心情」後，會依今天的經歷動態生成 3 道專屬覺察題。寫完再一鍵生成客製化覺察勾勾表；完成復盤會存進側邊欄「覺察力」。</p>
+            <p class="journal-guide js-deep-only">完成上方「01 今日感謝」與「02 今日事件與心情」後，會依今天的經歷動態生成 3 道專屬覺察題。寫完再一鍵煉結今日核心覺察金句；收藏後會存進側邊欄「覺察力」。</p>
             <div class="journal-split">
               <div class="journal-col">
                 <div class="check-loading" id="awarePromptLoading" hidden>
@@ -383,13 +383,13 @@
                 <p class="deep-empty" id="awareEmpty">請先完成上方今日感謝與事件，將為你生成今日專屬的覺察與執行反思題</p>
                 <button class="ai-check-btn" id="btnAwarePrompts" type="button">生成今日專屬反思題</button>
                 <div id="awareQuestions"></div>
-                <button class="ai-check-btn" id="btnAwareAi" type="button" hidden>生成客製化覺察勾勾表</button>
+                <button class="ai-check-btn" id="btnAwareAi" type="button" hidden>生成今日核心覺察</button>
               </div>
               <div class="journal-col js-deep-only">
-                <p class="journal-label">今天我覺察到</p>
-                <p class="journal-guide journal-guide--tight">寫完左側三題後，會生成 4 到 6 個專屬覺察面向，你再勾選今天有看見的。</p>
+                <p class="journal-label">今日核心覺察</p>
+                <p class="journal-guide journal-guide--tight">寫完左側三題後，會煉結成一句直擊核心的金句。可收藏進覺察力，或複製帶走。</p>
                 <div class="check-loading" id="awareLoading" hidden>
-                  <p class="check-loading__label">正在深層分析今天的覺察…</p>
+                  <p class="check-loading__label">正在為你煉結今日核心覺察…</p>
                   <div class="ai-thinking__bar"><i></i></div>
                 </div>
                 <div class="check-list" id="awareChecks"></div>
@@ -514,7 +514,7 @@
         <section class="page" id="page-next" data-page="next" hidden>
           <header class="page__header">
             <h2 class="page__title">覺察力</h2>
-            <p class="page__subtitle">個人歷史覺察總覽。復盤裡勾選的洞察，會自動收在這裡。</p>
+            <p class="page__subtitle">個人歷史覺察總覽。復盤裡收藏的核心金句，會自動收在這裡。</p>
           </header>
 
           <div class="chips" role="tablist" aria-label="覺察篩選" id="insightFilters">
@@ -676,10 +676,10 @@
               <span class="guide-step__num" aria-hidden="true">4</span>
               <div class="guide-step__body">
                 <p class="guide-step__label">第四步</p>
-                <h3 class="guide-step__title">動態出題與智慧勾勾表</h3>
-                <p class="guide-step__text">覺察力與執行力會完全依據你今天寫下的感謝與事件自動出題，回答後一鍵生成專屬的行動與覺察勾勾表。快速復盤只要勾選對應模組，就會走同一套今天專屬的出題。</p>
+                <h3 class="guide-step__title">動態出題與今日煉結</h3>
+                <p class="guide-step__text">覺察力與執行力會完全依據你今天寫下的感謝與事件自動出題。覺察會煉結成一句核心金句，執行力則生成專屬行動卡。快速復盤只要勾選對應模組，就會走同一套今天專屬的出題。</p>
                 <div class="guide-pills">
-                  <span class="guide-pill"><strong>覺察力</strong> 3 道今日反思題 → 勾勾表</span>
+                  <span class="guide-pill"><strong>覺察力</strong> 3 道今日反思題 → 核心金句</span>
                   <span class="guide-pill"><strong>執行力</strong> 3 道突破題 → 行動卡點</span>
                 </div>
               </div>
@@ -834,6 +834,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=119"></script>
+    <script src="app.js?v=120"></script>
   </body>
 </html>

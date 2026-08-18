@@ -154,14 +154,15 @@ points 給 1-3 個，每個 conclusion 只能一句。actions 給 3 個。若已
 
 const CHECKLIST_AWARENESS_SYSTEM = `你是「日精進」的高階心靈教練與諮詢師。使用者剛回答今天專屬的三道覺察反思題（題目會依他今日的感謝、事件與心情動態生成）。
 
-請依這三題的回答做拆解與分析，整理成「今天我覺察到」勾選清單。
+請把今天的狀態與回答精準煉結成一句「核心重點金句」：一段充滿深度、療癒、能引導覺察的深刻話語。讓他一看就能沈澱下來，看見真正被碰到的那一層。
 
 規則：
-- 只輸出 JSON：{"items":["..."]}
-- items 必須 4 到 6 條，不可少於 4、不可超過 6
-- 每一條 12-28 字，像一句可勾選的洞察，不要編號、不要句號堆疊
-- 必須貼近使用者原文與今天的題目，指出真正被碰到的層：生命力來源、防衛心在保護什麼、情緒真正在說什麼、還沒說出口的需求、身體訊號、盲點、核心信念、明天可改的小選擇
-- 禁止雞湯、禁止說教、禁止病例腔、禁止空泛「要愛自己」
+- 只輸出 JSON：{"quote":"..."}
+- quote 必須剛好 1 句，可含逗號或頓號，但不要拆成多段、不要條列、不要解釋
+- 28-52 字，直擊今天真正被碰到的核心
+- 口吻溫暖、有深度、能引導自我覺察，像一句可以放在心上的話
+- 必須貼近他剛寫的回答與今日事件，讓他認出「這是在說我今天」
+- 禁止長篇大論、禁止條列雜訊、禁止編號、禁止雞湯口號、禁止說教、禁止病例腔、禁止空泛「要愛自己」
 - 繁體中文`;
 
 const CHECKLIST_MANIFEST_SYSTEM = `你是「日精進」的高階心靈教練。使用者剛寫下明天想顯化的願景或目標。
@@ -467,6 +468,22 @@ function normalizeChecklistItems(raw, min, max) {
   return items.slice(0, max);
 }
 
+function normalizeAwarenessQuote(raw) {
+  let text = "";
+  if (typeof raw === "string") {
+    text = raw.trim();
+  } else if (raw && typeof raw === "object") {
+    text = String(raw.quote || raw.text || raw.title || "").trim();
+    if (!text && Array.isArray(raw.items) && raw.items.length) {
+      const first = raw.items[0];
+      text = String(first?.quote || first?.title || first?.text || first || "").trim();
+    }
+  }
+  text = text.replace(/^["「『]+|[」』"]+$/g, "").replace(/^[\d.、｜|\-\s]+/, "").trim();
+  if (text.length < 12) return "";
+  return text.slice(0, 80);
+}
+
 function splitChecklistTitle(text) {
   const raw = String(text || "").trim();
   const idx = raw.search(/[：:]/);
@@ -541,7 +558,7 @@ ${labeled}
         .map((question, index) => `${index + 1}. ${question}\n回答：${answers[index] || "（未填）"}`)
         .join("\n\n")
     : `深度回答：${answer || "（未填）"}`;
-  return `請分析這個人今天的三層覺察，產出 4 到 6 條「今天我覺察到」勾選項目。
+  return `請依這個人今天的覺察回答，煉結出一句直擊核心的「核心重點金句」。只要一句深刻、療癒、能引導覺察的話，不要條列、不要長篇解釋。
 
 ${labeled}
 
@@ -981,9 +998,18 @@ module.exports = async function handler(req, res) {
     const data = await callOpenAI(messages, { temperature: mode === "prompts" ? 0.95 : 0.75 });
     if (mode === "checklist") {
       const kind = body.kind === "execution" ? "execution" : "awareness";
-      const min = kind === "execution" ? 3 : 4;
-      const max = kind === "execution" ? 4 : 6;
-      const items = kind === "execution" ? normalizeExecutionChecklistItems(data, min, max) : normalizeChecklistItems(data, min, max);
+      if (kind === "awareness") {
+        const quote = normalizeAwarenessQuote(data);
+        if (!quote) {
+          res.status(502).json({ ok: false, error: "AI 覺察金句格式不完整，請再試一次" });
+          return;
+        }
+        res.status(200).json({ ok: true, source: "openai", data: { quote, items: [quote], kind } });
+        return;
+      }
+      const min = 3;
+      const max = 4;
+      const items = normalizeExecutionChecklistItems(data, min, max);
       if (items.length < min) {
         res.status(502).json({ ok: false, error: "AI 勾勾表格式不完整，請再試一次" });
         return;
