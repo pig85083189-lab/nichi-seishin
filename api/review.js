@@ -221,7 +221,7 @@ const INSIGHT_JSON_SHAPE = `{
 }`;
 
 const INSIGHT_SYSTEM = `你是「日精進」溫暖且具建設性的成長教練：先接住，再點破；陪伴，但不討好。使用者剛寫下今天的事件、心情，以及身體狀況。
-請根據事件、情緒與身體反應，生成一份結構完整、有深度的「深度洞察」。禁止只給一句空泛金句。
+請根據事件、情緒與身體反應，生成一份結構完整、有深度的「深度思考」。禁止只給一句空泛金句。
 
 【必須寫滿四個維度】
 ① 今天的身心訊號（psychology）：
@@ -249,7 +249,7 @@ ${INSIGHT_JSON_SHAPE}`;
 
 const QUICK_INSIGHT_SYSTEM = `你是「日精進」溫暖且具建設性的成長教練：溫柔、精準、不責備。使用者剛用「快速復盤」寫下今日感謝、今天發生的事，以及心情。
 他可能另外加選了身體覺察、覺察力、執行力或顯化力。若有這些模組的內容，必須一併納入綜合評估；沒有的模組不要硬編。
-請生成一份結構完整、有深度的「深度洞察」。即使是快速復盤，也禁止只給一句話。
+請生成一份結構完整、有深度的「深度思考」。即使是快速復盤，也禁止只給一句話。
 
 【必須寫滿四個維度】
 ① 今天的身心訊號（psychology）：
@@ -271,6 +271,108 @@ const QUICK_INSIGHT_SYSTEM = `你是「日精進」溫暖且具建設性的成�
 - 若有身體訊號，bodyLink 寫 1 到 2 句關聯；若沒有可給空字串
 - 繁體中文
 ${INSIGHT_JSON_SHAPE}`;
+
+function isThinkGuideRequest(body) {
+  return body?.variant === "think-guide" || body?.context?.variant === "think-guide";
+}
+
+function thinkGuideStep(body) {
+  const ctx = body && body.context && typeof body.context === "object" ? body.context : {};
+  return String(body?.step || ctx.step || "ask") === "close" ? "close" : "ask";
+}
+
+function formatThinkGuideRounds(rounds) {
+  const list = Array.isArray(rounds) ? rounds : [];
+  if (!list.length) return "（尚未開始）";
+  return list
+    .map((item, index) => {
+      const question = String(item?.question || "").trim() || "（尚未提問）";
+      const answer = String(item?.answer || "").trim() || "（尚未回答）";
+      return `第 ${index + 1} 輪\n問：${question}\n答：${answer}`;
+    })
+    .join("\n\n");
+}
+
+const THINK_GUIDE_ASK_SYSTEM = `你是「日精進」的深度思考引導者：溫柔，但不討好；一針見血，但不審判。
+使用者剛寫下今日感謝、事件、心情與身體覺察。請只提出「下一輪」的引導式疑問句，讓他親自往下想，不要替他下結論。
+
+三輪各自的任務：
+- 第 1 輪：點出今天真正被碰到的那一點。問他看見了什麼、哪裡卡住。
+- 第 2 輪：往內一層。問還沒說出口的期待、害怕或自我保護。
+- 第 3 輪：把看見收成選擇。問明天最小、做得到的那一步會先碰哪裡。
+
+規則：
+- 只輸出 JSON：{"question":"...","hint":"..."}
+- question 必須是疑問句，18-42 字，溫柔且精準，貼近他今天的原文用詞
+- hint 12-28 字，一句陪伴，不給答案
+- 禁止雞湯、禁止說教、禁止一次問兩件事、禁止複述整段日記
+- 繁體中文`;
+
+const THINK_GUIDE_CLOSE_SYSTEM = `你是「日精進」的深度思考引導者：先接住三輪回答，再點破核心。
+使用者已完成 3 輪引導式問答。請給出最終總結，並精準列出 2 件具體下一步。
+
+規則：
+- 只輸出 JSON：{"title":"...","summary":"...","actions":["...","..."]}
+- title：12-22 字，有質感的深度思考標題
+- summary：4 到 7 句。溫暖、直擊核心，點出他真正卡住與真正被保護的地方。不要條列、不要標題
+- actions 必須剛好 2 條。每條 18-36 字，是今天或明天做得到的具體事情，不要口號
+- 必須承接三輪原文，不要空泛激勵
+- 繁體中文`;
+
+function thinkGuideUserPrompt(body) {
+  const ctx = body.context && typeof body.context === "object" ? body.context : {};
+  const thanks = formatThanksForPrompt(ctx);
+  const round = Math.max(1, Math.min(3, Number(body.round || ctx.round) || 1));
+  const rounds = Array.isArray(ctx.rounds) ? ctx.rounds : [];
+  const base = `今日感謝：${thanks || "未寫"}
+今日事件：${ctx.event || body.text || "（未寫）"}
+心情：${ctx.mood || "未選"}
+${formatBodyCheckPrompt(ctx)}
+
+三輪對話至今：
+${formatThinkGuideRounds(rounds)}`;
+  if (thinkGuideStep(body) === "close") {
+    return `請根據這 3 輪深度思考，寫出溫暖且直擊核心的總結，並給出 2 件具體下一步。\n\n${base}`;
+  }
+  return `這是第 ${round}/3 輪。請只出這一輪的引導式疑問句，不要總結、不要給行動清單。\n\n${base}`;
+}
+
+function normalizeThinkGuideAsk(raw) {
+  const data = raw && typeof raw === "object" ? raw : {};
+  return {
+    step: "ask",
+    question: String(data.question || data.prompt || "").trim().slice(0, 80),
+    hint: String(data.hint || data.guide || "").trim().slice(0, 60),
+  };
+}
+
+function normalizeThinkGuideClose(raw) {
+  const data = raw && typeof raw === "object" ? raw : {};
+  const actions = normalizeStringList(data.actions || data.suggestions || data.steps, 2);
+  return {
+    step: "close",
+    title: String(data.title || data.headline || "").trim().slice(0, 48),
+    summary: String(data.summary || data.conclusion || data.psychology || "").trim(),
+    actions,
+  };
+}
+
+function contextHasBodySignal(ctx) {
+  if ((Array.isArray(ctx.bodyTags) && ctx.bodyTags.length) || String(ctx.bodyNote || "").trim()) return true;
+  const check = ctx.bodyCheck && typeof ctx.bodyCheck === "object" ? ctx.bodyCheck : null;
+  if (!check) return false;
+  const groups = [check.mood, check.body, check.sleep];
+  return groups.some((group) => {
+    const data = group && typeof group === "object" ? group : {};
+    return (
+      (Array.isArray(data.flags) && data.flags.some((item) => String(item || "").trim())) ||
+      String(data.other || "").trim() ||
+      String(data.duration || "").trim() ||
+      String(data.quality || "").trim() ||
+      String(data.energy || "").trim()
+    );
+  });
+}
 
 function isQuickInsightRequest(body) {
   const ctx = body && body.context && typeof body.context === "object" ? body.context : {};
@@ -298,7 +400,7 @@ function insightUserPrompt(body) {
       extras.push(`明天最小的一步：${ctx.smallestStep || "未寫"}`);
     }
     if (modules.includes("manifest") || ctx.manifest) extras.push(`明天想顯化：${ctx.manifest || "未寫"}`);
-    return `這是快速復盤。請生成包含四個完整維度的深度洞察：① 今天的身心訊號 ② 客觀檢討與反思 ③ 具體突破建議（怎麼做會更好） ④ 今日核心重點整理。
+    return `這是快速復盤。請生成包含四個完整維度的深度思考：① 今天的身心訊號 ② 客觀檢討與反思 ③ 具體突破建議（怎麼做會更好） ④ 今日核心重點整理。
 今天加選的模組：${modules.length ? modules.join("、") : "無（只寫感謝、事件與心情）"}
 
 今日感謝：${thanks || "（未寫）"}
@@ -306,7 +408,7 @@ function insightUserPrompt(body) {
 心情：${ctx.mood || "未選"}
 ${extras.join("\n")}`.trim();
   }
-  return `請為這個人生成包含四個完整維度的深度洞察：① 今天的身心訊號 ② 客觀檢討與反思 ③ 具體突破建議（怎麼做會更好） ④ 今日核心重點整理。
+  return `請為這個人生成包含四個完整維度的深度思考：① 今天的身心訊號 ② 客觀檢討與反思 ③ 具體突破建議（怎麼做會更好） ④ 今日核心重點整理。
 
 今日感謝：${thanks || "未寫"}
 今日事件：${ctx.event || body.text || "（未寫）"}
@@ -927,15 +1029,21 @@ module.exports = async function handler(req, res) {
       const ctx = body.context && typeof body.context === "object" ? body.context : {};
       const event = String(ctx.event || text || "").trim();
       const mood = String(ctx.mood || "").trim();
-      if (isQuickInsightRequest(body)) {
+      if (isThinkGuideRequest(body) && thinkGuideStep(body) === "close") {
+        const rounds = Array.isArray(ctx.rounds) ? ctx.rounds : [];
+        const answered = rounds.filter((item) => String(item?.question || "").trim() && String(item?.answer || "").trim());
+        if (answered.length < 3) {
+          res.status(400).json({ ok: false, error: "請先完成三輪深度思考" });
+          return;
+        }
+      } else if (isQuickInsightRequest(body)) {
         const thanks = thanksItems(ctx.thanksText || ctx.thanks);
         if (!event || !mood || !thanks.length) {
           res.status(400).json({ ok: false, error: "請先寫下今日感謝、事件，並選擇心情" });
           return;
         }
       } else {
-        const hasBody = (Array.isArray(ctx.bodyTags) && ctx.bodyTags.length) || String(ctx.bodyNote || "").trim();
-        if (!event || !mood || !hasBody) {
+        if (!event || !mood || !contextHasBodySignal(ctx)) {
           res.status(400).json({ ok: false, error: "請先寫下今日事件、選擇心情，並標出身體狀況" });
           return;
         }
@@ -989,10 +1097,18 @@ module.exports = async function handler(req, res) {
         { role: "user", content: checklistUserPrompt(kind, body) },
       ];
     } else if (mode === "insight") {
-      messages = [
-        { role: "system", content: isQuickInsightRequest(body) ? QUICK_INSIGHT_SYSTEM : INSIGHT_SYSTEM },
-        { role: "user", content: insightUserPrompt(body) },
-      ];
+      if (isThinkGuideRequest(body)) {
+        const close = thinkGuideStep(body) === "close";
+        messages = [
+          { role: "system", content: close ? THINK_GUIDE_CLOSE_SYSTEM : THINK_GUIDE_ASK_SYSTEM },
+          { role: "user", content: thinkGuideUserPrompt(body) },
+        ];
+      } else {
+        messages = [
+          { role: "system", content: isQuickInsightRequest(body) ? QUICK_INSIGHT_SYSTEM : INSIGHT_SYSTEM },
+          { role: "user", content: insightUserPrompt(body) },
+        ];
+      }
     } else if (mode === "deepen") {
       messages = [
         { role: "system", content: DEEPEN_SYSTEM },
@@ -1056,9 +1172,27 @@ module.exports = async function handler(req, res) {
       return;
     }
     if (mode === "insight") {
+      if (isThinkGuideRequest(body)) {
+        if (thinkGuideStep(body) === "close") {
+          const closed = normalizeThinkGuideClose(data);
+          if (!closed.summary || closed.actions.length < 2) {
+            res.status(502).json({ ok: false, error: "深度思考總結格式不完整，請再試一次" });
+            return;
+          }
+          res.status(200).json({ ok: true, source: "openai", data: closed });
+          return;
+        }
+        const asked = normalizeThinkGuideAsk(data);
+        if (!asked.question) {
+          res.status(502).json({ ok: false, error: "深度思考提問格式不完整，請再試一次" });
+          return;
+        }
+        res.status(200).json({ ok: true, source: "openai", data: asked });
+        return;
+      }
       const insight = normalizeInsightResult(data);
       if (!insight.conclusion && !insight.psychology) {
-        res.status(502).json({ ok: false, error: "洞察格式不完整，請再試一次" });
+        res.status(502).json({ ok: false, error: "深度思考格式不完整，請再試一次" });
         return;
       }
       res.status(200).json({ ok: true, source: "openai", data: insight });

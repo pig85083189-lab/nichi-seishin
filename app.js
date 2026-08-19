@@ -2275,7 +2275,7 @@ function renderAiReportBlock(ai, status) {
   if (status === "loading") {
     return `
       <article class="report-card report-card--ai report-card--coach">
-        <h3>💡 深度洞察</h3>
+        <h3>💡 深度思考</h3>
         <p class="report-empty">正在把這個區間的勾選量、趨勢與復盤摘要，整理成閃光點與突破口…</p>
       </article>
     `;
@@ -2283,7 +2283,7 @@ function renderAiReportBlock(ai, status) {
   if (status === "error") {
     return `
       <article class="report-card report-card--ai report-card--coach">
-        <h3>💡 深度洞察</h3>
+        <h3>💡 深度思考</h3>
         <p class="report-empty">${escapeHtml(ai || "雲端洞察暫時不可用。圖表與本地摘要仍在上面。")}</p>
       </article>
     `;
@@ -2305,7 +2305,7 @@ function renderAiReportBlock(ai, status) {
   const psychology = analysis || summary;
   return `
     <article class="report-card report-card--ai report-card--coach">
-      <h3>💡 深度洞察</h3>
+      <h3>💡 深度思考</h3>
       ${rangeNote ? `<p class="report-range">${escapeHtml(rangeNote)}</p>` : ""}
       ${ai.title ? `<p class="insight-card__headline">${escapeHtml(ai.title)}</p>` : ""}
       ${summary && summary !== psychology ? `<p class="rv-card__conclusion">${escapeHtml(summary)}</p>` : ""}
@@ -2616,7 +2616,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "02 今日事件",
-        description: "寫下今天真正被碰到的事，再點選心情。快速復盤寫完這兩項就可以生成洞察；深度復盤則會成為後面出題與洞察的原料。",
+        description: "寫下今天真正被碰到的事，再點選心情。快速復盤寫完這兩項就可以生成深度思考；深度復盤則會成為後面出題與思考的原料。",
         side: "bottom",
       },
     },
@@ -2633,8 +2633,8 @@ function tourSteps() {
       element: "#section-insight",
       tourPage: "today",
       popover: {
-        title: "深度洞察",
-        description: "寫完事件、心情與身體後，會生成四層洞察：今天的身心訊號、客觀檢討、具體突破建議，以及今日核心重點。",
+        title: "深度思考",
+        description: "寫完事件、心情與身體後，會連續問你 3 輪。答完後給你 2 件具體下一步，以及一段直擊核心的總結。",
         side: "bottom",
       },
     },
@@ -2708,7 +2708,7 @@ function tourSteps() {
       tourSidebar: true,
       popover: {
         title: "週月報",
-        description: "把一週或一個月的勾選量、完成率收成圖表，並用深度洞察寫出閃光點與突破口。底部可回看封存的月報。",
+        description: "把一週或一個月的勾選量、完成率收成圖表，並用深度思考寫出閃光點與突破口。底部可回看封存的月報。",
         side: "right",
       },
     },
@@ -2991,8 +2991,23 @@ function emptyDeep() {
   ];
 }
 
+function emptyThinkGuide() {
+  return { round: 0, rounds: [], summary: "", actions: [], title: "" };
+}
+
 function emptyInsight() {
-  return { title: "", conclusion: "", psychology: "", reflection: "", logic: "", bodyLink: "", suggestions: [], takeaways: [], sig: "" };
+  return {
+    title: "",
+    conclusion: "",
+    psychology: "",
+    reflection: "",
+    logic: "",
+    bodyLink: "",
+    suggestions: [],
+    takeaways: [],
+    guide: emptyThinkGuide(),
+    sig: "",
+  };
 }
 
 function emptyBodyCheck() {
@@ -3225,19 +3240,47 @@ function normalizeInsightList(raw, max = 4) {
     .slice(0, max);
 }
 
+function normalizeThinkGuide(raw) {
+  const data = raw && typeof raw === "object" ? raw : {};
+  const rounds = (Array.isArray(data.rounds) ? data.rounds : [])
+    .map((item) => ({
+      question: String(item?.question || "").trim(),
+      hint: String(item?.hint || "").trim(),
+      answer: String(item?.answer || "").trim(),
+    }))
+    .filter((item) => item.question)
+    .slice(0, 3);
+  const roundNum = Number(data.round);
+  const round = Number.isFinite(roundNum) ? Math.max(0, Math.min(4, Math.floor(roundNum))) : 0;
+  return {
+    round: round || (data.summary ? 4 : rounds.length),
+    rounds,
+    summary: String(data.summary || "").trim(),
+    actions: normalizeInsightList(data.actions, 2),
+    title: String(data.title || "").trim(),
+  };
+}
+
+function thinkGuideDone(guide) {
+  const data = normalizeThinkGuide(guide);
+  return Boolean(data.summary && data.actions.length >= 2 && data.rounds.filter((item) => item.answer).length >= 3);
+}
+
 function normalizeInsight(insight) {
   const data = insight && typeof insight === "object" ? insight : {};
   const psychology = String(data.psychology || data.analysis || data.logic || "").trim();
   const conclusion = String(data.conclusion || data.summary || "").trim();
+  const guide = normalizeThinkGuide(data.guide);
   return {
-    title: String(data.title || "").trim(),
-    conclusion: conclusion || psychology,
-    psychology: psychology || conclusion,
+    title: String(data.title || guide.title || "").trim(),
+    conclusion: conclusion || psychology || guide.summary,
+    psychology: psychology || conclusion || guide.summary,
     reflection: String(data.reflection || data.review || data.critique || "").trim(),
     logic: String(data.logic || "").trim(),
     bodyLink: String(data.bodyLink || "").trim(),
-    suggestions: normalizeInsightList(data.suggestions || data.actions, 3),
+    suggestions: normalizeInsightList(data.suggestions || data.actions || guide.actions, 3),
     takeaways: normalizeInsightList(data.takeaways || data.keyPoints, 4),
+    guide,
     sig: String(data.sig || "").trim(),
   };
 }
@@ -3285,8 +3328,8 @@ function journalHasContent(journal) {
   ];
   if (textBits.some((item) => String(item || "").trim())) return true;
   if (deepHasContent(journal.deep)) return true;
-  if (String(journal.insight?.conclusion || journal.insight?.psychology || journal.insight?.reflection || "").trim()) return true;
-  if ((journal.insight?.suggestions || []).length || (journal.insight?.takeaways || []).length) return true;
+  if (String(journal.insight?.conclusion || journal.insight?.psychology || journal.insight?.reflection || journal.insight?.guide?.summary || "").trim()) return true;
+  if ((journal.insight?.suggestions || []).length || (journal.insight?.takeaways || []).length || (journal.insight?.guide?.rounds || []).length) return true;
   return Boolean((journal.bodyTags || []).length || (journal.awarenessChecks || []).length || (journal.executionChecks || []).length || (journal.manifestChecks || []).length);
 }
 
@@ -3992,8 +4035,8 @@ function insightSignature(journal) {
 
 function insightEmptyCopy(quick) {
   return quick
-    ? "先寫下感謝、事件與心情，再點按鈕或完成快速復盤，就會生成四層洞察。"
-    : "先把事件、心情與身體反應寫下來，再點按鈕或等它自動生成四層洞察。";
+    ? "先寫下感謝、事件與心情，再點按鈕或完成快速復盤，就會生成今日深度思考。"
+    : "先把感謝、事件、心情與身體覺察寫下來，再開始 3 輪引導式深度思考。";
 }
 
 function emphasizeLeadHtml(text, className = "insight-block__text") {
@@ -4041,6 +4084,50 @@ function insightListHtml(items, className) {
   return `<${className.includes("takeaways") ? "ul" : "ol"} class="${className}">${list
     .map((item) => `<li><strong class="insight-emph">${escapeHtml(item)}</strong></li>`)
     .join("")}</${className.includes("takeaways") ? "ul" : "ol"}>`;
+}
+
+function renderThinkGuideHtml(insight) {
+  const data = normalizeInsight(insight);
+  const guide = data.guide || emptyThinkGuide();
+  const rounds = guide.rounds || [];
+  if (!rounds.length && !guide.summary) {
+    return `<p class="insight-card__empty">${insightEmptyCopy(false)}</p>`;
+  }
+  const current = Math.min(3, Math.max(1, guide.round || rounds.length || 1));
+  const done = thinkGuideDone(guide);
+  const roundCards = rounds
+    .map((item, index) => {
+      const num = String(index + 1).padStart(2, "0");
+      const active = !done && index + 1 === current && !item.answer;
+      const answered = Boolean(item.answer);
+      return `<article class="think-guide__round${active ? " is-on" : answered ? " is-done" : ""}">
+        <p class="think-guide__kicker">第 ${num} 輪</p>
+        <p class="think-guide__q">${escapeHtml(item.question)}</p>
+        ${item.hint && (active || !answered) ? `<p class="think-guide__hint">${escapeHtml(item.hint)}</p>` : ""}
+        ${
+          answered
+            ? `<p class="think-guide__answer">${escapeHtml(item.answer)}</p>`
+            : active
+              ? `<label class="think-guide__field">
+                  <span class="sr-only">這一輪的回答</span>
+                  <textarea class="textarea" id="thinkGuideAnswer" rows="4" placeholder="用一句話，把此刻真正想到的寫下來…"></textarea>
+                  <button class="ai-check-btn" data-think-guide-next type="button">${index === 2 ? "完成三輪，生成總結" : "送出，進入下一輪"}</button>
+                </label>`
+              : ""
+        }
+      </article>`;
+    })
+    .join("");
+  const closeHtml =
+    done || guide.summary
+      ? `<article class="think-guide__close">
+        <p class="think-guide__kicker">深度思考總結</p>
+        ${guide.title || data.title ? `<p class="think-guide__close-title">${escapeHtml(guide.title || data.title)}</p>` : ""}
+        <p class="think-guide__close-text">${escapeHtml(guide.summary || data.conclusion || "")}</p>
+        ${actionStepsHtml(guide.actions.length ? guide.actions : data.suggestions)}
+      </article>`
+      : "";
+  return `<div class="think-guide">${roundCards}${closeHtml}</div>`;
 }
 
 function renderInsightResultHtml(data) {
@@ -4095,11 +4182,18 @@ function renderInsightResultHtml(data) {
 
 function renderInsightCard(insight) {
   const data = normalizeInsight(insight);
-  const html = renderInsightResultHtml(data);
   const deepRoot = document.getElementById("insightBody");
   const quickRoot = document.getElementById("quickInsightBody");
-  if (deepRoot) deepRoot.innerHTML = html;
-  if (quickRoot) quickRoot.innerHTML = html;
+  const startBtn = document.getElementById("btnInsightAi");
+  if (deepRoot) {
+    const guide = data.guide || emptyThinkGuide();
+    const started = Boolean(guide.rounds.length || guide.summary);
+    if (started) deepRoot.innerHTML = renderThinkGuideHtml(data);
+    else if (data.psychology || data.conclusion || data.reflection) deepRoot.innerHTML = renderInsightResultHtml(data);
+    else deepRoot.innerHTML = `<p class="insight-card__empty">${insightEmptyCopy(false)}</p>`;
+    if (startBtn) startBtn.hidden = started;
+  }
+  if (quickRoot) quickRoot.innerHTML = renderInsightResultHtml(data);
 }
 
 function syncCompleteButtonLabel() {
@@ -4113,7 +4207,7 @@ function setCompleteBusy(loading) {
   const btn = document.getElementById("btnCompleteToday");
   if (!btn) return;
   btn.disabled = loading;
-  if (loading) btn.textContent = "正在生成今日洞察…";
+  if (loading) btn.textContent = "正在生成今日深度思考…";
   else syncCompleteButtonLabel();
 }
 
@@ -4127,11 +4221,11 @@ function setInsightLoading(loading) {
   state.insightBusy = loading;
   if (deepBtn) {
     deepBtn.disabled = loading;
-    deepBtn.textContent = loading ? "分析中…" : "生成深度洞察";
+    deepBtn.textContent = loading ? "想下一問…" : "開始深度思考";
   }
   if (quickBtn) {
     quickBtn.disabled = loading;
-    quickBtn.textContent = loading ? "梳理中…" : "生成深度洞察";
+    quickBtn.textContent = loading ? "梳理中…" : "生成深度思考";
   }
   if (deepLoader) deepLoader.hidden = !loading;
   if (quickLoader) quickLoader.hidden = !loading;
@@ -4190,18 +4284,219 @@ function localInsightFallback(journal) {
   };
 }
 
-async function generateJournalInsight(options = {}) {
-  setJournalFoldOpen(state.journalMode === "quick" ? "section-quick-insight" : "section-insight", true);
+function thinkGuideContext(journal, guide) {
+  return {
+    variant: "think-guide",
+    step: "ask",
+    event: journal.event,
+    mood: journal.mood,
+    thanks: thanksTextFrom(journal),
+    thanksText: thanksTextFrom(journal),
+    bodyTags: journal.bodyTags,
+    bodyNote: journal.bodyNote,
+    bodyCheck: journal.bodyCheck,
+    rounds: (guide?.rounds || []).map((item) => ({
+      question: item.question,
+      hint: item.hint,
+      answer: item.answer,
+    })),
+  };
+}
+
+function localThinkGuideAsk(journal, round, guide) {
+  const mood = journal.mood || "這份心情";
+  const eventBit = String(journal.event || "").trim().slice(0, 16) || "今天這件事";
+  const questions = [
+    {
+      question: `在「${eventBit}」裡，最讓你放不下的，其實是哪一個瞬間？`,
+      hint: "先點名那個畫面，不必急著解釋。",
+    },
+    {
+      question: `如果「${mood}」可以說話，它最想讓你承認的是什麼？`,
+      hint: "往內聽一句還沒被允許說出口的話。",
+    },
+    {
+      question: "明天的你若只改一件最小的事，會先輕輕碰哪裡？",
+      hint: "選小到 5 分鐘內做得到的那一步。",
+    },
+  ];
+  return questions[Math.max(0, Math.min(2, round - 1))];
+}
+
+function localThinkGuideClose(journal, guide) {
+  const last = (guide.rounds || []).map((item) => item.answer).filter(Boolean).slice(-1)[0] || "你今天願意停下來看自己";
+  return {
+    title: "先把看見，收成下一步",
+    summary: `三輪問下來，真正被碰到的不是事情成不成功，而是你有沒有被自己接住。你寫下「${String(last).slice(0, 24)}」，已經比繞開它更靠近核心。先溫柔地承認這一層，再把力氣放到明天做得到的兩件小事上。`,
+    actions: [
+      "今晚把這一輪最刺到的那句話，手寫成一行，放到明天看得到的地方。",
+      "明天只做一件 5 分鐘內能完成、和今天卡點有關的小事，做完就停。",
+    ],
+  };
+}
+
+function applyThinkGuideInsight(guide, sig) {
+  const data = normalizeThinkGuide(guide);
+  const insight = normalizeInsight({
+    title: data.title,
+    conclusion: data.summary,
+    psychology: data.summary,
+    suggestions: data.actions,
+    takeaways: data.actions,
+    guide: data,
+    sig,
+  });
+  state.journalInsight = insight;
+  state.journalMeta.insightSig = sig;
+  renderInsightCard(insight);
+  persistJournalQuietly();
+  return insight;
+}
+
+async function generateThinkGuideAsk(options = {}) {
+  setJournalFoldOpen("section-insight", true);
   if (state.insightBusy) return false;
   const journal = collectJournal();
   if (!insightReady(journal)) {
-    if (!options.auto) {
-      showToast(
-        state.journalMode === "quick"
-          ? "請先寫下今日感謝、事件，並選擇心情。"
-          : "請先寫下今日事件、選擇心情，並標出身體狀況。"
-      );
+    if (!options.auto) showToast("請先寫下今日事件、選擇心情，並標出身體狀況。");
+    return false;
+  }
+  const current = normalizeInsight(state.journalInsight);
+  const guide = current.guide || emptyThinkGuide();
+  if (thinkGuideDone(guide)) return true;
+  const nextRound = (guide.rounds || []).length + 1;
+  if (nextRound > 3) return generateThinkGuideClose(options);
+  const sig = insightSignature(journal);
+  if (options.auto && guide.rounds.length && current.sig === sig) return false;
+  const token = (state.insightToken || 0) + 1;
+  state.insightToken = token;
+  setInsightLoading(true);
+  try {
+    if (!state.user) throw new Error("請先登入，才能使用雲端分析。");
+    const remote = await postReview({
+      mode: "insight",
+      variant: "think-guide",
+      step: "ask",
+      round: nextRound,
+      date: currentIso(),
+      text: journal.event,
+      context: { ...thinkGuideContext(journal, guide), step: "ask", round: nextRound },
+    });
+    if (state.insightToken !== token) return false;
+    const asked = {
+      question: String(remote.question || "").trim(),
+      hint: String(remote.hint || "").trim(),
+      answer: "",
+    };
+    if (!asked.question) throw new Error("雲端回傳格式不完整");
+    const nextGuide = {
+      ...guide,
+      round: nextRound,
+      rounds: [...guide.rounds, asked],
+    };
+    applyThinkGuideInsight(nextGuide, sig);
+    if (!options.auto) showToast(`深度思考｜第 ${nextRound}/3 輪`);
+    return true;
+  } catch (error) {
+    if (state.insightToken !== token) return false;
+    const asked = { ...localThinkGuideAsk(journal, nextRound, guide), answer: "" };
+    applyThinkGuideInsight({ ...guide, round: nextRound, rounds: [...guide.rounds, asked] }, sig);
+    if (!options.auto) showToast(`雲端提問失敗：${formatApiError(error)}，先用本地引導。`);
+    return true;
+  } finally {
+    if (state.insightToken === token) setInsightLoading(false);
+  }
+}
+
+async function generateThinkGuideClose(options = {}) {
+  setJournalFoldOpen("section-insight", true);
+  if (state.insightBusy) return false;
+  const journal = collectJournal();
+  const current = normalizeInsight(state.journalInsight);
+  const guide = current.guide || emptyThinkGuide();
+  if (guide.rounds.filter((item) => item.answer).length < 3) {
+    if (!options.auto) showToast("請先寫完三輪深度思考。");
+    return false;
+  }
+  const sig = insightSignature(journal);
+  const token = (state.insightToken || 0) + 1;
+  state.insightToken = token;
+  setInsightLoading(true);
+  const deepLoader = document.getElementById("insightLoading");
+  if (deepLoader) {
+    const label = deepLoader.querySelector(".check-loading__label");
+    if (label) label.textContent = "正在為你收成今日深度思考…";
+  }
+  try {
+    if (!state.user) throw new Error("請先登入，才能使用雲端分析。");
+    const remote = await postReview({
+      mode: "insight",
+      variant: "think-guide",
+      step: "close",
+      date: currentIso(),
+      text: journal.event,
+      context: { ...thinkGuideContext(journal, guide), step: "close" },
+    });
+    if (state.insightToken !== token) return false;
+    const closed = {
+      title: String(remote.title || "").trim(),
+      summary: String(remote.summary || "").trim(),
+      actions: Array.isArray(remote.actions) ? remote.actions.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 2) : [],
+    };
+    if (!closed.summary || closed.actions.length < 2) throw new Error("雲端回傳格式不完整");
+    applyThinkGuideInsight({ ...guide, round: 4, title: closed.title, summary: closed.summary, actions: closed.actions }, sig);
+    if (!options.fromComplete) showToast("今日深度思考已生成。");
+    return true;
+  } catch (error) {
+    if (state.insightToken !== token) return false;
+    const fallback = localThinkGuideClose(journal, guide);
+    applyThinkGuideInsight({ ...guide, round: 4, ...fallback }, sig);
+    if (!options.fromComplete) showToast(`雲端總結失敗：${formatApiError(error)}，先留下本地思考。`);
+    return true;
+  } finally {
+    if (deepLoader) {
+      const label = deepLoader.querySelector(".check-loading__label");
+      if (label) label.textContent = "正在為你想下一問…";
     }
+    if (state.insightToken === token) setInsightLoading(false);
+  }
+}
+
+async function submitThinkGuideRound() {
+  if (state.insightBusy) return;
+  const journal = collectJournal();
+  if (!insightReady(journal)) {
+    showToast("請先寫下今日事件、選擇心情，並標出身體狀況。");
+    return;
+  }
+  const answer = String(document.getElementById("thinkGuideAnswer")?.value || "").trim();
+  if (answer.length < 2) {
+    showToast("先寫下一點你此刻想到的，再往下一輪。");
+    return;
+  }
+  const current = normalizeInsight(state.journalInsight);
+  const guide = current.guide || emptyThinkGuide();
+  const rounds = (guide.rounds || []).map((item, index, list) =>
+    index === list.length - 1 ? { ...item, answer } : item
+  );
+  const nextGuide = { ...guide, rounds };
+  applyThinkGuideInsight(nextGuide, insightSignature(journal));
+  if (rounds.filter((item) => item.answer).length >= 3) {
+    await generateThinkGuideClose();
+    return;
+  }
+  await generateThinkGuideAsk();
+}
+
+async function generateJournalInsight(options = {}) {
+  if (state.journalMode !== "quick") {
+    return generateThinkGuideAsk(options);
+  }
+  setJournalFoldOpen("section-quick-insight", true);
+  if (state.insightBusy) return false;
+  const journal = collectJournal();
+  if (!insightReady(journal)) {
+    if (!options.auto) showToast("請先寫下今日感謝、事件，並選擇心情。");
     return false;
   }
   const sig = insightSignature(journal);
@@ -4210,18 +4505,17 @@ async function generateJournalInsight(options = {}) {
   const token = (state.insightToken || 0) + 1;
   state.insightToken = token;
   setInsightLoading(true);
-  const isQuick = state.journalMode === "quick";
-  const mods = isQuick ? normalizeQuickModules(journal.quickModules || state.quickModules) : { body: true, aware: true, exec: true, manifest: true };
+  const mods = normalizeQuickModules(journal.quickModules || state.quickModules);
 
   try {
     if (!state.user) throw new Error("請先登入，才能使用雲端分析。");
     const remote = await postReview({
       mode: "insight",
-      variant: isQuick ? "quick" : "deep",
+      variant: "quick",
       date: currentIso(),
       text: journal.event,
       context: {
-        variant: isQuick ? "quick" : "deep",
+        variant: "quick",
         modules: Object.keys(mods).filter((key) => mods[key]),
         event: journal.event,
         mood: journal.mood,
@@ -4243,7 +4537,7 @@ async function generateJournalInsight(options = {}) {
     state.journalMeta.insightSig = sig;
     renderInsightCard(insight);
     persistJournalQuietly();
-    if (!options.fromComplete) showToast("今日深度洞察已生成。");
+    if (!options.fromComplete) showToast("今日深度思考已生成。");
     return true;
   } catch (error) {
     if (state.insightToken !== token) return false;
@@ -4252,7 +4546,7 @@ async function generateJournalInsight(options = {}) {
     state.journalMeta.insightSig = sig;
     renderInsightCard(fallback);
     persistJournalQuietly();
-    if (!options.fromComplete) showToast(`雲端分析失敗：${formatApiError(error)}，先留下本地洞察。`);
+    if (!options.fromComplete) showToast(`雲端分析失敗：${formatApiError(error)}，先留下本地思考。`);
     return true;
   } finally {
     if (state.insightToken === token) setInsightLoading(false);
@@ -4261,6 +4555,7 @@ async function generateJournalInsight(options = {}) {
 
 function maybeAutoGenerateInsight(journal) {
   if (state.journalHydrating) return;
+  if (state.journalMode !== "quick") return;
   if (insightReady(journal) && state.journalMeta.insightSig !== insightSignature(journal)) {
     generateJournalInsight({ auto: true });
   }
@@ -5484,10 +5779,24 @@ function composeJournalRawText(journal) {
     bodyCoach.suggestions.forEach((item, index) => lines.push(`建議 ${index + 1}：${item}`));
   }
   const insight = normalizeInsight(journal.insight);
-  if (insight.psychology || insight.conclusion || insight.reflection || insight.suggestions.length || insight.takeaways.length) {
-    lines.push("深度洞察");
-    if (insight.title) lines.push(insight.title);
-    if (insight.psychology || insight.conclusion) {
+  if (
+    insight.guide?.rounds?.length ||
+    insight.guide?.summary ||
+    insight.psychology ||
+    insight.conclusion ||
+    insight.reflection ||
+    insight.suggestions.length ||
+    insight.takeaways.length
+  ) {
+    lines.push("深度思考");
+    (insight.guide?.rounds || []).forEach((item, index) => {
+      lines.push(`第 ${index + 1} 輪：${item.question}`);
+      if (item.answer) lines.push(item.answer);
+    });
+    if (insight.guide?.title || insight.title) lines.push(insight.guide?.title || insight.title);
+    if (insight.guide?.summary) lines.push(insight.guide.summary);
+    (insight.guide?.actions || []).forEach((item, index) => lines.push(`下一步 ${index + 1}：${item}`));
+    if (!insight.guide?.summary && (insight.psychology || insight.conclusion)) {
       lines.push("① 今天的身心訊號");
       lines.push(insight.psychology || insight.conclusion);
     }
@@ -5496,11 +5805,11 @@ function composeJournalRawText(journal) {
       lines.push("② 客觀檢討與反思");
       lines.push(insight.reflection);
     }
-    if (insight.suggestions.length) {
+    if (insight.suggestions.length && !(insight.guide?.actions || []).length) {
       lines.push("③ 具體突破建議（怎麼做會更好）");
       insight.suggestions.forEach((item, index) => lines.push(`${index + 1}. ${item}`));
     }
-    if (insight.takeaways.length) {
+    if (insight.takeaways.length && !insight.guide?.summary) {
       lines.push("④ 今日核心重點整理");
       insight.takeaways.forEach((item) => lines.push(`- ${item}`));
     }
@@ -6845,13 +7154,25 @@ async function finishTodayReview() {
           insight.conclusion ||
           insight.reflection ||
           insight.suggestions.length ||
-          insight.takeaways.length
+          insight.takeaways.length ||
+          thinkGuideDone(insight.guide)
       );
       if (!hasInsight || state.journalMeta.insightSig !== insightSignature(journal)) {
         await generateJournalInsight({ auto: false, fromComplete: true });
       }
     } finally {
       setCompleteBusy(false);
+    }
+  } else {
+    const journal = collectJournal();
+    const guide = normalizeInsight(state.journalInsight).guide || emptyThinkGuide();
+    if (guide.rounds.filter((item) => item.answer).length >= 3 && !thinkGuideDone(guide)) {
+      setCompleteBusy(true);
+      try {
+        await generateThinkGuideClose({ fromComplete: true });
+      } finally {
+        setCompleteBusy(false);
+      }
     }
   }
   const iso = currentIso();
@@ -6959,7 +7280,7 @@ function renderReport() {
       <article class="report-card">
         <div class="empty">
           <p class="empty__title">這個區間還沒有復盤</p>
-          <p class="report-empty">寫下第一篇、勾選覺察／執行／顯化之後，這裡會出現圖表與深度洞察。</p>
+          <p class="report-empty">寫下第一篇、勾選覺察／執行／顯化之後，這裡會出現圖表與深度思考。</p>
         </div>
       </article>
       <div id="reportAi"></div>
@@ -7036,7 +7357,7 @@ function fillArchiveModal(period) {
     {
       ai:
         view.cached || {
-          summary: "這份月份已留下數據存檔。登入後可生成深度洞察。",
+          summary: "這份月份已留下數據存檔。登入後可生成深度思考。",
           highlights: [],
           breakthroughs: [],
           fromIso: view.local.fromIso,
@@ -7464,6 +7785,8 @@ function historyHighlight(review) {
     insight.reflection,
     insight.conclusion,
     insight.title,
+    insight.guide?.summary,
+    ...(insight.guide?.rounds || []).map((item) => item.answer),
     ...(insight.takeaways || []),
     organize.themeInsight,
     organize.conclusion,
@@ -7640,32 +7963,60 @@ function renderHistoryJournal(review) {
       return "";
     }).filter(Boolean);
   })();
-  const insightHtml =
-    insight.conclusion || insight.psychology || insight.reflection
-      ? `${insight.title ? historyBlock("", `<p class="history-journal__headline">${escapeHtml(insight.title)}</p>`) : ""}${
-          insight.psychology || insight.conclusion
-            ? historyBlock("① 今天的身心訊號", `<p class="history-journal__text">${escapeHtml(insight.psychology || insight.conclusion)}</p>`)
-            : ""
-        }${insight.bodyLink ? historyBlock("", `<p class="history-journal__note">${escapeHtml(insight.bodyLink)}</p>`) : ""}${
-          insight.reflection
-            ? historyBlock("② 客觀檢討與反思", `<p class="history-journal__text">${escapeHtml(insight.reflection)}</p>`)
-            : ""
-        }${
-          insight.suggestions.length
-            ? historyBlock(
-                "③ 具體突破建議（怎麼做會更好）",
-                `<ul class="history-journal__list">${insight.suggestions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
-              )
-            : ""
-        }${
-          insight.takeaways.length
-            ? historyBlock(
-                "今日核心重點整理",
-                `<ul class="history-journal__list">${insight.takeaways.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
-              )
-            : ""
-        }`
-      : "";
+  const insightHtml = (() => {
+    const guide = insight.guide || emptyThinkGuide();
+    if (guide.rounds.length || guide.summary) {
+      const roundBlocks = guide.rounds
+        .map((item, index) =>
+          historyBlock(
+            `第 ${String(index + 1).padStart(2, "0")} 輪`,
+            `<p class="history-journal__text">${escapeHtml(item.question)}</p>${
+              item.answer ? `<p class="history-journal__note">${escapeHtml(item.answer)}</p>` : ""
+            }`
+          )
+        )
+        .join("");
+      const closeBlocks = [
+        guide.title || insight.title
+          ? historyBlock("", `<p class="history-journal__headline">${escapeHtml(guide.title || insight.title)}</p>`)
+          : "",
+        guide.summary ? historyBlock("總結", `<p class="history-journal__text">${escapeHtml(guide.summary)}</p>`) : "",
+        guide.actions.length
+          ? historyBlock(
+              "兩件具體下一步",
+              `<ul class="history-journal__list">${guide.actions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+            )
+          : "",
+      ].join("");
+      return `${roundBlocks}${closeBlocks}`;
+    }
+    if (!(insight.conclusion || insight.psychology || insight.reflection || insight.suggestions.length || insight.takeaways.length)) {
+      return "";
+    }
+    return `${insight.title ? historyBlock("", `<p class="history-journal__headline">${escapeHtml(insight.title)}</p>`) : ""}${
+      insight.psychology || insight.conclusion
+        ? historyBlock("① 今天的身心訊號", `<p class="history-journal__text">${escapeHtml(insight.psychology || insight.conclusion)}</p>`)
+        : ""
+    }${insight.bodyLink ? historyBlock("", `<p class="history-journal__note">${escapeHtml(insight.bodyLink)}</p>`) : ""}${
+      insight.reflection
+        ? historyBlock("② 客觀檢討與反思", `<p class="history-journal__text">${escapeHtml(insight.reflection)}</p>`)
+        : ""
+    }${
+      insight.suggestions.length
+        ? historyBlock(
+            "③ 具體突破建議（怎麼做會更好）",
+            `<ul class="history-journal__list">${insight.suggestions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+          )
+        : ""
+    }${
+      insight.takeaways.length
+        ? historyBlock(
+            "今日核心重點整理",
+            `<ul class="history-journal__list">${insight.takeaways.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+          )
+        : ""
+    }`;
+  })();
   const parts = historySectionsHtml([
     ["① 今日感謝", "thanks", historyBlock("", thanks)],
     [
@@ -7692,7 +8043,7 @@ function renderHistoryJournal(review) {
       "exec",
       [...execFields, historyTextBlock("明天最小的一步", journal.smallestStep), historyBlock("行動卡點／解法", historyExecChecksHtml(journal))],
     ],
-    ["深度洞察", "insight", insightHtml],
+    ["深度思考", "insight", insightHtml],
     [
       "⑤ 顯化力願景",
       "manifest",
@@ -8085,6 +8436,12 @@ function bindEvents() {
       event.preventDefault();
       const root = foldBtn.closest(".journal-fold");
       if (root?.id) toggleJournalFold(root.id);
+      return;
+    }
+    const nextThink = event.target.closest("[data-think-guide-next]");
+    if (nextThink) {
+      event.preventDefault();
+      submitThinkGuideRound();
       return;
     }
     const answerBtn = event.target.closest("[data-aware-answer]");

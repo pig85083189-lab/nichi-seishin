@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=130" />
+    <link rel="stylesheet" href="app.css?v=131" />
     <style>
       .splash {
         position: fixed;
@@ -468,8 +468,8 @@
                 </svg>
               </span>
               <div>
-                <h2 class="insight-card__title">深度洞察</h2>
-                <p class="insight-card__lead">寫完事件、心情與身體後，會依今天的身心訊號、客觀檢討、具體突破建議，以及今日核心重點，分段整理給你。</p>
+                <h2 class="insight-card__title">深度思考</h2>
+                <p class="insight-card__lead">寫完感謝、事件與身體後，會依今天的內容連續問你 3 輪。答完後給你 2 件具體下一步，以及一段直擊核心的總結。</p>
               </div>
                 </span>
               </span>
@@ -477,13 +477,13 @@
             </button>
             <div class="journal-fold__panel" id="insightFoldPanel" inert aria-hidden="true">
               <div class="journal-fold__inner">
-            <button class="ai-check-btn" id="btnInsightAi" type="button">生成深度洞察</button>
+            <button class="ai-check-btn" id="btnInsightAi" type="button">開始深度思考</button>
             <div class="check-loading" id="insightLoading" hidden>
-              <p class="check-loading__label">正在為你梳理今天的核心結論…</p>
+              <p class="check-loading__label">正在為你想下一問…</p>
               <div class="ai-thinking__bar"><i></i></div>
             </div>
             <div class="insight-card__body" id="insightBody">
-              <p class="insight-card__empty">先把事件、心情與身體反應寫下來，再點按鈕或等它自動生成四層洞察。</p>
+              <p class="insight-card__empty">先把感謝、事件、心情與身體覺察寫下來，再開始 3 輪引導式深度思考。</p>
             </div>
               </div>
             </div>
@@ -633,7 +633,7 @@
                 <span class="insight-card__head">
               <span class="insight-card__spark" aria-hidden="true">✨</span>
               <div>
-                <h2 class="insight-card__title">✨ 深度洞察</h2>
+                <h2 class="insight-card__title">✨ 深度思考</h2>
                 <p class="insight-card__lead">寫完感謝、事件與心情後，會依今天的身心訊號、客觀檢討、具體突破建議，以及今日核心重點，分段整理給你。</p>
               </div>
                 </span>
@@ -642,13 +642,13 @@
             </button>
             <div class="journal-fold__panel" id="quickInsightFoldPanel" inert aria-hidden="true">
               <div class="journal-fold__inner">
-            <button class="ai-check-btn" id="btnQuickInsight" type="button">生成深度洞察</button>
+            <button class="ai-check-btn" id="btnQuickInsight" type="button">生成深度思考</button>
             <div class="check-loading" id="quickInsightLoading" hidden>
               <p class="check-loading__label">正在為你梳理今天的核心總結…</p>
               <div class="ai-thinking__bar"><i></i></div>
             </div>
             <div class="insight-card__body" id="quickInsightBody">
-              <p class="insight-card__empty">先寫下感謝、事件與心情，再點按鈕或完成快速復盤，就會生成四層洞察。</p>
+              <p class="insight-card__empty">先寫下感謝、事件與心情，再點按鈕或完成快速復盤，就會生成今日深度思考。</p>
             </div>
               </div>
             </div>
@@ -668,7 +668,7 @@
         <section class="page" id="page-report" data-page="report" hidden>
           <header class="page__header">
             <h2 class="page__title">週月報</h2>
-            <p class="page__subtitle">用圖表看見三力節奏，再用深度洞察點出閃光點與突破口。</p>
+            <p class="page__subtitle">用圖表看見三力節奏，再用深度思考點出閃光點與突破口。</p>
           </header>
 
           <div class="tabs" role="tablist" aria-label="報告類型">
@@ -787,7 +787,7 @@
           <nav class="guide-toc" aria-label="手冊五大步驟">
             <button class="guide-toc__item" type="button" data-guide-jump="guide-step-1"><span>1</span>復盤模式</button>
             <button class="guide-toc__item" type="button" data-guide-jump="guide-step-2"><span>2</span>感謝與事件</button>
-            <button class="guide-toc__item" type="button" data-guide-jump="guide-step-3"><span>3</span>身心洞察</button>
+            <button class="guide-toc__item" type="button" data-guide-jump="guide-step-3"><span>3</span>深度思考</button>
             <button class="guide-toc__item" type="button" data-guide-jump="guide-step-4"><span>4</span>動態出題</button>
             <button class="guide-toc__item" type="button" data-guide-jump="guide-step-5"><span>5</span>資料庫</button>
           </nav>
@@ -803,7 +803,7 @@
                   <article class="guide-mode">
                     <p class="guide-mode__tag">忙碌時段</p>
                     <h4>⚡ 快速復盤（3-5分鐘）</h4>
-                    <p>適合時間不夠的日子。填寫感謝與事件後，自由選配身心、覺察或執行模組，即時獲得 AI 深度洞察。</p>
+                    <p>適合時間不夠的日子。填寫感謝與事件後，自由選配身心、覺察或執行模組，即時獲得 AI 深度思考。</p>
                   </article>
                   <article class="guide-mode guide-mode--deep">
                     <p class="guide-mode__tag">完整沉澱</p>
@@ -818,7 +818,7 @@
               <div class="guide-step__body">
                 <p class="guide-step__label">第二步</p>
                 <h3 class="guide-step__title">填寫今日感謝與事件</h3>
-                <p class="guide-step__text">在同一格大型輸入框裡自由寫下今天想感謝的人事物（換行即可繼續下一件），並寫下今日事件與心情。這是啟動所有 AI 動態教練的基石：後面的洞察、覺察題與執行突破題，都會讀你今天真正寫下的內容。</p>
+                <p class="guide-step__text">在同一格大型輸入框裡自由寫下今天想感謝的人事物（換行即可繼續下一件），並寫下今日事件與心情。這是啟動所有 AI 動態教練的基石：後面的深度思考、覺察題與執行突破題，都會讀你今天真正寫下的內容。</p>
                 <div class="guide-pills">
                   <span class="guide-pill"><strong>01</strong> 今日感謝</span>
                   <span class="guide-pill"><strong>02</strong> 今日事件與心情</span>
@@ -829,13 +829,12 @@
               <span class="guide-step__num" aria-hidden="true">3</span>
               <div class="guide-step__body">
                 <p class="guide-step__label">第三步</p>
-                <h3 class="guide-step__title">身心覺察與 AI 深度洞察</h3>
-                <p class="guide-step__text">勾選心情、身體與睡眠狀況並寫下原因，系統將即時產出專業教練報告。快速復盤可加選身心模組；深度復盤會完整走過這一層。</p>
+                <h3 class="guide-step__title">身心覺察與 AI 深度思考</h3>
+                <p class="guide-step__text">勾選心情、身體與睡眠狀況並寫下原因。深度復盤會接著走進 3 輪引導式提問，答完後收下 2 件具體下一步與一段直擊核心的總結。快速復盤可加選身心模組，並生成今日深度思考。</p>
                 <ul class="guide-insight">
-                  <li>今天的身心訊號</li>
-                  <li>客觀檢討反思</li>
-                  <li>具體突破建議</li>
-                  <li>核心重點整理</li>
+                  <li>三輪引導式提問</li>
+                  <li>兩件具體下一步</li>
+                  <li>溫暖直擊核心的總結</li>
                 </ul>
               </div>
             </li>
@@ -956,7 +955,7 @@
         <div class="paywall__card js-lock-guest" role="dialog" aria-labelledby="paywallGuestTitle" aria-modal="true">
           <p class="paywall__kicker">7 天完整免費試用</p>
           <h2 class="paywall__title" id="paywallGuestTitle">先登入，再把日子寫下來</h2>
-          <p class="paywall__copy">請先使用 Google 登入，即可解鎖 7 天完整免費試用。今日感謝、事件、洞察、覺察、執行與顯化都會為你打開。</p>
+          <p class="paywall__copy">請先使用 Google 登入，即可解鎖 7 天完整免費試用。今日感謝、事件、深度思考、覺察、執行與顯化都會為你打開。</p>
           <button class="paywall__btn paywall__btn--primary paywall__btn--google" type="button" data-google-login>
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
               <path fill="#4285F4" d="M22.6 12.25c0-.8-.07-1.57-.2-2.31H12v4.37h5.95a5.08 5.08 0 0 1-2.2 3.34v2.77h3.56c2.08-1.92 3.29-4.75 3.29-8.17Z" />
@@ -1001,6 +1000,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=148"></script>
+    <script src="app.js?v=149"></script>
   </body>
 </html>
