@@ -2559,6 +2559,7 @@ function prepareTourStep(step) {
     setSidebarOpen(false);
   }
   if (step.tourPage) switchPage(step.tourPage, { keepSidebar: Boolean(step.tourSidebar) });
+  if (step.element === "#section-exec") setExecFoldOpen(true);
 }
 
 function tourSteps() {
@@ -2913,6 +2914,7 @@ function toggleQuickModule(key) {
   const journal = collectJournal();
   if (next[key]) {
     const sectionId = { body: "section-body", aware: "section-aware", exec: "section-exec", manifest: "section-manifest" }[key];
+    if (key === "exec") setExecFoldOpen(true);
     document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
   if (next.aware || next.exec) maybeAutoGenerateCorePrompts(journal);
@@ -3709,6 +3711,7 @@ function applyGeneratedChecklist(kind, items, sig) {
 }
 
 async function generateJournalChecklist(kind, options = {}) {
+  if (kind === "execution") setExecFoldOpen(true);
   if (kind === "manifest") {
     await generateManifestChecklist(options);
     return;
@@ -4999,6 +5002,7 @@ function setCorePromptsLoading(loading) {
 }
 
 async function generateCorePrompts(options = {}) {
+  if (!options.auto) setExecFoldOpen(true);
   if (state.corePromptsBusy) return;
   const journal = collectJournal();
   if (!coreStoryReady(journal)) {
@@ -5543,6 +5547,37 @@ function setCheckedValues(rootId, values) {
   });
 }
 
+function journalExecHasContent(data) {
+  const journal = data && typeof data === "object" ? data : {};
+  return Boolean(
+    String(journal.smallestStep || "").trim() ||
+      (journal.execution || []).some((item) => String(item || "").trim()) ||
+      (journal.executionChecks || []).length ||
+      (journal.executionCheckItems || []).length ||
+      (journal.executionPrompts || []).length
+  );
+}
+
+function setExecFoldOpen(open) {
+  const root = document.getElementById("section-exec");
+  const toggle = document.getElementById("execFoldToggle");
+  const panel = document.getElementById("execFoldPanel");
+  if (!root || !toggle) return;
+  const next = Boolean(open);
+  root.classList.toggle("is-open", next);
+  toggle.setAttribute("aria-expanded", next ? "true" : "false");
+  if (panel) {
+    panel.inert = !next;
+    panel.setAttribute("aria-hidden", next ? "false" : "true");
+  }
+}
+
+function toggleExecFold() {
+  const root = document.getElementById("section-exec");
+  if (!root) return;
+  setExecFoldOpen(!root.classList.contains("is-open"));
+}
+
 function fillJournal(journal) {
   const data = { ...emptyJournal(), ...(journal && typeof journal === "object" ? journal : {}) };
   state.journalHydrating = true;
@@ -5606,6 +5641,7 @@ function fillJournal(journal) {
   renderBodyCoachCard(state.journalBodyCoach);
   syncCorePromptGate();
   state.journalHydrating = false;
+  setExecFoldOpen(journalExecHasContent(data));
 }
 
 function updateJournalDateLabel(iso) {
@@ -7778,8 +7814,17 @@ function bindEvents() {
   }
   document.getElementById("btnCompleteToday")?.addEventListener("click", completeToday);
   document.getElementById("btnSaveDraft")?.addEventListener("click", saveJournalDraft);
+  document.getElementById("section-exec")?.addEventListener("click", (event) => {
+    const fold = event.target.closest("[data-exec-fold]");
+    if (!fold) return;
+    event.preventDefault();
+    toggleExecFold();
+  });
   document.getElementById("btnAwarePrompts")?.addEventListener("click", () => generateCorePrompts());
-  document.getElementById("btnExecPrompts")?.addEventListener("click", () => generateCorePrompts());
+  document.getElementById("btnExecPrompts")?.addEventListener("click", () => {
+    setExecFoldOpen(true);
+    generateCorePrompts();
+  });
   document.getElementById("btnAwareAi")?.addEventListener("click", () => generateJournalChecklist("awareness"));
   document.getElementById("btnExecAi")?.addEventListener("click", () => generateJournalChecklist("execution"));
   document.getElementById("btnManifestAi")?.addEventListener("click", () => generateJournalChecklist("manifest"));
