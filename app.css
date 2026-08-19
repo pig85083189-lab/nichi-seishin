@@ -1511,6 +1511,14 @@ body.nav-closed .auth-pay {
   font-size: 13px;
   cursor: pointer;
   white-space: nowrap;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.tabs__item:hover,
+.chip:hover {
+  border-color: var(--cream-border);
+  background: var(--cream);
+  color: var(--heading);
 }
 
 .tabs__item.is-active,
@@ -1518,6 +1526,33 @@ body.nav-closed .auth-pay {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
+}
+
+.tabs__item.is-active:hover,
+.chip.is-active:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.tabs__item:focus-visible,
+.chip:focus-visible {
+  outline: 2px solid var(--blush);
+  outline-offset: 2px;
+}
+
+#taskFilters,
+#manifestFilters {
+  gap: 10px;
+}
+
+#taskFilters .chip,
+#manifestFilters .chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 0;
+  min-width: 5.5em;
 }
 
 .report-content {

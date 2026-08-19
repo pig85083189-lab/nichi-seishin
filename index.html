@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=116" />
+    <link rel="stylesheet" href="app.css?v=117" />
     <style>
       .splash {
         position: fixed;
@@ -574,7 +574,7 @@
           <header class="page__header todo-hero">
             <p class="todo-kicker">執行力</p>
             <h2 class="page__title">執行力行動清單</h2>
-            <p class="page__subtitle">今日復盤打勾的行動卡，完成復盤後會匯集到這裡。還沒想馬上做的，可先收到「先放著（暫存）」專區。</p>
+            <p class="page__subtitle">今日復盤打勾的行動卡，完成復盤後會匯集到這裡。可用進行中、待辦、已完成來查看與切換。</p>
           </header>
 
           <form class="panel add-task" id="taskForm">
@@ -600,20 +600,10 @@
             <button class="btn" type="submit">加入</button>
           </form>
 
-          <section class="todo-hold" id="taskHold" aria-label="先放著暫存">
-            <header class="todo-hold__head">
-              <p class="todo-hold__kicker">暫存專區</p>
-              <h3>先放著（暫存）<span id="taskHoldCount"></span></h3>
-              <p>目前還不想做、又想留下來的任務，先收在這裡。主清單就能專心做眼前這一步。</p>
-            </header>
-            <div class="todo-hold__list" id="taskHoldList"></div>
-          </section>
-
           <div class="chips" role="tablist" aria-label="行動分類" id="taskFilters">
-            <button class="chip is-active" data-filter="all" type="button">全部</button>
-            <button class="chip" data-filter="doing" type="button">進行中</button>
-            <button class="chip" data-filter="later" type="button">先放著（暫存）</button>
-            <button class="chip" data-filter="done" type="button">已完成</button>
+            <button class="chip is-active" data-filter="doing" type="button" role="tab" aria-selected="true">進行中</button>
+            <button class="chip" data-filter="later" type="button" role="tab" aria-selected="false">待辦</button>
+            <button class="chip" data-filter="done" type="button" role="tab" aria-selected="false">已完成</button>
           </div>
 
           <div class="task-list" id="taskList"></div>
@@ -623,23 +613,13 @@
           <header class="page__header todo-hero">
             <p class="todo-kicker">顯化力</p>
             <h2 class="page__title">顯化力清單</h2>
-            <p class="page__subtitle">今日復盤勾選的顯化目標，完成復盤後會匯集到這裡。還沒想推進的，可先放到「先放著（暫存）」。</p>
+            <p class="page__subtitle">今日復盤勾選的顯化目標，完成復盤後會匯集到這裡。可用進行中、待辦、已完成來查看與切換。</p>
           </header>
 
-          <section class="todo-hold" id="manifestHold" aria-label="顯化先放著暫存">
-            <header class="todo-hold__head">
-              <p class="todo-hold__kicker">暫存專區</p>
-              <h3>先放著（暫存）<span id="manifestHoldCount"></span></h3>
-              <p>目前還不想推進、又想留下來的顯化目標，先收在這裡。主清單就能專心做眼前這一步。</p>
-            </header>
-            <div class="todo-hold__list" id="manifestHoldList"></div>
-          </section>
-
           <div class="chips" role="tablist" aria-label="顯化分類" id="manifestFilters">
-            <button class="chip is-active" data-manifest-filter="all" type="button">全部</button>
-            <button class="chip" data-manifest-filter="doing" type="button">進行中</button>
-            <button class="chip" data-manifest-filter="later" type="button">先放著（暫存）</button>
-            <button class="chip" data-manifest-filter="done" type="button">已完成</button>
+            <button class="chip is-active" data-manifest-filter="doing" type="button" role="tab" aria-selected="true">進行中</button>
+            <button class="chip" data-manifest-filter="later" type="button" role="tab" aria-selected="false">待辦</button>
+            <button class="chip" data-manifest-filter="done" type="button" role="tab" aria-selected="false">已完成</button>
           </div>
 
           <div class="task-list" id="manifestList"></div>
@@ -897,6 +877,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=135"></script>
+    <script src="app.js?v=136"></script>
   </body>
 </html>

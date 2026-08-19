@@ -46,7 +46,7 @@ const SFM_TYPE_LABEL = {
 
 const STATUS_LABEL = {
   doing: "進行中",
-  later: "先放著",
+  later: "待辦",
   done: "已完成",
 };
 
@@ -56,9 +56,9 @@ const state = {
   reportCharts: { radar: null, bars: null },
   monthArchiveTried: false,
   tour: null,
-  taskFilter: "all",
+  taskFilter: "doing",
   insightFilter: "all",
-  manifestFilter: "all",
+  manifestFilter: "doing",
   sfmFilter: "all",
   historyQuery: "",
   historyTag: "all",
@@ -2716,7 +2716,7 @@ function tourSteps() {
       tourSidebar: true,
       popover: {
         title: "執行力清單",
-        description: "復盤裡打勾的行動卡會匯集到這裡。還沒想做的可點「先放著」，收到上方的暫存專區。",
+        description: "復盤裡打勾的行動卡會匯集到這裡。可用進行中、待辦、已完成來整理，還沒想做的就移到待辦。",
         side: "right",
       },
     },
@@ -2726,7 +2726,7 @@ function tourSteps() {
       tourSidebar: true,
       popover: {
         title: "顯化力清單",
-        description: "復盤裡勾選的顯化目標會匯集到這裡。還沒想推進的可先放著，完成後也能長期追蹤。",
+        description: "復盤裡勾選的顯化目標會匯集到這裡。可用進行中、待辦、已完成來整理，還沒想推進的就移到待辦。",
         side: "right",
       },
     },
@@ -6932,6 +6932,27 @@ function renderTaskChip(label, variant, attrs, icon) {
   return `<button class="task-chip-btn task-chip-btn--${variant}" ${attrs} type="button">${taskActionIcon(icon)}<span>${escapeHtml(label)}</span></button>`;
 }
 
+function renderStatusActionChips(id, status, attrName) {
+  const safeId = escapeHtml(id);
+  const attr = `${attrName}="${safeId}"`;
+  if (status === "done") {
+    return renderTaskChip("進行中", "back", `${attr} data-to="doing" aria-label="移到進行中"`, "back");
+  }
+  if (status === "later") {
+    return `${renderTaskChip("進行中", "back", `${attr} data-to="doing" aria-label="移到進行中"`, "back")}
+      ${renderTaskChip("已完成", "done", `${attr} data-to="done" aria-label="標記已完成"`, "done")}`;
+  }
+  return `${renderTaskChip("移到待辦", "hold", `${attr} data-to="later" aria-label="移到待辦"`, "hold")}
+    ${renderTaskChip("已完成", "done", `${attr} data-to="done" aria-label="標記已完成"`, "done")}`;
+}
+
+function statusMoveToast(to) {
+  if (to === "later") return "已移到待辦。";
+  if (to === "doing") return "已移到進行中。";
+  if (to === "done") return "已標記完成。";
+  return "已更新狀態。";
+}
+
 function renderTaskItem(task, options = {}) {
   const done = task.status === "done";
   const later = task.status === "later";
@@ -6942,12 +6963,6 @@ function renderTaskItem(task, options = {}) {
       ? `${String(options.index + 1).padStart(2, "0")}｜${parts.title}`
       : parts.title;
   const id = escapeHtml(task.id);
-  const actionBtns = done
-    ? ""
-    : later
-      ? `${renderTaskChip("拿回來", "back", `data-task-status="${id}" data-to="doing" aria-label="拿回進行中"`, "back")}
-        ${renderTaskChip("完成", "done", `data-task-status="${id}" data-to="done" aria-label="標記完成"`, "done")}`
-      : renderTaskChip("先放著", "hold", `data-task-status="${id}" data-to="later" aria-label="先放到暫存"`, "hold");
   return `
     <article class="task-card task-todo${done ? " is-done" : ""}${later ? " is-later" : ""}">
       <label class="task-todo__check">
@@ -6958,13 +6973,13 @@ function renderTaskItem(task, options = {}) {
           ${parts.detail ? `<span class="task-card__lead">${escapeHtml(parts.detail)}</span>` : ""}
           <span class="task-card__meta">
             <span class="tag">${escapeHtml(task.source || "自行新增")}</span>
-            ${later ? `<span class="tag tag--later">先放著（暫存）</span>` : ""}
+            ${later ? `<span class="tag tag--later">待辦</span>` : ""}
             ${dateLabel ? `<span class="tag">${escapeHtml(dateLabel)}</span>` : ""}
           </span>
         </span>
       </label>
       <div class="task-todo__actions" role="group" aria-label="行動操作">
-        ${actionBtns}
+        ${renderStatusActionChips(task.id, task.status, "data-task-status")}
         ${renderTaskChip("刪除", "delete", `data-task-delete="${id}" aria-label="刪除這項行動"`, "trash")}
       </div>
     </article>
@@ -6983,18 +6998,6 @@ function renderTaskSection(title, lead, items, emptyText) {
   `;
 }
 
-function renderTaskHold(laterItems) {
-  const list = document.getElementById("taskHoldList");
-  const count = document.getElementById("taskHoldCount");
-  if (count) count.textContent = laterItems.length ? `（${laterItems.length}）` : "";
-  if (!list) return;
-  if (!laterItems.length) {
-    list.innerHTML = `<p class="todo-hold__empty">還沒有暫存的行動。點主清單項目旁的「先放著」，就會收到這裡。</p>`;
-    return;
-  }
-  list.innerHTML = laterItems.map((task, index) => renderTaskItem(task, { index })).join("");
-}
-
 function renderTasks() {
   const list = document.getElementById("taskList");
   if (!list) return;
@@ -7008,39 +7011,36 @@ function renderTasks() {
   const done = all
     .filter((task) => task.status === "done")
     .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
-  const filter = state.taskFilter;
-  renderTaskHold(later);
+  const filter = ["doing", "later", "done"].includes(state.taskFilter) ? state.taskFilter : "doing";
 
   if (!all.length) {
     list.innerHTML = `<div class="empty"><p class="empty__title">執行力還是空的</p>在今日復盤勾選行動卡點或解法，完成復盤後就會匯集到這裡。</div>`;
     return;
   }
 
-  const showDoing = filter === "all" || filter === "doing";
-  const showDone = filter === "all" || filter === "done";
   if (filter === "later") {
-    list.innerHTML = `<div class="empty">暫存的行動都在上方專區。可從那裡拿回進行中，或直接標記完成。</div>`;
+    list.innerHTML = renderTaskSection("待辦", "點「進行中」就能拿回來做。完成後會走到已完成。", later, "目前沒有待辦的行動。");
     return;
   }
-
-  list.innerHTML = [
-    showDoing
-      ? renderTaskSection(
-          "進行中",
-          "勾選後會走到已完成。還沒想做的，點「先放著」會移到上方暫存專區。",
-          doing,
-          "目前沒有進行中的行動。"
-        )
-      : "",
-    showDone ? renderTaskSection("已完成", "這些已經被你做完了。取消勾選就能再拿回來。", done, "還沒有完成的行動。") : "",
-  ].join("");
+  if (filter === "done") {
+    list.innerHTML = renderTaskSection("已完成", "這些已經被你做完了。點「進行中」或取消勾選就能再拿回來。", done, "還沒有完成的行動。");
+    return;
+  }
+  list.innerHTML = renderTaskSection(
+    "進行中",
+    "勾選或點「已完成」就會走過去。還沒想做的，點「移到待辦」。",
+    doing,
+    "目前沒有進行中的行動。"
+  );
 }
 
 function setTaskFilter(filter) {
-  const next = ["all", "doing", "later", "done"].includes(filter) ? filter : "all";
+  const next = ["doing", "later", "done"].includes(filter) ? filter : "doing";
   state.taskFilter = next;
   document.querySelectorAll("#taskFilters .chip").forEach((item) => {
-    item.classList.toggle("is-active", item.dataset.filter === next);
+    const on = item.dataset.filter === next;
+    item.classList.toggle("is-active", on);
+    item.setAttribute("aria-selected", on ? "true" : "false");
   });
 }
 
@@ -7052,7 +7052,7 @@ function setTaskStatus(id, status) {
       task.id === id ? { ...task, status: next, updatedAt: new Date().toISOString() } : task
     )
   );
-  if (state.taskFilter === "later" && next !== "later") setTaskFilter("all");
+  setTaskFilter(next);
   renderTasks();
 }
 
@@ -7079,6 +7079,7 @@ function addTask(event) {
   document.getElementById("taskTitle").value = "";
   const detailInput = document.getElementById("taskDetail");
   if (detailInput) detailInput.value = "";
+  setTaskFilter("doing");
   renderTasks();
   showToast("行動已加入。");
 }
@@ -7144,13 +7145,6 @@ function renderManifestItem(item) {
   const dateLabel = item.date ? formatDisplayDate(item.date) : "";
   const vision = String(item.vision || "").trim();
   const id = escapeHtml(item.id);
-  const actionBtns = done
-    ? ""
-    : later
-      ? `${renderTaskChip("拿回來", "back", `data-manifest-status="${id}" data-to="doing" aria-label="拿回進行中"`, "back")}
-        ${renderTaskChip("完成", "done", `data-manifest-status="${id}" data-to="done" aria-label="標記完成"`, "done")}`
-      : `${renderTaskChip("先放著", "hold", `data-manifest-status="${id}" data-to="later" aria-label="先放到暫存"`, "hold")}
-        ${renderTaskChip("完成", "done", `data-manifest-status="${id}" data-to="done" aria-label="標記完成"`, "done")}`;
   return `
     <article class="task-card task-todo${done ? " is-done" : ""}${later ? " is-later" : ""}">
       <label class="task-todo__check">
@@ -7161,30 +7155,18 @@ function renderManifestItem(item) {
           ${vision ? `<span class="task-card__lead">${escapeHtml(vision)}</span>` : ""}
           <span class="task-card__meta">
             <span class="tag">顯化力</span>
-            ${later ? `<span class="tag tag--later">先放著（暫存）</span>` : ""}
+            ${later ? `<span class="tag tag--later">待辦</span>` : ""}
             <span class="tag">${escapeHtml(item.source || "今日復盤")}</span>
             ${dateLabel ? `<span class="tag">${escapeHtml(dateLabel)}</span>` : ""}
           </span>
         </span>
       </label>
       <div class="task-todo__actions" role="group" aria-label="顯化操作">
-        ${actionBtns}
+        ${renderStatusActionChips(item.id, item.status, "data-manifest-status")}
         ${renderTaskChip("刪除", "delete", `data-manifest-delete="${id}" aria-label="刪除這項顯化目標"`, "trash")}
       </div>
     </article>
   `;
-}
-
-function renderManifestHold(laterItems) {
-  const list = document.getElementById("manifestHoldList");
-  const count = document.getElementById("manifestHoldCount");
-  if (count) count.textContent = laterItems.length ? `（${laterItems.length}）` : "";
-  if (!list) return;
-  if (!laterItems.length) {
-    list.innerHTML = `<p class="todo-hold__empty">還沒有暫存的顯化目標。點主清單項目旁的「先放著」，就會收到這裡。</p>`;
-    return;
-  }
-  list.innerHTML = laterItems.map((item) => renderManifestItem(item)).join("");
 }
 
 function renderManifestGroups(items) {
@@ -7216,40 +7198,46 @@ function renderManifests() {
   const done = all
     .filter((item) => item.status === "done")
     .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
-  const filter = state.manifestFilter;
-  renderManifestHold(later);
+  const filter = ["doing", "later", "done"].includes(state.manifestFilter) ? state.manifestFilter : "doing";
 
   if (!all.length) {
     list.innerHTML = `<div class="empty"><p class="empty__title">顯化力還是空的</p>在今日復盤勾選顯化執行目標，完成復盤後就會匯集到這裡。</div>`;
     return;
   }
 
-  const showDoing = filter === "all" || filter === "doing";
-  const showDone = filter === "all" || filter === "done";
-  if (filter === "later") {
-    list.innerHTML = `<div class="empty">暫存的顯化目標都在上方專區。可從那裡拿回進行中，或直接標記完成。</div>`;
-    return;
-  }
-
-  list.innerHTML = [
-    showDoing
-      ? `<section class="todo-section"><header class="todo-section__head"><h3>進行中${doing.length ? `（${doing.length}）` : ""}</h3><p>勾選或點完成，就會走到已完成。還沒想推進的，可先放到上方暫存專區。</p></header>${
-          doing.length ? renderManifestGroups(doing) : `<div class="empty">目前沒有進行中的顯化目標。</div>`
-        }</section>`
-      : "",
-    showDone
-      ? `<section class="todo-section"><header class="todo-section__head"><h3>已完成${done.length ? `（${done.length}）` : ""}</h3><p>這些願景步驟已經被你做完了。取消勾選就能再拿回來。</p></header>${
-          done.length ? renderManifestGroups(done) : `<div class="empty">還沒有完成的顯化目標。</div>`
-        }</section>`
-      : "",
-  ].join("");
+  const buckets = {
+    doing: {
+      title: "進行中",
+      lead: "勾選或點「已完成」就會走過去。還沒想推進的，點「移到待辦」。",
+      items: doing,
+      empty: "目前沒有進行中的顯化目標。",
+    },
+    later: {
+      title: "待辦",
+      lead: "點「進行中」就能拿回來推進。完成後會走到已完成。",
+      items: later,
+      empty: "目前沒有待辦的顯化目標。",
+    },
+    done: {
+      title: "已完成",
+      lead: "這些願景步驟已經被你做完了。點「進行中」或取消勾選就能再拿回來。",
+      items: done,
+      empty: "還沒有完成的顯化目標。",
+    },
+  };
+  const bucket = buckets[filter];
+  list.innerHTML = `<section class="todo-section"><header class="todo-section__head"><h3>${bucket.title}${bucket.items.length ? `（${bucket.items.length}）` : ""}</h3><p>${bucket.lead}</p></header>${
+    bucket.items.length ? renderManifestGroups(bucket.items) : `<div class="empty">${bucket.empty}</div>`
+  }</section>`;
 }
 
 function setManifestFilter(filter) {
-  const next = ["all", "doing", "later", "done"].includes(filter) ? filter : "all";
+  const next = ["doing", "later", "done"].includes(filter) ? filter : "doing";
   state.manifestFilter = next;
   document.querySelectorAll("#manifestFilters .chip").forEach((item) => {
-    item.classList.toggle("is-active", item.dataset.manifestFilter === next);
+    const on = item.dataset.manifestFilter === next;
+    item.classList.toggle("is-active", on);
+    item.setAttribute("aria-selected", on ? "true" : "false");
   });
 }
 
@@ -7259,7 +7247,7 @@ function setManifestStatus(id, status) {
   saveManifests(
     getManifests().map((item) => (item.id === id ? { ...item, status: next, updatedAt: new Date().toISOString() } : item))
   );
-  if (state.manifestFilter === "later" && next !== "later") setManifestFilter("all");
+  setManifestFilter(next);
   renderManifests();
 }
 
@@ -8063,9 +8051,7 @@ function bindEvents() {
       event.preventDefault();
       const to = statusBtn.dataset.to;
       setTaskStatus(statusBtn.dataset.taskStatus, to);
-      showToast(
-        to === "later" ? "已移到「先放著（暫存）」。" : to === "doing" ? "已拿回進行中。" : to === "done" ? "已標記完成。" : "已更新這項行動。"
-      );
+      showToast(statusMoveToast(to));
       return;
     }
     if (deleteBtn) {
@@ -8108,9 +8094,7 @@ function bindEvents() {
       event.preventDefault();
       const to = statusBtn.dataset.to;
       setManifestStatus(statusBtn.dataset.manifestStatus, to);
-      showToast(
-        to === "later" ? "已移到「先放著（暫存）」。" : to === "doing" ? "已拿回進行中。" : to === "done" ? "已標記完成。" : "已更新這項顯化目標。"
-      );
+      showToast(statusMoveToast(to));
       return;
     }
     if (deleteBtn) {
