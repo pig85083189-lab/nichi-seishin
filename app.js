@@ -17,6 +17,7 @@ const STORAGE_KEYS = {
 };
 
 const REVIEW_API = "/api/review";
+const CHAT_API = "/api/chat";
 const NEWEBPAY_EPG_URL = "https://core.newebpay.com/EPG/HTC109030010100/QLBIYc";
 const NEWEBPAY_PLANS = {
   monthly: {
@@ -705,14 +706,21 @@ function parseAiJson(raw) {
 
 function reviewApiUrl() {
   if (typeof location === "undefined" || location.protocol === "file:") {
-    throw new Error("請用 Vercel 網址開啟這個網頁（不要開本機 HTML），前端才能呼叫 /api/review。");
+    throw new Error("請用本機 http://localhost:3000 或 Vercel 網址開啟這個網頁（不要開本機 HTML），前端才能呼叫 /api/review。");
   }
   return `${location.origin}${REVIEW_API}`;
 }
 
+function chatApiUrl() {
+  if (typeof location === "undefined" || location.protocol === "file:") {
+    throw new Error("請用本機 http://localhost:3000 或 Vercel 網址開啟這個網頁（不要開本機 HTML），前端才能呼叫 /api/chat。");
+  }
+  return `${location.origin}${CHAT_API}`;
+}
+
 function formatApiError(error) {
   const message = String(error?.message || error || "未知錯誤");
-  if (error?.name === "AbortError" || /請求逾時|逾時|504|OpenAI 逾時|FUNCTION_INVOCATION_TIMEOUT/i.test(message)) {
+  if (error?.name === "AbortError" || /請求逾時|逾時|504|OpenAI 逾時|Claude 逾時|FUNCTION_INVOCATION_TIMEOUT/i.test(message)) {
     return "雲端整理逾時了。請再試一次。";
   }
   if (/file:|本機 HTML/.test(message)) return message;
@@ -723,7 +731,7 @@ function formatApiError(error) {
     return "您的 7 天免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限";
   }
   if (/404|Failed to fetch|fetch 失敗|NetworkError/i.test(message)) {
-    return "找不到 /api/review。請用 Vercel 網址開啟，並重新部署後端函式。";
+    return "找不到後端 API。請用本機 http://localhost:3000（npm run dev）或 Vercel 網址開啟。";
   }
   return message;
 }
@@ -775,11 +783,18 @@ async function fetchWithTimeout(url, options, timeoutMs) {
 }
 
 async function postReview(body, timeoutMs = 28000) {
+  return postAiApi(reviewApiUrl(), body, timeoutMs);
+}
+
+async function postChat(body, timeoutMs = 28000) {
+  return postAiApi(chatApiUrl(), body, timeoutMs);
+}
+
+async function postAiApi(url, body, timeoutMs = 28000) {
   if (isAccessLocked()) {
     applyAccessLock();
     throw new Error(accessLockMessage());
   }
-  const url = reviewApiUrl();
   console.log("[日精進 API] POST", url, body && body.mode);
   const response = await fetchWithTimeout(
     url,
@@ -814,7 +829,7 @@ async function generateReview(rawText) {
 }
 
 async function generateThink(rawText, organize, round, actions, reply) {
-  const remote = await postReview({
+  const remote = await postChat({
     mode: "think",
     date: currentIso(),
     text: String(rawText || "").slice(0, 8000),
@@ -832,14 +847,31 @@ async function generateThink(rawText, organize, round, actions, reply) {
 
 async function probeReviewApi() {
   try {
+    const chatUrl = chatApiUrl();
+    const chatResponse = await fetchWithTimeout(chatUrl, { method: "GET" }, 8000);
+    const chatPayload = await chatResponse.json().catch(() => ({}));
+    if (chatResponse.ok && chatPayload && typeof chatPayload === "object") {
+      state.apiConfigured = Boolean(chatPayload.configured);
+      const label = [chatPayload.provider, chatPayload.model].filter(Boolean).join(" / ") || "未標示模型";
+      if (state.apiConfigured) {
+        console.log("[日精進 API] /api/chat 金鑰已設定", label);
+      } else {
+        console.warn("[日精進 API] 伺服器還沒讀到 ANTHROPIC_API_KEY 或 OPENAI_API_KEY。本機請寫入 .env.local，Vercel 請設環境變數後 Redeploy。");
+      }
+      return;
+    }
+  } catch (error) {
+    console.warn("[日精進 API] /api/chat 健康檢查失敗", formatApiError(error), error);
+  }
+  try {
     const url = reviewApiUrl();
     const response = await fetchWithTimeout(url, { method: "GET" }, 8000);
     const payload = await response.json().catch(() => ({}));
     state.apiConfigured = Boolean(payload.configured);
     if (state.apiConfigured) {
-      console.log("[日精進 API] 雲端金鑰已設定", payload.model || "gpt-4o-mini");
+      console.log("[日精進 API] 雲端金鑰已設定", payload.provider || "openai", payload.model || "gpt-4o-mini");
     } else {
-      console.warn("[日精進 API] 伺服器還沒讀到 OPENAI_API_KEY。請在 Vercel → Settings → Environment Variables 設 Production，然後 Redeploy。");
+      console.warn("[日精進 API] 伺服器還沒讀到 ANTHROPIC_API_KEY 或 OPENAI_API_KEY。請在本機 .env.local 或 Vercel 環境變數設定後 Redeploy。");
     }
   } catch (error) {
     state.apiConfigured = false;
@@ -4553,7 +4585,7 @@ async function generateThinkGuideAsk(options = {}) {
   }, 32000);
   try {
     if (!state.user) throw new Error("請先登入，才能使用雲端分析。");
-    const remote = await postReview({
+    const remote = await postChat({
       mode: "insight",
       variant: "think-guide",
       step: "ask",
@@ -4615,7 +4647,7 @@ async function generateThinkGuideClose(options = {}) {
   }, 32000);
   try {
     if (!state.user) throw new Error("請先登入，才能使用雲端分析。");
-    const remote = await postReview({
+    const remote = await postChat({
       mode: "insight",
       variant: "think-guide",
       step: "close",

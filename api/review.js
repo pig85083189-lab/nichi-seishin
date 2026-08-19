@@ -1,6 +1,6 @@
 const { requireUser } = require("../lib/auth");
 const { ensureTrial, isEntitled, supabaseAdminConfigured } = require("../lib/supabase");
-const { getApiKey, getModel, callOpenAI } = require("../lib/openai");
+const { getApiKey, getModel, getProvider, usesClaude, callOpenAI } = require("../lib/openai");
 
 function readJsonBody(req) {
   const raw = req.body;
@@ -1146,6 +1146,8 @@ module.exports = async function handler(req, res) {
       ok: true,
       configured: Boolean(getApiKey()),
       auth: require("../lib/auth").authConfigured(),
+      provider: getProvider(),
+      usesClaude: usesClaude(),
       model: getModel(),
     });
     return;
@@ -1372,7 +1374,7 @@ module.exports = async function handler(req, res) {
           res.status(502).json({ ok: false, error: "今天的核心覺察還沒整理好，請再試一次" });
           return;
         }
-        res.status(200).json({ ok: true, source: "openai", data: { quotes, items: quotes, kind } });
+        res.status(200).json({ ok: true, source: getProvider(), data: { quotes, items: quotes, kind } });
         return;
       }
       const min = 3;
@@ -1382,7 +1384,7 @@ module.exports = async function handler(req, res) {
         res.status(502).json({ ok: false, error: "AI 勾勾表格式不完整，請再試一次" });
         return;
       }
-      res.status(200).json({ ok: true, source: "openai", data: { items: items.slice(0, max), kind } });
+      res.status(200).json({ ok: true, source: getProvider(), data: { items: items.slice(0, max), kind } });
       return;
     }
     if (mode === "insight") {
@@ -1393,7 +1395,7 @@ module.exports = async function handler(req, res) {
             res.status(502).json({ ok: false, error: "今日覺察總結還沒整理好，請再試一次" });
             return;
           }
-          res.status(200).json({ ok: true, source: "openai", data: closed });
+          res.status(200).json({ ok: true, source: getProvider(), data: closed });
           return;
         }
         const asked = normalizeThinkGuideAsk(data);
@@ -1401,7 +1403,7 @@ module.exports = async function handler(req, res) {
           res.status(502).json({ ok: false, error: "深度思考提問格式不完整，請再試一次" });
           return;
         }
-        res.status(200).json({ ok: true, source: "openai", data: asked });
+        res.status(200).json({ ok: true, source: getProvider(), data: asked });
         return;
       }
       const insight = normalizeInsightResult(data);
@@ -1409,7 +1411,7 @@ module.exports = async function handler(req, res) {
         res.status(502).json({ ok: false, error: "深度思考格式不完整，請再試一次" });
         return;
       }
-      res.status(200).json({ ok: true, source: "openai", data: insight });
+      res.status(200).json({ ok: true, source: getProvider(), data: insight });
       return;
     }
     if (mode === "deepen") {
@@ -1418,7 +1420,7 @@ module.exports = async function handler(req, res) {
         res.status(502).json({ ok: false, error: "AI 延伸提問格式不完整，請再試一次" });
         return;
       }
-      res.status(200).json({ ok: true, source: "openai", data: { questions } });
+      res.status(200).json({ ok: true, source: getProvider(), data: { questions } });
       return;
     }
     if (mode === "prompts") {
@@ -1431,7 +1433,7 @@ module.exports = async function handler(req, res) {
           res.status(502).json({ ok: false, error: "今天的覺察題還沒準備好，請再試一次" });
           return;
         }
-        res.status(200).json({ ok: true, source: "openai", data: { awareness, execution: [] } });
+        res.status(200).json({ ok: true, source: getProvider(), data: { awareness, execution: [] } });
         return;
       }
       if (isCorePromptsRequest(body)) {
@@ -1441,7 +1443,7 @@ module.exports = async function handler(req, res) {
             res.status(502).json({ ok: false, error: "今天的執行題還沒準備好，請再試一次" });
             return;
           }
-          res.status(200).json({ ok: true, source: "openai", data: { awareness: [], execution } });
+          res.status(200).json({ ok: true, source: getProvider(), data: { awareness: [], execution } });
           return;
         }
         if (prompts.awareness.length < 1) {
@@ -1454,7 +1456,7 @@ module.exports = async function handler(req, res) {
         res.status(502).json({ ok: false, error: "AI 題目格式不完整，請再試一次" });
         return;
       }
-      res.status(200).json({ ok: true, source: "openai", data: prompts });
+      res.status(200).json({ ok: true, source: getProvider(), data: prompts });
       return;
     }
     if (mode === "manifest") {
@@ -1463,7 +1465,7 @@ module.exports = async function handler(req, res) {
         res.status(502).json({ ok: false, error: "AI 顯化步驟格式不完整，請再試一次" });
         return;
       }
-      res.status(200).json({ ok: true, source: "openai", data: { items: items.slice(0, 5), kind: "manifest" } });
+      res.status(200).json({ ok: true, source: getProvider(), data: { items: items.slice(0, 5), kind: "manifest" } });
       return;
     }
     if (mode === "bodycoach") {
@@ -1472,15 +1474,15 @@ module.exports = async function handler(req, res) {
         res.status(502).json({ ok: false, error: "今天的身心建議還沒整理好，請再試一次" });
         return;
       }
-      res.status(200).json({ ok: true, source: "openai", data: coach });
+      res.status(200).json({ ok: true, source: getProvider(), data: coach });
       return;
     }
-    res.status(200).json({ ok: true, source: "openai", data });
+    res.status(200).json({ ok: true, source: getProvider(), data });
   } catch (error) {
     const aborted = error?.name === "AbortError" || /aborted/i.test(String(error?.message || ""));
     res.status(aborted ? 504 : error.status || 500).json({
       ok: false,
-      error: aborted ? "OpenAI 逾時" : String(error.message || "伺服器錯誤"),
+      error: aborted ? (usesClaude() ? "Claude 逾時" : "OpenAI 逾時") : String(error.message || "伺服器錯誤"),
     });
   }
 };
