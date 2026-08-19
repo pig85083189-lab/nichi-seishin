@@ -1,19 +1,6 @@
-function chatCompletionsUrl() {
-  const raw = String(process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").trim() || "https://api.openai.com/v1";
-  const base = raw.replace(/\/+$/, "");
-  if (/\/chat\/completions$/i.test(base)) return base;
-  return `${base}/chat/completions`;
-}
-
-function parseAiJson(raw) {
-  const text = String(raw || "").trim();
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = (fenced ? fenced[1] : text).trim();
-  const start = candidate.indexOf("{");
-  const end = candidate.lastIndexOf("}");
-  if (start === -1 || end === -1) throw new Error("OpenAI 回傳不是 JSON");
-  return JSON.parse(candidate.slice(start, end + 1));
-}
+const { requireUser } = require("../lib/auth");
+const { ensureTrial, isEntitled, supabaseAdminConfigured } = require("../lib/supabase");
+const { getApiKey, getModel, callOpenAI } = require("../lib/openai");
 
 function readJsonBody(req) {
   const raw = req.body;
@@ -34,13 +21,6 @@ function readJsonBody(req) {
   }
   if (typeof raw === "object") return raw;
   return {};
-}
-
-const { requireUser } = require("../lib/auth");
-const { ensureTrial, isEntitled, supabaseAdminConfigured } = require("../lib/supabase");
-
-function getApiKey() {
-  return String(process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY || "").trim();
 }
 
 const ORGANIZE_SYSTEM = `你是「日精進」的高階心靈教練，也是一位沉穩的專業諮詢師。使用者會用口語、不完整的句子描述今天。你的工作不是寫摘要，也不是上課，而是幫他把真正卡住的那一層說清楚，讓思緒被釐清。
@@ -368,11 +348,14 @@ function normalizeThinkGuideAsk(raw) {
 function normalizeThinkGuideClose(raw) {
   const data = raw && typeof raw === "object" ? raw : {};
   const actions = normalizeStringList(data.actions || data.suggestions || data.steps, 2);
+  while (actions.length < 2) {
+    actions.push(actions.length ? "今晚先把今天真正卡住的那一點，用一句話寫下來。" : "明天只做一件 5 分鐘內能完成、和今天有關的小事。");
+  }
   return {
     step: "close",
-    title: String(data.title || data.headline || "").trim().slice(0, 48),
+    title: String(data.title || data.headline || "").trim().slice(0, 48) || "今天被看見的那一層",
     summary: String(data.summary || data.conclusion || data.psychology || "").trim(),
-    actions,
+    actions: actions.slice(0, 2),
   };
 }
 
@@ -873,6 +856,7 @@ function corePromptsUserPrompt(body) {
 ${thanks}
 今日事件：${compactLine(ctx.event || body.text, 800) || "（未寫）"}
 心情：${ctx.mood || "未選"}
+${formatBodyCheckPrompt(ctx)}
 
 尚未完成的行動：${openActions.slice(0, 6).map((item) => compactLine(item, 40)).join("、") || "尚無"}
 
@@ -883,13 +867,32 @@ ${avoid.length ? avoid.slice(0, 16).map((item) => `- ${compactLine(item, 60)}`).
 執行題：針對今天卡住、生氣或拖延的部分，問具體盲點，以及明天最快的突破行動。`;
 }
 
+function asPromptList(raw) {
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === "string" && raw.trim()) return [raw];
+  if (raw && typeof raw === "object") {
+    if (Array.isArray(raw.questions)) return raw.questions;
+    if (Array.isArray(raw.items)) return raw.items;
+    if (Array.isArray(raw.prompts)) return raw.prompts;
+    if (raw.question || raw.title || raw.text || raw.prompt || raw.statement) return [raw];
+    const values = Object.keys(raw)
+      .sort()
+      .map((key) => raw[key])
+      .filter((item) => typeof item === "string" || (item && typeof item === "object"));
+    if (values.length) return values;
+  }
+  return [];
+}
+
 function normalizePromptItem(item) {
   if (typeof item === "string") {
     const question = item.trim();
     return question ? { question, placeholder: "寫下那個時刻…" } : null;
   }
   if (!item || typeof item !== "object") return null;
-  const question = String(item.question || item.title || item.text || "").trim();
+  const question = String(
+    item.question || item.title || item.text || item.prompt || item.statement || item.label || ""
+  ).trim();
   if (!question) return null;
   return {
     question: question.slice(0, 80),
@@ -912,67 +915,19 @@ function normalizeDeepPromptItem(item) {
 
 function normalizePromptsResult(raw) {
   const data = raw && typeof raw === "object" ? raw : {};
-  const awareness = (Array.isArray(data.awareness) ? data.awareness : [])
+  const awareness = asPromptList(data.awareness)
     .map(normalizePromptItem)
     .filter(Boolean)
     .slice(0, 3);
-  const execution = (Array.isArray(data.execution) ? data.execution : [])
+  const execution = asPromptList(data.execution)
     .map(normalizePromptItem)
     .filter(Boolean)
     .slice(0, 3);
-  const deep = (Array.isArray(data.deep) ? data.deep : [])
+  const deep = asPromptList(data.deep)
     .map(normalizeDeepPromptItem)
     .filter(Boolean)
     .slice(0, 4);
   return { awareness, execution, deep };
-}
-
-async function callOpenAI(messages, options = {}) {
-  const apiKey = getApiKey();
-  if (!apiKey) {
-    const error = new Error("伺服器尚未設定 OPENAI_API_KEY");
-    error.status = 500;
-    throw error;
-  }
-
-  const url = chatCompletionsUrl();
-  const model = String(process.env.OPENAI_MODEL || "gpt-4o-mini").trim() || "gpt-4o-mini";
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 25000);
-
-  const headers = {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${apiKey}`,
-  };
-  if (/openrouter\.ai/i.test(url)) {
-    headers["HTTP-Referer"] = process.env.OPENROUTER_REFERER || "https://nichi-seishin.vercel.app";
-    headers["X-Title"] = "nichi-seishin";
-  }
-
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        model,
-        temperature: Number.isFinite(options.temperature) ? options.temperature : 0.75,
-        response_format: { type: "json_object" },
-        messages,
-      }),
-      signal: controller.signal,
-    });
-
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const error = new Error((data && data.error && data.error.message) || `OpenAI 請求失敗（${response.status}）`);
-      error.status = response.status;
-      throw error;
-    }
-    const content = data?.choices?.[0]?.message?.content || "";
-    return parseAiJson(content);
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 function setCors(res) {
@@ -994,7 +949,7 @@ module.exports = async function handler(req, res) {
       ok: true,
       configured: Boolean(getApiKey()),
       auth: require("../lib/auth").authConfigured(),
-      model: String(process.env.OPENAI_MODEL || "gpt-4o-mini"),
+      model: getModel(),
     });
     return;
   }
@@ -1180,7 +1135,20 @@ module.exports = async function handler(req, res) {
       ];
     }
 
-    const data = await callOpenAI(messages, { temperature: mode === "prompts" ? 0.95 : 0.75 });
+    const data = await callOpenAI(messages, {
+      temperature: mode === "prompts" ? 0.7 : 0.75,
+      timeoutMs: 22000,
+      maxTokens:
+        mode === "insight" && isThinkGuideRequest(body)
+          ? thinkGuideStep(body) === "close"
+            ? 900
+            : 400
+          : mode === "prompts" && isCorePromptsRequest(body)
+            ? 1100
+            : mode === "checklist"
+              ? 600
+              : 1400,
+    });
     if (mode === "checklist") {
       const kind = body.kind === "execution" ? "execution" : "awareness";
       if (kind === "awareness") {
@@ -1241,9 +1209,15 @@ module.exports = async function handler(req, res) {
     if (mode === "prompts") {
       const prompts = normalizePromptsResult(data);
       if (isCorePromptsRequest(body)) {
-        if (prompts.awareness.length < 3 || prompts.execution.length < 3) {
-          res.status(502).json({ ok: false, error: "AI 題目格式不完整，請再試一次" });
+        if (prompts.awareness.length < 3) {
+          res.status(502).json({ ok: false, error: "今天的覺察題還沒準備好，請再試一次" });
           return;
+        }
+        while (prompts.execution.length < 3) {
+          prompts.execution.push({
+            question: "明天只做一件 5 分鐘內能完成、和今天有關的小事，會先碰哪裡？",
+            placeholder: "明天最小的一步…",
+          });
         }
       } else if (prompts.deep.length < 4) {
         res.status(502).json({ ok: false, error: "AI 題目格式不完整，請再試一次" });

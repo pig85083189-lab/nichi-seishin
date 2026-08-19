@@ -712,7 +712,9 @@ function reviewApiUrl() {
 
 function formatApiError(error) {
   const message = String(error?.message || error || "未知錯誤");
-  if (error?.name === "AbortError" || /請求逾時|逾時/.test(message)) return "雲端通道逾時。請確認 Vercel 已 Redeploy，且 OPENAI_API_KEY 設在 Production。";
+  if (error?.name === "AbortError" || /請求逾時|逾時|504|OpenAI 逾時|FUNCTION_INVOCATION_TIMEOUT/i.test(message)) {
+    return "雲端整理逾時了。請再試一次。";
+  }
   if (/file:|本機 HTML/.test(message)) return message;
   if (/401|請先使用 Google|未登入|未授權/i.test(message)) {
     return "請先使用 Google 登入，即可解鎖 7 天完整免費試用";
@@ -3787,6 +3789,8 @@ function setChecklistLoading(kind, loading) {
   const loader = document.getElementById(ui.loader);
   const list = document.getElementById(ui.list);
   state.checklistBusy[kind] = loading;
+  if (!state.checklistBusyAt) state.checklistBusyAt = { awareness: 0, execution: 0, manifest: 0 };
+  state.checklistBusyAt[kind] = loading ? Date.now() : 0;
   if (btn) {
     btn.disabled = loading;
     btn.textContent = loading
@@ -3827,7 +3831,10 @@ async function generateJournalChecklist(kind, options = {}) {
     return;
   }
   const isAware = kind === "awareness";
-  if (state.checklistBusy[kind]) return;
+  if (recoverStaleBusy(state.checklistBusy[kind], state.checklistBusyAt?.[kind], () => setChecklistLoading(kind, false))) {
+    if (!options.auto) showToast(isAware ? "還在為你整理核心覺察，請稍候。" : "還在為你整理行動卡，請稍候。");
+    return;
+  }
   const journal = collectJournal();
   const answers = isAware ? journal.awareness : journal.execution;
   const ready = isAware ? awarenessReady(answers) : executionReady(answers);
@@ -3852,6 +3859,12 @@ async function generateJournalChecklist(kind, options = {}) {
   const token = (state.checklistToken[kind] || 0) + 1;
   state.checklistToken[kind] = token;
   setChecklistLoading(kind, true);
+  const watchdog = setTimeout(() => {
+    if (state.checklistToken[kind] === token && state.checklistBusy[kind]) {
+      setChecklistLoading(kind, false);
+      if (!options.auto) showToast("雲端回應太久，已先停下來。請再試一次。");
+    }
+  }, 32000);
 
   const fallback = isAware ? buildAwarenessCheckItems(journal) : buildExecutionCheckItems(journal);
   const min = isAware ? AWARENESS_QUOTE_COUNT : 3;
@@ -3901,6 +3914,7 @@ async function generateJournalChecklist(kind, options = {}) {
     applyGeneratedChecklist(kind, fallback.slice(0, max), sig);
     showToast(`雲端分析失敗：${formatApiError(error)}，先用本地整理。`);
   } finally {
+    clearTimeout(watchdog);
     if (state.checklistToken[kind] === token) setChecklistLoading(kind, false);
   }
 }
@@ -4000,13 +4014,19 @@ function insightReady(journal) {
   const data = journal || collectJournal();
   if ((data.mode || state.journalMode) === "quick") return quickInsightReady(data);
   const check = normalizeBodyCheck(data.bodyCheck, data.bodyTags, data.bodyNote);
-  const hasBody =
+  const hasBody = Boolean(
     (data.bodyTags || []).length ||
     String(data.bodyNote || "").trim() ||
+    (check.mood.flags || []).length ||
+    check.mood.reason ||
+    (check.body.flags || []).length ||
+    check.body.other ||
+    check.body.reason ||
     check.sleep.duration ||
     check.sleep.quality ||
     check.sleep.energy ||
-    check.body.other;
+    check.sleep.reason
+  );
   return Boolean(String(data.event || "").trim() && data.mood && hasBody);
 }
 
@@ -4251,6 +4271,7 @@ function setInsightLoading(loading) {
   const body = document.getElementById(quick ? "quickInsightBody" : "insightBody");
   const otherBody = document.getElementById(quick ? "insightBody" : "quickInsightBody");
   state.insightBusy = loading;
+  state.insightBusyAt = loading ? Date.now() : 0;
   if (btn) {
     btn.disabled = loading;
     btn.textContent = loading ? "想下一問…" : "開始深度思考";
@@ -4395,9 +4416,19 @@ function applyThinkGuideInsight(guide, sig) {
   return insight;
 }
 
+function recoverStaleBusy(flag, startedAt, clearFn, limitMs = 32000) {
+  if (!flag) return false;
+  if (Date.now() - (startedAt || 0) < limitMs) return true;
+  if (typeof clearFn === "function") clearFn();
+  return false;
+}
+
 async function generateThinkGuideAsk(options = {}) {
   setJournalFoldOpen(thinkGuideFoldId(), true);
-  if (state.insightBusy) return false;
+  if (recoverStaleBusy(state.insightBusy, state.insightBusyAt, () => setInsightLoading(false))) {
+    if (!options.auto) showToast("還在為你想下一問，請稍候。");
+    return false;
+  }
   const journal = collectJournal();
   if (!insightReady(journal)) {
     if (!options.auto) showToast(thinkGuideNotReadyMessage());
@@ -4413,6 +4444,12 @@ async function generateThinkGuideAsk(options = {}) {
   const token = (state.insightToken || 0) + 1;
   state.insightToken = token;
   setInsightLoading(true);
+  const watchdog = setTimeout(() => {
+    if (state.insightToken === token && state.insightBusy) {
+      setInsightLoading(false);
+      if (!options.auto) showToast("雲端回應太久，已先停下來。請再試一次。");
+    }
+  }, 32000);
   try {
     if (!state.user) throw new Error("請先登入，才能使用雲端分析。");
     const remote = await postReview({
@@ -4446,13 +4483,17 @@ async function generateThinkGuideAsk(options = {}) {
     if (!options.auto) showToast(`雲端提問失敗：${formatApiError(error)}，先用本地引導。`);
     return true;
   } finally {
+    clearTimeout(watchdog);
     if (state.insightToken === token) setInsightLoading(false);
   }
 }
 
 async function generateThinkGuideClose(options = {}) {
   setJournalFoldOpen(thinkGuideFoldId(), true);
-  if (state.insightBusy) return false;
+  if (recoverStaleBusy(state.insightBusy, state.insightBusyAt, () => setInsightLoading(false))) {
+    if (!options.auto) showToast("還在為你收成今日深度思考，請稍候。");
+    return false;
+  }
   const journal = collectJournal();
   const current = normalizeInsight(state.journalInsight);
   const guide = current.guide || emptyThinkGuide();
@@ -4465,6 +4506,12 @@ async function generateThinkGuideClose(options = {}) {
   state.insightToken = token;
   setInsightLoading(true);
   setThinkGuideLoadingLabel("正在為你收成今日深度思考…");
+  const watchdog = setTimeout(() => {
+    if (state.insightToken === token && state.insightBusy) {
+      setInsightLoading(false);
+      if (!options.fromComplete && !options.auto) showToast("雲端回應太久，已先停下來。請再試一次。");
+    }
+  }, 32000);
   try {
     if (!state.user) throw new Error("請先登入，才能使用雲端分析。");
     const remote = await postReview({
@@ -4492,13 +4539,17 @@ async function generateThinkGuideClose(options = {}) {
     if (!options.fromComplete) showToast(`雲端總結失敗：${formatApiError(error)}，先留下本地思考。`);
     return true;
   } finally {
+    clearTimeout(watchdog);
     setThinkGuideLoadingLabel("正在為你想下一問…");
     if (state.insightToken === token) setInsightLoading(false);
   }
 }
 
 async function submitThinkGuideRound() {
-  if (state.insightBusy) return;
+  if (recoverStaleBusy(state.insightBusy, state.insightBusyAt, () => setInsightLoading(false))) {
+    showToast("還在為你想下一問，請稍候。");
+    return;
+  }
   const journal = collectJournal();
   if (!insightReady(journal)) {
     showToast(thinkGuideNotReadyMessage());
@@ -4958,7 +5009,18 @@ function coreStoryReady(journal) {
 function corePromptsSignature(journal) {
   const data = journal || collectJournal();
   const thanks = thanksItemsFrom(data.thanksText || data.thanks).join("\n");
-  return ["core", thanks, String(data.event || "").trim(), data.mood || ""].join("\n");
+  const check = normalizeBodyCheck(data.bodyCheck, data.bodyTags, data.bodyNote);
+  const bodySig = [
+    (check.mood.flags || []).join("、"),
+    check.mood.reason || "",
+    (check.body.flags || []).join("、"),
+    check.body.other || "",
+    check.body.reason || "",
+    check.sleep.duration || "",
+    check.sleep.quality || "",
+    check.sleep.energy || "",
+  ].join("|");
+  return ["core", thanks, String(data.event || "").trim(), data.mood || "", bodySig].join("\n");
 }
 
 function corePromptsHaveAnswers(journal) {
@@ -5284,6 +5346,7 @@ function applyGeneratedCorePrompts(awareness, execution, sig, fromAi) {
 
 function setCorePromptsLoading(loading) {
   state.corePromptsBusy = loading;
+  state.corePromptsBusyAt = loading ? Date.now() : 0;
   const awareLoader = document.getElementById("awarePromptLoading");
   const execLoader = document.getElementById("execPromptLoading");
   if (awareLoader) awareLoader.hidden = !loading;
@@ -5291,8 +5354,28 @@ function setCorePromptsLoading(loading) {
   syncCorePromptGate();
 }
 
+function localCorePrompts(journal) {
+  const eventBit = String(journal?.event || "").trim().slice(0, 12) || "今天這件事";
+  const mood = journal?.mood || "這份心情";
+  return {
+    awareness: [
+      { question: `在「${eventBit}」裡，我真正被碰到的，其實不是表面看到的那一層。` },
+      { question: "我寫下的感謝，其實在說：我今天很想被好好對待。" },
+      { question: `「${mood}」底下，還有一句我還沒敢對自己承認的話。` },
+    ],
+    execution: [
+      { question: `若明天只改「${eventBit}」裡最小的一步，你會先動哪裡？`, placeholder: "明天最小的一步…" },
+      { question: "今天卡住時，你最常用來保護自己的方式是什麼？", placeholder: "我習慣用的保護是…" },
+      { question: "哪一個 5 分鐘內做得到的動作，能讓今天鬆一口氣？", placeholder: "5 分鐘內能做的是…" },
+    ],
+  };
+}
+
 async function generateCorePrompts(options = {}) {
-  if (state.corePromptsBusy) return;
+  if (recoverStaleBusy(state.corePromptsBusy, state.corePromptsBusyAt, () => setCorePromptsLoading(false))) {
+    if (!options.auto) showToast("還在為你準備今天的覺察，請稍候。");
+    return;
+  }
   const journal = collectJournal();
   if (!coreStoryReady(journal)) {
     if (!options.auto) showToast("請先寫下今日感謝、事件，並選擇心情。");
@@ -5310,6 +5393,12 @@ async function generateCorePrompts(options = {}) {
   const token = (state.corePromptsToken || 0) + 1;
   state.corePromptsToken = token;
   setCorePromptsLoading(true);
+  const watchdog = setTimeout(() => {
+    if (state.corePromptsToken === token && state.corePromptsBusy) {
+      setCorePromptsLoading(false);
+      if (!options.auto) showToast("雲端回應太久，已先停下來。請再試一次。");
+    }
+  }, 32000);
 
   try {
     if (!state.user) throw new Error("請先登入，才能使用雲端出題。");
@@ -5319,28 +5408,40 @@ async function generateCorePrompts(options = {}) {
       date: currentIso(),
       text: journal.event,
       context: {
+        journalMode: state.journalMode,
+        mode: state.journalMode,
         thanks: thanksTextFrom(journal),
         thanksText: thanksTextFrom(journal),
         event: journal.event,
         mood: journal.mood,
+        bodyTags: journal.bodyTags,
+        bodyNote: journal.bodyNote,
+        bodyCheck: journal.bodyCheck,
       },
       progress: collectGrowthProgress(),
     });
     if (state.corePromptsToken !== token) return;
-    const awareness = normalizeAwarenessPrompts(remote.awareness);
-    const execution = normalizeExecutionPrompts(remote.execution);
-    if (awareness.length < AWARENESS_QUIZ_COUNT || execution.length < 3) throw new Error("雲端回傳格式不完整");
-    applyGeneratedCorePrompts(awareness, execution, sig, true);
+    const fallback = localCorePrompts(journal);
+    const awareness = normalizeAwarenessPrompts(remote.awareness?.length ? remote.awareness : fallback.awareness);
+    const execution = normalizeExecutionPrompts(remote.execution?.length ? remote.execution : fallback.execution);
+    if (awareness.length < AWARENESS_QUIZ_COUNT) throw new Error("雲端回傳格式不完整");
+    applyGeneratedCorePrompts(
+      awareness,
+      execution.length >= 3 ? execution : fallback.execution,
+      sig,
+      true
+    );
     if (!options.auto) showToast("今天的覺察題已經準備好了。");
   } catch (error) {
     if (state.corePromptsToken !== token) return;
+    const fallback = localCorePrompts(journal);
+    applyGeneratedCorePrompts(fallback.awareness, fallback.execution, sig, true);
     if (options.auto) state.corePromptsFailedSig = sig;
-    showToast(
-      options.auto
-        ? `今日專屬題目還沒生成：${formatApiError(error)}。可點按鈕再試一次。`
-        : `今天的覺察還沒準備好：${formatApiError(error)}。請再試一次。`
-    );
+    if (!options.auto) {
+      showToast(`雲端出題還沒好：${formatApiError(error)}，先用本地覺察題。`);
+    }
   } finally {
+    clearTimeout(watchdog);
     if (state.corePromptsToken === token) setCorePromptsLoading(false);
   }
 }
