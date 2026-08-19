@@ -4086,25 +4086,6 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   margin-top: 18px;
 }
 
-.exec-q__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.exec-q__head .journal-core-q {
-  margin: 0;
-  flex: 1;
-  min-width: 0;
-}
-
-.exec-q__park {
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
 .exec-q-empty {
   margin: 0;
   padding: 16px 14px;

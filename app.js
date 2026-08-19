@@ -3361,9 +3361,7 @@ function executionReady(answers) {
   const prompts = normalizeExecutionPrompts(state.executionPrompts);
   const list = Array.isArray(answers) ? answers : [];
   if (prompts.length >= 3) {
-    const allDealt = prompts.every((item, index) => item.parked || String(list[index] || "").trim());
-    const hasUsableAnswer = prompts.some((_, index) => String(list[index] || "").trim());
-    return allDealt && hasUsableAnswer;
+    return prompts.every((_, index) => String(list[index] || "").trim());
   }
   return coreAnswerFilled(list);
 }
@@ -3791,7 +3789,7 @@ async function generateJournalChecklist(kind, options = {}) {
       showToast(
         isAware
           ? "先點完三題是非，再生成核心金句。"
-          : "先把進行中的執行突破題寫完（或不想答的先放到「先放著」），再生成勾勾表。"
+          : "先把執行突破題寫完，再生成勾勾表。"
       );
     }
     return;
@@ -3815,14 +3813,7 @@ async function generateJournalChecklist(kind, options = {}) {
       mode: "checklist",
       kind,
       date: currentIso(),
-      answers: isAware
-        ? answers
-        : answers.map((item, index) => {
-            const text = String(item || "").trim();
-            if (text) return String(item || "");
-            const prompt = normalizeExecutionPrompts(journal.executionPrompts || state.executionPrompts)[index];
-            return prompt?.parked ? "先放著（今日先不答）" : String(item || "");
-          }),
+      answers,
       questions: isAware
         ? currentAwarenessQuestions()
         : currentExecutionQuestions(),
@@ -4681,9 +4672,7 @@ function currentAwarenessQuestions() {
 
 function currentExecutionQuestions() {
   const prompts = normalizeExecutionPrompts(state.executionPrompts);
-  if (prompts.length) {
-    return prompts.map((item) => (item.parked ? `${item.question}（先放著，今日先不答）` : item.question));
-  }
+  if (prompts.length) return prompts.map((item) => item.question);
   return [CORE_EXECUTION_PROMPT.question];
 }
 
@@ -4886,37 +4875,18 @@ function renderExecutionQuestions(prompts, options = {}) {
   const saved = Array.isArray(options.answers)
     ? options.answers.map((item) => String(item || ""))
     : collectExecutionAnswers();
-  const visible = items
-    .map((item, index) => ({ item, index }))
-    .filter(({ item }) => !item.parked);
-  const emptyCopy = "目前沒有進行中的執行題。";
-  root.innerHTML = visible.length
-    ? visible
+  root.innerHTML = items.length
+    ? items
         .map(
-          ({ item, index }) => `
+          (item, index) => `
         <div class="aware-q exec-q" data-exec-index="${index}">
-          <div class="exec-q__head">
-            <p class="journal-core-q">${escapeHtml(item.question)}</p>
-            <button class="btn btn--ghost btn--tiny exec-q__park" data-exec-park="${index}" type="button">先放著</button>
-          </div>
+          <p class="journal-core-q">${escapeHtml(item.question)}</p>
           <textarea class="textarea" id="exec${index + 1}" rows="4" placeholder="${escapeHtml(item.placeholder || "寫下今天的行動卡點…")}">${escapeHtml(saved[index] || "")}</textarea>
         </div>
       `
         )
         .join("")
-    : `<p class="exec-q-empty">${escapeHtml(emptyCopy)}</p>`;
-}
-
-function setExecutionParked(index, parked) {
-  const prompts = normalizeExecutionPrompts(state.executionPrompts);
-  if (!Number.isInteger(index) || index < 0 || index >= prompts.length) return;
-  persistJournalQuietly();
-  const answers = collectExecutionAnswers();
-  state.executionPrompts = prompts.map((item, i) => (i === index ? { ...item, parked: Boolean(parked) } : item));
-  state.execQuestionTab = "open";
-  renderExecutionQuestions(state.executionPrompts, { answers });
-  persistJournalQuietly();
-  showToast(parked ? "已先放著。" : "已拿回進行中。");
+    : `<p class="exec-q-empty">目前沒有執行題。</p>`;
 }
 
 function renderDeepItemHtml(item, index, slot, openSet) {
@@ -8016,18 +7986,6 @@ function bindEvents() {
       persistJournalQuietly();
       const journal = collectJournal();
       renderAwareQuote(journal.awarenessCheckItems, journal.awarenessChecks);
-      return;
-    }
-    const parkBtn = event.target.closest("[data-exec-park]");
-    if (parkBtn) {
-      event.preventDefault();
-      setExecutionParked(Number(parkBtn.dataset.execPark), true);
-      return;
-    }
-    const unparkBtn = event.target.closest("[data-exec-unpark]");
-    if (unparkBtn) {
-      event.preventDefault();
-      setExecutionParked(Number(unparkBtn.dataset.execUnpark), false);
       return;
     }
     const copyBtn = event.target.closest("[data-copy-aware-quote]");
