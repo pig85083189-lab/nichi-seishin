@@ -4082,10 +4082,6 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   margin-top: 22px;
 }
 
-.exec-q-tabs {
-  margin: 0 0 14px;
-}
-
 .exec-q + .exec-q {
   margin-top: 18px;
 }

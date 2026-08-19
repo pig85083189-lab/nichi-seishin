@@ -4886,53 +4886,25 @@ function renderExecutionQuestions(prompts, options = {}) {
   const saved = Array.isArray(options.answers)
     ? options.answers.map((item) => String(item || ""))
     : collectExecutionAnswers();
-  const tab = normalizeExecQuestionTab(state.execQuestionTab);
-  const openCount = items.filter((item) => !item.parked).length;
-  const laterCount = items.filter((item) => item.parked).length;
   const visible = items
     .map((item, index) => ({ item, index }))
-    .filter(({ item }) => (tab === "later" ? item.parked : !item.parked));
-  const emptyCopy =
-    tab === "later"
-      ? "還沒有先放著的題。點進行中題目旁的「先放著」，就會移到這裡。"
-      : laterCount
-        ? "進行中的題都先放著了。可到「先放著」拿回來繼續寫。"
-        : "目前沒有進行中的題。";
-  root.innerHTML = `
-    <div class="exec-q-tabs chips" role="tablist" aria-label="執行力題目分類">
-      <button class="chip${tab === "open" ? " is-active" : ""}" data-exec-q-tab="open" type="button" role="tab" aria-selected="${tab === "open"}">進行中${openCount ? `（${openCount}）` : ""}</button>
-      <button class="chip${tab === "later" ? " is-active" : ""}" data-exec-q-tab="later" type="button" role="tab" aria-selected="${tab === "later"}">先放著${laterCount ? `（${laterCount}）` : ""}</button>
-    </div>
-    ${
-      visible.length
-        ? visible
-            .map(
-              ({ item, index }) => `
+    .filter(({ item }) => !item.parked);
+  const emptyCopy = "目前沒有進行中的執行題。";
+  root.innerHTML = visible.length
+    ? visible
+        .map(
+          ({ item, index }) => `
         <div class="aware-q exec-q" data-exec-index="${index}">
           <div class="exec-q__head">
             <p class="journal-core-q">${escapeHtml(item.question)}</p>
-            ${
-              item.parked
-                ? `<button class="btn btn--ghost btn--tiny exec-q__park" data-exec-unpark="${index}" type="button">拿回來</button>`
-                : `<button class="btn btn--ghost btn--tiny exec-q__park" data-exec-park="${index}" type="button">先放著</button>`
-            }
+            <button class="btn btn--ghost btn--tiny exec-q__park" data-exec-park="${index}" type="button">先放著</button>
           </div>
           <textarea class="textarea" id="exec${index + 1}" rows="4" placeholder="${escapeHtml(item.placeholder || "寫下今天的行動卡點…")}">${escapeHtml(saved[index] || "")}</textarea>
         </div>
       `
-            )
-            .join("")
-        : `<p class="exec-q-empty">${escapeHtml(emptyCopy)}</p>`
-    }
-  `;
-}
-
-function setExecQuestionTab(tab) {
-  persistJournalQuietly();
-  const answers = collectExecutionAnswers();
-  state.execQuestionTab = normalizeExecQuestionTab(tab);
-  renderExecutionQuestions(state.executionPrompts, { answers });
-  persistJournalQuietly();
+        )
+        .join("")
+    : `<p class="exec-q-empty">${escapeHtml(emptyCopy)}</p>`;
 }
 
 function setExecutionParked(index, parked) {
@@ -4941,10 +4913,10 @@ function setExecutionParked(index, parked) {
   persistJournalQuietly();
   const answers = collectExecutionAnswers();
   state.executionPrompts = prompts.map((item, i) => (i === index ? { ...item, parked: Boolean(parked) } : item));
-  state.execQuestionTab = parked ? "later" : "open";
+  state.execQuestionTab = "open";
   renderExecutionQuestions(state.executionPrompts, { answers });
   persistJournalQuietly();
-  showToast(parked ? "已移到「先放著」。" : "已拿回進行中。");
+  showToast(parked ? "已先放著。" : "已拿回進行中。");
 }
 
 function renderDeepItemHtml(item, index, slot, openSet) {
@@ -8044,12 +8016,6 @@ function bindEvents() {
       persistJournalQuietly();
       const journal = collectJournal();
       renderAwareQuote(journal.awarenessCheckItems, journal.awarenessChecks);
-      return;
-    }
-    const execTab = event.target.closest("[data-exec-q-tab]");
-    if (execTab) {
-      event.preventDefault();
-      setExecQuestionTab(execTab.dataset.execQTab);
       return;
     }
     const parkBtn = event.target.closest("[data-exec-park]");
