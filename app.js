@@ -2569,7 +2569,7 @@ function prepareTourStep(step) {
   }
   if (step.tourPage) switchPage(step.tourPage, { keepSidebar: Boolean(step.tourSidebar) });
   if (typeof step.element === "string" && step.element.startsWith("#")) {
-    setJournalFoldOpen(step.element.slice(1), true, { persist: false });
+    setJournalFoldOpen(step.element.slice(1), true, { persist: false, pin: false });
   }
 }
 
@@ -2930,7 +2930,6 @@ function toggleQuickModule(key) {
   if (next[key]) {
     const sectionId = { body: "section-body", aware: "section-aware", exec: "section-exec", manifest: "section-manifest" }[key];
     setJournalFoldOpen(sectionId, true);
-    document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
   } else {
     applyJournalFolds();
   }
@@ -5618,6 +5617,46 @@ function persistJournalFoldOpen(openId) {
   }
 }
 
+function journalScroller(el) {
+  const view = document.getElementById("view");
+  if (view && (!el || view.contains(el))) return view;
+  return document.scrollingElement || document.documentElement;
+}
+
+let foldAnchorFrame = 0;
+
+function stopFoldAnchor() {
+  if (foldAnchorFrame) cancelAnimationFrame(foldAnchorFrame);
+  foldAnchorFrame = 0;
+}
+
+function pinFoldWhileAnimating(root, mutate) {
+  if (!root) {
+    mutate();
+    return;
+  }
+  const scroller = journalScroller(root);
+  const anchor = root.querySelector(":scope > [data-journal-fold]") || root;
+  const startTop = anchor.getBoundingClientRect().top;
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  stopFoldAnchor();
+  mutate();
+  const sync = () => {
+    const delta = anchor.getBoundingClientRect().top - startTop;
+    if (!scroller || Math.abs(delta) < 0.5) return;
+    scroller.scrollTop += delta;
+  };
+  sync();
+  if (reduceMotion) return;
+  const doneAt = performance.now() + 420;
+  const tick = (now) => {
+    sync();
+    if (now < doneAt) foldAnchorFrame = requestAnimationFrame(tick);
+    else foldAnchorFrame = 0;
+  };
+  foldAnchorFrame = requestAnimationFrame(tick);
+}
+
 function applyFoldState(id, open) {
   const root = document.getElementById(id);
   if (!root?.classList.contains("journal-fold")) return;
@@ -5640,24 +5679,23 @@ function setJournalFoldOpen(id, open, options = {}) {
   const root = document.getElementById(id);
   if (!root?.classList.contains("journal-fold")) return;
   const next = Boolean(open);
-  if (next && options.exclusive !== false) {
-    JOURNAL_FOLD_IDS.forEach((other) => {
-      if (other !== id) applyFoldState(other, false);
-    });
-  }
-  applyFoldState(id, next);
-  if (options.persist === false) return;
-  persistJournalFoldOpen(next ? id : currentOpenJournalFold());
+  const run = () => {
+    if (next && options.exclusive !== false) {
+      JOURNAL_FOLD_IDS.forEach((other) => {
+        if (other !== id) applyFoldState(other, false);
+      });
+    }
+    applyFoldState(id, next);
+    if (options.persist !== false) persistJournalFoldOpen(next ? id : currentOpenJournalFold());
+  };
+  if (options.pin === false) run();
+  else pinFoldWhileAnimating(root, run);
 }
 
 function toggleJournalFold(id) {
   const root = document.getElementById(id);
   if (!root) return;
-  const opening = !root.classList.contains("is-open");
-  setJournalFoldOpen(id, opening);
-  if (opening) {
-    root.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
+  setJournalFoldOpen(id, !root.classList.contains("is-open"));
 }
 
 function applyJournalFolds() {

@@ -820,6 +820,7 @@ body.nav-closed .auth-pay {
   flex: 1;
   min-width: 0;
   overflow: auto;
+  overflow-anchor: none;
   padding: 36px 40px 64px;
 }
 
@@ -4320,7 +4321,8 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
 .journal-fold__panel {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows 0.34s ease;
+  overflow-anchor: none;
+  transition: grid-template-rows 0.36s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .journal-fold.is-open .journal-fold__panel {
@@ -4331,7 +4333,7 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   min-height: 0;
   overflow: hidden;
   padding: 0 26px;
-  transition: padding 0.34s ease;
+  transition: padding 0.36s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .journal-fold.is-open .journal-fold__inner {
