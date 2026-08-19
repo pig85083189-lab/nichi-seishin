@@ -83,6 +83,7 @@ const state = {
     executionAi: false,
     awarenessAiSig: "",
     executionAiSig: "",
+    awarenessQuoteGenCount: 0,
     manifestAi: false,
     manifestAiSig: "",
     insightSig: "",
@@ -2648,7 +2649,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "3 句核心金句",
-        description: "三題都點完後，這裡會解鎖。點一下，把今天的是／否煉成 3 張可收藏的犀利金句卡。",
+        description: "三題都點完後，這裡會解鎖。點一下煉成三張金句卡；每句只有一句話，這個復盤最多煉兩次。",
         side: "top",
       },
     },
@@ -2835,6 +2836,7 @@ function journalFieldValue(id) {
 }
 
 const AWARENESS_QUIZ_COUNT = 3;
+const AWARENESS_QUOTE_GEN_MAX = 2;
 
 const AWARENESS_QUESTIONS = [
   { question: "今天最觸動我的，其實不是事情本身，而是它碰到了我在意的那一層。" },
@@ -2955,6 +2957,7 @@ function emptyJournal() {
     executionAi: false,
     awarenessAiSig: "",
     executionAiSig: "",
+    awarenessQuoteGenCount: 0,
     manifest: "",
     manifestChecks: [],
     manifestCheckItems: [],
@@ -3385,12 +3388,20 @@ function fillCoreAnswer(id, answers) {
   if (el) el.value = joinJournalAnswers(answers);
 }
 
+function firstAwarenessSentence(text) {
+  const raw = String(text || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const match = raw.match(/^[^。！？!?]+[。！？!?]?/);
+  return (match ? match[0] : raw).replace(/[，,、；;]+$/g, "").trim();
+}
+
 function cleanAwarenessQuote(text) {
-  return String(text || "")
+  return firstAwarenessSentence(text)
     .replace(/^["「『]+|[」』"]+$/g, "")
     .replace(/^[\d.、｜|\-\s]+/, "")
     .trim()
-    .slice(0, 48);
+    .slice(0, 28);
 }
 
 function normalizeAwarenessQuotes(raw, fallback) {
@@ -3427,6 +3438,20 @@ function normalizeAwarenessQuotes(raw, fallback) {
 
 function pickAwarenessQuote(items) {
   return normalizeAwarenessQuotes(items)[0] || "";
+}
+
+function normalizeAwarenessQuoteGenCount(raw, hasQuotes) {
+  const n = Number(raw);
+  if (Number.isFinite(n) && n >= 0) return Math.min(AWARENESS_QUOTE_GEN_MAX, Math.floor(n));
+  return hasQuotes ? 1 : 0;
+}
+
+function awarenessQuoteGenCount() {
+  return normalizeAwarenessQuoteGenCount(state.journalMeta.awarenessQuoteGenCount, collectAwareQuotes().length);
+}
+
+function awarenessQuoteGenCapped() {
+  return awarenessQuoteGenCount() >= AWARENESS_QUOTE_GEN_MAX;
 }
 
 function collectAwareQuotes() {
@@ -3503,7 +3528,7 @@ function renderAwareQuote(items, checked) {
       <p class="aware-quote-gate__meta">${Math.min(done, AWARENESS_QUIZ_COUNT)} / ${AWARENESS_QUIZ_COUNT}</p>
       <p class="aware-quote-gate__hint">${
         ready
-          ? "點下方按鈕，AI 會依你的是／否煉結 3 句犀利金句。"
+          ? "點下方按鈕，每次煉出三句、一句一事；這個復盤最多兩次。"
           : "每一題點「是」或「否」即可，沒有標準答案。"
       }</p>
     </div>
@@ -3513,16 +3538,38 @@ function renderAwareQuote(items, checked) {
 
 function syncAwareQuoteGate() {
   const btn = document.getElementById("btnAwareAi");
+  const hint = document.getElementById("awareQuoteLimitHint");
   if (!btn) return;
   const answers = collectAwarenessQuizAnswers();
   const ready = awarenessReady(answers);
   const quotes = collectAwareQuotes();
   const sig = checklistSignature(answers);
+  const used = awarenessQuoteGenCount();
+  const capped = used >= AWARENESS_QUOTE_GEN_MAX;
   const stale = quotes.length && Boolean(state.journalMeta.awarenessAi) && state.journalMeta.awarenessAiSig !== sig;
   const loading = Boolean(state.checklistBusy.awareness);
-  btn.hidden = !ready || (quotes.length && !stale);
-  btn.disabled = !ready || loading;
-  btn.textContent = loading ? "分析中…" : stale ? "依新作答重煉金句" : "生成 3 句核心金句";
+  const left = Math.max(0, AWARENESS_QUOTE_GEN_MAX - used);
+  btn.hidden = !ready;
+  btn.disabled = !ready || loading || capped;
+  btn.classList.toggle("is-capped", Boolean(ready && capped && !loading));
+  btn.classList.toggle("is-busy", loading);
+  btn.textContent = loading
+    ? "分析中…"
+    : capped
+      ? "已達今日上限"
+      : quotes.length
+        ? stale
+          ? "依新作答再煉一次"
+          : "再煉一次"
+        : "生成核心金句";
+  if (hint) {
+    hint.hidden = !ready;
+    hint.textContent = capped
+      ? "這次復盤的金句已煉過兩次。把目光放回當下這三句就好。"
+      : quotes.length
+        ? `還可以再煉 ${left} 次。每一句都只會是一句話。`
+        : "點一次生成三句金句；每句一句話，這個復盤最多兩次。";
+  }
 }
 
 function buildExecutionCheckItems(journal) {
@@ -3690,7 +3737,7 @@ function checklistUi(kind) {
     return { btn: "btnManifestAi", loader: "manifestLoading", list: "manifestChecks", idle: "生成執行目標" };
   }
   if (kind === "awareness") {
-    return { btn: "btnAwareAi", loader: "awareLoading", list: "awareChecks", idle: "生成 3 句核心金句" };
+    return { btn: "btnAwareAi", loader: "awareLoading", list: "awareChecks", idle: "生成核心金句" };
   }
   return { btn: "btnExecAi", loader: "execLoading", list: "execChecks", idle: "生成專屬行動卡點勾勾表" };
 }
@@ -3720,6 +3767,11 @@ function applyGeneratedChecklist(kind, items, sig) {
     const isAware = kind === "awareness";
     state.journalMeta[isAware ? "awarenessAi" : "executionAi"] = true;
     state.journalMeta[isAware ? "awarenessAiSig" : "executionAiSig"] = sig;
+    if (isAware) {
+      const used = Number(state.journalMeta.awarenessQuoteGenCount);
+      const current = Number.isFinite(used) && used >= 0 ? Math.floor(used) : 0;
+      state.journalMeta.awarenessQuoteGenCount = Math.min(AWARENESS_QUOTE_GEN_MAX, current + 1);
+    }
   }
   persistJournalQuietly();
 }
@@ -3735,6 +3787,11 @@ async function generateJournalChecklist(kind, options = {}) {
   const journal = collectJournal();
   const answers = isAware ? journal.awareness : journal.execution;
   const ready = isAware ? awarenessReady(answers) : executionReady(answers);
+  if (isAware && awarenessQuoteGenCapped()) {
+    if (!options.auto) showToast("這次復盤的金句已達兩次上限。");
+    syncAwareQuoteGate();
+    return;
+  }
   if (!ready) {
     if (!options.auto) {
       showToast(
@@ -3795,7 +3852,13 @@ async function generateJournalChecklist(kind, options = {}) {
       : normalizeAiExecItems(remote.items, min, max, fallback);
     if (items.length < min) throw new Error("雲端回傳格式不完整");
     applyGeneratedChecklist(kind, items, sig);
-    showToast(isAware ? "今日 3 句核心金句已生成。" : "行動卡點已生成。");
+    showToast(
+      isAware
+        ? awarenessQuoteGenCount() >= AWARENESS_QUOTE_GEN_MAX
+          ? "這是這次復盤的最後一次金句。請專注當下這三句。"
+          : "今日核心金句已生成。"
+        : "行動卡點已生成。"
+    );
   } catch (error) {
     if (state.checklistToken[kind] !== token) return;
     applyGeneratedChecklist(kind, fallback.slice(0, max), sig);
@@ -5429,6 +5492,7 @@ function collectJournal() {
     executionAi: Boolean(state.journalMeta.executionAi),
     awarenessAiSig: state.journalMeta.awarenessAiSig || "",
     executionAiSig: state.journalMeta.executionAiSig || "",
+    awarenessQuoteGenCount: awarenessQuoteGenCount(),
     manifest: journalFieldValue("manifestVision"),
     manifestChecks: checkedValues("manifestChecks"),
     manifestCheckItems: checklistItems("manifestChecks"),
@@ -5620,6 +5684,10 @@ function fillJournal(journal) {
     executionAi: Boolean(data.executionAi),
     awarenessAiSig: data.awarenessAiSig || "",
     executionAiSig: data.executionAiSig || "",
+    awarenessQuoteGenCount: normalizeAwarenessQuoteGenCount(
+      data.awarenessQuoteGenCount,
+      Boolean((data.awarenessCheckItems || []).length)
+    ),
     manifestAi: Boolean(data.manifestAi),
     manifestAiSig: data.manifestAiSig || "",
     insightSig: data.insight?.sig || "",

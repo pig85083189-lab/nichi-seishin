@@ -154,12 +154,13 @@ points 給 1-3 個，每個 conclusion 只能一句。actions 給 3 個。若已
 
 const CHECKLIST_AWARENESS_SYSTEM = `你是「日精進」洞察力極高、一針見血的高階心靈教練／導師。不討好、不溫吞、不給廉價安慰。使用者剛完成今天專屬的 3 道自我覺察是非題（題目依他今日的感謝、事件與心情動態生成）。
 
-請根據這 3 題的「是／否」作答，以及今天的復盤內容，精準萃取出 3 個獨立的「核心金句」。每句都要極度簡短、犀利、一針見血，直接說出重點，讓人瞬間有「講到心坎裡、被敲醒」的觸動。
+請根據這 3 題的「是／否」作答，以及今天的復盤內容，精準萃取出 3 個獨立的「核心金句」。每一句都必須是「一句話」：精練、直擊人心、不囉嗦。
 
 規則：
 - 只輸出 JSON：{"quotes":["...","...","..."]}
 - quotes 必須剛好 3 句，各自獨立，不要互相解釋、不要連成一段
-- 每句 12-28 字，短到能一口氣讀完，準到他無法否認「這是在說我今天」
+- 每一句絕對只能有一句話：一個完整意思，一個句號。禁止第二句、禁止分號再接一段、禁止「因為／所以／其實是」再解釋
+- 每句 10-22 字，短到能一口氣讀完，準到他無法否認「這是在說我今天」
 - 三句打三個不同層，不要重複同一個意思：①盲點 ②心理防衛 ③內心真正的結
 - 要讀懂「是」與「否」的組合：點「是」的地方是他已隱約看見的傷；點「否」的地方往往是防衛、迴避，或還沒準備承認的結
 - 禁止空泛雞湯、禁止溫吞安慰、禁止「沒關係」「你已經很棒」「慢慢來就好」
@@ -473,12 +474,20 @@ function normalizeChecklistItems(raw, min, max) {
   return items.slice(0, max);
 }
 
+function firstAwarenessSentence(text) {
+  const raw = String(text || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const match = raw.match(/^[^。！？!?]+[。！？!?]?/);
+  return (match ? match[0] : raw).replace(/[，,、；;]+$/g, "").trim();
+}
+
 function cleanAwarenessQuote(text) {
-  return String(text || "")
+  return firstAwarenessSentence(text)
     .replace(/^["「『]+|[」』"]+$/g, "")
     .replace(/^[\d.、｜|\-\s]+/, "")
     .trim()
-    .slice(0, 48);
+    .slice(0, 28);
 }
 
 function normalizeAwarenessQuotes(raw) {
@@ -587,7 +596,7 @@ ${labeled}
         .map((question, index) => `${index + 1}. ${question}\n作答：${answers[index] || "（未答）"}`)
         .join("\n\n")
     : `是非題作答：${answer || "（未答）"}`;
-  return `請依這個人今天的 3 道覺察是非題作答與今日復盤，精準萃取出 3 個獨立、極度簡短、犀利一針見血的核心金句。每句都要直接說出重點，讓他看完被敲醒。不要雞湯，不要溫吞安慰，不要長篇解釋。
+  return `請依這個人今天的 3 道覺察是非題作答與今日復盤，精準萃取出 3 個獨立、極度簡短、犀利一針見血的核心金句。每一句只能是一句話，不要第二句、不要解釋。讓他看完被敲醒。不要雞湯，不要溫吞安慰，不要長篇。
 
 ${labeled}
 

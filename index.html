@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=123" />
+    <link rel="stylesheet" href="app.css?v=124" />
     <style>
       .splash {
         position: fixed;
@@ -456,13 +456,14 @@
               </div>
               <div class="journal-col aware-col aware-col--quotes js-deep-only">
                 <p class="journal-label">今日核心覺察</p>
-                <p class="journal-guide journal-guide--tight">三題都點完後，會依你的是／否煉結 3 句極度簡短、犀利一針見血的金句。戳中自己的，可以收藏或複製。</p>
+                <p class="journal-guide journal-guide--tight">三題都點完後，會依你的是／否煉結 3 句金句。每句只有一句話；這個復盤最多生成兩次。</p>
                 <div class="check-loading" id="awareLoading" hidden>
-                  <p class="check-loading__label">正在為你煉結 3 句核心金句…</p>
+                  <p class="check-loading__label">正在為你煉結核心金句…</p>
                   <div class="ai-thinking__bar"><i></i></div>
                 </div>
                 <div class="check-list" id="awareChecks"></div>
-                <button class="ai-check-btn" id="btnAwareAi" type="button" hidden>生成 3 句核心金句</button>
+                <button class="ai-check-btn" id="btnAwareAi" type="button" hidden>生成核心金句</button>
+                <p class="aware-quote-limit" id="awareQuoteLimitHint" hidden></p>
               </div>
             </div>
           </section>
@@ -910,6 +911,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=141"></script>
+    <script src="app.js?v=142"></script>
   </body>
 </html>

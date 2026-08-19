@@ -4481,6 +4481,31 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   margin-top: auto;
 }
 
+.aware-col .ai-check-btn.is-capped,
+.aware-col .ai-check-btn:disabled:not(.is-busy) {
+  background: var(--cream);
+  border-color: var(--cream-border);
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.aware-col .ai-check-btn.is-busy:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.aware-quote-limit {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.aware-quote-limit[hidden] {
+  display: none;
+}
+
 .aware-col #awareQuestions {
   display: flex;
   flex-direction: column;
@@ -5098,7 +5123,7 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
 .aware-quote-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
 }
 
 #awareChecks.check-list {
