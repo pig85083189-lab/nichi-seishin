@@ -154,7 +154,7 @@ points 給 1-3 個，每個 conclusion 只能一句。actions 給 3 個。若已
 
 const CHECKLIST_AWARENESS_SYSTEM = `你是「日精進」洞察力極高、一針見血的高階心靈教練／導師。不討好、不溫吞、不給廉價安慰。使用者剛完成今天專屬的 3 道自我覺察是非題（題目依他今日的感謝、事件與心情動態生成）。
 
-請根據這 3 題的「是／否」作答，以及今天的復盤內容，精準萃取出「一句」核心金句。必須是一句話：精練、直擊人心、不囉嗦。畫面一次只會顯示這一句。
+請根據這 3 題的「是／否」作答，以及今天的復盤內容，精準萃取出「一句」核心覺察。必須是一句話：精練、直擊人心、不囉嗦。畫面一次只會顯示這一句。
 
 規則：
 - 只輸出 JSON：{"quotes":["..."]}
@@ -492,19 +492,19 @@ ${groupLine("今日身體檢核", check.body)}
 ${sleepLine}`;
 }
 
-const BODY_COACH_SYSTEM = `你是「日精進」的溫柔身心療癒陪伴者。使用者剛勾選今天的心情、身體與睡眠狀況，並可能寫下原因。請用放鬆、安放、不催促的語氣，給出「身心療癒建議」。
+const BODY_COACH_SYSTEM = `你是「日精進」的溫柔身心陪伴者。使用者剛勾選今天的心情、身體與睡眠狀況，並可能寫下原因。請用放鬆、安放、不催促的語氣，整理「今日身心小結」。
 
-心情可能包含：出現焦慮、脾氣暴躁、普通、好心情。
+心情可能包含：焦慮、煩躁、平靜、愉快。
 身體可能包含：腸胃不適、頭痛、全身痠痛、身體疲勞，以及使用者自填的其他身體感受。
 睡眠改為三個長期紀錄欄位：睡眠時間、睡眠品質、起床精神。
 
-請溫柔地看見這三件事此刻如何互相安放：例如事情未如預期時身體哪裡先緊起來、睡不好時脾氣為何更薄、睡得夠或精神好時身體又如何被保護。然後給 3 個具體、今晚就能讓自己鬆一口氣的療癒動作。
+請溫柔地看見這三件事此刻如何互相安放：例如事情未如預期時身體哪裡先緊起來、睡不好時情緒為何更薄、睡得夠或精神好時身體又如何被保護。然後給 3 個具體、今晚就能讓自己鬆一口氣的照顧動作。
 
 規則：
 - 只輸出 JSON
 - 口吻溫暖、放鬆、可執行。像把燈調暗一點，而不是檢查清單。禁止雞湯、禁止說教、禁止診斷疾病或開藥
-- 若勾選的是正向或平穩狀態（好心情、普通、睡眠品質很好、起床精神很好），要肯定它並給維持安放節奏的建議，不要硬找問題
-- 若有不適訊號，先同理身體的緊繃，再給輕柔、做得到的療癒動作
+- 若勾選的是正向或平穩狀態（平靜、愉快、睡眠品質很好、起床精神很好），要肯定它並給維持安放節奏的建議，不要硬找問題
+- 若有不適訊號，先同理身體的緊繃，再給輕柔、做得到的照顧動作
 - 建議必須是實際、放鬆導向的動作，例如調整呼吸、補充溫水、伸展、提早放下手機、溫水洗手臂、讓肩膀鬆開
 - suggestions 必須剛好 3 條，每條 18-42 字
 - 繁體中文
@@ -515,7 +515,7 @@ const BODY_COACH_SYSTEM = `你是「日精進」的溫柔身心療癒陪伴者�
 
 function bodyCoachUserPrompt(body) {
   const ctx = body.context && typeof body.context === "object" ? body.context : {};
-  return `請針對這個人今天的身心狀態，寫出溫暖放鬆的「身心療癒建議」，並給 3 個今晚就能安放自己的動作。
+  return `請針對這個人今天的身心狀態，寫出溫暖放鬆的「今日身心小結」，並給 3 個今晚就能安放自己的動作。
 
 今日感謝：${formatThanksForPrompt(ctx) || "（未寫）"}
 今日事件：${ctx.event || body.text || "（未寫）"}
@@ -1186,7 +1186,7 @@ module.exports = async function handler(req, res) {
       if (kind === "awareness") {
         const quotes = normalizeAwarenessQuotes(data);
         if (quotes.length < 1) {
-          res.status(502).json({ ok: false, error: "AI 覺察金句格式不完整，請再試一次" });
+          res.status(502).json({ ok: false, error: "今天的核心覺察還沒整理好，請再試一次" });
           return;
         }
         res.status(200).json({ ok: true, source: "openai", data: { quotes, items: quotes, kind } });
@@ -1264,7 +1264,7 @@ module.exports = async function handler(req, res) {
     if (mode === "bodycoach") {
       const coach = normalizeBodyCoachResult(data);
       if (!coach.analysis || coach.suggestions.length < 3) {
-        res.status(502).json({ ok: false, error: "AI 身心療癒建議格式不完整，請再試一次" });
+        res.status(502).json({ ok: false, error: "今天的身心建議還沒整理好，請再試一次" });
         return;
       }
       res.status(200).json({ ok: true, source: "openai", data: coach });

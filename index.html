@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=132" />
+    <link rel="stylesheet" href="app.css?v=133" />
     <style>
       .splash {
         position: fixed;
@@ -277,7 +277,7 @@
                 <p class="journal-guide">把今天想感謝的人、事、物寫在同一格就好。換行即可繼續下一件，想寫幾件都可以。</p>
                 <label class="thanks-box">
                   <span class="sr-only">今日感謝</span>
-                  <textarea class="textarea textarea--thanks" id="thanksText" rows="8" data-journal="thanks" placeholder="寫下今天感恩的人事物…"></textarea>
+                  <textarea class="textarea textarea--thanks" id="thanksText" rows="8" data-journal="thanks" placeholder="今天，我想謝謝⋯"></textarea>
                 </label>
               </div>
             </div>
@@ -300,7 +300,7 @@
             <div class="journal-split">
               <label class="journal-col">
                 <span class="journal-label">寫下今天發生的事（開心、生氣、難過）</span>
-                <textarea class="textarea" id="eventText" rows="5" placeholder="記錄今天發生的重要事件…"></textarea>
+                <textarea class="textarea" id="eventText" rows="5" placeholder="把當時發生的事寫下來⋯"></textarea>
               </label>
               <div class="journal-col">
                 <p class="journal-label">今天的心情是...</p>
@@ -347,7 +347,7 @@
             </button>
             <div class="journal-fold__panel" id="bodyFoldPanel" inert aria-hidden="true">
               <div class="journal-fold__inner">
-            <p class="journal-guide">用三個具體檢核，把心情、身體與睡眠溫柔地放在一起看。有狀況再勾選，沒勾選就代表今天大致平穩；勾了之後再寫原因，右側會給你可放鬆、做得到的身心療癒建議。</p>
+            <p class="journal-guide">今天的你，身體和心情還好嗎？<br />花一分鐘看看自己的心情、身體和睡眠，也許會發現一些平常沒注意到的小訊號。</p>
             <div class="journal-split journal-split--body">
               <div class="journal-col body-check">
                 <div class="body-check-group body-subcard" data-body-group="mood">
@@ -355,14 +355,14 @@
                     <span class="body-subcard__index">01</span>
                     <div>
                       <h3 class="body-subcard__title">今日的心情</h3>
-                      <p class="body-subcard__hint">有狀況再勾選；沒勾選就代表大致平穩。</p>
+                      <p class="body-subcard__hint">今天的情緒有什麼變化嗎？選一個最接近現在的感受。</p>
                     </div>
                   </header>
                   <div class="body-flags">
-                    <button class="tag-btn body-flag-btn" type="button" data-body-group="mood" data-body-flag="焦慮">出現焦慮</button>
-                    <button class="tag-btn body-flag-btn" type="button" data-body-group="mood" data-body-flag="脾氣暴躁">脾氣暴躁</button>
-                    <button class="tag-btn body-flag-btn" type="button" data-body-group="mood" data-body-flag="普通">普通</button>
-                    <button class="tag-btn body-flag-btn" type="button" data-body-group="mood" data-body-flag="好心情">好心情</button>
+                    <button class="tag-btn body-flag-btn" type="button" data-body-group="mood" data-body-flag="焦慮">焦慮</button>
+                    <button class="tag-btn body-flag-btn" type="button" data-body-group="mood" data-body-flag="煩躁">煩躁</button>
+                    <button class="tag-btn body-flag-btn" type="button" data-body-group="mood" data-body-flag="平靜">平靜</button>
+                    <button class="tag-btn body-flag-btn" type="button" data-body-group="mood" data-body-flag="愉快">愉快</button>
                   </div>
                   <label class="body-reason" data-body-reason="mood" hidden>
                     <span class="body-subcard__field">原因是什麼？</span>
@@ -374,7 +374,7 @@
                     <span class="body-subcard__index">02</span>
                     <div>
                       <h3 class="body-subcard__title">今日的身體狀況</h3>
-                      <p class="body-subcard__hint">緊繃、疲勞或不適，都可以各自點出來。</p>
+                      <p class="body-subcard__hint">今天身體有哪裡在提醒你？有感覺的地方都可以選。</p>
                     </div>
                   </header>
                   <div class="body-flags">
@@ -397,8 +397,8 @@
                   <header class="body-subcard__head">
                     <span class="body-subcard__index">03</span>
                     <div>
-                      <h3 class="body-subcard__title">昨晚的睡眠</h3>
-                      <p class="body-subcard__hint">時間、品質與起床精神分開看，比較容易對到身體訊號。</p>
+                      <h3 class="body-subcard__title">昨晚睡得好嗎？</h3>
+                      <p class="body-subcard__hint">睡了多久、睡得好不好、醒來有沒有精神，都一起看看。</p>
                     </div>
                   </header>
                   <div class="body-sleep-grid">
@@ -438,17 +438,16 @@
               </div>
               <aside class="journal-col body-coach" id="bodyCoachCard">
                 <header class="body-coach__head">
-                  <p class="body-coach__kicker">身心療癒解析</p>
-                  <h3 class="body-coach__title">身心療癒建議</h3>
-                  <p class="body-coach__lead">勾完左側狀態後，會溫柔地看見心情、身體與睡眠此刻如何互相安放，並給你 3 個今晚就能讓自己鬆一口氣的療癒動作。</p>
+                  <h3 class="body-coach__title">今日身心小結</h3>
+                  <p class="body-coach__lead">看完今天的心情、身體與睡眠後，幫你整理現在的身心狀態，以及今晚可以怎麼照顧自己。</p>
                 </header>
-                <button class="ai-check-btn" id="btnBodyCoach" type="button">生成身心療癒建議</button>
+                <button class="ai-check-btn ai-check-btn--label" id="btnBodyCoach" type="button">✦ 看看今天的身心建議</button>
                 <div class="check-loading" id="bodyCoachLoading" hidden>
-                  <p class="check-loading__label">正在為你準備今天的身心療癒建議…</p>
+                  <p class="check-loading__label">正在為你整理今天的身心建議…</p>
                   <div class="ai-thinking__bar"><i></i></div>
                 </div>
                 <div class="body-coach__body" id="bodyCoachBody">
-                  <p class="insight-card__empty">有狀況再勾選。沒勾選就代表今天大致平穩，也可直接點按鈕生成身心療癒建議。</p>
+                  <p class="insight-card__empty">先把左邊的心情、身體與睡眠看過，再點看看今天適合怎麼照顧自己。</p>
                 </div>
               </aside>
             </div>
@@ -494,34 +493,33 @@
               <span class="journal-fold__copy">
                 <h2 class="journal-card__title js-quick-only"><span>03</span> 今日覺察</h2>
                 <h2 class="journal-card__title js-deep-only"><span>04</span> 覺察力</h2>
-                <p class="journal-fold__summary js-quick-only">用 3 道今日是非題，快速看見自己。</p>
-                <p class="journal-fold__summary js-deep-only">答完 3 道是非題，解鎖一句核心金句。</p>
+                <p class="journal-fold__summary js-quick-only">用 3 個簡單的問題，看見今天的自己。</p>
+                <p class="journal-fold__summary js-deep-only">回答 3 個問題，把今天最重要的發現留下來。</p>
               </span>
               <span class="journal-fold__chevron" aria-hidden="true"></span>
             </button>
             <div class="journal-fold__panel" id="awareFoldPanel" inert aria-hidden="true">
               <div class="journal-fold__inner">
-            <p class="journal-guide js-quick-only">用 3 道今日是非題，快速看見自己真正被碰到的地方。</p>
-            <p class="journal-guide js-deep-only">完成上方「01 今日感謝」與「02 今日事件與心情」後，會依今天的經歷動態生成 3 道自我覺察是非題。逐題點「是」或「否」，答完才解鎖一句核心金句。</p>
+            <p class="journal-guide">今天的經歷裡，也許藏著一些你還沒發現的自己。<br />透過 3 個簡單的問題，陪你看見今天真正值得留下來的覺察。</p>
             <div class="journal-split journal-split--aware">
               <div class="journal-col aware-col aware-col--quiz">
                 <div class="check-loading" id="awarePromptLoading" hidden>
-                  <p class="check-loading__label">正在為你生成今天的覺察是非題…</p>
+                  <p class="check-loading__label">正在為你準備今天的覺察…</p>
                   <div class="ai-thinking__bar"><i></i></div>
                 </div>
-                <p class="deep-empty" id="awareEmpty">請先完成上方今日感謝與事件，將為你生成 3 道今日覺察是非題</p>
-                <button class="ai-check-btn" id="btnAwarePrompts" type="button">生成今日覺察是非題</button>
+                <p class="deep-empty" id="awareEmpty">完成「今日感謝」與「今日事件」後，會依照你今天寫下的內容，產生專屬於你的覺察題。</p>
+                <button class="ai-check-btn ai-check-btn--label" id="btnAwarePrompts" type="button">✦ 開始今天的覺察</button>
                 <div id="awareQuestions"></div>
               </div>
               <div class="journal-col aware-col aware-col--quotes js-deep-only">
                 <p class="journal-label">今日核心覺察</p>
-                <p class="journal-guide journal-guide--tight">三題都點完後，會依你的是／否煉出一句金句。再煉一次會覆蓋舊的；這個復盤最多兩次。</p>
+                <p class="journal-guide journal-guide--tight">回答完 3 個問題後，幫你把今天最重要的發現，整理成一句值得留下來的話。</p>
                 <div class="check-loading" id="awareLoading" hidden>
-                  <p class="check-loading__label">正在為你煉結核心金句…</p>
+                  <p class="check-loading__label">正在為你整理今天的核心覺察…</p>
                   <div class="ai-thinking__bar"><i></i></div>
                 </div>
                 <div class="check-list" id="awareChecks"></div>
-                <button class="ai-check-btn" id="btnAwareAi" type="button" hidden>生成核心金句</button>
+                <button class="ai-check-btn ai-check-btn--label" id="btnAwareAi" type="button" hidden>✦ 看見我的核心覺察</button>
                 <p class="aware-quote-limit" id="awareQuoteLimitHint" hidden></p>
               </div>
             </div>
@@ -849,9 +847,9 @@
               <div class="guide-step__body">
                 <p class="guide-step__label">第四步</p>
                 <h3 class="guide-step__title">動態出題與今日煉結</h3>
-                <p class="guide-step__text">覺察力與執行力會完全依據你今天寫下的感謝與事件自動出題。覺察是 3 道是非題，答完才解鎖一句核心金句；執行力則生成專屬行動卡。快速復盤只要勾選對應模組，就會走同一套今天專屬的出題。</p>
+                <p class="guide-step__text">覺察力會依照你今天寫下的感謝與事件，準備 3 個簡單的問題。回答完後，把今天最重要的發現整理成一句值得留下來的話；執行力則準備專屬行動卡。快速復盤只要勾選對應模組，就會走同一套今天專屬的陪伴。</p>
                 <div class="guide-pills">
-                  <span class="guide-pill"><strong>覺察力</strong> 3 道是非題 → 1 句金句</span>
+                  <span class="guide-pill"><strong>覺察力</strong> 3 個問題 → 一句核心覺察</span>
                   <span class="guide-pill"><strong>執行力</strong> 3 道突破題 → 行動卡點</span>
                 </div>
               </div>
@@ -1006,6 +1004,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=150"></script>
+    <script src="app.js?v=151"></script>
   </body>
 </html>

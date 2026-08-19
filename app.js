@@ -2625,7 +2625,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "03 身體覺察",
-        description: "用心情、身體、睡眠三個檢核看今天的狀態。勾選後，右側會生成溫暖的身心療癒建議，給你今晚就能放鬆的小動作。",
+        description: "用心情、身體、睡眠三個檢核看今天的狀態。看完後，右側會整理今日身心小結，給你今晚就能照顧自己的小建議。",
         side: "bottom",
       },
     },
@@ -2643,7 +2643,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "04 覺察力",
-        description: "寫完今日感謝與事件後，會生成 3 道今天專屬的覺察是非題。逐題點是或否，答完再煉一句犀利金句。",
+        description: "寫完今日感謝與事件後，點開始，會依今天的內容準備 3 個專屬問題。逐題回答後，把今天最重要的發現留下來。",
         side: "top",
       },
     },
@@ -2651,8 +2651,8 @@ function tourSteps() {
       element: "#awareChecks",
       tourPage: "today",
       popover: {
-        title: "今日金句",
-        description: "三題都點完後，這裡會解鎖。每次只煉一句，再煉一次會覆蓋舊的；這個復盤最多兩次。",
+        title: "今日核心覺察",
+        description: "回答完 3 個問題後，這裡會把今天最重要的發現，整理成一句值得留下來的話。",
         side: "top",
       },
     },
@@ -3045,23 +3045,44 @@ function migrateSleepFields(sleep) {
   return next;
 }
 
+function normalizeBodyMoodFlags(flags) {
+  const aliases = {
+    出現焦慮: "焦慮",
+    焦慮: "焦慮",
+    心悸緊張: "焦慮",
+    脾氣暴躁: "煩躁",
+    不耐煩: "煩躁",
+    煩躁: "煩躁",
+    普通: "平靜",
+    平靜: "平靜",
+    好心情: "愉快",
+    愉快: "愉快",
+  };
+  const next = [];
+  (Array.isArray(flags) ? flags : []).forEach((flag) => {
+    const mapped = aliases[String(flag || "").trim()];
+    if (mapped && !next.includes(mapped)) next.push(mapped);
+  });
+  return next.slice(0, 1);
+}
+
 function migrateBodyCheckFromTags(tags, note) {
   const next = emptyBodyCheck();
   const list = Array.isArray(tags) ? tags.map((item) => String(item || "").trim()) : [];
   const noteText = String(note || "").trim();
   list.forEach((tag) => {
-    if (tag === "焦慮" || tag === "心悸緊張") next.mood.flags.push(tag === "心悸緊張" ? "焦慮" : tag);
-    else if (tag === "脾氣暴躁" || tag === "不耐煩" || tag === "普通" || tag === "好心情") next.mood.flags.push(tag);
+    const mood = normalizeBodyMoodFlags([tag])[0];
+    if (mood) next.mood.flags.push(mood);
     else if (tag === "腸胃不適" || tag === "頭痛" || tag === "全身痠痛" || tag === "身體疲勞") next.body.flags.push(tag);
     else if (tag === "睡眠不足" || tag === "睡不著") next.sleep.flags.push("睡不著");
     else if (tag === "10:00以前入睡" || tag === "睡得很好") next.sleep.flags.push(tag);
     else if (tag === "心情平穩") next.mood.none = true;
     else if (tag === "身體無不適" || tag === "精力充沛") next.body.none = true;
   });
-  next.mood.flags = [...new Set(next.mood.flags)];
+  next.mood.flags = normalizeBodyMoodFlags(next.mood.flags);
   next.body.flags = [...new Set(next.body.flags)];
   next.sleep.flags = [...new Set(next.sleep.flags)];
-  if (!next.mood.flags.length && !next.mood.none && /焦慮|暴躁|不耐/.test(noteText)) next.mood.reason = noteText;
+  if (!next.mood.flags.length && !next.mood.none && /焦慮|暴躁|不耐|煩躁/.test(noteText)) next.mood.reason = noteText;
   if (!next.body.reason && noteText) next.body.reason = noteText;
   if (next.mood.flags.length) next.mood.none = false;
   if (next.body.flags.length) next.body.none = false;
@@ -3070,9 +3091,10 @@ function migrateBodyCheckFromTags(tags, note) {
 
 function normalizeBodyCheck(raw, tags, note) {
   if (raw && typeof raw === "object" && (raw.mood || raw.body || raw.sleep)) {
+    const mood = normalizeBodyGroup(raw.mood);
     const body = normalizeBodyGroup(raw.body);
     const next = {
-      mood: normalizeBodyGroup(raw.mood),
+      mood: { ...mood, flags: normalizeBodyMoodFlags(mood.flags) },
       body: { ...body, other: String(raw.body?.other || "").trim() },
       sleep: migrateSleepFields(raw.sleep),
     };
@@ -3535,7 +3557,7 @@ function renderAwareQuote(items, checked) {
     const kept = (checked || []).map((item) => String(item || "").trim()).includes(quote);
     root.innerHTML = `<div class="aware-quote-list aware-quote-list--solo">
           <article class="aware-quote aware-quote--solo" data-quote="${escapeHtml(quote)}">
-            <p class="aware-quote__kicker">今日金句</p>
+            <p class="aware-quote__kicker">今日核心覺察</p>
             <p class="aware-quote__text">${escapeHtml(quote)}</p>
             <div class="aware-quote__actions">
               <label class="aware-quote__keep">
@@ -3553,23 +3575,16 @@ function renderAwareQuote(items, checked) {
   const answers = collectAwarenessQuizAnswers();
   const done = awarenessQuizAnsweredCount(answers);
   const ready = done >= AWARENESS_QUIZ_COUNT;
-  const hasQuiz = normalizeAwarenessPrompts(state.awarenessPrompts).length >= AWARENESS_QUIZ_COUNT;
   root.innerHTML = `
     <div class="aware-quote-gate${ready ? " is-ready" : ""}">
-      <p class="aware-quote__kicker">${ready ? "可以煉結金句了" : "答完三題後解鎖"}</p>
+      <p class="aware-quote__kicker">今日核心覺察</p>
       <p class="aware-quote-gate__title">${
         ready
-          ? "三題都看見了。現在把今天煉成一句話。"
-          : hasQuiz
-            ? "先誠實點完三題是非。"
-            : "先生成今日覺察是非題。"
+          ? "三個問題都看過了。現在可以把今天最重要的發現留下來。"
+          : "完成 3 題後，看見今天的核心覺察。"
       }</p>
       <p class="aware-quote-gate__meta">${Math.min(done, AWARENESS_QUIZ_COUNT)} / ${AWARENESS_QUIZ_COUNT}</p>
-      <p class="aware-quote-gate__hint">${
-        ready
-          ? "點下方按鈕，每次只煉一句；這個復盤最多兩次。"
-          : "每一題點「是」或「否」即可，沒有標準答案。"
-      }</p>
+      <p class="aware-quote-gate__hint">沒有標準答案，只要選擇最貼近現在的自己。</p>
     </div>
   `;
   syncAwareQuoteGate();
@@ -3582,32 +3597,17 @@ function syncAwareQuoteGate() {
   const answers = collectAwarenessQuizAnswers();
   const ready = awarenessReady(answers);
   const quotes = collectAwareQuotes();
-  const sig = checklistSignature(answers);
-  const used = awarenessQuoteGenCount();
-  const capped = used >= AWARENESS_QUOTE_GEN_MAX;
-  const stale = quotes.length && Boolean(state.journalMeta.awarenessAi) && state.journalMeta.awarenessAiSig !== sig;
   const loading = Boolean(state.checklistBusy.awareness);
-  const left = Math.max(0, AWARENESS_QUOTE_GEN_MAX - used);
-  btn.hidden = !ready;
-  btn.disabled = !ready || loading || capped;
-  btn.classList.toggle("is-capped", Boolean(ready && capped && !loading));
+  const show = ready && !quotes.length && !awarenessQuoteGenCapped();
+  btn.hidden = !(show || loading);
+  if (quotes.length && !loading) btn.hidden = true;
+  btn.disabled = !show || loading;
+  btn.classList.remove("is-capped");
   btn.classList.toggle("is-busy", loading);
-  btn.textContent = loading
-    ? "分析中…"
-    : capped
-      ? "已達今日上限"
-      : quotes.length
-        ? stale
-          ? "依新作答再煉一次"
-          : "再煉一次"
-        : "生成核心金句";
+  btn.textContent = loading ? "正在為你整理…" : "✦ 看見我的核心覺察";
   if (hint) {
-    hint.hidden = !ready;
-    hint.textContent = capped
-      ? "這次復盤的金句已煉過兩次。把目光放回當下這一句就好。"
-      : quotes.length
-        ? `還可以再煉 ${left} 次。新的一句會覆蓋現在這句。`
-        : "點一次生成一句金句；這個復盤最多兩次。";
+    hint.hidden = true;
+    hint.textContent = "";
   }
 }
 
@@ -3776,7 +3776,7 @@ function checklistUi(kind) {
     return { btn: "btnManifestAi", loader: "manifestLoading", list: "manifestChecks", idle: "生成執行目標" };
   }
   if (kind === "awareness") {
-    return { btn: "btnAwareAi", loader: "awareLoading", list: "awareChecks", idle: "生成核心金句" };
+    return { btn: "btnAwareAi", loader: "awareLoading", list: "awareChecks", idle: "✦ 看見我的核心覺察" };
   }
   return { btn: "btnExecAi", loader: "execLoading", list: "execChecks", idle: "生成專屬行動卡點勾勾表" };
 }
@@ -3789,7 +3789,11 @@ function setChecklistLoading(kind, loading) {
   state.checklistBusy[kind] = loading;
   if (btn) {
     btn.disabled = loading;
-    btn.textContent = loading ? "分析中…" : ui.idle;
+    btn.textContent = loading
+      ? kind === "awareness"
+        ? "正在為你整理…"
+        : "分析中…"
+      : ui.idle;
   }
   if (loader) loader.hidden = !loading;
   if (list) list.classList.toggle("is-loading", loading);
@@ -3828,7 +3832,7 @@ async function generateJournalChecklist(kind, options = {}) {
   const answers = isAware ? journal.awareness : journal.execution;
   const ready = isAware ? awarenessReady(answers) : executionReady(answers);
   if (isAware && awarenessQuoteGenCapped()) {
-    if (!options.auto) showToast("這次復盤的金句已達兩次上限。");
+    if (!options.auto) showToast("這次復盤的核心覺察已經留下來了。");
     syncAwareQuoteGate();
     return;
   }
@@ -3836,7 +3840,7 @@ async function generateJournalChecklist(kind, options = {}) {
     if (!options.auto) {
       showToast(
         isAware
-          ? "先點完三題是非，再生成核心金句。"
+          ? "先回答完 3 個問題，再看見今天的核心覺察。"
           : "先把執行突破題寫完，再生成勾勾表。"
       );
     }
@@ -3888,8 +3892,8 @@ async function generateJournalChecklist(kind, options = {}) {
     showToast(
       isAware
         ? awarenessQuoteGenCount() >= AWARENESS_QUOTE_GEN_MAX
-          ? "這是這次復盤的最後一次金句。請專注當下這一句。"
-          : "今日核心金句已生成。"
+          ? "今天的核心覺察，已經留下來了。"
+          : "今天的核心覺察，已經留下來了。"
         : "行動卡點已生成。"
     );
   } catch (error) {
@@ -4532,7 +4536,7 @@ function renderBodyCoachCard(coach) {
   if (!root) return;
   const data = normalizeBodyCoach(coach);
   if (!data.analysis && !data.suggestions.length) {
-    root.innerHTML = `<p class="insight-card__empty">有狀況再勾選。沒勾選就代表今天大致平穩，也可直接點按鈕生成身心療癒建議。</p>`;
+    root.innerHTML = `<p class="insight-card__empty">先把左邊的心情、身體與睡眠看過，再點看看今天適合怎麼照顧自己。</p>`;
     return;
   }
   const tips = actionStepsHtml(data.suggestions);
@@ -4567,7 +4571,7 @@ function setBodyCoachLoading(loading) {
   state.bodyCoachBusy = loading;
   if (btn) {
     btn.disabled = loading;
-    btn.textContent = loading ? "療癒整理中…" : "生成身心療癒建議";
+    btn.textContent = loading ? "正在為你整理…" : "✦ 看看今天的身心建議";
   }
   if (loader) loader.hidden = !loading;
   if (body) body.classList.toggle("is-loading", loading);
@@ -4581,7 +4585,7 @@ function localBodyCoachFallback(journal) {
   const moodBits = moodFlags.length ? `心情是「${moodFlags.join("、")}」` : "心情大致平穩";
   const bodyBits = bodyFlags.length ? `身體有「${bodyFlags.join("、")}」` : "身體沒有明顯不適";
   const sleepBits = sleepFlags.join("、") || "未特別勾選睡眠狀況";
-  const moodIssue = moodFlags.includes("焦慮") || moodFlags.includes("脾氣暴躁") || moodFlags.includes("不耐煩");
+  const moodIssue = moodFlags.includes("焦慮") || moodFlags.includes("煩躁") || moodFlags.includes("脾氣暴躁") || moodFlags.includes("不耐煩");
   const bodyIssue =
     bodyFlags.includes("腸胃不適") ||
     bodyFlags.includes("頭痛") ||
@@ -4635,7 +4639,7 @@ async function generateBodyCoach(options = {}) {
   setBodyCoachLoading(true);
 
   try {
-    if (!state.user) throw new Error("請先登入，才能使用雲端身心療癒建議。");
+    if (!state.user) throw new Error("請先登入，才能看看今天的身心建議。");
     const remote = await postReview({
       mode: "bodycoach",
       date: currentIso(),
@@ -4657,7 +4661,7 @@ async function generateBodyCoach(options = {}) {
     state.journalMeta.bodyCoachSig = sig;
     renderBodyCoachCard(coach);
     persistJournalQuietly();
-    showToast("身心療癒建議已生成。");
+    showToast("今天的身心建議，已經為你整理好了。");
   } catch (error) {
     if (state.bodyCoachToken !== token) return;
     const fallback = localBodyCoachFallback(journal);
@@ -4665,7 +4669,7 @@ async function generateBodyCoach(options = {}) {
     state.journalMeta.bodyCoachSig = sig;
     renderBodyCoachCard(fallback);
     persistJournalQuietly();
-    showToast(`雲端療癒建議失敗：${formatApiError(error)}，先留下本地身心療癒建議。`);
+    showToast(`雲端建議還沒整理好：${formatApiError(error)}，先留下本地身心小結。`);
   } finally {
     if (state.bodyCoachToken === token) setBodyCoachLoading(false);
   }
@@ -4931,7 +4935,8 @@ function collectGrowthProgress() {
   };
 }
 
-const CORE_WAIT_COPY = "請先完成上方今日感謝與事件，將為你生成今日專屬的覺察與執行題";
+const CORE_WAIT_COPY = "請先完成上方今日感謝與事件，將為你準備今日專屬的覺察與執行題";
+const AWARE_WAIT_COPY = "完成「今日感謝」與「今日事件」後，會依照你今天寫下的內容，產生專屬於你的覺察題。";
 
 function currentAwarenessQuestions() {
   const prompts = normalizeAwarenessPrompts(state.awarenessPrompts);
@@ -5017,7 +5022,7 @@ function syncCorePromptGate() {
   const awareBtn = document.getElementById("btnAwarePrompts");
   const execBtn = document.getElementById("btnExecPrompts");
   if (awareEmpty) {
-    awareEmpty.textContent = CORE_WAIT_COPY;
+    awareEmpty.textContent = AWARE_WAIT_COPY;
     awareEmpty.hidden = loading || hasAware;
   }
   if (execEmpty) {
@@ -5028,7 +5033,7 @@ function syncCorePromptGate() {
     awareBtn.hidden = hasAware;
     if (!awareBtn.hidden) {
       awareBtn.disabled = !ready || loading;
-      awareBtn.textContent = loading ? "出題中…" : "生成今日覺察是非題";
+      awareBtn.textContent = loading ? "正在為你準備…" : "✦ 開始今天的覺察";
     }
   }
   if (execBtn) {
@@ -5087,12 +5092,13 @@ function renderAwarenessQuestions(prompts, options = {}) {
     root.classList.remove("aware-quiz");
     root.innerHTML = "";
     if (empty) {
-      empty.textContent = "請先完成上方今日感謝與事件，將為你生成 3 道今日覺察是非題";
+      empty.textContent = AWARE_WAIT_COPY;
       empty.hidden = Boolean(state.corePromptsBusy);
     }
     if (genBtn) {
       genBtn.hidden = false;
       genBtn.disabled = !coreStoryReady() || Boolean(state.corePromptsBusy);
+      genBtn.textContent = state.corePromptsBusy ? "正在為你準備…" : "✦ 開始今天的覺察";
     }
     syncAwareQuoteGate();
     return;
@@ -5107,7 +5113,7 @@ function renderAwarenessQuestions(prompts, options = {}) {
       return `
         <article class="aware-quiz__item" data-index="${index}" data-answer="${escapeHtml(answer)}">
           <p class="aware-quiz__q"><span>${String(index + 1).padStart(2, "0")}</span>${escapeHtml(item.question)}</p>
-          <div class="aware-quiz__opts" role="group" aria-label="第 ${index + 1} 題是非">
+          <div class="aware-quiz__opts" role="group" aria-label="第 ${index + 1} 題">
             <button type="button" class="aware-quiz__opt${answer === "是" ? " is-on" : ""}" data-aware-answer="是">是</button>
             <button type="button" class="aware-quiz__opt${answer === "否" ? " is-on" : ""}" data-aware-answer="否">否</button>
           </div>
@@ -5325,14 +5331,14 @@ async function generateCorePrompts(options = {}) {
     const execution = normalizeExecutionPrompts(remote.execution);
     if (awareness.length < AWARENESS_QUIZ_COUNT || execution.length < 3) throw new Error("雲端回傳格式不完整");
     applyGeneratedCorePrompts(awareness, execution, sig, true);
-    if (!options.auto) showToast("今天的覺察是非題與執行題已生成。");
+    if (!options.auto) showToast("今天的覺察題已經準備好了。");
   } catch (error) {
     if (state.corePromptsToken !== token) return;
     if (options.auto) state.corePromptsFailedSig = sig;
     showToast(
       options.auto
         ? `今日專屬題目還沒生成：${formatApiError(error)}。可點按鈕再試一次。`
-        : `雲端出題失敗：${formatApiError(error)}。請再試一次。`
+        : `今天的覺察還沒準備好：${formatApiError(error)}。請再試一次。`
     );
   } finally {
     if (state.corePromptsToken === token) setCorePromptsLoading(false);
@@ -5341,19 +5347,7 @@ async function generateCorePrompts(options = {}) {
 
 function maybeAutoGenerateCorePrompts(journal) {
   if (state.journalHydrating) return;
-  if (state.journalMode === "quick" && !state.quickModules?.aware && !state.quickModules?.exec) {
-    syncCorePromptGate();
-    return;
-  }
-  const data = journal || collectJournal();
   syncCorePromptGate();
-  if (!coreStoryReady(data)) return;
-  const hasSet = hasCorePromptSet();
-  const sig = corePromptsSignature(data);
-  if (hasSet && state.journalMeta.corePromptsAi && state.journalMeta.corePromptsSig === sig) return;
-  if (hasSet && corePromptsHaveAnswers(data)) return;
-  if (state.corePromptsFailedSig === sig) return;
-  generateCorePrompts({ auto: true });
 }
 
 function persistJournalQuietly() {
@@ -5738,7 +5732,7 @@ function composeJournalRawText(journal) {
   if (check.sleep.reason) lines.push(`睡眠說明：${check.sleep.reason}`);
   const bodyCoach = normalizeBodyCoach(journal.bodyCoach);
   if (bodyCoach.analysis) {
-    lines.push("身心療癒建議");
+    lines.push("今日身心小結");
     lines.push(bodyCoach.analysis);
     bodyCoach.suggestions.forEach((item, index) => lines.push(`建議 ${index + 1}：${item}`));
   }
@@ -5786,7 +5780,7 @@ function composeJournalRawText(journal) {
     if (answer) lines.push(`${question} ${answer}`);
   });
   const awareQuotes = normalizeAwarenessQuotes(journal.awarenessCheckItems);
-  awareQuotes.forEach((quote, index) => lines.push(`核心金句 ${index + 1}：${quote}`));
+  awareQuotes.forEach((quote, index) => lines.push(`核心覺察 ${index + 1}：${quote}`));
   const execPrompts = normalizeExecutionPrompts(journal.executionPrompts || state.executionPrompts);
   const execAnswers = Array.isArray(journal.execution) ? journal.execution : [];
   const execCount = Math.max(execPrompts.length, execAnswers.length);
@@ -8319,7 +8313,14 @@ function bindEvents() {
     } else {
       const btn = event.target.closest(".body-flag-btn");
       if (!btn) return;
-      btn.classList.toggle("is-on");
+      if (btn.dataset.bodyGroup === "mood") {
+        const turningOn = !btn.classList.contains("is-on");
+        document.querySelectorAll('.body-flag-btn[data-body-group="mood"]').forEach((item) => {
+          item.classList.toggle("is-on", turningOn && item === btn);
+        });
+      } else {
+        btn.classList.toggle("is-on");
+      }
     }
     syncBodyReasonVisibility();
     persistJournalQuietly();
@@ -8411,7 +8412,7 @@ function bindEvents() {
     const quote = copyBtn.closest(".aware-quote")?.dataset.quote || "";
     if (!quote) return;
     navigator.clipboard.writeText(quote).then(
-      () => showToast("金句已複製。"),
+      () => showToast("這句核心覺察已複製。"),
       () => showToast("複製失敗，請手動選取文字。")
     );
   });
