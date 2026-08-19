@@ -2640,7 +2640,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "04 覺察力",
-        description: "寫完今日感謝與事件後，會生成 3 道今天專屬的覺察是非題。逐題點是或否，答完再煉結 3 句犀利金句。",
+        description: "寫完今日感謝與事件後，會生成 3 道今天專屬的覺察是非題。逐題點是或否，答完再煉一句犀利金句。",
         side: "top",
       },
     },
@@ -2648,8 +2648,8 @@ function tourSteps() {
       element: "#awareChecks",
       tourPage: "today",
       popover: {
-        title: "3 句核心金句",
-        description: "三題都點完後，這裡會解鎖。點一下煉成三張金句卡；每句只有一句話，這個復盤最多煉兩次。",
+        title: "今日金句",
+        description: "三題都點完後，這裡會解鎖。每次只煉一句，再煉一次會覆蓋舊的；這個復盤最多兩次。",
         side: "top",
       },
     },
@@ -2836,6 +2836,7 @@ function journalFieldValue(id) {
 }
 
 const AWARENESS_QUIZ_COUNT = 3;
+const AWARENESS_QUOTE_COUNT = 1;
 const AWARENESS_QUOTE_GEN_MAX = 2;
 
 const AWARENESS_QUESTIONS = [
@@ -3428,12 +3429,12 @@ function normalizeAwarenessQuotes(raw, fallback) {
   });
   (Array.isArray(fallback) ? fallback : fallback ? [fallback] : []).forEach((item) => {
     const text = cleanAwarenessQuote(item);
-    if (text.length >= 8 && items.length < 3 && !seen.has(text)) {
+    if (text.length >= 8 && items.length < AWARENESS_QUOTE_COUNT && !seen.has(text)) {
       seen.add(text);
       items.push(text);
     }
   });
-  return items.slice(0, 3);
+  return items.slice(0, AWARENESS_QUOTE_COUNT);
 }
 
 function pickAwarenessQuote(items) {
@@ -3469,14 +3470,11 @@ function collectAwareQuote() {
 
 function buildAwarenessQuotes(journal) {
   const mood = journal.mood || "";
-  const quotes = [
-    "你不是看不見，你是太會保護自己。",
-    "那些「否」，往往才是真正的結所在。",
+  return [
     mood === "生氣" || mood === "難過"
       ? "不舒服不是失控，是內心的結在敲門。"
       : "你最不想承認的那一層，才是今天的主詞。",
   ];
-  return quotes;
 }
 
 function buildAwarenessCheckItems(journal) {
@@ -3488,13 +3486,11 @@ function renderAwareQuote(items, checked) {
   if (!root) return;
   const quotes = normalizeAwarenessQuotes(items);
   if (quotes.length) {
-    const saved = new Set((checked || []).map((item) => String(item || "").trim()).filter(Boolean));
-    root.innerHTML = `<div class="aware-quote-list">${quotes
-      .map((quote, index) => {
-        const kept = saved.has(quote);
-        return `
-          <article class="aware-quote" data-quote="${escapeHtml(quote)}">
-            <p class="aware-quote__kicker">金句 ${String(index + 1).padStart(2, "0")}</p>
+    const quote = quotes[0];
+    const kept = (checked || []).map((item) => String(item || "").trim()).includes(quote);
+    root.innerHTML = `<div class="aware-quote-list aware-quote-list--solo">
+          <article class="aware-quote aware-quote--solo" data-quote="${escapeHtml(quote)}">
+            <p class="aware-quote__kicker">今日金句</p>
             <p class="aware-quote__text">${escapeHtml(quote)}</p>
             <div class="aware-quote__actions">
               <label class="aware-quote__keep">
@@ -3505,9 +3501,7 @@ function renderAwareQuote(items, checked) {
               <button class="btn btn--ghost btn--tiny" type="button" data-copy-aware-quote>複製</button>
             </div>
           </article>
-        `;
-      })
-      .join("")}</div>`;
+        </div>`;
     syncAwareQuoteGate();
     return;
   }
@@ -3520,7 +3514,7 @@ function renderAwareQuote(items, checked) {
       <p class="aware-quote__kicker">${ready ? "可以煉結金句了" : "答完三題後解鎖"}</p>
       <p class="aware-quote-gate__title">${
         ready
-          ? "三題都看見了。現在把今天煉成三句話。"
+          ? "三題都看見了。現在把今天煉成一句話。"
           : hasQuiz
             ? "先誠實點完三題是非。"
             : "先生成今日覺察是非題。"
@@ -3528,7 +3522,7 @@ function renderAwareQuote(items, checked) {
       <p class="aware-quote-gate__meta">${Math.min(done, AWARENESS_QUIZ_COUNT)} / ${AWARENESS_QUIZ_COUNT}</p>
       <p class="aware-quote-gate__hint">${
         ready
-          ? "點下方按鈕，每次煉出三句、一句一事；這個復盤最多兩次。"
+          ? "點下方按鈕，每次只煉一句；這個復盤最多兩次。"
           : "每一題點「是」或「否」即可，沒有標準答案。"
       }</p>
     </div>
@@ -3565,10 +3559,10 @@ function syncAwareQuoteGate() {
   if (hint) {
     hint.hidden = !ready;
     hint.textContent = capped
-      ? "這次復盤的金句已煉過兩次。把目光放回當下這三句就好。"
+      ? "這次復盤的金句已煉過兩次。把目光放回當下這一句就好。"
       : quotes.length
-        ? `還可以再煉 ${left} 次。每一句都只會是一句話。`
-        : "點一次生成三句金句；每句一句話，這個復盤最多兩次。";
+        ? `還可以再煉 ${left} 次。新的一句會覆蓋現在這句。`
+        : "點一次生成一句金句；這個復盤最多兩次。";
   }
 }
 
@@ -3671,7 +3665,7 @@ function refreshJournalChecklists(journal, options = {}) {
   const keepExec = !options.forceLocal && (options.useSaved || data.executionAi) && (data.executionCheckItems || []).length;
   const keepManifest = !options.forceLocal && (options.useSaved || data.manifestAi) && (data.manifestCheckItems || []).length;
   const awareItems = keepAware
-    ? normalizeAwarenessQuotes(data.awarenessCheckItems).slice(0, 3)
+    ? normalizeAwarenessQuotes(data.awarenessCheckItems).slice(0, AWARENESS_QUOTE_COUNT)
     : [];
   const execItems = keepExec
     ? normalizeExecCheckItems(data.executionCheckItems).slice(0, 4)
@@ -3810,8 +3804,8 @@ async function generateJournalChecklist(kind, options = {}) {
   setChecklistLoading(kind, true);
 
   const fallback = isAware ? buildAwarenessCheckItems(journal) : buildExecutionCheckItems(journal);
-  const min = 3;
-  const max = isAware ? 3 : 4;
+  const min = isAware ? AWARENESS_QUOTE_COUNT : 3;
+  const max = isAware ? AWARENESS_QUOTE_COUNT : 4;
 
   try {
     if (!state.user) {
@@ -3855,7 +3849,7 @@ async function generateJournalChecklist(kind, options = {}) {
     showToast(
       isAware
         ? awarenessQuoteGenCount() >= AWARENESS_QUOTE_GEN_MAX
-          ? "這是這次復盤的最後一次金句。請專注當下這三句。"
+          ? "這是這次復盤的最後一次金句。請專注當下這一句。"
           : "今日核心金句已生成。"
         : "行動卡點已生成。"
     );
