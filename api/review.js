@@ -263,41 +263,113 @@ function thinkGuideStep(body) {
 
 function formatThinkGuideRounds(rounds) {
   const list = Array.isArray(rounds) ? rounds : [];
-  if (!list.length) return "（尚未開始）";
+  if (!list.length) return "（尚未開始提問）";
   return list
     .map((item, index) => {
+      const roles = ["感受", "意義", "看見自己"];
       const question = String(item?.question || "").trim() || "（尚未提問）";
       const answer = String(item?.answer || "").trim() || "（尚未回答）";
-      return `第 ${index + 1} 輪\n問：${question}\n答：${answer}`;
+      return `第 ${index + 1} 輪｜${roles[index] || "延續"}\n問：${question}\n答：${answer}`;
     })
     .join("\n\n");
 }
 
-const THINK_GUIDE_ASK_SYSTEM = `你是「日精進」的深度思考引導者：溫柔，但不討好；一針見血，但不審判。
-使用者剛寫下今日感謝、事件與心情。深度復盤還會有身體覺察；快速復盤可能加選身體、覺察、執行力或顯化。請只提出「下一輪」的引導式疑問句，讓他親自往下想，不要替他下結論。若某模組沒有內容，不要編造該模組的細節。
+function inferThinkGuideTone(ctx, rounds) {
+  const blob = [
+    formatThanksForPrompt(ctx),
+    ctx && (ctx.event || ctx.text),
+    ctx && ctx.mood,
+    formatThinkGuideRounds(rounds || (ctx && ctx.rounds)),
+  ]
+    .map((item) => String(item || ""))
+    .join("\n");
+  const mixed = /一方面|卻又|可是又|但又|開心.{0,12}(擔心|不安)|幸福.{0,12}(不安|怕)|感謝.{0,12}(怕|擔心)/.test(blob);
+  const angry = /生氣|憤怒|委屈|被冒犯|不爽|討厭|翻臉|界線|被當/.test(blob);
+  const sad = /難過|失落|傷心|遺憾|失去|孤單/.test(blob);
+  const anxious = /焦慮|害怕|擔心|不安|恐懼|緊張/.test(blob);
+  const warm = /幸福|感謝|開心|滿足|溫暖|喜歡|愛|愉快|平靜|感恩|珍惜/.test(blob);
+  if (mixed || (warm && (anxious || angry || sad))) return "mixed";
+  if (angry) return "anger";
+  if (sad) return "sad";
+  if (anxious && !warm) return "anxiety";
+  if (warm) return "warm";
+  return "open";
+}
 
-三輪各自的任務：
-- 第 1 輪：點出今天真正被碰到的那一點。問他看見了什麼、哪裡卡住。
-- 第 2 輪：往內一層。問還沒說出口的期待、害怕或自我保護。
-- 第 3 輪：把看見收成選擇。問明天最小、做得到的那一步會先碰哪裡。
+function thinkGuideToneHint(tone) {
+  if (tone === "warm") {
+    return `情緒方向：幸福／感謝／開心／滿足。
+請探索為什麼這件事重要、真正珍惜什麼、反映了什麼價值或生活方式、有沒有開始看見容易忽略的幸福。
+禁止問害怕失去、保護自己、防衛、期待回報，除非他自己的文字已出現矛盾、擔心、不安或交換感。`;
+  }
+  if (tone === "anger") {
+    return `情緒方向：生氣／不舒服／被冒犯。
+可探索哪個界線被碰到、真正介意什麼、原本期待對方怎麼做、情緒底下的需求。`;
+  }
+  if (tone === "sad") {
+    return `情緒方向：難過／失落。
+可探索真正失去什麼、為什麼這件事重要、這份難過反映他在乎什麼。`;
+  }
+  if (tone === "anxiety") {
+    return `情緒方向：焦慮／害怕。
+可探索最擔心什麼、哪一部分可以控制、哪一部分來自未知或想像、現在真正需要什麼。`;
+  }
+  if (tone === "mixed") {
+    return `情緒方向：矛盾（例如又幸福又不安）。可以同時輕輕碰觸正向與不安兩面，但不要把幸福整段改寫成恐懼。`;
+  }
+  return `情緒方向尚不明顯。先跟著原文走，不要預設有創傷、防衛或害怕。`;
+}
+
+const THINK_GUIDE_ASK_SYSTEM = `你是「日精進」的深度思考陪伴者。先讀懂使用者今天寫下的感謝、事件、心情與（若有）身體覺察，以及到目前為止的每一輪問答，再只提出「這一輪」一個引導式疑問句。
+
+你的工作是陪他找到答案，不是替他下結論，也不是找創傷。深度不等於找問題。不要為了深度而刻意負面化。
+
+【先判斷情緒方向，再決定怎麼問】
+- 幸福／感謝／開心／滿足：問為什麼重要、真正珍惜什麼、這反映了他的什麼、有沒有開始看見容易忽略的幸福。禁止問「是不是害怕失去」「是不是在保護自己」「是不是期待回報」，除非他自己的文字已出現矛盾、擔心、不安或交換感。
+- 生氣／不舒服／被冒犯：問哪個界線被碰到、真正介意什麼、原本期待對方怎麼做、情緒底下的需求。
+- 難過／失落：問真正失去什麼、為什麼重要、這份難過反映他在乎什麼。
+- 焦慮／害怕：問最擔心什麼、哪裡可控制、哪裡來自未知或想像、現在真正需要什麼。
+- 矛盾（例如又幸福又不安）：才可以同時輕輕碰觸正向與不安兩面。
+
+不要像心理醫生，不要下診斷，不要堆心理學名詞，不要每件事都解讀成防衛或創傷，不要一直稱讚，不要 emoji。
+
+【三輪角色必須不同，最多 3 輪，不要第 4 輪】
+- 第 1 輪｜感受：回到事件當下。問最明顯的感受，或真正被觸動的那一個瞬間。
+- 第 2 輪｜意義：必須讀取第 1 輪回答後動態生成。往「為什麼這對我重要」走，承接他的用詞。不要重問類似的為什麼，不要無故跳去害怕／防衛。
+- 第 3 輪｜看見自己：把視角從「事情」拉回「自己」。問今天這件事讓他重新看見自己哪一部分。
 
 規則：
 - 只輸出 JSON：{"question":"...","hint":"..."}
-- question 必須是疑問句，18-42 字，溫柔且精準，貼近他今天的原文用詞
-- hint 12-28 字，一句陪伴，不給答案
+- question 必須是疑問句，16-48 字，溫暖、白話、貼近今天的原文用詞
+- hint 10-24 字，一句陪伴，不給答案
+- 必須使用完整上下文：原始內容＋前面每一輪的問與答。不要像重新開始聊天
 - 禁止雞湯、禁止說教、禁止一次問兩件事、禁止複述整段日記
 - 繁體中文`;
 
-const THINK_GUIDE_CLOSE_SYSTEM = `你是「日精進」的深度思考引導者：先接住三輪回答，再點破核心。
-使用者已完成 3 輪引導式問答。請給出最終總結，並精準列出 2 件具體下一步。
+const THINK_GUIDE_CLOSE_SYSTEM = `你是「日精進」的深度思考陪伴者。使用者已完成剛好 3 輪引導式問答。請讀取「原始內容＋三輪問與答」全部上下文，寫出一份有整體脈絡的「今日覺察總結」。
+
+目標：讓他覺得「原來今天這些事情其實在講同一件事」「你有看懂我寫的」。不是把文字重新包裝，不是急著給答案，而是幫他把「事件 → 感受 → 發現 → 意義」串起來。
+
+語氣：溫暖、有洞察、白話。不說教、不過度心理分析、不用心理學名詞、不像心理醫生、不下診斷。不要把幸福硬寫成害怕或防衛。不要一直稱讚。不要 emoji。不要文青空話或網路雞湯語錄。
 
 規則：
-- 只輸出 JSON：{"title":"...","summary":"...","actions":["...","..."]}
-- title：12-22 字，有質感的深度思考標題
-- summary：4 到 7 句。溫暖、直擊核心，點出他真正卡住與真正被保護的地方。不要條列、不要標題
-- actions 必須剛好 2 條。每條 18-36 字，是今天或明天做得到的具體事情，不要口號
-- 必須承接三輪原文，不要空泛激勵
+- 只輸出 JSON：
+{
+  "title": "今日主題，8-18字，具體有意義，不要太雞湯也不要太抽象",
+  "awareness": "今日覺察，2到4小段，用\\n\\n分段。串起事件、感受、發現與意義，不要只重述原文。",
+  "selfSeen": "今天我看見的自己：一句第一人稱，必須根據他的原文，不可套模板",
+  "takeaway": "今日帶走的一句話：短、有記憶點，像從今天這份紀錄長出來"
+}
+- 必須承接他的用詞與三輪回答
+- 若今天是幸福／感謝，總結也要停在珍惜與看見，不要硬轉成恐懼
+- 不要再提問，不要列行動清單
 - 繁體中文`;
+
+function thinkGuideRoundRole(round) {
+  if (Number(round) === 2) return "意義";
+  if (Number(round) === 3) return "看見自己";
+  return "感受";
+}
 
 function thinkGuideUserPrompt(body) {
   const ctx = body.context && typeof body.context === "object" ? body.context : {};
@@ -323,17 +395,43 @@ function thinkGuideUserPrompt(body) {
     extras.push(`明天最小的一步：${ctx.smallestStep || "未寫"}`);
   }
   if (modules.includes("manifest") || ctx.manifest) extras.push(`明天想顯化：${ctx.manifest || "未寫"}`);
-  const base = `今日感謝：${thanks || "未寫"}
+  const original = `【原始內容｜每一輪都必須讀完】
+今日感謝：
+${thanks || "未寫"}
 今日事件：${ctx.event || body.text || "（未寫）"}
 心情：${ctx.mood || "未選"}
-${extras.join("\n")}
-
-三輪對話至今：
+${extras.join("\n")}`;
+  const dialogue = `【到目前為止的完整問答｜必須承接，不要當作新對話】
 ${formatThinkGuideRounds(rounds)}`;
+  const tone = inferThinkGuideTone(ctx, rounds);
   if (thinkGuideStep(body) === "close") {
-    return `請根據這 3 輪深度思考，寫出溫暖且直擊核心的總結，並給出 2 件具體下一步。\n\n${base}`;
+    return `請根據下面全部上下文，寫出有整體脈絡的「今日覺察總結」。不要再提問。
+
+${thinkGuideToneHint(tone)}
+
+${original}
+
+${dialogue}`;
   }
-  return `這是第 ${round}/3 輪。請只出這一輪的引導式疑問句，不要總結、不要給行動清單。\n\n${base}`;
+  const last = rounds.filter((item) => String(item?.answer || "").trim()).slice(-1)[0];
+  const lastLine = last
+    ? `上一輪他回答：「${compactLine(last.answer, 120)}」。第 ${round} 輪必須承接這句話的用詞與意思。`
+    : "這是第 1 輪，請先回到今天的畫面與感受。";
+  const roleHint =
+    round === 1
+      ? "這一輪只問「當下真正的感受」或真正被觸動的瞬間，不要跳到意義或自我分析。"
+      : round === 2
+        ? "這一輪問「為什麼這對我重要／真正珍惜的是什麼」。不要無故問害怕、防衛、期待回報。"
+        : "這一輪把視角從事情拉回自己：今天這件事讓他重新看見自己哪一部分。這是最後一問，不要再往下追。";
+  return `這是第 ${round}/3 輪，任務是「${thinkGuideRoundRole(round)}」。請只出這一輪一個引導式疑問句，不要總結。
+
+${thinkGuideToneHint(tone)}
+${roleHint}
+${lastLine}
+
+${original}
+
+${dialogue}`;
 }
 
 function normalizeThinkGuideAsk(raw) {
@@ -347,15 +445,20 @@ function normalizeThinkGuideAsk(raw) {
 
 function normalizeThinkGuideClose(raw) {
   const data = raw && typeof raw === "object" ? raw : {};
+  const awareness = String(data.awareness || data.summary || data.conclusion || data.psychology || "")
+    .replace(/\r\n/g, "\n")
+    .trim();
+  const selfSeen = String(data.selfSeen || data.self || data.seen || "").trim();
+  const takeaway = String(data.takeaway || data.line || data.quote || "").trim();
   const actions = normalizeStringList(data.actions || data.suggestions || data.steps, 2);
-  while (actions.length < 2) {
-    actions.push(actions.length ? "今晚先把今天真正卡住的那一點，用一句話寫下來。" : "明天只做一件 5 分鐘內能完成、和今天有關的小事。");
-  }
   return {
     step: "close",
     title: String(data.title || data.headline || "").trim().slice(0, 48) || "今天被看見的那一層",
-    summary: String(data.summary || data.conclusion || data.psychology || "").trim(),
-    actions: actions.slice(0, 2),
+    summary: awareness,
+    awareness,
+    selfSeen: selfSeen.slice(0, 80),
+    takeaway: takeaway.slice(0, 80),
+    actions,
   };
 }
 
@@ -1249,7 +1352,7 @@ module.exports = async function handler(req, res) {
       maxTokens:
         mode === "insight" && isThinkGuideRequest(body)
           ? thinkGuideStep(body) === "close"
-            ? 900
+            ? 1100
             : 400
           : mode === "prompts" && promptKind === "awareness"
             ? 500
@@ -1286,8 +1389,8 @@ module.exports = async function handler(req, res) {
       if (isThinkGuideRequest(body)) {
         if (thinkGuideStep(body) === "close") {
           const closed = normalizeThinkGuideClose(data);
-          if (!closed.summary || closed.actions.length < 2) {
-            res.status(502).json({ ok: false, error: "深度思考總結格式不完整，請再試一次" });
+          if (!closed.summary && !closed.awareness) {
+            res.status(502).json({ ok: false, error: "今日覺察總結還沒整理好，請再試一次" });
             return;
           }
           res.status(200).json({ ok: true, source: "openai", data: closed });

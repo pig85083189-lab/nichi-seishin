@@ -2994,7 +2994,7 @@ function emptyDeep() {
 }
 
 function emptyThinkGuide() {
-  return { round: 0, rounds: [], summary: "", actions: [], title: "" };
+  return { round: 0, rounds: [], summary: "", awareness: "", selfSeen: "", takeaway: "", actions: [], title: "" };
 }
 
 function emptyInsight() {
@@ -3276,10 +3276,15 @@ function normalizeThinkGuide(raw) {
     .slice(0, 3);
   const roundNum = Number(data.round);
   const round = Number.isFinite(roundNum) ? Math.max(0, Math.min(4, Math.floor(roundNum))) : 0;
+  const awareness = String(data.awareness || "").trim();
+  const summary = String(data.summary || awareness || "").trim();
   return {
-    round: round || (data.summary ? 4 : rounds.length),
+    round: round || (summary ? 4 : rounds.length),
     rounds,
-    summary: String(data.summary || "").trim(),
+    summary,
+    awareness: awareness || summary,
+    selfSeen: String(data.selfSeen || data.self || "").trim(),
+    takeaway: String(data.takeaway || data.line || "").trim(),
     actions: normalizeInsightList(data.actions, 2),
     title: String(data.title || "").trim(),
   };
@@ -3287,7 +3292,9 @@ function normalizeThinkGuide(raw) {
 
 function thinkGuideDone(guide) {
   const data = normalizeThinkGuide(guide);
-  return Boolean(data.summary && data.actions.length >= 2 && data.rounds.filter((item) => item.answer).length >= 3);
+  const answered = data.rounds.filter((item) => item.answer).length >= 3;
+  if (!answered) return false;
+  return Boolean(data.summary || data.awareness || data.selfSeen || data.takeaway);
 }
 
 function normalizeInsight(insight) {
@@ -4130,22 +4137,61 @@ function insightListHtml(items, className) {
     .join("")}</${className.includes("takeaways") ? "ul" : "ol"}>`;
 }
 
+function renderThinkGuideCloseHtml(guide, data) {
+  const title = guide.title || data.title || "";
+  const awareness = String(guide.awareness || guide.summary || data.conclusion || "").trim();
+  const selfSeen = String(guide.selfSeen || "").trim();
+  const takeaway = String(guide.takeaway || "").trim();
+  const actions = Array.isArray(guide.actions) ? guide.actions.filter(Boolean) : [];
+  const awarenessHtml = awareness
+    ? awareness
+        .split(/\n{2,}/)
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .map((part) => `<p class="think-guide__close-text">${escapeHtml(part)}</p>`)
+        .join("")
+    : "";
+  return `<article class="think-guide__close">
+        <p class="think-guide__kicker">今日覺察總結</p>
+        ${title ? `<p class="think-guide__close-title">${escapeHtml(title)}</p>` : ""}
+        ${awarenessHtml}
+        ${
+          selfSeen
+            ? `<div class="think-guide__close-block">
+          <p class="think-guide__kicker">今天我看見的自己</p>
+          <p class="think-guide__self">${escapeHtml(selfSeen)}</p>
+        </div>`
+            : ""
+        }
+        ${
+          takeaway
+            ? `<div class="think-guide__close-block">
+          <p class="think-guide__kicker">今日帶走的一句話</p>
+          <p class="think-guide__takeaway">${escapeHtml(takeaway)}</p>
+        </div>`
+            : ""
+        }
+        ${actions.length ? actionStepsHtml(actions) : ""}
+      </article>`;
+}
+
 function renderThinkGuideHtml(insight) {
   const data = normalizeInsight(insight);
   const guide = data.guide || emptyThinkGuide();
   const rounds = guide.rounds || [];
-  if (!rounds.length && !guide.summary) {
+  if (!rounds.length && !guide.summary && !guide.awareness) {
     return `<p class="insight-card__empty">${insightEmptyCopy(state.journalMode === "quick")}</p>`;
   }
   const current = Math.min(3, Math.max(1, guide.round || rounds.length || 1));
   const done = thinkGuideDone(guide);
+  const roles = ["感受", "意義", "看見自己"];
   const roundCards = rounds
     .map((item, index) => {
       const num = String(index + 1).padStart(2, "0");
       const active = !done && index + 1 === current && !item.answer;
       const answered = Boolean(item.answer);
       return `<article class="think-guide__round${active ? " is-on" : answered ? " is-done" : ""}">
-        <p class="think-guide__kicker">第 ${num} 輪</p>
+        <p class="think-guide__kicker">第 ${num} 輪｜${roles[index] || ""}</p>
         <p class="think-guide__q">${escapeHtml(item.question)}</p>
         ${item.hint && (active || !answered) ? `<p class="think-guide__hint">${escapeHtml(item.hint)}</p>` : ""}
         ${
@@ -4162,15 +4208,7 @@ function renderThinkGuideHtml(insight) {
       </article>`;
     })
     .join("");
-  const closeHtml =
-    done || guide.summary
-      ? `<article class="think-guide__close">
-        <p class="think-guide__kicker">深度思考總結</p>
-        ${guide.title || data.title ? `<p class="think-guide__close-title">${escapeHtml(guide.title || data.title)}</p>` : ""}
-        <p class="think-guide__close-text">${escapeHtml(guide.summary || data.conclusion || "")}</p>
-        ${actionStepsHtml(guide.actions.length ? guide.actions : data.suggestions)}
-      </article>`
-      : "";
+  const closeHtml = done || guide.summary || guide.awareness ? renderThinkGuideCloseHtml(guide, data) : "";
   return `<div class="think-guide">${roundCards}${closeHtml}</div>`;
 }
 
@@ -4258,7 +4296,7 @@ function setCompleteBusy(loading) {
   const btn = document.getElementById("btnCompleteToday");
   if (!btn) return;
   btn.disabled = loading;
-  if (loading) btn.textContent = "正在為你收成今日深度思考…";
+  if (loading) btn.textContent = "正在為你整理今日覺察總結…";
   else syncCompleteButtonLabel();
 }
 
@@ -4367,38 +4405,97 @@ function thinkGuideContext(journal, guide) {
       hint: item.hint,
       answer: item.answer,
     })),
+    lastAnswer: String((guide?.rounds || []).filter((item) => item.answer).slice(-1)[0]?.answer || "").trim(),
   };
 }
 
 function localThinkGuideAsk(journal, round, guide) {
-  const mood = journal.mood || "這份心情";
-  const eventBit = String(journal.event || "").trim().slice(0, 16) || "今天這件事";
-  const questions = [
-    {
-      question: `在「${eventBit}」裡，最讓你放不下的，其實是哪一個瞬間？`,
-      hint: "先點名那個畫面，不必急著解釋。",
-    },
-    {
-      question: `如果「${mood}」可以說話，它最想讓你承認的是什麼？`,
-      hint: "往內聽一句還沒被允許說出口的話。",
-    },
-    {
-      question: "明天的你若只改一件最小的事，會先輕輕碰哪裡？",
-      hint: "選小到 5 分鐘內做得到的那一步。",
-    },
-  ];
-  return questions[Math.max(0, Math.min(2, round - 1))];
+  const eventBit = String(journal?.event || "").trim().slice(0, 16) || "今天這件事";
+  const thanksBit = thanksTextFrom(journal).trim();
+  const mood = journal?.mood || "";
+  const blob = `${thanksBit}\n${journal?.event || ""}\n${mood}\n${(guide?.rounds || [])
+    .map((item) => `${item.question || ""} ${item.answer || ""}`)
+    .join("\n")}`;
+  const mixed = /一方面|卻又|可是又|但又|開心.{0,12}(擔心|不安)|幸福.{0,12}(不安|怕)/.test(blob);
+  const angry = /生氣|憤怒|委屈|被冒犯|不爽|討厭/.test(blob);
+  const sad = /難過|失落|傷心|遺憾|失去/.test(blob);
+  const anxious = /焦慮|害怕|擔心|不安|恐懼/.test(blob);
+  const warm = /幸福|感謝|開心|滿足|溫暖|喜歡|愛|愉快|平靜|感恩|珍惜/.test(blob);
+  const prev = String(guide?.rounds?.[0]?.answer || "").trim().slice(0, 18);
+  if (round <= 1) {
+    if (mixed) {
+      return { question: `當「${eventBit}」發生時，你心裡同時出現的，最明顯的那份感受是什麼？`, hint: "先點名當下的感覺，兩種都可以在。" };
+    }
+    if (angry) {
+      return { question: `在「${eventBit}」裡，真正讓你不舒服的，是哪一個瞬間？`, hint: "先回到那個畫面，不必急著評對錯。" };
+    }
+    if (sad) {
+      return { question: `面對「${eventBit}」，你此刻最明顯的感受是什麼？`, hint: "用自己的話說那一刻的感覺。" };
+    }
+    if (anxious && !warm) {
+      return { question: `想到「${eventBit}」時，你身體或心裡最先浮出來的感覺是什麼？`, hint: "先描述感覺，先不用解決。" };
+    }
+    return {
+      question: thanksBit
+        ? `今天這份付出或感謝裡，真正讓你覺得被觸動的，是哪一個瞬間？`
+        : `當「${eventBit}」發生時，你最明顯的感受是什麼？`,
+      hint: "先回到那個畫面，不必急著解釋。",
+    };
+  }
+  if (round === 2) {
+    const clip = prev || "你剛寫下的那句";
+    if (angry) {
+      return { question: `你說「${clip}」，這件事真正碰到你在乎的，是哪一條界線？`, hint: "往「我真正介意的是什麼」走一小步。" };
+    }
+    if (sad) {
+      return { question: `你說「${clip}」，這份難過之所以重要，是因為它碰到了你的什麼？`, hint: "看看為什麼這對你重要。" };
+    }
+    if (anxious && !warm) {
+      return { question: `你說「${clip}」，你最擔心接下來會發生的，其實是哪一件？`, hint: "把擔心說具體一點就好。" };
+    }
+    return {
+      question: `你說「${clip}」，這件事對你來說，真正重要的是什麼？`,
+      hint: "往「為什麼這對我重要」走一小步。",
+    };
+  }
+  return {
+    question: "經過前面兩問，你覺得今天這件事讓你重新看見了自己哪一部分？",
+    hint: "把視角從事情，輕輕拉回自己。",
+  };
 }
 
 function localThinkGuideClose(journal, guide) {
-  const last = (guide.rounds || []).map((item) => item.answer).filter(Boolean).slice(-1)[0] || "你今天願意停下來看自己";
+  const eventBit = String(journal?.event || "").trim().slice(0, 22) || "今天這件事";
+  const answers = (guide?.rounds || []).map((item) => String(item.answer || "").trim()).filter(Boolean);
+  const a1 = answers[0] || "";
+  const a2 = answers[1] || "";
+  const a3 = answers[2] || "";
+  const thanks = thanksTextFrom(journal).trim();
+  const awareness = [
+    `今天真正留下印象的，不只是「${eventBit}」本身，而是你願意把它寫下來，多看自己一眼。`,
+    a1 ? `你說「${a1.slice(0, 36)}」，這已經比事情的表面更靠近你真正的感受。` : "",
+    a2 ? `接著你談到「${a2.slice(0, 36)}」，可以看出這件事重要，是因為它碰到了你在乎的價值。` : "",
+    a3
+      ? `最後你看見「${a3.slice(0, 36)}」，等於把視角從事情拉回自己：今天這些片段，其實在講同一件事。`
+      : "最後這一問，是把視角從事情輕輕拉回自己。",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+  const selfSeen = a3 && /^我/.test(a3) && a3.length <= 40
+    ? a3.replace(/[。！？]+$/, "") + "。"
+    : thanks
+      ? "我喜歡把好的感受放進日常，也正在學習看見別人給我的那一份。"
+      : "我開始看見，今天這件事其實在說出我真正在乎的是什麼。";
+  const takeaway = thanks
+    ? "當我願意把日常裡的好放進心上，也比較容易看見，原來這些並不是理所當然。"
+    : "先看清楚我真正有感的那一點，今天就沒有白過。";
   return {
-    title: "先把看見，收成下一步",
-    summary: `三輪問下來，真正被碰到的不是事情成不成功，而是你有沒有被自己接住。你寫下「${String(last).slice(0, 24)}」，已經比繞開它更靠近核心。先溫柔地承認這一層，再把力氣放到明天做得到的兩件小事上。`,
-    actions: [
-      "今晚把這一輪最刺到的那句話，手寫成一行，放到明天看得到的地方。",
-      "明天只做一件 5 分鐘內能完成、和今天卡點有關的小事，做完就停。",
-    ],
+    title: thanks ? "把日常裡的好，當真看見" : "今天真正有感的那一層",
+    summary: awareness,
+    awareness,
+    selfSeen,
+    takeaway,
+    actions: [],
   };
 }
 
@@ -4409,7 +4506,7 @@ function applyThinkGuideInsight(guide, sig) {
     conclusion: data.summary,
     psychology: data.summary,
     suggestions: data.actions,
-    takeaways: data.actions,
+    takeaways: [data.selfSeen, data.takeaway].filter(Boolean),
     guide: data,
     sig,
   });
@@ -4495,7 +4592,7 @@ async function generateThinkGuideAsk(options = {}) {
 async function generateThinkGuideClose(options = {}) {
   setJournalFoldOpen(thinkGuideFoldId(), true);
   if (recoverStaleBusy(state.insightBusy, state.insightBusyAt, () => setInsightLoading(false))) {
-    if (!options.auto) showToast("還在為你收成今日深度思考，請稍候。");
+    if (!options.auto) showToast("還在為你整理今日覺察總結，請稍候。");
     return false;
   }
   const journal = collectJournal();
@@ -4509,7 +4606,7 @@ async function generateThinkGuideClose(options = {}) {
   const token = (state.insightToken || 0) + 1;
   state.insightToken = token;
   setInsightLoading(true);
-  setThinkGuideLoadingLabel("正在為你收成今日深度思考…");
+  setThinkGuideLoadingLabel("正在為你整理今日覺察總結…");
   const watchdog = setTimeout(() => {
     if (state.insightToken === token && state.insightBusy) {
       setInsightLoading(false);
@@ -4529,12 +4626,17 @@ async function generateThinkGuideClose(options = {}) {
     if (state.insightToken !== token) return false;
     const closed = {
       title: String(remote.title || "").trim(),
-      summary: String(remote.summary || "").trim(),
-      actions: Array.isArray(remote.actions) ? remote.actions.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 2) : [],
+      summary: String(remote.awareness || remote.summary || "").trim(),
+      awareness: String(remote.awareness || remote.summary || "").trim(),
+      selfSeen: String(remote.selfSeen || "").trim(),
+      takeaway: String(remote.takeaway || "").trim(),
+      actions: Array.isArray(remote.actions)
+        ? remote.actions.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 2)
+        : [],
     };
-    if (!closed.summary || closed.actions.length < 2) throw new Error("雲端回傳格式不完整");
-    applyThinkGuideInsight({ ...guide, round: 4, title: closed.title, summary: closed.summary, actions: closed.actions }, sig);
-    if (!options.fromComplete) showToast("今日深度思考已生成。");
+    if (!closed.summary && !closed.awareness) throw new Error("雲端回傳格式不完整");
+    applyThinkGuideInsight({ ...guide, round: 4, ...closed }, sig);
+    if (!options.fromComplete) showToast("今日覺察總結已生成。");
     return true;
   } catch (error) {
     if (state.insightToken !== token) return false;
@@ -8096,7 +8198,15 @@ function renderHistoryJournal(review) {
         guide.title || insight.title
           ? historyBlock("", `<p class="history-journal__headline">${escapeHtml(guide.title || insight.title)}</p>`)
           : "",
-        guide.summary ? historyBlock("總結", `<p class="history-journal__text">${escapeHtml(guide.summary)}</p>`) : "",
+        guide.awareness || guide.summary
+          ? historyBlock("今日覺察", `<p class="history-journal__text">${escapeHtml(guide.awareness || guide.summary)}</p>`)
+          : "",
+        guide.selfSeen
+          ? historyBlock("今天我看見的自己", `<p class="history-journal__text">${escapeHtml(guide.selfSeen)}</p>`)
+          : "",
+        guide.takeaway
+          ? historyBlock("今日帶走的一句話", `<p class="history-journal__headline">${escapeHtml(guide.takeaway)}</p>`)
+          : "",
         guide.actions.length
           ? historyBlock(
               "兩件具體下一步",

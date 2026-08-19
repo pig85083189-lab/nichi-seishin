@@ -5498,14 +5498,29 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
 }
 
 .think-guide__close-text {
-  margin: 0 0 16px;
+  margin: 0 0 12px;
   color: var(--text);
   font-size: 15px;
   line-height: 1.8;
+  white-space: pre-wrap;
+}
+
+.think-guide__close-block {
+  margin-top: 16px;
+}
+
+.think-guide__self,
+.think-guide__takeaway {
+  margin: 0;
+  color: var(--heading);
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.6;
 }
 
 .think-guide__close .action-steps {
-  margin: 0;
+  margin: 16px 0 0;
 }
 
 .insight-card__result {
