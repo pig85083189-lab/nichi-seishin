@@ -4325,8 +4325,29 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   transition: grid-template-rows 0.36s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.journal-fold.is-open .journal-fold__panel {
+.journal-fold.is-open {
+  overflow: visible;
+}
+
+.journal-fold.is-open > .journal-fold__panel {
   grid-template-rows: 1fr;
+  overflow: visible;
+  pointer-events: auto;
+}
+
+.journal-fold.is-open > .journal-fold__panel > .journal-fold__inner {
+  overflow: visible;
+}
+
+.journal-fold .ai-check-btn,
+.journal-fold [data-think-guide-next] {
+  position: relative;
+  z-index: 2;
+}
+
+.ai-check-btn.is-busy {
+  opacity: 0.7;
+  cursor: wait;
 }
 
 .journal-fold__inner {
@@ -4525,7 +4546,7 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   opacity: 0.72;
 }
 
-.aware-col .ai-check-btn.is-busy:disabled {
+.aware-col .ai-check-btn.is-busy {
   cursor: wait;
   opacity: 0.7;
 }

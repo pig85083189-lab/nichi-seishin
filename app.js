@@ -4273,11 +4273,15 @@ function setInsightLoading(loading) {
   state.insightBusy = loading;
   state.insightBusyAt = loading ? Date.now() : 0;
   if (btn) {
-    btn.disabled = loading;
+    btn.disabled = false;
+    btn.classList.toggle("is-busy", loading);
+    btn.setAttribute("aria-busy", loading ? "true" : "false");
     btn.textContent = loading ? "想下一問…" : "開始深度思考";
   }
   if (otherBtn) {
     otherBtn.disabled = false;
+    otherBtn.classList.remove("is-busy");
+    otherBtn.setAttribute("aria-busy", "false");
     otherBtn.textContent = "開始深度思考";
   }
   if (loader) loader.hidden = !loading;
@@ -5094,14 +5098,19 @@ function syncCorePromptGate() {
   if (awareBtn) {
     awareBtn.hidden = hasAware;
     if (!awareBtn.hidden) {
-      awareBtn.disabled = !ready || loading;
+      awareBtn.disabled = false;
+      awareBtn.classList.toggle("is-busy", loading);
+      awareBtn.setAttribute("aria-busy", loading ? "true" : "false");
+      awareBtn.title = ready || loading ? "" : "請先寫下今日感謝、事件，並選擇心情";
       awareBtn.textContent = loading ? "正在生成覺察題…" : "✦ 開始今天的覺察";
     }
   }
   if (execBtn) {
     execBtn.hidden = hasExec;
     if (!execBtn.hidden) {
-      execBtn.disabled = !ready || loading;
+      execBtn.disabled = false;
+      execBtn.classList.toggle("is-busy", loading);
+      execBtn.setAttribute("aria-busy", loading ? "true" : "false");
       execBtn.textContent = loading ? "出題中…" : "生成今日專屬行動題";
     }
   }
@@ -5122,7 +5131,9 @@ function renderDynamicQuestions(rootId, emptyId, genBtnId, checkBtnId, prompts, 
     }
     if (genBtn) {
       genBtn.hidden = false;
-      genBtn.disabled = !coreStoryReady() || Boolean(state.corePromptsBusy);
+      genBtn.disabled = false;
+      genBtn.classList.toggle("is-busy", Boolean(state.corePromptsBusy));
+      genBtn.setAttribute("aria-busy", state.corePromptsBusy ? "true" : "false");
     }
     if (checkBtn) checkBtn.hidden = true;
     return;
@@ -5159,7 +5170,9 @@ function renderAwarenessQuestions(prompts, options = {}) {
     }
     if (genBtn) {
       genBtn.hidden = false;
-      genBtn.disabled = !coreStoryReady() || Boolean(state.corePromptsBusy);
+      genBtn.disabled = false;
+      genBtn.classList.toggle("is-busy", Boolean(state.corePromptsBusy));
+      genBtn.setAttribute("aria-busy", state.corePromptsBusy ? "true" : "false");
       genBtn.textContent = state.corePromptsBusy ? "正在生成覺察題…" : "✦ 開始今天的覺察";
     }
     syncAwareQuoteGate();
@@ -5201,7 +5214,9 @@ function renderExecutionQuestions(prompts, options = {}) {
     }
     if (genBtn) {
       genBtn.hidden = false;
-      genBtn.disabled = !coreStoryReady() || Boolean(state.corePromptsBusy);
+      genBtn.disabled = false;
+      genBtn.classList.toggle("is-busy", Boolean(state.corePromptsBusy));
+      genBtn.setAttribute("aria-busy", state.corePromptsBusy ? "true" : "false");
     }
     if (checkBtn) checkBtn.hidden = true;
     return;
@@ -6087,8 +6102,15 @@ function applyFoldState(id, open) {
   root.classList.toggle("is-open", next);
   if (toggle) toggle.setAttribute("aria-expanded", next ? "true" : "false");
   if (panel) {
-    panel.inert = !next;
-    panel.setAttribute("aria-hidden", next ? "false" : "true");
+    if (next) {
+      panel.inert = false;
+      panel.removeAttribute("inert");
+      panel.setAttribute("aria-hidden", "false");
+    } else {
+      panel.inert = true;
+      panel.setAttribute("inert", "");
+      panel.setAttribute("aria-hidden", "true");
+    }
   }
 }
 
@@ -8310,25 +8332,134 @@ function tickReminder() {
  * 事件
  * =========================================================================== */
 
+function catchAsync(run, fallbackMessage) {
+  try {
+    const result = run();
+    if (result && typeof result.catch === "function") {
+      result.catch((error) => {
+        showToast(`${fallbackMessage}：${formatApiError(error)}`);
+      });
+    }
+  } catch (error) {
+    showToast(`${fallbackMessage}：${formatApiError(error)}`);
+  }
+}
+
+function handleTodayPointerClick(event) {
+  const node = event?.target;
+  if (!node || typeof node.closest !== "function") return false;
+  if (event._nichiTodayHandled) return false;
+  if (!node.closest("#page-today")) return false;
+  const handled = () => {
+    event.preventDefault();
+    event.stopPropagation();
+    event._nichiTodayHandled = true;
+    return true;
+  };
+
+  if (node.closest("#btnAwarePrompts")) {
+    handled();
+    setJournalFoldOpen("section-aware", true);
+    catchAsync(() => generateCorePrompts({ scope: "awareness" }), "覺察題生成失敗");
+    return true;
+  }
+  if (node.closest("#btnExecPrompts")) {
+    handled();
+    setJournalFoldOpen("section-exec", true);
+    catchAsync(() => generateCorePrompts({ scope: "execution" }), "執行題生成失敗");
+    return true;
+  }
+  if (node.closest("#btnInsightAi") || node.closest("#btnQuickInsight")) {
+    handled();
+    setJournalFoldOpen(thinkGuideFoldId(), true);
+    catchAsync(() => generateJournalInsight(), "深度思考還沒開始");
+    return true;
+  }
+  if (node.closest("#btnAwareAi")) {
+    handled();
+    catchAsync(() => generateJournalChecklist("awareness"), "核心覺察還沒整理好");
+    return true;
+  }
+  if (node.closest("#btnExecAi")) {
+    handled();
+    catchAsync(() => generateJournalChecklist("execution"), "行動卡還沒整理好");
+    return true;
+  }
+  if (node.closest("#btnManifestAi")) {
+    handled();
+    catchAsync(() => generateJournalChecklist("manifest"), "顯化步驟還沒整理好");
+    return true;
+  }
+  if (node.closest("#btnBodyCoach")) {
+    handled();
+    catchAsync(() => generateBodyCoach(), "身心建議還沒整理好");
+    return true;
+  }
+  const foldBtn = node.closest("[data-journal-fold]");
+  if (foldBtn) {
+    handled();
+    const root = foldBtn.closest(".journal-fold");
+    if (root?.id) toggleJournalFold(root.id);
+    return true;
+  }
+  const nextThink = node.closest("[data-think-guide-next]");
+  if (nextThink) {
+    handled();
+    catchAsync(() => submitThinkGuideRound(), "下一輪還沒送出");
+    return true;
+  }
+  const answerBtn = node.closest("[data-aware-answer]");
+  if (answerBtn) {
+    handled();
+    const item = answerBtn.closest(".aware-quiz__item");
+    if (!item) return true;
+    const value = normalizeYesNo(answerBtn.dataset.awareAnswer);
+    item.dataset.answer = value;
+    item.querySelectorAll(".aware-quiz__opt").forEach((btn) => {
+      btn.classList.toggle("is-on", btn === answerBtn);
+    });
+    persistJournalQuietly();
+    const journal = collectJournal();
+    renderAwareQuote(journal.awarenessCheckItems, journal.awarenessChecks);
+    return true;
+  }
+  const copyBtn = node.closest("[data-copy-aware-quote]");
+  if (!copyBtn) return false;
+  handled();
+  const quote = copyBtn.closest(".aware-quote")?.dataset.quote || "";
+  if (!quote) return true;
+  navigator.clipboard.writeText(quote).then(
+    () => showToast("這句核心覺察已複製。"),
+    () => showToast("複製失敗，請手動選取文字。")
+  );
+  return true;
+}
+
 function bindEvents() {
   document.addEventListener("click", (event) => {
-    const target = event.target.closest ? event.target : event.target.parentElement;
-    if (!target || !target.closest) return;
-    if (target.closest("#btnGoogleLogin") || target.closest("[data-google-login]")) {
-      event.preventDefault();
-      signInWithGoogle();
-      return;
-    }
-    if (target.closest("#btnSignOut") || target.closest("#btnGoogleLogout")) {
-      event.preventDefault();
-      signOutUser();
-      return;
-    }
-    if (target.closest("#btnNewebPay") || target.closest(".auth-pay:not(:disabled)") || target.closest("[data-open-pricing]")) {
-      console.log("Pricing modal opened");
-      event.preventDefault();
-      openPricingModal();
-      return;
+    try {
+      const target = event.target?.closest ? event.target : event.target?.parentElement;
+      if (!target?.closest) return;
+      if (target.closest("#btnGoogleLogin") || target.closest("[data-google-login]")) {
+        event.preventDefault();
+        signInWithGoogle();
+        return;
+      }
+      if (target.closest("#btnSignOut") || target.closest("#btnGoogleLogout")) {
+        event.preventDefault();
+        signOutUser();
+        return;
+      }
+      if (target.closest("#btnNewebPay") || target.closest(".auth-pay:not(:disabled)") || target.closest("[data-open-pricing]")) {
+        console.log("Pricing modal opened");
+        event.preventDefault();
+        openPricingModal();
+        return;
+      }
+      handleTodayPointerClick(event);
+    } catch (error) {
+      console.error(error);
+      showToast(formatApiError(error));
     }
   });
 
@@ -8405,26 +8536,6 @@ function bindEvents() {
   }
   document.getElementById("btnCompleteToday")?.addEventListener("click", completeToday);
   document.getElementById("btnSaveDraft")?.addEventListener("click", saveJournalDraft);
-  document.getElementById("btnAwarePrompts")?.addEventListener("click", () => {
-    setJournalFoldOpen("section-aware", true);
-    Promise.resolve(generateCorePrompts({ scope: "awareness" })).catch((error) => {
-      setCorePromptsLoading(false);
-      showToast(`覺察題生成失敗：${formatApiError(error)}`);
-    });
-  });
-  document.getElementById("btnExecPrompts")?.addEventListener("click", () => {
-    setJournalFoldOpen("section-exec", true);
-    Promise.resolve(generateCorePrompts({ scope: "execution" })).catch((error) => {
-      setCorePromptsLoading(false);
-      showToast(`執行題生成失敗：${formatApiError(error)}`);
-    });
-  });
-  document.getElementById("btnAwareAi")?.addEventListener("click", () => generateJournalChecklist("awareness"));
-  document.getElementById("btnExecAi")?.addEventListener("click", () => generateJournalChecklist("execution"));
-  document.getElementById("btnManifestAi")?.addEventListener("click", () => generateJournalChecklist("manifest"));
-  document.getElementById("btnInsightAi")?.addEventListener("click", () => generateJournalInsight());
-  document.getElementById("btnQuickInsight")?.addEventListener("click", () => generateJournalInsight());
-  document.getElementById("btnBodyCoach")?.addEventListener("click", () => generateBodyCoach());
   document.querySelector(".journal-mode-block")?.addEventListener("click", (event) => {
     const fold = event.target.closest("[data-mode-guide-toggle]");
     if (fold) {
@@ -8538,46 +8649,10 @@ function bindEvents() {
   });
 
   document.getElementById("page-today")?.addEventListener("click", (event) => {
-    const foldBtn = event.target.closest("[data-journal-fold]");
-    if (foldBtn) {
-      event.preventDefault();
-      const root = foldBtn.closest(".journal-fold");
-      if (root?.id) toggleJournalFold(root.id);
-      return;
-    }
-    const nextThink = event.target.closest("[data-think-guide-next]");
-    if (nextThink) {
-      event.preventDefault();
-      submitThinkGuideRound();
-      return;
-    }
-    const answerBtn = event.target.closest("[data-aware-answer]");
-    if (answerBtn) {
-      event.preventDefault();
-      const item = answerBtn.closest(".aware-quiz__item");
-      if (!item) return;
-      const value = normalizeYesNo(answerBtn.dataset.awareAnswer);
-      item.dataset.answer = value;
-      item.querySelectorAll(".aware-quiz__opt").forEach((btn) => {
-        btn.classList.toggle("is-on", btn === answerBtn);
-      });
-      persistJournalQuietly();
-      const journal = collectJournal();
-      renderAwareQuote(journal.awarenessCheckItems, journal.awarenessChecks);
-      return;
-    }
-    const copyBtn = event.target.closest("[data-copy-aware-quote]");
-    if (!copyBtn) return;
-    event.preventDefault();
-    const quote = copyBtn.closest(".aware-quote")?.dataset.quote || "";
-    if (!quote) return;
-    navigator.clipboard.writeText(quote).then(
-      () => showToast("這句核心覺察已複製。"),
-      () => showToast("複製失敗，請手動選取文字。")
-    );
+    handleTodayPointerClick(event);
   });
 
-  document.getElementById("aiStage").addEventListener("click", (event) => {
+  document.getElementById("aiStage")?.addEventListener("click", (event) => {
     const copyQuote = event.target.closest("[data-copy-quote]");
     if (copyQuote) {
       event.preventDefault();
@@ -8602,7 +8677,7 @@ function bindEvents() {
     }
   });
 
-  document.getElementById("aiStage").addEventListener("change", (event) => {
+  document.getElementById("aiStage")?.addEventListener("change", (event) => {
     const quote = event.target.dataset.quote;
     const sfm = event.target.dataset.sfm;
     const action = event.target.dataset.action;
@@ -8636,7 +8711,7 @@ function bindEvents() {
     if (event.target.id === "gratitudeInput") state.gratitude = event.target.value;
   });
 
-  document.getElementById("aiStage").addEventListener("input", (event) => {
+  document.getElementById("aiStage")?.addEventListener("input", (event) => {
     if (event.target.id === "gratitudeInput") state.gratitude = event.target.value;
   });
 
@@ -8772,18 +8847,18 @@ function bindEvents() {
     }
   });
 
-  document.getElementById("historySearch").addEventListener("input", (event) => {
+  document.getElementById("historySearch")?.addEventListener("input", (event) => {
     state.historyQuery = event.target.value;
     renderHistory();
   });
-  document.getElementById("historyTags").addEventListener("click", (event) => {
+  document.getElementById("historyTags")?.addEventListener("click", (event) => {
     const chip = event.target.closest("[data-tag]");
     if (!chip) return;
     state.historyTag = chip.dataset.tag;
     document.querySelectorAll("#historyTags .chip").forEach((item) => item.classList.toggle("is-active", item === chip));
     renderHistory();
   });
-  document.getElementById("historyList").addEventListener("click", (event) => {
+  document.getElementById("historyList")?.addEventListener("click", (event) => {
     const open = event.target.closest("[data-open]");
     if (open) {
       event.preventDefault();
@@ -8847,10 +8922,10 @@ function bindEvents() {
   );
   bindSubscribeButton();
 
-  document.getElementById("reminderCta").addEventListener("click", () => {
+  document.getElementById("reminderCta")?.addEventListener("click", () => {
     document.getElementById("reminderModal").showModal();
   });
-  document.getElementById("reminderForm").addEventListener("submit", (event) => {
+  document.getElementById("reminderForm")?.addEventListener("submit", (event) => {
     const enable = event.submitter && event.submitter.id === "enableReminder";
     saveReminder(Boolean(enable));
   });
@@ -8880,15 +8955,27 @@ function initSplash() {
 function init() {
   try {
     initSplash();
+  } catch (error) {
+    console.error(error);
+  }
+  try {
     applyAccessLock();
+  } catch (error) {
+    console.error(error);
+  }
+  try {
     bindEvents();
-  } catch {
+  } catch (error) {
+    console.error(error);
+    document.addEventListener("click", handleTodayPointerClick);
     const btn = document.getElementById("btnOrganize");
     if (btn) btn.onclick = runOrganize;
   }
   try {
-    document.getElementById("headerDate").textContent = formatHeaderDate(new Date());
-    document.getElementById("reviewDate").value = toInputDate(new Date());
+    const headerDate = document.getElementById("headerDate");
+    if (headerDate) headerDate.textContent = formatHeaderDate(new Date());
+    const reviewDate = document.getElementById("reviewDate");
+    if (reviewDate) reviewDate.value = toInputDate(new Date());
     updateJournalDateLabel(toInputDate(new Date()));
     try {
       const storedMode = localStorage.getItem(STORAGE_KEYS.journalMode);
