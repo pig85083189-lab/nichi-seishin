@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=119" />
+    <link rel="stylesheet" href="app.css?v=120" />
     <style>
       .splash {
         position: fixed;
@@ -311,8 +311,14 @@
             <p class="journal-guide">用三個具體檢核，把心情、身體與睡眠溫柔地放在一起看。有狀況再勾選，沒勾選就代表今天大致平穩；勾了之後再寫原因，右側會給你可放鬆、做得到的身心療癒建議。</p>
             <div class="journal-split journal-split--body">
               <div class="journal-col body-check">
-                <div class="body-check-group" data-body-group="mood">
-                  <p class="journal-label">① 今日的心情</p>
+                <div class="body-check-group body-subcard" data-body-group="mood">
+                  <header class="body-subcard__head">
+                    <span class="body-subcard__index">01</span>
+                    <div>
+                      <h3 class="body-subcard__title">今日的心情</h3>
+                      <p class="body-subcard__hint">有狀況再勾選；沒勾選就代表大致平穩。</p>
+                    </div>
+                  </header>
                   <div class="body-flags">
                     <button class="tag-btn body-flag-btn" type="button" data-body-group="mood" data-body-flag="焦慮">出現焦慮</button>
                     <button class="tag-btn body-flag-btn" type="button" data-body-group="mood" data-body-flag="脾氣暴躁">脾氣暴躁</button>
@@ -320,12 +326,18 @@
                     <button class="tag-btn body-flag-btn" type="button" data-body-group="mood" data-body-flag="好心情">好心情</button>
                   </div>
                   <label class="body-reason" data-body-reason="mood" hidden>
-                    <span class="journal-label">原因是什麼？</span>
+                    <span class="body-subcard__field">原因是什麼？</span>
                     <textarea class="textarea" id="bodyMoodReason" rows="3" placeholder="簡單記錄發生的原因…"></textarea>
                   </label>
                 </div>
-                <div class="body-check-group" data-body-group="body">
-                  <p class="journal-label">② 今日的身體狀況</p>
+                <div class="body-check-group body-subcard" data-body-group="body">
+                  <header class="body-subcard__head">
+                    <span class="body-subcard__index">02</span>
+                    <div>
+                      <h3 class="body-subcard__title">今日的身體狀況</h3>
+                      <p class="body-subcard__hint">緊繃、疲勞或不適，都可以各自點出來。</p>
+                    </div>
+                  </header>
                   <div class="body-flags">
                     <button class="tag-btn body-flag-btn" type="button" data-body-group="body" data-body-flag="腸胃不適">腸胃不適</button>
                     <button class="tag-btn body-flag-btn" type="button" data-body-group="body" data-body-flag="頭痛">頭痛</button>
@@ -334,39 +346,53 @@
                     <button class="tag-btn body-flag-btn" type="button" data-body-group="body" data-body-flag="其他">＋其他身體感受</button>
                   </div>
                   <label class="body-other" data-body-other="body" hidden>
-                    <span class="journal-label">其他身體感受</span>
+                    <span class="body-subcard__field">其他身體感受</span>
                     <input class="input" id="bodyOtherNote" type="text" placeholder="簡單寫下其他身體感受…" />
                   </label>
                   <label class="body-reason" data-body-reason="body" hidden>
-                    <span class="journal-label">原因是什麼？</span>
+                    <span class="body-subcard__field">原因是什麼？</span>
                     <textarea class="textarea" id="bodyBodyReason" rows="3" placeholder="簡單記錄發生的原因…"></textarea>
                   </label>
                 </div>
-                <div class="body-check-group" data-body-group="sleep">
-                  <p class="journal-label">③ 昨晚的睡眠</p>
-                  <p class="journal-label journal-label--sub">睡眠時間</p>
-                  <div class="body-flags" data-sleep-field="duration">
-                    <button class="tag-btn sleep-chip" type="button" data-sleep-field="duration" data-sleep-value="少於5小時">少於5小時</button>
-                    <button class="tag-btn sleep-chip" type="button" data-sleep-field="duration" data-sleep-value="5–6小時">5–6小時</button>
-                    <button class="tag-btn sleep-chip" type="button" data-sleep-field="duration" data-sleep-value="6–7小時">6–7小時</button>
-                    <button class="tag-btn sleep-chip" type="button" data-sleep-field="duration" data-sleep-value="7–8小時">7–8小時</button>
-                    <button class="tag-btn sleep-chip" type="button" data-sleep-field="duration" data-sleep-value="8小時以上">8小時以上</button>
-                  </div>
-                  <p class="journal-label journal-label--sub">睡眠品質</p>
-                  <div class="body-flags" data-sleep-field="quality">
-                    <button class="tag-btn sleep-chip" type="button" data-sleep-field="quality" data-sleep-value="很好">很好</button>
-                    <button class="tag-btn sleep-chip" type="button" data-sleep-field="quality" data-sleep-value="普通">普通</button>
-                    <button class="tag-btn sleep-chip" type="button" data-sleep-field="quality" data-sleep-value="差">差</button>
-                    <button class="tag-btn sleep-chip" type="button" data-sleep-field="quality" data-sleep-value="睡不著">睡不著</button>
-                  </div>
-                  <p class="journal-label journal-label--sub">起床精神</p>
-                  <div class="body-flags" data-sleep-field="energy">
-                    <button class="tag-btn sleep-chip" type="button" data-sleep-field="energy" data-sleep-value="很好">很好</button>
-                    <button class="tag-btn sleep-chip" type="button" data-sleep-field="energy" data-sleep-value="普通">普通</button>
-                    <button class="tag-btn sleep-chip" type="button" data-sleep-field="energy" data-sleep-value="疲憊">疲憊</button>
+                <div class="body-check-group body-subcard" data-body-group="sleep">
+                  <header class="body-subcard__head">
+                    <span class="body-subcard__index">03</span>
+                    <div>
+                      <h3 class="body-subcard__title">昨晚的睡眠</h3>
+                      <p class="body-subcard__hint">時間、品質與起床精神分開看，比較容易對到身體訊號。</p>
+                    </div>
+                  </header>
+                  <div class="body-sleep-grid">
+                    <div class="body-sleep-tile" data-sleep-field="duration">
+                      <p class="body-sleep-tile__label">睡眠時間</p>
+                      <div class="body-flags">
+                        <button class="tag-btn sleep-chip" type="button" data-sleep-field="duration" data-sleep-value="少於5小時">少於5小時</button>
+                        <button class="tag-btn sleep-chip" type="button" data-sleep-field="duration" data-sleep-value="5–6小時">5–6小時</button>
+                        <button class="tag-btn sleep-chip" type="button" data-sleep-field="duration" data-sleep-value="6–7小時">6–7小時</button>
+                        <button class="tag-btn sleep-chip" type="button" data-sleep-field="duration" data-sleep-value="7–8小時">7–8小時</button>
+                        <button class="tag-btn sleep-chip" type="button" data-sleep-field="duration" data-sleep-value="8小時以上">8小時以上</button>
+                      </div>
+                    </div>
+                    <div class="body-sleep-tile" data-sleep-field="quality">
+                      <p class="body-sleep-tile__label">睡眠品質</p>
+                      <div class="body-flags">
+                        <button class="tag-btn sleep-chip" type="button" data-sleep-field="quality" data-sleep-value="很好">很好</button>
+                        <button class="tag-btn sleep-chip" type="button" data-sleep-field="quality" data-sleep-value="普通">普通</button>
+                        <button class="tag-btn sleep-chip" type="button" data-sleep-field="quality" data-sleep-value="差">差</button>
+                        <button class="tag-btn sleep-chip" type="button" data-sleep-field="quality" data-sleep-value="睡不著">睡不著</button>
+                      </div>
+                    </div>
+                    <div class="body-sleep-tile" data-sleep-field="energy">
+                      <p class="body-sleep-tile__label">起床精神</p>
+                      <div class="body-flags">
+                        <button class="tag-btn sleep-chip" type="button" data-sleep-field="energy" data-sleep-value="很好">很好</button>
+                        <button class="tag-btn sleep-chip" type="button" data-sleep-field="energy" data-sleep-value="普通">普通</button>
+                        <button class="tag-btn sleep-chip" type="button" data-sleep-field="energy" data-sleep-value="疲憊">疲憊</button>
+                      </div>
+                    </div>
                   </div>
                   <label class="body-reason" data-body-reason="sleep" hidden>
-                    <span class="journal-label">補充說明（選填）</span>
+                    <span class="body-subcard__field">補充說明（選填）</span>
                     <textarea class="textarea" id="bodySleepReason" rows="2" placeholder="簡單記錄發生的原因…"></textarea>
                   </label>
                 </div>

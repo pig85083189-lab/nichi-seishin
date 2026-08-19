@@ -4066,18 +4066,15 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
 .journal-label--sub {
   margin-top: 12px;
   font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--heading);
 }
 
 .body-other {
   display: grid;
   gap: 8px;
   margin-top: 12px;
-}
-
-.body-other[hidden] {
-  display: none;
 }
 
 .aware-q + .aware-q,
@@ -4405,6 +4402,7 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
 
 .journal-split--body {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px 22px;
 }
 
 .journal-col {
@@ -4486,46 +4484,127 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
 .body-check {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 
-.body-check-group {
-  padding: 16px 16px 14px;
+.body-check-group,
+.body-subcard {
+  padding: 18px 16px 16px;
   border: 1px solid var(--cream-border);
   border-radius: var(--radius);
-  background: var(--cream);
+  background: linear-gradient(180deg, #fffdf8 0%, #fff 100%);
+  box-shadow: 0 1px 2px rgba(92, 74, 58, 0.04);
+}
+
+.body-subcard__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0 0 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--cream-border);
+}
+
+.body-subcard__index {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--heading);
+  font-family: var(--serif);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.body-subcard__title {
+  margin: 0 0 4px;
+  color: var(--heading);
+  font-family: var(--serif);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+}
+
+.body-subcard__hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.body-subcard__field {
+  display: block;
+  margin: 0 0 6px;
+  color: var(--heading);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
 }
 
 .body-flags {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
   gap: 8px;
 }
 
-.body-flag-btn {
-  min-height: 34px;
+.body-flag-btn,
+.body-subcard .tag-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 38px;
   height: auto;
-  padding: 6px 12px;
-  line-height: 1.4;
-  text-align: left;
+  padding: 8px 10px;
+  line-height: 1.35;
+  text-align: center;
+  white-space: normal;
 }
 
-.body-reason {
+.body-sleep-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.body-sleep-tile {
+  padding: 12px 12px 12px;
+  border: 1px solid var(--cream-border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.body-sleep-tile__label {
+  margin: 0 0 10px;
+  color: var(--heading);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.body-reason,
+.body-other {
   display: grid;
   gap: 8px;
   margin-top: 12px;
 }
 
-.body-reason[hidden] {
+.body-reason[hidden],
+.body-other[hidden] {
   display: none;
 }
 
 .body-coach {
-  padding: 18px 18px 16px;
-  border: 1px solid #e4d4c8;
+  padding: 20px 18px 18px;
+  border: 1px solid var(--cream-border);
   border-radius: var(--radius);
-  background: linear-gradient(180deg, #fffdf9 0%, var(--cream) 100%);
-  box-shadow: 0 8px 24px rgba(92, 74, 58, 0.06);
+  background: linear-gradient(180deg, #fffdf8 0%, var(--cream) 100%);
+  box-shadow: 0 1px 2px rgba(92, 74, 58, 0.04);
 }
 
 .body-coach__head {
@@ -4543,14 +4622,14 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
 .body-coach__title {
   margin: 0 0 8px;
   font-family: var(--serif);
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
-  color: var(--text);
+  color: var(--heading);
 }
 
 .body-coach__lead {
   margin: 0;
-  color: var(--ink-soft);
+  color: var(--muted);
   font-size: 13px;
   line-height: 1.7;
 }
