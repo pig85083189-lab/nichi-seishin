@@ -4415,6 +4415,17 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   line-height: 1.7;
 }
 
+.journal-guide--lead p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.85;
+}
+
+.journal-guide--lead p + p {
+  margin-top: 0.65em;
+}
+
 .journal-guide--tight {
   margin: -4px 0 12px;
 }
