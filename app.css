@@ -1667,27 +1667,14 @@ body.nav-closed .auth-pay {
   gap: 12px;
 }
 
-.todo-kicker {
-  margin: 0 0 8px;
-  color: var(--heading);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-}
-
 .todo-hero {
-  padding: 4px 0 2px;
+  margin-bottom: 20px;
+  padding: 2px 0 0;
 }
 
 .todo-hero .page__title {
+  margin: 0;
   color: var(--text);
-}
-
-.todo-hero .page__subtitle {
-  max-width: 42em;
-  color: var(--muted);
-  font-size: 15px;
-  line-height: 1.75;
 }
 
 .todo-section {

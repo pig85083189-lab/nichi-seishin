@@ -2716,7 +2716,7 @@ function tourSteps() {
       tourPage: "sfm",
       tourSidebar: true,
       popover: {
-        title: "執行力清單",
+        title: "執行力",
         description: "復盤裡打勾的行動卡會匯集到這裡。可用進行中、待辦、已完成來整理，還沒想做的就移到待辦。",
         side: "right",
       },
@@ -2726,7 +2726,7 @@ function tourSteps() {
       tourPage: "manifest",
       tourSidebar: true,
       popover: {
-        title: "顯化力清單",
+        title: "顯化力",
         description: "復盤裡勾選的顯化目標會匯集到這裡。可用進行中、待辦、已完成來整理，還沒想推進的就移到待辦。",
         side: "right",
       },
