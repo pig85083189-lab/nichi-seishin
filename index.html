@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=127" />
+    <link rel="stylesheet" href="app.css?v=128" />
     <style>
       .splash {
         position: fixed;
@@ -264,18 +264,37 @@
           <textarea class="sr-only" id="reviewText" rows="3" tabindex="-1" aria-hidden="true"></textarea>
           <div class="hidden" id="promptChips" hidden></div>
 
-          <section class="journal-card" id="section-thanks">
-            <h2 class="journal-card__title"><span>01</span> 今日感謝</h2>
-            <p class="journal-guide">把今天想感謝的人、事、物寫在同一格就好。換行即可繼續下一件，想寫幾件都可以。</p>
-            <label class="thanks-box">
-              <span class="sr-only">今日感謝</span>
-              <textarea class="textarea textarea--thanks" id="thanksText" rows="8" data-journal="thanks" placeholder="寫下今天感恩的人事物…"></textarea>
-            </label>
+          <section class="journal-card journal-fold is-open" id="section-thanks">
+            <button class="journal-fold__toggle" type="button" data-journal-fold aria-expanded="true" aria-controls="thanksFoldPanel">
+              <span class="journal-fold__copy">
+                <h2 class="journal-card__title"><span>01</span> 今日感謝</h2>
+                <p class="journal-fold__summary">把今天想感謝的人、事、物寫下來。</p>
+              </span>
+              <span class="journal-fold__chevron" aria-hidden="true"></span>
+            </button>
+            <div class="journal-fold__panel" id="thanksFoldPanel">
+              <div class="journal-fold__inner">
+                <p class="journal-guide">把今天想感謝的人、事、物寫在同一格就好。換行即可繼續下一件，想寫幾件都可以。</p>
+                <label class="thanks-box">
+                  <span class="sr-only">今日感謝</span>
+                  <textarea class="textarea textarea--thanks" id="thanksText" rows="8" data-journal="thanks" placeholder="寫下今天感恩的人事物…"></textarea>
+                </label>
+              </div>
+            </div>
           </section>
 
-          <section class="journal-card" id="section-event">
-            <h2 class="journal-card__title js-quick-only"><span>02</span> 今日事件與心情</h2>
-            <h2 class="journal-card__title js-deep-only"><span>02</span> 今日事件</h2>
+          <section class="journal-card journal-fold is-open" id="section-event">
+            <button class="journal-fold__toggle" type="button" data-journal-fold aria-expanded="true" aria-controls="eventFoldPanel">
+              <span class="journal-fold__copy">
+                <h2 class="journal-card__title js-quick-only"><span>02</span> 今日事件與心情</h2>
+                <h2 class="journal-card__title js-deep-only"><span>02</span> 今日事件</h2>
+                <p class="journal-fold__summary js-quick-only">寫下今天真正被碰到的事，再點選心情。</p>
+                <p class="journal-fold__summary js-deep-only">先把開心、生氣、難過的那件事寫下來。</p>
+              </span>
+              <span class="journal-fold__chevron" aria-hidden="true"></span>
+            </button>
+            <div class="journal-fold__panel" id="eventFoldPanel">
+              <div class="journal-fold__inner">
             <p class="journal-guide js-quick-only">寫下今天真正被碰到的事，再點選心情。想加深再加選下方模組。</p>
             <p class="journal-guide js-deep-only">透過這些事件引發深度思考。先把開心、生氣、難過的那件事寫下來就好。</p>
             <div class="journal-split">
@@ -293,10 +312,20 @@
                 </div>
               </div>
             </div>
+              </div>
+            </div>
           </section>
 
-          <section class="journal-card quick-modules js-quick-only" id="quickModules">
-            <h2 class="journal-card__title">今天想加寫的模組</h2>
+          <section class="journal-card journal-fold is-open quick-modules js-quick-only" id="quickModules">
+            <button class="journal-fold__toggle" type="button" data-journal-fold aria-expanded="true" aria-controls="modulesFoldPanel">
+              <span class="journal-fold__copy">
+                <h2 class="journal-card__title">今天想加寫的模組</h2>
+                <p class="journal-fold__summary">想加強哪一塊，再勾選展開。</p>
+              </span>
+              <span class="journal-fold__chevron" aria-hidden="true"></span>
+            </button>
+            <div class="journal-fold__panel" id="modulesFoldPanel">
+              <div class="journal-fold__inner">
             <p class="journal-guide">預設保持極簡。想加強哪一塊，再勾選展開；取消就會收合。</p>
             <div class="quick-modules__list" role="group" aria-label="快速復盤選配模組">
               <button class="quick-mod" data-quick-mod="body" type="button" aria-pressed="false">身體覺察</button>
@@ -304,10 +333,20 @@
               <button class="quick-mod" data-quick-mod="exec" type="button" aria-pressed="false">執行力</button>
               <button class="quick-mod" data-quick-mod="manifest" type="button" aria-pressed="false">顯化力</button>
             </div>
+              </div>
+            </div>
           </section>
 
-          <section class="journal-card" id="section-body">
-            <h2 class="journal-card__title"><span>03</span> 身體覺察</h2>
+          <section class="journal-card journal-fold is-open" id="section-body">
+            <button class="journal-fold__toggle" type="button" data-journal-fold aria-expanded="true" aria-controls="bodyFoldPanel">
+              <span class="journal-fold__copy">
+                <h2 class="journal-card__title"><span>03</span> 身體覺察</h2>
+                <p class="journal-fold__summary">用三個檢核，把心情、身體與睡眠放在一起看。</p>
+              </span>
+              <span class="journal-fold__chevron" aria-hidden="true"></span>
+            </button>
+            <div class="journal-fold__panel" id="bodyFoldPanel">
+              <div class="journal-fold__inner">
             <p class="journal-guide">用三個具體檢核，把心情、身體與睡眠溫柔地放在一起看。有狀況再勾選，沒勾選就代表今天大致平穩；勾了之後再寫原因，右側會給你可放鬆、做得到的身心療癒建議。</p>
             <div class="journal-split journal-split--body">
               <div class="journal-col body-check">
@@ -413,10 +452,14 @@
                 </div>
               </aside>
             </div>
+              </div>
+            </div>
           </section>
 
-          <section class="insight-card" id="section-insight">
-            <header class="insight-card__head">
+          <section class="insight-card journal-fold is-open" id="section-insight">
+            <button class="journal-fold__toggle" type="button" data-journal-fold aria-expanded="true" aria-controls="insightFoldPanel">
+              <span class="journal-fold__copy">
+                <span class="insight-card__head">
               <span class="insight-card__icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24">
                   <path d="M9 18h6" />
@@ -428,7 +471,12 @@
                 <h2 class="insight-card__title">深度洞察</h2>
                 <p class="insight-card__lead">寫完事件、心情與身體後，會依今天的身心訊號、客觀檢討、具體突破建議，以及今日核心重點，分段整理給你。</p>
               </div>
-            </header>
+                </span>
+              </span>
+              <span class="journal-fold__chevron" aria-hidden="true"></span>
+            </button>
+            <div class="journal-fold__panel" id="insightFoldPanel">
+              <div class="journal-fold__inner">
             <button class="ai-check-btn" id="btnInsightAi" type="button">生成深度洞察</button>
             <div class="check-loading" id="insightLoading" hidden>
               <p class="check-loading__label">正在為你梳理今天的核心結論…</p>
@@ -437,11 +485,22 @@
             <div class="insight-card__body" id="insightBody">
               <p class="insight-card__empty">先把事件、心情與身體反應寫下來，再點按鈕或等它自動生成四層洞察。</p>
             </div>
+              </div>
+            </div>
           </section>
 
-          <section class="journal-card journal-card--aware" id="section-aware">
-            <h2 class="journal-card__title js-quick-only"><span>03</span> 今日覺察</h2>
-            <h2 class="journal-card__title js-deep-only"><span>04</span> 覺察力</h2>
+          <section class="journal-card journal-card--aware journal-fold is-open" id="section-aware">
+            <button class="journal-fold__toggle" type="button" data-journal-fold aria-expanded="true" aria-controls="awareFoldPanel">
+              <span class="journal-fold__copy">
+                <h2 class="journal-card__title js-quick-only"><span>03</span> 今日覺察</h2>
+                <h2 class="journal-card__title js-deep-only"><span>04</span> 覺察力</h2>
+                <p class="journal-fold__summary js-quick-only">用 3 道今日是非題，快速看見自己。</p>
+                <p class="journal-fold__summary js-deep-only">答完 3 道是非題，解鎖一句核心金句。</p>
+              </span>
+              <span class="journal-fold__chevron" aria-hidden="true"></span>
+            </button>
+            <div class="journal-fold__panel" id="awareFoldPanel">
+              <div class="journal-fold__inner">
             <p class="journal-guide js-quick-only">用 3 道今日是非題，快速看見自己真正被碰到的地方。</p>
             <p class="journal-guide js-deep-only">完成上方「01 今日感謝」與「02 今日事件與心情」後，會依今天的經歷動態生成 3 道自我覺察是非題。逐題點「是」或「否」，答完才解鎖一句核心金句。</p>
             <div class="journal-split journal-split--aware">
@@ -466,10 +525,12 @@
                 <p class="aware-quote-limit" id="awareQuoteLimitHint" hidden></p>
               </div>
             </div>
+              </div>
+            </div>
           </section>
 
-          <section class="journal-card journal-fold" id="section-exec">
-            <button class="journal-fold__toggle" id="execFoldToggle" type="button" data-exec-fold aria-expanded="false" aria-controls="execFoldPanel">
+          <section class="journal-card journal-fold is-open" id="section-exec">
+            <button class="journal-fold__toggle" id="execFoldToggle" type="button" data-journal-fold aria-expanded="true" aria-controls="execFoldPanel">
               <span class="journal-fold__copy">
                 <h2 class="journal-card__title js-quick-only"><span>04</span> 今日最小行動</h2>
                 <h2 class="journal-card__title js-deep-only"><span>05</span> 執行力</h2>
@@ -478,7 +539,7 @@
               </span>
               <span class="journal-fold__chevron" aria-hidden="true"></span>
             </button>
-            <div class="journal-fold__panel" id="execFoldPanel" inert aria-hidden="true">
+            <div class="journal-fold__panel" id="execFoldPanel">
               <div class="journal-fold__inner">
                 <p class="journal-guide js-quick-only">明天只要做一件小到 5 分鐘內能完成的事。完成復盤後會進到側邊欄「執行力」清單，方便追蹤。</p>
                 <p class="journal-guide js-deep-only">完成上方感謝與事件後，會依今天的卡點、生氣或拖延動態生成 3 道執行突破題。寫完再一鍵生成專屬行動卡點勾勾表，並同步至側邊欄「執行力」。</p>
@@ -514,8 +575,16 @@
             </div>
           </section>
 
-          <section class="journal-card" id="section-deep">
-            <h2 class="journal-card__title"><span>06</span> 深度思考</h2>
+          <section class="journal-card journal-fold is-open" id="section-deep">
+            <button class="journal-fold__toggle" type="button" data-journal-fold aria-expanded="true" aria-controls="deepFoldPanel">
+              <span class="journal-fold__copy">
+                <h2 class="journal-card__title"><span>06</span> 深度思考</h2>
+                <p class="journal-fold__summary">今天先深挖一個最貼近你的主題。</p>
+              </span>
+              <span class="journal-fold__chevron" aria-hidden="true"></span>
+            </button>
+            <div class="journal-fold__panel" id="deepFoldPanel">
+              <div class="journal-fold__inner">
             <p class="journal-guide">今天先深挖一個最貼近你的主題。若還想繼續，再展開另外三題。</p>
             <div class="check-loading" id="deepPromptLoading" hidden>
               <p class="check-loading__label">正在生成今天的深度思考主題…</p>
@@ -523,10 +592,20 @@
             </div>
             <div class="deep-list" id="deepList"></div>
             <button class="btn btn--outline deep-more-btn" id="btnDeepMore" type="button" hidden>✨ 我還想繼續探索（再給我 3 題）</button>
+              </div>
+            </div>
           </section>
 
-          <section class="journal-card" id="section-manifest">
-            <h2 class="journal-card__title"><span>07</span> 顯化力</h2>
+          <section class="journal-card journal-fold is-open" id="section-manifest">
+            <button class="journal-fold__toggle" type="button" data-journal-fold aria-expanded="true" aria-controls="manifestFoldPanel">
+              <span class="journal-fold__copy">
+                <h2 class="journal-card__title"><span>07</span> 顯化力</h2>
+                <p class="journal-fold__summary">把明天想顯化的事，拆成做得到的步驟。</p>
+              </span>
+              <span class="journal-fold__chevron" aria-hidden="true"></span>
+            </button>
+            <div class="journal-fold__panel" id="manifestFoldPanel">
+              <div class="journal-fold__inner">
             <p class="journal-guide">明天想顯化的事情。先寫下心念，會把它拆成具體、做得到的執行目標。</p>
             <div class="journal-split">
               <div class="journal-col">
@@ -544,16 +623,25 @@
                 <div class="check-list" id="manifestChecks"></div>
               </div>
             </div>
+              </div>
+            </div>
           </section>
 
-          <section class="insight-card insight-card--quick js-quick-only" id="section-quick-insight">
-            <header class="insight-card__head">
+          <section class="insight-card insight-card--quick journal-fold is-open js-quick-only" id="section-quick-insight">
+            <button class="journal-fold__toggle" type="button" data-journal-fold aria-expanded="true" aria-controls="quickInsightFoldPanel">
+              <span class="journal-fold__copy">
+                <span class="insight-card__head">
               <span class="insight-card__spark" aria-hidden="true">✨</span>
               <div>
                 <h2 class="insight-card__title">✨ 深度洞察</h2>
                 <p class="insight-card__lead">寫完感謝、事件與心情後，會依今天的身心訊號、客觀檢討、具體突破建議，以及今日核心重點，分段整理給你。</p>
               </div>
-            </header>
+                </span>
+              </span>
+              <span class="journal-fold__chevron" aria-hidden="true"></span>
+            </button>
+            <div class="journal-fold__panel" id="quickInsightFoldPanel">
+              <div class="journal-fold__inner">
             <button class="ai-check-btn" id="btnQuickInsight" type="button">生成深度洞察</button>
             <div class="check-loading" id="quickInsightLoading" hidden>
               <p class="check-loading__label">正在為你梳理今天的核心總結…</p>
@@ -561,6 +649,8 @@
             </div>
             <div class="insight-card__body" id="quickInsightBody">
               <p class="insight-card__empty">先寫下感謝、事件與心情，再點按鈕或完成快速復盤，就會生成四層洞察。</p>
+            </div>
+              </div>
             </div>
           </section>
 
@@ -911,6 +1001,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=145"></script>
+    <script src="app.js?v=146"></script>
   </body>
 </html>

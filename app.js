@@ -13,6 +13,7 @@ const STORAGE_KEYS = {
   sidebar: "nichi.sidebarCollapsed",
   reports: "nichi.reports",
   journalMode: "nichi.journalMode",
+  journalFolds: "nichi.journalFolds",
 };
 
 const REVIEW_API = "/api/review";
@@ -2567,7 +2568,9 @@ function prepareTourStep(step) {
     setSidebarOpen(false);
   }
   if (step.tourPage) switchPage(step.tourPage, { keepSidebar: Boolean(step.tourSidebar) });
-  if (step.element === "#section-exec") setExecFoldOpen(true);
+  if (typeof step.element === "string" && step.element.startsWith("#")) {
+    setJournalFoldOpen(step.element.slice(1), true, { persist: false });
+  }
 }
 
 function tourSteps() {
@@ -2926,7 +2929,7 @@ function toggleQuickModule(key) {
   const journal = collectJournal();
   if (next[key]) {
     const sectionId = { body: "section-body", aware: "section-aware", exec: "section-exec", manifest: "section-manifest" }[key];
-    if (key === "exec") setExecFoldOpen(true);
+    setJournalFoldOpen(sectionId, true);
     document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
   if (next.aware || next.exec) maybeAutoGenerateCorePrompts(journal);
@@ -3769,7 +3772,8 @@ function applyGeneratedChecklist(kind, items, sig) {
 }
 
 async function generateJournalChecklist(kind, options = {}) {
-  if (kind === "execution") setExecFoldOpen(true);
+  if (kind === "execution") setJournalFoldOpen("section-exec", true);
+  if (kind === "awareness") setJournalFoldOpen("section-aware", true);
   if (kind === "manifest") {
     await generateManifestChecklist(options);
     return;
@@ -3879,6 +3883,7 @@ function buildManifestCheckItems(journal) {
 }
 
 async function generateManifestChecklist(options = {}) {
+  setJournalFoldOpen("section-manifest", true);
   if (state.checklistBusy.manifest && !options.auto) return;
   const journal = collectJournal();
   const vision = String(journal.manifest || "").trim();
@@ -4185,6 +4190,7 @@ function localInsightFallback(journal) {
 }
 
 async function generateJournalInsight(options = {}) {
+  setJournalFoldOpen(state.journalMode === "quick" ? "section-quick-insight" : "section-insight", true);
   if (state.insightBusy) return false;
   const journal = collectJournal();
   if (!insightReady(journal)) {
@@ -4352,6 +4358,7 @@ function localBodyCoachFallback(journal) {
 }
 
 async function generateBodyCoach(options = {}) {
+  setJournalFoldOpen("section-body", true);
   if (state.bodyCoachBusy) return;
   const journal = collectJournal();
   if (!bodyCoachReady(journal, options)) {
@@ -5017,7 +5024,10 @@ function setCorePromptsLoading(loading) {
 }
 
 async function generateCorePrompts(options = {}) {
-  if (!options.auto) setExecFoldOpen(true);
+  if (!options.auto) {
+    setJournalFoldOpen("section-aware", true);
+    setJournalFoldOpen("section-exec", true);
+  }
   if (state.corePromptsBusy) return;
   const journal = collectJournal();
   if (!coreStoryReady(journal)) {
@@ -5564,35 +5574,57 @@ function setCheckedValues(rootId, values) {
   });
 }
 
-function journalExecHasContent(data) {
-  const journal = data && typeof data === "object" ? data : {};
-  return Boolean(
-    String(journal.smallestStep || "").trim() ||
-      (journal.execution || []).some((item) => String(item || "").trim()) ||
-      (journal.executionChecks || []).length ||
-      (journal.executionCheckItems || []).length ||
-      (journal.executionPrompts || []).length
-  );
+const JOURNAL_FOLD_IDS = [
+  "section-thanks",
+  "section-event",
+  "quickModules",
+  "section-body",
+  "section-insight",
+  "section-aware",
+  "section-exec",
+  "section-deep",
+  "section-manifest",
+  "section-quick-insight",
+];
+
+function journalFoldPrefs() {
+  const saved = loadJson(STORAGE_KEYS.journalFolds, {});
+  return saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
 }
 
-function setExecFoldOpen(open) {
-  const root = document.getElementById("section-exec");
-  const toggle = document.getElementById("execFoldToggle");
-  const panel = document.getElementById("execFoldPanel");
-  if (!root || !toggle) return;
+function setJournalFoldOpen(id, open, options = {}) {
+  const root = document.getElementById(id);
+  if (!root?.classList.contains("journal-fold")) return;
+  const toggle = root.querySelector(":scope > [data-journal-fold]");
+  const panel = root.querySelector(":scope > .journal-fold__panel");
   const next = Boolean(open);
   root.classList.toggle("is-open", next);
-  toggle.setAttribute("aria-expanded", next ? "true" : "false");
+  if (toggle) toggle.setAttribute("aria-expanded", next ? "true" : "false");
   if (panel) {
     panel.inert = !next;
     panel.setAttribute("aria-hidden", next ? "false" : "true");
   }
+  if (options.persist === false) return;
+  const prefs = journalFoldPrefs();
+  prefs[id] = next;
+  try {
+    localStorage.setItem(STORAGE_KEYS.journalFolds, JSON.stringify(prefs));
+  } catch {
+    /* ignore quota */
+  }
 }
 
-function toggleExecFold() {
-  const root = document.getElementById("section-exec");
+function toggleJournalFold(id) {
+  const root = document.getElementById(id);
   if (!root) return;
-  setExecFoldOpen(!root.classList.contains("is-open"));
+  setJournalFoldOpen(id, !root.classList.contains("is-open"));
+}
+
+function applyJournalFolds() {
+  const prefs = journalFoldPrefs();
+  JOURNAL_FOLD_IDS.forEach((id) => {
+    setJournalFoldOpen(id, prefs[id] !== false, { persist: false });
+  });
 }
 
 function fillJournal(journal) {
@@ -5662,7 +5694,7 @@ function fillJournal(journal) {
   renderBodyCoachCard(state.journalBodyCoach);
   syncCorePromptGate();
   state.journalHydrating = false;
-  setExecFoldOpen(journalExecHasContent(data));
+  applyJournalFolds();
 }
 
 function updateJournalDateLabel(iso) {
@@ -7850,15 +7882,9 @@ function bindEvents() {
   }
   document.getElementById("btnCompleteToday")?.addEventListener("click", completeToday);
   document.getElementById("btnSaveDraft")?.addEventListener("click", saveJournalDraft);
-  document.getElementById("section-exec")?.addEventListener("click", (event) => {
-    const fold = event.target.closest("[data-exec-fold]");
-    if (!fold) return;
-    event.preventDefault();
-    toggleExecFold();
-  });
   document.getElementById("btnAwarePrompts")?.addEventListener("click", () => generateCorePrompts());
   document.getElementById("btnExecPrompts")?.addEventListener("click", () => {
-    setExecFoldOpen(true);
+    setJournalFoldOpen("section-exec", true);
     generateCorePrompts();
   });
   document.getElementById("btnAwareAi")?.addEventListener("click", () => generateJournalChecklist("awareness"));
@@ -7973,6 +7999,13 @@ function bindEvents() {
   });
 
   document.getElementById("page-today")?.addEventListener("click", (event) => {
+    const foldBtn = event.target.closest("[data-journal-fold]");
+    if (foldBtn) {
+      event.preventDefault();
+      const root = foldBtn.closest(".journal-fold");
+      if (root?.id) toggleJournalFold(root.id);
+      return;
+    }
     const answerBtn = event.target.closest("[data-aware-answer]");
     if (answerBtn) {
       event.preventDefault();
@@ -8319,6 +8352,7 @@ function init() {
       applyJournalMode("deep", { silent: true });
     }
     setModeGuideOpen(false);
+    applyJournalFolds();
     const closed =
       localStorage.getItem("rv_sidebar") === "closed" || localStorage.getItem(STORAGE_KEYS.sidebar) === "1";
     if (closed && !isMobile()) {

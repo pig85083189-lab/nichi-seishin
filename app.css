@@ -2494,7 +2494,8 @@ body.nav-closed .auth-pay {
   .history-subcard__chevron,
   .history-subcard__panel,
   .journal-fold__chevron,
-  .journal-fold__panel {
+  .journal-fold__panel,
+  .journal-fold__inner {
     transition: none;
   }
 }
@@ -4257,6 +4258,10 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   background: var(--cream);
 }
 
+.journal-fold__toggle:hover .journal-fold__chevron {
+  background: #efe8dc;
+}
+
 .journal-fold__toggle:focus-visible {
   outline: 2px solid var(--blush);
   outline-offset: -2px;
@@ -4326,6 +4331,7 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   min-height: 0;
   overflow: hidden;
   padding: 0 26px;
+  transition: padding 0.34s ease;
 }
 
 .journal-fold.is-open .journal-fold__inner {
@@ -4334,6 +4340,49 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
 
 .journal-fold.is-open .journal-fold__toggle {
   border-bottom: 1px solid var(--cream-border);
+}
+
+.journal-card--aware.journal-fold {
+  padding: 0;
+}
+
+.journal-card--aware .journal-fold__toggle {
+  padding: 24px 28px;
+}
+
+.journal-card--aware.journal-fold.is-open .journal-fold__inner {
+  padding: 8px 28px 34px;
+}
+
+.journal-card--aware .journal-fold__inner > .journal-guide {
+  margin-bottom: 26px;
+}
+
+.insight-card.journal-fold {
+  padding: 0;
+}
+
+.insight-card .journal-fold__toggle {
+  position: relative;
+  z-index: 1;
+  align-items: center;
+  padding: 28px 32px;
+}
+
+.insight-card .insight-card__head {
+  margin-bottom: 0;
+}
+
+.insight-card .insight-card__title {
+  margin-bottom: 6px;
+}
+
+.insight-card.journal-fold.is-open .journal-fold__inner {
+  padding: 0 32px 32px;
+}
+
+.insight-card.journal-fold.is-open .journal-fold__toggle {
+  border-bottom-color: #eadfd4;
 }
 
 .journal-card__title {
@@ -4386,14 +4435,6 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
 .journal-split--body {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 18px 22px;
-}
-
-.journal-card--aware {
-  padding: 32px 28px 34px;
-}
-
-.journal-card--aware > .journal-guide {
-  margin-bottom: 26px;
 }
 
 .journal-split--aware {
@@ -6223,7 +6264,7 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   }
 
   .journal-card:not(.journal-fold),
-  .insight-card,
+  .insight-card:not(.journal-fold),
   .body-check-group,
   .body-coach,
   .pricing-modal__card,
@@ -6264,10 +6305,6 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   .journal-split--body,
   .journal-split--aware {
     gap: 0.75rem;
-  }
-
-  .journal-card--aware {
-    padding: 24px 18px 26px;
   }
 
   .aware-col {
