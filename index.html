@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=122" />
+    <link rel="stylesheet" href="app.css?v=123" />
     <style>
       .splash {
         position: fixed;
@@ -439,24 +439,24 @@
             </div>
           </section>
 
-          <section class="journal-card" id="section-aware">
+          <section class="journal-card journal-card--aware" id="section-aware">
             <h2 class="journal-card__title js-quick-only"><span>03</span> 今日覺察</h2>
             <h2 class="journal-card__title js-deep-only"><span>04</span> 覺察力</h2>
-            <p class="journal-guide js-quick-only">用 6 道今日是非題，快速看見自己真正被碰到的地方。</p>
-            <p class="journal-guide js-deep-only">完成上方「01 今日感謝」與「02 今日事件與心情」後，會依今天的經歷動態生成 6 道自我覺察是非題。逐題點「是」或「否」，答完才解鎖 3 句核心金句。</p>
-            <div class="journal-split">
-              <div class="journal-col">
+            <p class="journal-guide js-quick-only">用 3 道今日是非題，快速看見自己真正被碰到的地方。</p>
+            <p class="journal-guide js-deep-only">完成上方「01 今日感謝」與「02 今日事件與心情」後，會依今天的經歷動態生成 3 道自我覺察是非題。逐題點「是」或「否」，答完才解鎖 3 句核心金句。</p>
+            <div class="journal-split journal-split--aware">
+              <div class="journal-col aware-col aware-col--quiz">
                 <div class="check-loading" id="awarePromptLoading" hidden>
                   <p class="check-loading__label">正在為你生成今天的覺察是非題…</p>
                   <div class="ai-thinking__bar"><i></i></div>
                 </div>
-                <p class="deep-empty" id="awareEmpty">請先完成上方今日感謝與事件，將為你生成 6 道今日覺察是非題</p>
+                <p class="deep-empty" id="awareEmpty">請先完成上方今日感謝與事件，將為你生成 3 道今日覺察是非題</p>
                 <button class="ai-check-btn" id="btnAwarePrompts" type="button">生成今日覺察是非題</button>
                 <div id="awareQuestions"></div>
               </div>
-              <div class="journal-col js-deep-only">
+              <div class="journal-col aware-col aware-col--quotes js-deep-only">
                 <p class="journal-label">今日核心覺察</p>
-                <p class="journal-guide journal-guide--tight">六題都點完後，會依你的是／否煉結 3 句極度簡短、犀利一針見血的金句。戳中自己的，可以收藏或複製。</p>
+                <p class="journal-guide journal-guide--tight">三題都點完後，會依你的是／否煉結 3 句極度簡短、犀利一針見血的金句。戳中自己的，可以收藏或複製。</p>
                 <div class="check-loading" id="awareLoading" hidden>
                   <p class="check-loading__label">正在為你煉結 3 句核心金句…</p>
                   <div class="ai-thinking__bar"><i></i></div>
@@ -753,9 +753,9 @@
               <div class="guide-step__body">
                 <p class="guide-step__label">第四步</p>
                 <h3 class="guide-step__title">動態出題與今日煉結</h3>
-                <p class="guide-step__text">覺察力與執行力會完全依據你今天寫下的感謝與事件自動出題。覺察是 6 道是非題，答完才解鎖 3 句核心金句；執行力則生成專屬行動卡。快速復盤只要勾選對應模組，就會走同一套今天專屬的出題。</p>
+                <p class="guide-step__text">覺察力與執行力會完全依據你今天寫下的感謝與事件自動出題。覺察是 3 道是非題，答完才解鎖 3 句核心金句；執行力則生成專屬行動卡。快速復盤只要勾選對應模組，就會走同一套今天專屬的出題。</p>
                 <div class="guide-pills">
-                  <span class="guide-pill"><strong>覺察力</strong> 6 道是非題 → 3 句金句</span>
+                  <span class="guide-pill"><strong>覺察力</strong> 3 道是非題 → 3 句金句</span>
                   <span class="guide-pill"><strong>執行力</strong> 3 道突破題 → 行動卡點</span>
                 </div>
               </div>
@@ -910,6 +910,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=140"></script>
+    <script src="app.js?v=141"></script>
   </body>
 </html>

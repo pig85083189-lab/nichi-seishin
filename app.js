@@ -2639,7 +2639,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "04 覺察力",
-        description: "寫完今日感謝與事件後，會生成 6 道今天專屬的覺察是非題。逐題點是或否，答完再煉結 3 句犀利金句。",
+        description: "寫完今日感謝與事件後，會生成 3 道今天專屬的覺察是非題。逐題點是或否，答完再煉結 3 句犀利金句。",
         side: "top",
       },
     },
@@ -2648,7 +2648,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "3 句核心金句",
-        description: "六題都點完後，這裡會解鎖。點一下，把今天的是／否煉成 3 張可收藏的犀利金句卡。",
+        description: "三題都點完後，這裡會解鎖。點一下，把今天的是／否煉成 3 張可收藏的犀利金句卡。",
         side: "top",
       },
     },
@@ -2834,10 +2834,12 @@ function journalFieldValue(id) {
   return String(document.getElementById(id)?.value || "").trim();
 }
 
+const AWARENESS_QUIZ_COUNT = 3;
+
 const AWARENESS_QUESTIONS = [
-  { question: "今天哪一件事最觸動你？", placeholder: "那件讓你心裡動了一下的事…" },
-  { question: "你當時真正的感受是什麼？", placeholder: "不一定是表面的情緒，更裡面那一層…" },
-  { question: "如果再往內看一層，你覺得自己真正介意的是什麼？", placeholder: "被碰到的，也許是被看見、被尊重、安全感…" },
+  { question: "今天最觸動我的，其實不是事情本身，而是它碰到了我在意的那一層。" },
+  { question: "我寫下的感謝裡，藏著我今天真正想被看見的需求。" },
+  { question: "我還沒完全承認：今天讓我不舒服的，其實和我怕失去什麼有關。" },
 ];
 
 const CORE_AWARENESS_PROMPT = AWARENESS_QUESTIONS[0];
@@ -2940,7 +2942,7 @@ function emptyJournal() {
     bodyNote: "",
     bodyCheck: emptyBodyCheck(),
     bodyCoach: emptyBodyCoach(),
-    awareness: ["", "", "", "", "", ""],
+    awareness: ["", "", ""],
     awarenessChecks: [],
     awarenessCheckItems: [],
     execution: ["", "", ""],
@@ -3336,15 +3338,19 @@ function collectAwarenessQuizAnswers() {
   const items = [...document.querySelectorAll("#awareQuestions .aware-quiz__item")];
   if (items.length) return items.map((el) => normalizeYesNo(el.dataset.answer));
   const prev = getReview(currentIso())?.journal?.awareness;
-  return Array.isArray(prev) ? prev.map(normalizeYesNo) : ["", "", "", "", "", ""];
+  const list = Array.isArray(prev) ? prev.map(normalizeYesNo) : [];
+  return Array.from({ length: AWARENESS_QUIZ_COUNT }, (_, index) => list[index] || "");
 }
 
 function awarenessQuizAnsweredCount(answers) {
-  return (Array.isArray(answers) ? answers : []).map(normalizeYesNo).filter(Boolean).length;
+  return (Array.isArray(answers) ? answers : [])
+    .slice(0, AWARENESS_QUIZ_COUNT)
+    .map(normalizeYesNo)
+    .filter(Boolean).length;
 }
 
 function awarenessReady(answers) {
-  return awarenessQuizAnsweredCount(answers) >= 6;
+  return awarenessQuizAnsweredCount(answers) >= AWARENESS_QUIZ_COUNT;
 }
 
 function executionReady(answers) {
@@ -3482,19 +3488,19 @@ function renderAwareQuote(items, checked) {
   }
   const answers = collectAwarenessQuizAnswers();
   const done = awarenessQuizAnsweredCount(answers);
-  const ready = done >= 6;
-  const hasQuiz = normalizeAwarenessPrompts(state.awarenessPrompts).length >= 6;
+  const ready = done >= AWARENESS_QUIZ_COUNT;
+  const hasQuiz = normalizeAwarenessPrompts(state.awarenessPrompts).length >= AWARENESS_QUIZ_COUNT;
   root.innerHTML = `
     <div class="aware-quote-gate${ready ? " is-ready" : ""}">
-      <p class="aware-quote__kicker">${ready ? "可以煉結金句了" : "答完六題後解鎖"}</p>
+      <p class="aware-quote__kicker">${ready ? "可以煉結金句了" : "答完三題後解鎖"}</p>
       <p class="aware-quote-gate__title">${
         ready
-          ? "六題都看見了。現在把今天煉成三句話。"
+          ? "三題都看見了。現在把今天煉成三句話。"
           : hasQuiz
-            ? "先誠實點完六題是非。"
+            ? "先誠實點完三題是非。"
             : "先生成今日覺察是非題。"
       }</p>
-      <p class="aware-quote-gate__meta">${Math.min(done, 6)} / 6</p>
+      <p class="aware-quote-gate__meta">${Math.min(done, AWARENESS_QUIZ_COUNT)} / ${AWARENESS_QUIZ_COUNT}</p>
       <p class="aware-quote-gate__hint">${
         ready
           ? "點下方按鈕，AI 會依你的是／否煉結 3 句犀利金句。"
@@ -3733,7 +3739,7 @@ async function generateJournalChecklist(kind, options = {}) {
     if (!options.auto) {
       showToast(
         isAware
-          ? "先點完六題是非，再生成核心金句。"
+          ? "先點完三題是非，再生成核心金句。"
           : "先把進行中的執行突破題寫完（或不想答的先放到「先放著」），再生成勾勾表。"
       );
     }
@@ -4410,7 +4416,7 @@ function normalizePromptQuestionList(list, max) {
 }
 
 function normalizeAwarenessPrompts(list) {
-  return normalizePromptQuestionList(list, 6);
+  return normalizePromptQuestionList(list, AWARENESS_QUIZ_COUNT);
 }
 
 function normalizeExecutionPrompts(list) {
@@ -4661,7 +4667,9 @@ function keepHydratedCorePrompts(prompts, hasAnswers, fromAi, min = 3) {
 function hydrateAwarenessPrompts(data) {
   const prompts = normalizeAwarenessPrompts(data?.awarenessPrompts);
   const hasAnswers = (data?.awareness || []).some((item) => normalizeYesNo(item) || String(item || "").trim());
-  if (keepHydratedCorePrompts(prompts, hasAnswers, data?.corePromptsAi, 6)) return prompts.slice(0, 6);
+  if (keepHydratedCorePrompts(prompts, hasAnswers, data?.corePromptsAi, AWARENESS_QUIZ_COUNT)) {
+    return prompts.slice(0, AWARENESS_QUIZ_COUNT);
+  }
   return [];
 }
 
@@ -4675,7 +4683,7 @@ function hydrateExecutionPrompts(data) {
 
 function hasCorePromptSet() {
   return (
-    normalizeAwarenessPrompts(state.awarenessPrompts).length >= 6 &&
+    normalizeAwarenessPrompts(state.awarenessPrompts).length >= AWARENESS_QUIZ_COUNT &&
     normalizeExecutionPrompts(state.executionPrompts).length >= 3
   );
 }
@@ -4687,7 +4695,7 @@ function collectPromptAnswers(prefix, count = 3) {
 function syncCorePromptGate() {
   const ready = coreStoryReady();
   const loading = Boolean(state.corePromptsBusy);
-  const hasAware = normalizeAwarenessPrompts(state.awarenessPrompts).length >= 6;
+  const hasAware = normalizeAwarenessPrompts(state.awarenessPrompts).length >= AWARENESS_QUIZ_COUNT;
   const hasExec = normalizeExecutionPrompts(state.executionPrompts).length >= 3;
   const awareEmpty = document.getElementById("awareEmpty");
   const execEmpty = document.getElementById("execEmpty");
@@ -4764,7 +4772,7 @@ function renderAwarenessQuestions(prompts, options = {}) {
     root.classList.remove("aware-quiz");
     root.innerHTML = "";
     if (empty) {
-      empty.textContent = "請先完成上方今日感謝與事件，將為你生成 6 道今日覺察是非題";
+      empty.textContent = "請先完成上方今日感謝與事件，將為你生成 3 道今日覺察是非題";
       empty.hidden = Boolean(state.corePromptsBusy);
     }
     if (genBtn) {
@@ -4986,7 +4994,7 @@ function applyGeneratedPrompts(awareness, deep, execution, sig, fromAi) {
 function applyGeneratedCorePrompts(awareness, execution, sig, fromAi) {
   const journal = collectJournal();
   const keepAnswers = corePromptsHaveAnswers(journal);
-  const awareAnswers = ["", "", "", "", "", ""];
+  const awareAnswers = ["", "", ""];
   const execAnswers = keepAnswers ? journal.execution : ["", "", ""];
   state.awarenessPrompts = normalizeAwarenessPrompts(awareness);
   state.executionPrompts = normalizeExecutionPrompts(execution);
@@ -5048,7 +5056,7 @@ async function generateCorePrompts(options = {}) {
     if (state.corePromptsToken !== token) return;
     const awareness = normalizeAwarenessPrompts(remote.awareness);
     const execution = normalizeExecutionPrompts(remote.execution);
-    if (awareness.length < 6 || execution.length < 3) throw new Error("雲端回傳格式不完整");
+    if (awareness.length < AWARENESS_QUIZ_COUNT || execution.length < 3) throw new Error("雲端回傳格式不完整");
     applyGeneratedCorePrompts(awareness, execution, sig, true);
     if (!options.auto) showToast("今天的覺察是非題與執行題已生成。");
   } catch (error) {

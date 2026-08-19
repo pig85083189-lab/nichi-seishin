@@ -152,9 +152,9 @@ actions 的 detail 必須是可開口的完整一句，用「」包起來。
 title 必須是有質感的思考主題，例如「先看見，才能改變」，不要寫「深度思考」。stars 為 1-5。
 points 給 1-3 個，每個 conclusion 只能一句。actions 給 3 個。若已是最後一輪，question 改成收束。`;
 
-const CHECKLIST_AWARENESS_SYSTEM = `你是「日精進」洞察力極高、一針見血的高階心靈教練／導師。不討好、不溫吞、不給廉價安慰。使用者剛完成今天專屬的 6 道自我覺察是非題（題目依他今日的感謝、事件與心情動態生成）。
+const CHECKLIST_AWARENESS_SYSTEM = `你是「日精進」洞察力極高、一針見血的高階心靈教練／導師。不討好、不溫吞、不給廉價安慰。使用者剛完成今天專屬的 3 道自我覺察是非題（題目依他今日的感謝、事件與心情動態生成）。
 
-請根據這 6 題的「是／否」作答，以及今天的復盤內容，精準萃取出 3 個獨立的「核心金句」。每句都要極度簡短、犀利、一針見血，直接說出重點，讓人瞬間有「講到心坎裡、被敲醒」的觸動。
+請根據這 3 題的「是／否」作答，以及今天的復盤內容，精準萃取出 3 個獨立的「核心金句」。每句都要極度簡短、犀利、一針見血，直接說出重點，讓人瞬間有「講到心坎裡、被敲醒」的觸動。
 
 規則：
 - 只輸出 JSON：{"quotes":["...","...","..."]}
@@ -587,7 +587,7 @@ ${labeled}
         .map((question, index) => `${index + 1}. ${question}\n作答：${answers[index] || "（未答）"}`)
         .join("\n\n")
     : `是非題作答：${answer || "（未答）"}`;
-  return `請依這個人今天的 6 道覺察是非題作答與今日復盤，精準萃取出 3 個獨立、極度簡短、犀利一針見血的核心金句。每句都要直接說出重點，讓他看完被敲醒。不要雞湯，不要溫吞安慰，不要長篇解釋。
+  return `請依這個人今天的 3 道覺察是非題作答與今日復盤，精準萃取出 3 個獨立、極度簡短、犀利一針見血的核心金句。每句都要直接說出重點，讓他看完被敲醒。不要雞湯，不要溫吞安慰，不要長篇解釋。
 
 ${labeled}
 
@@ -697,7 +697,7 @@ ${avoid.length ? avoid.slice(0, 16).map((item) => `- ${compactLine(item, 60)}`).
 const CORE_PROMPTS_SYSTEM = `你是「日精進」的高階心靈教練。請精準讀取使用者今天寫下的感謝內容、事件經過與當下情緒，動態生成「只屬於今天」的覺察力與執行力題目。
 
 【任務】
-- awareness：剛好 6 道自我覺察是非題。每題必須是一句可回答「是」或「否」的陳述句（不要開放問句、不要問「是什麼／為什麼」）。對準今天實際發生的畫面、情緒波動、感動或委屈，由淺入深：事件觸動 → 情緒 → 防衛 → 需求 → 身體 → 核心信念。
+- awareness：剛好 3 道自我覺察是非題。每題必須是一句可回答「是」或「否」的陳述句（不要開放問句、不要問「是什麼／為什麼」）。三題都要直擊今日感謝與事件的核心，不要旁支、不要為了湊數而問。由淺入深、只打三層：①今天事件真正碰到的點 ②感謝或情緒背後還沒說出口的需求 ③今天真正的防衛或核心盲點。
 - execution：3 道針對性的執行突破題。必須對準今天事件裡的卡點、生氣、拖延或做不下去的地方：具體盲點是什麼、卡住的真正原因、明天最快能採取的突破行動。
 
 【必須遵守】
@@ -721,7 +721,7 @@ const CORE_PROMPTS_SYSTEM = `你是「日精進」的高階心靈教練。請精
     { "question": "完整問句，18-40字", "placeholder": "8-18字" }
   ]
 }
-awareness 必須剛好 6 題，execution 必須剛好 3 題。`;
+awareness 必須剛好 3 題，execution 必須剛好 3 題。`;
 
 function isCorePromptsRequest(body) {
   return body?.variant === "core" || body?.scope === "core" || body?.kind === "core";
@@ -733,7 +733,7 @@ function corePromptsUserPrompt(body) {
   const thanks = formatThanksForPrompt(ctx) || "未寫";
   const avoid = Array.isArray(progress.avoidQuestions) ? progress.avoidQuestions.filter(Boolean) : [];
   const openActions = Array.isArray(progress.openActions) ? progress.openActions.filter(Boolean) : [];
-  return `請精準讀取以下「今天的原文」，生成只屬於這一天的覺察力 6 題是非題、執行力 3 題。題目必須能讓人認出今天的感謝、事件與情緒，不要出成萬用題。
+  return `請精準讀取以下「今天的原文」，生成只屬於這一天的覺察力 3 題是非題、執行力 3 題。覺察題必須直擊今日感謝與事件的核心，不要出成萬用題，也不要為了湊數而問。
 
 日期：${body.date || ""}
 連續復盤天數：${progress.streak || 0}
@@ -749,7 +749,7 @@ ${thanks}
 【請避開、不要再出相近的題】
 ${avoid.length ? avoid.slice(0, 16).map((item) => `- ${compactLine(item, 60)}`).join("\n") : "（無）"}
 
-覺察是非題：6 句可答「是」或「否」的陳述，對準今天的情緒波動、感動或委屈，引導看見背後的期待或盲點。
+覺察是非題：剛好 3 句可答「是」或「否」的陳述，分別打中：今天事件碰到的點、感謝／情緒背後的需求、真正的防衛或盲點。
 執行題：針對今天卡住、生氣或拖延的部分，問具體盲點，以及明天最快的突破行動。`;
 }
 
@@ -785,7 +785,7 @@ function normalizePromptsResult(raw) {
   const awareness = (Array.isArray(data.awareness) ? data.awareness : [])
     .map(normalizePromptItem)
     .filter(Boolean)
-    .slice(0, 6);
+    .slice(0, 3);
   const execution = (Array.isArray(data.execution) ? data.execution : [])
     .map(normalizePromptItem)
     .filter(Boolean)
@@ -1067,7 +1067,7 @@ module.exports = async function handler(req, res) {
     if (mode === "prompts") {
       const prompts = normalizePromptsResult(data);
       if (isCorePromptsRequest(body)) {
-        if (prompts.awareness.length < 6 || prompts.execution.length < 3) {
+        if (prompts.awareness.length < 3 || prompts.execution.length < 3) {
           res.status(502).json({ ok: false, error: "AI 題目格式不完整，請再試一次" });
           return;
         }
