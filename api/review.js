@@ -294,7 +294,7 @@ function formatThinkGuideRounds(rounds) {
 }
 
 const THINK_GUIDE_ASK_SYSTEM = `你是「日精進」的深度思考引導者：溫柔，但不討好；一針見血，但不審判。
-使用者剛寫下今日感謝、事件、心情與身體覺察。請只提出「下一輪」的引導式疑問句，讓他親自往下想，不要替他下結論。
+使用者剛寫下今日感謝、事件與心情。深度復盤還會有身體覺察；快速復盤可能加選身體、覺察、執行力或顯化。請只提出「下一輪」的引導式疑問句，讓他親自往下想，不要替他下結論。若某模組沒有內容，不要編造該模組的細節。
 
 三輪各自的任務：
 - 第 1 輪：點出今天真正被碰到的那一點。問他看見了什麼、哪裡卡住。
@@ -324,10 +324,29 @@ function thinkGuideUserPrompt(body) {
   const thanks = formatThanksForPrompt(ctx);
   const round = Math.max(1, Math.min(3, Number(body.round || ctx.round) || 1));
   const rounds = Array.isArray(ctx.rounds) ? ctx.rounds : [];
+  const mode = String(ctx.journalMode || ctx.mode || "").trim();
+  const quick = mode === "quick";
+  const modules = Array.isArray(ctx.modules) ? ctx.modules.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  const awareness = Array.isArray(ctx.awareness)
+    ? ctx.awareness.map((item) => String(item || "").trim()).filter(Boolean).join("／")
+    : "";
+  const execution = Array.isArray(ctx.execution)
+    ? ctx.execution.map((item) => String(item || "").trim()).filter(Boolean).join("／")
+    : "";
+  const extras = [`復盤模式：${quick ? "快速復盤" : "深度復盤"}`];
+  if (quick) extras.push(`加選模組：${modules.length ? modules.join("、") : "無"}`);
+  if (!quick || modules.includes("body") || contextHasBodySignal(ctx)) extras.push(formatBodyCheckPrompt(ctx));
+  else extras.push("身體覺察：本次未加選，不要硬編身體細節");
+  if (!quick || modules.includes("aware") || awareness) extras.push(`今日覺察：${awareness || "未寫"}`);
+  if (!quick || modules.includes("exec") || execution || ctx.smallestStep) {
+    extras.push(`執行力回答：${execution || "未寫"}`);
+    extras.push(`明天最小的一步：${ctx.smallestStep || "未寫"}`);
+  }
+  if (modules.includes("manifest") || ctx.manifest) extras.push(`明天想顯化：${ctx.manifest || "未寫"}`);
   const base = `今日感謝：${thanks || "未寫"}
 今日事件：${ctx.event || body.text || "（未寫）"}
 心情：${ctx.mood || "未選"}
-${formatBodyCheckPrompt(ctx)}
+${extras.join("\n")}
 
 三輪對話至今：
 ${formatThinkGuideRounds(rounds)}`;
@@ -1034,6 +1053,18 @@ module.exports = async function handler(req, res) {
         const answered = rounds.filter((item) => String(item?.question || "").trim() && String(item?.answer || "").trim());
         if (answered.length < 3) {
           res.status(400).json({ ok: false, error: "請先完成三輪深度思考" });
+          return;
+        }
+      } else if (isThinkGuideRequest(body)) {
+        const isQuick = String(ctx.journalMode || ctx.mode || "").trim() === "quick";
+        if (isQuick) {
+          const thanks = thanksItems(ctx.thanksText || ctx.thanks);
+          if (!event || !mood || !thanks.length) {
+            res.status(400).json({ ok: false, error: "請先寫下今日感謝、事件，並選擇心情" });
+            return;
+          }
+        } else if (!event || !mood || !contextHasBodySignal(ctx)) {
+          res.status(400).json({ ok: false, error: "請先寫下今日事件、選擇心情，並標出身體狀況" });
           return;
         }
       } else if (isQuickInsightRequest(body)) {

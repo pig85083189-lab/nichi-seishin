@@ -5438,6 +5438,10 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   margin-top: 14px;
 }
 
+.think-guide__field .ai-check-btn {
+  justify-self: start;
+}
+
 .think-guide__close {
   padding: 22px 20px 20px;
   background: linear-gradient(165deg, rgba(255, 252, 247, 0.98) 0%, #f7efe6 58%, #f3e6d8 100%);

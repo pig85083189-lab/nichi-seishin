@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=131" />
+    <link rel="stylesheet" href="app.css?v=132" />
     <style>
       .splash {
         position: fixed;
@@ -627,14 +627,20 @@
             </div>
           </section>
 
-          <section class="insight-card insight-card--quick journal-fold js-quick-only" id="section-quick-insight">
+          <section class="insight-card journal-fold js-quick-only" id="section-quick-insight">
             <button class="journal-fold__toggle" type="button" data-journal-fold aria-expanded="false" aria-controls="quickInsightFoldPanel">
               <span class="journal-fold__copy">
                 <span class="insight-card__head">
-              <span class="insight-card__spark" aria-hidden="true">✨</span>
+              <span class="insight-card__icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M9 18h6" />
+                  <path d="M10 22h4" />
+                  <path d="M15.2 14.2A6 6 0 1 0 8.8 14.2C9.5 15 9.9 15.9 10.1 18h3.8c.2-2.1.6-3 1.3-3.8Z" />
+                </svg>
+              </span>
               <div>
-                <h2 class="insight-card__title">✨ 深度思考</h2>
-                <p class="insight-card__lead">寫完感謝、事件與心情後，會依今天的身心訊號、客觀檢討、具體突破建議，以及今日核心重點，分段整理給你。</p>
+                <h2 class="insight-card__title">深度思考</h2>
+                <p class="insight-card__lead">寫完感謝、事件與心情後，會依今天的內容連續問你 3 輪。答完後給你 2 件具體下一步，以及一段直擊核心的總結。</p>
               </div>
                 </span>
               </span>
@@ -642,13 +648,13 @@
             </button>
             <div class="journal-fold__panel" id="quickInsightFoldPanel" inert aria-hidden="true">
               <div class="journal-fold__inner">
-            <button class="ai-check-btn" id="btnQuickInsight" type="button">生成深度思考</button>
+            <button class="ai-check-btn" id="btnQuickInsight" type="button">開始深度思考</button>
             <div class="check-loading" id="quickInsightLoading" hidden>
-              <p class="check-loading__label">正在為你梳理今天的核心總結…</p>
+              <p class="check-loading__label">正在為你想下一問…</p>
               <div class="ai-thinking__bar"><i></i></div>
             </div>
             <div class="insight-card__body" id="quickInsightBody">
-              <p class="insight-card__empty">先寫下感謝、事件與心情，再點按鈕或完成快速復盤，就會生成今日深度思考。</p>
+              <p class="insight-card__empty">先寫下感謝、事件與心情，再開始 3 輪引導式深度思考。</p>
             </div>
               </div>
             </div>
@@ -803,7 +809,7 @@
                   <article class="guide-mode">
                     <p class="guide-mode__tag">忙碌時段</p>
                     <h4>⚡ 快速復盤（3-5分鐘）</h4>
-                    <p>適合時間不夠的日子。填寫感謝與事件後，自由選配身心、覺察或執行模組，即時獲得 AI 深度思考。</p>
+                    <p>適合時間不夠的日子。填寫感謝、事件與心情後，可加選模組，同樣走進 3 輪深度思考，收下 2 件下一步與總結。</p>
                   </article>
                   <article class="guide-mode guide-mode--deep">
                     <p class="guide-mode__tag">完整沉澱</p>
@@ -830,7 +836,7 @@
               <div class="guide-step__body">
                 <p class="guide-step__label">第三步</p>
                 <h3 class="guide-step__title">身心覺察與 AI 深度思考</h3>
-                <p class="guide-step__text">勾選心情、身體與睡眠狀況並寫下原因。深度復盤會接著走進 3 輪引導式提問，答完後收下 2 件具體下一步與一段直擊核心的總結。快速復盤可加選身心模組，並生成今日深度思考。</p>
+                <p class="guide-step__text">勾選心情、身體與睡眠狀況並寫下原因。無論快速或深度復盤，深度思考都會連續問你 3 輪。答完後給你 2 件具體下一步，以及一段直擊核心的總結。快速復盤寫完感謝、事件與心情即可開始；深度復盤還會讀你的身體覺察。</p>
                 <ul class="guide-insight">
                   <li>三輪引導式提問</li>
                   <li>兩件具體下一步</li>
@@ -1000,6 +1006,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=149"></script>
+    <script src="app.js?v=150"></script>
   </body>
 </html>
