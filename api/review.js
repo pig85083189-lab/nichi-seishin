@@ -192,15 +192,24 @@ function manifestUserPrompt(body) {
 尚未完成的行動：${openActions.slice(0, 6).join("、") || "尚無"}`;
 }
 
-const CHECKLIST_EXECUTION_SYSTEM = `你是「日精進」的高階心靈教練。使用者剛回答今天專屬的三道執行力問題（題目會依他今日的感謝、事件、情緒波動或卡點動態生成）。
+const CHECKLIST_EXECUTION_SYSTEM = `你是「日精進」的高階心靈教練：溫柔，但直擊心坎。使用者剛回答今天專屬的三道執行力問題（題目會依他今日的感謝、事件、情緒波動或卡點動態生成）。
 請依這三題的深度回答，整理成「行動卡點／解法」勾選清單。勾選後會進入他的個人行動清單。
 
+每一條都必須讓他一看就覺得「這就是我今天卡住的地方」，接著立刻知道下一步怎麼走。禁止空泛、禁止雞湯、禁止只給情緒安慰。
+
+【黃金架構：時間 × 對象 × 具體做法】
+每一條建議都必須同時寫出這三件事，缺一不可：
+- time：具體時段或時間點。例如「今天下午 3 點」「今晚睡前 10 分鐘」「明天開工後的前 15 分鐘」。禁止只寫「有空時」「之後」「盡快」。
+- who：這一步要面對誰。可以是自己一人、與主管／夥伴、向某一個具體的人表達。要寫成可辨認的對象，不要寫「大家」「相關人士」。
+- how：精準、不含糊的行動指令。要寫得出手、開口、寫下、送出、停下的那一下。禁止「好好溝通」「調整心態」「更努力」。
+
 規則：
-- 只輸出 JSON：{"items":[{"title":"...","detail":"..."}]}
+- 只輸出 JSON：{"items":[{"title":"...","time":"...","who":"...","how":"..."}]}
 - items 必須 3 到 4 條，不可少於 3、不可超過 4
-- title：4-12 字，核心行動名稱。不要編號、不要句號
-- detail：18-36 字，作為「引言／具體作法說明」。用溫暖、具體、好執行的口吻告訴他這件事「怎麼做會比較好」，不要只重複 title
-- 至少 2 條是明天做得到的最小解法（具體動作），其餘可以是真正卡住的點
+- title：4-12 字，點出這一步真正在突破的卡點。不要編號、不要句號、不要空泛動詞堆疊
+- time：6-18 字；who：4-16 字；how：16-36 字
+- 口吻像一對一教練：先看見他為什麼拖／怕／卡，再把解法收到最小、明天做得到的一步
+- 至少 2 條是今天或明天能立刻做完的最小動作
 - 必須貼近他剛寫的回答與今日事件，不要重複他已經列在「尚未完成的行動」裡的句子
 - 禁止固定題庫口吻（例如只寫「任務太大」「害怕被看見」「先做 5 分鐘」這種萬用句）
 - 禁止空泛激勵、禁止「你要更努力」
@@ -508,6 +517,24 @@ function splitChecklistTitle(text) {
   return { title: raw, detail: "" };
 }
 
+function composeExecDetail(parts) {
+  const time = String(parts?.time || "").trim();
+  const who = String(parts?.who || "").trim();
+  const how = String(parts?.how || parts?.detail || "").trim();
+  if (time || who) {
+    return [time && `時間：${time}`, who && `對象：${who}`, how && `怎麼做：${how}`].filter(Boolean).join("｜");
+  }
+  return how;
+}
+
+function parseExecDetail(text) {
+  const raw = String(text || "").trim();
+  const time = (raw.match(/時間[:：]\s*([^｜|]+)/) || [])[1]?.trim() || "";
+  const who = (raw.match(/對象[:：]\s*([^｜|]+)/) || [])[1]?.trim() || "";
+  const how = (raw.match(/怎麼做[:：]\s*([^｜]+)/) || raw.match(/怎麼做[:：]\s*(.+)$/) || [])[1]?.trim() || "";
+  return { time, who, how: how || (!time && !who ? raw : ""), detail: raw };
+}
+
 function normalizeExecutionChecklistItems(raw, min, max) {
   const list = Array.isArray(raw)
     ? raw
@@ -518,6 +545,9 @@ function normalizeExecutionChecklistItems(raw, min, max) {
   const seen = new Set();
   list.forEach((item) => {
     let title = "";
+    let time = "";
+    let who = "";
+    let how = "";
     let detail = "";
     if (typeof item === "string") {
       const parts = splitChecklistTitle(item);
@@ -525,19 +555,38 @@ function normalizeExecutionChecklistItems(raw, min, max) {
       detail = parts.detail;
     } else if (item && typeof item === "object") {
       title = String(item.title || item.label || item.text || "").trim();
-      detail = String(item.detail || item.lead || item.how || item.note || "").trim();
-      if (!detail && title) {
+      time = String(item.time || item.when || "").trim();
+      who = String(item.who || item.with || item.person || "").trim();
+      how = String(item.how || item.action || "").trim();
+      detail = String(item.detail || item.lead || item.note || "").trim();
+      if (!detail && title && !time && !who && !how) {
         const parts = splitChecklistTitle(title);
         title = parts.title;
         detail = parts.detail;
       }
     }
+    if ((!time || !who || !how) && detail) {
+      const parsed = parseExecDetail(detail);
+      time = time || parsed.time;
+      who = who || parsed.who;
+      how = how || parsed.how;
+    }
     title = title.replace(/^[\d.、｜|\-\s]+/, "").slice(0, 18);
-    detail = detail.slice(0, 48);
+    time = time.slice(0, 24);
+    who = who.slice(0, 22);
+    how = how.slice(0, 48);
     if (!title || seen.has(title)) return;
-    if (!detail) detail = "用最小、明天做得到的方式先走一步。";
+    if (!how) how = detail || "用最小、明天做得到的方式先走一步。";
+    if (!time) time = "明天開工後的前 15 分鐘";
+    if (!who) who = "自己一人";
     seen.add(title);
-    items.push({ title, detail });
+    items.push({
+      title,
+      time,
+      who,
+      how,
+      detail: composeExecDetail({ time, who, how }),
+    });
   });
   return items.slice(0, max);
 }
@@ -555,7 +604,7 @@ function checklistUserPrompt(kind, body) {
           .map((question, index) => `${index + 1}. ${question}\n回答：${answers[index] || "（未填）"}`)
           .join("\n\n")
       : `深度回答：${answer || "（未填）"}`;
-    return `請依這個人今天的執行力回答，產出 3 到 4 條「行動卡點／解法」勾選項目。每一條都要有「行動標題」與「怎麼做會比較好」的具體作法說明。勾選後會進入行動清單，所以解法要具體、明天做得到。
+    return `請依這個人今天的執行力回答，產出 3 到 4 條「行動卡點／解法」。每一條都必須同時寫出時間、對象、具體做法，讓他一眼就知道何時、對誰、做哪一件最小的事。文字要直擊他今天卡住的地方，解法要具體、今天或明天做得到。
 
 ${labeled}
 

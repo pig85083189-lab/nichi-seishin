@@ -286,13 +286,58 @@ function splitTaskText(text) {
   return { title: raw, detail: "" };
 }
 
+function composeExecDetail(parts) {
+  const time = String(parts?.time || "").trim();
+  const who = String(parts?.who || "").trim();
+  const how = String(parts?.how || parts?.detail || "").trim();
+  if (time || who) {
+    return [time && `時間：${time}`, who && `對象：${who}`, how && `怎麼做：${how}`].filter(Boolean).join("｜");
+  }
+  return how;
+}
+
+function parseExecDetail(text) {
+  const raw = String(text || "").trim();
+  const time = (raw.match(/時間[:：]\s*([^｜|]+)/) || [])[1]?.trim() || "";
+  const who = (raw.match(/對象[:：]\s*([^｜|]+)/) || [])[1]?.trim() || "";
+  const how = (raw.match(/怎麼做[:：]\s*([^｜]+)/) || raw.match(/怎麼做[:：]\s*(.+)$/) || [])[1]?.trim() || "";
+  return { time, who, how: how || (!time && !who ? raw : ""), detail: raw };
+}
+
+function execMetaFrom(item) {
+  const next = item && typeof item === "object" ? item : {};
+  let time = String(next.time || "").trim();
+  let who = String(next.who || "").trim();
+  let how = String(next.how || "").trim();
+  const detail = String(next.detail || next.lead || next.note || "").trim();
+  if ((!time || !who || !how) && detail) {
+    const parsed = parseExecDetail(detail);
+    time = time || parsed.time;
+    who = who || parsed.who;
+    how = how || parsed.how;
+  }
+  how = how || detail;
+  return {
+    time,
+    who,
+    how,
+    detail: composeExecDetail({ time, who, how }) || detail,
+  };
+}
+
+function hasExecMeta(item) {
+  return Boolean(String(item?.time || "").trim() || String(item?.who || "").trim());
+}
+
 function taskDisplayParts(task) {
   const storedTitle = String(task && task.title ? task.title : "").trim();
   const storedDetail = String((task && (task.detail || task.note || task.body)) || "").trim();
+  const meta = execMetaFrom(task);
   if (storedDetail && storedDetail !== storedTitle) {
-    return { title: storedTitle || storedDetail, detail: storedTitle ? storedDetail : "" };
+    return { title: storedTitle || storedDetail, detail: storedTitle ? storedDetail : "", ...meta };
   }
-  return splitTaskText(storedTitle);
+  const split = splitTaskText(storedTitle);
+  return { title: split.title || storedTitle || storedDetail, detail: split.detail, ...execMetaFrom({ ...task, detail: split.detail || storedDetail }) };
 }
 
 function findTaskBySourceKey(key) {
@@ -300,10 +345,11 @@ function findTaskBySourceKey(key) {
   return getTasks().find((task) => task.sourceKey === key) || null;
 }
 
-function addTaskFromGuide({ key, label, detail, source, date }) {
+function addTaskFromGuide({ key, label, detail, source, date, time, who, how }) {
   const parsed = splitTaskText(label);
   const title = parsed.title || String(detail || "").trim();
-  const note = String(detail || "").trim() || parsed.detail;
+  const meta = execMetaFrom({ time, who, how, detail: String(detail || "").trim() || parsed.detail });
+  const note = meta.detail;
   if (!title) return { added: false };
   const iso = date || currentIso();
   const tasks = getTasks();
@@ -315,6 +361,9 @@ function addTaskFromGuide({ key, label, detail, source, date }) {
     id: uid(),
     title,
     detail: note && note !== title ? note : "",
+    time: meta.time,
+    who: meta.who,
+    how: meta.how,
     status: "doing",
     source: source || "今日復盤",
     sourceKey: key || "",
@@ -353,7 +402,7 @@ function execCheckTaskKey(title, iso) {
   return `exec:${iso || currentIso()}:${heading}`;
 }
 
-function syncExecCheckToSidebar({ checked, title, detail }) {
+function syncExecCheckToSidebar({ checked, title, detail, time, who, how }) {
   const heading = String(title || "").trim();
   if (!heading) return;
   const key = execCheckTaskKey(heading);
@@ -362,6 +411,9 @@ function syncExecCheckToSidebar({ checked, title, detail }) {
       key,
       label: heading,
       detail: String(detail || "").trim(),
+      time,
+      who,
+      how,
       source: "今日復盤",
     });
     if (result.added) showToast("已加入側邊欄『執行力』");
@@ -532,6 +584,9 @@ function syncJournalLibraries(iso, journal) {
       key: `exec:${iso}:${title}`,
       label: title,
       detail: item?.detail || "",
+      time: item?.time,
+      who: item?.who,
+      how: item?.how,
       source: "今日復盤",
       date: iso,
     });
@@ -3519,36 +3574,115 @@ function buildExecutionCheckItems(journal) {
   const blob = `${answer}\n${journal.event || ""}\n${journal.bodyNote || ""}`;
   if (answer) {
     const short = answer.length > 18 ? `${answer.slice(0, 18)}…` : answer;
-    pushUniqueExec(items, "先處理今天最卡的那一步", `把「${short}」收成明天第一個 5 分鐘動作，做完再停。`, 4);
+    pushUniqueExec(
+      items,
+      "先處理今天最卡的那一步",
+      {
+        time: "明天開工後的前 15 分鐘",
+        who: "自己一人",
+        how: `把「${short}」收成一個 5 分鐘就能做完的動作，做完立刻停。`,
+      },
+      4
+    );
   }
   if (/累|疲|睡|沒力|能量|頭痛|緊繃/.test(blob)) {
-    pushUniqueExec(items, "先讓身體休息", "先停十分鐘，喝口水、鬆開肩膀，再決定下一小步。", 4);
+    pushUniqueExec(
+      items,
+      "先讓身體休息",
+      {
+        time: "此刻先停 10 分鐘",
+        who: "自己一人",
+        how: "離開螢幕，喝口水、鬆開肩膀，再決定下一小步。",
+      },
+      4
+    );
   }
   if (/怕|完美|失敗|丟臉|被看/.test(blob)) {
-    pushUniqueExec(items, "只做醜一點的第一版", "設 10 分鐘計時，只交出能開始的草稿，不求一次做好。", 4);
+    pushUniqueExec(
+      items,
+      "只做醜一點的第一版",
+      {
+        time: "今天下午設一個 10 分鐘鬧鐘",
+        who: "自己一人，必要時給一位信任的人看",
+        how: "只交出能開始的草稿，時間一到就停，不求一次做好。",
+      },
+      4
+    );
   }
   if (/卡|拖|大|不知|從哪|複雜|太多/.test(blob)) {
-    pushUniqueExec(items, "拆成最小一步", "在紙上寫下「明天只做的一件小事」，做完就收工。", 4);
+    pushUniqueExec(
+      items,
+      "拆成最小一步",
+      {
+        time: "今晚睡前 10 分鐘",
+        who: "自己一人",
+        how: "在紙上只寫「明天第一件小事」，寫完就收工。",
+      },
+      4
+    );
   }
   if (/策略|突破|行動|下一步/.test(blob)) {
-    pushUniqueExec(items, "把策略變成動作", "把突破策略改寫成明天第一個具體動作，寫到行事曆。", 4);
+    pushUniqueExec(
+      items,
+      "把策略變成動作",
+      {
+        time: "明天行事曆的第一格",
+        who: "自己一人，若需協同則告訴夥伴",
+        how: "把突破策略改寫成一個可勾選的具體動作，寫進行事曆。",
+      },
+      4
+    );
   }
   answers.slice(0, 2).forEach((item) => {
     const parts = splitTaskText(item.slice(0, 36));
-    if (items.length < 3) pushUniqueExec(items, parts.title, parts.detail || "用最小、明天做得到的方式先走一步。", 4);
+    if (items.length < 3) {
+      pushUniqueExec(
+        items,
+        parts.title,
+        {
+          time: "明天開工後的前 15 分鐘",
+          who: "自己一人",
+          how: parts.detail || "用最小、明天做得到的方式先走一步。",
+        },
+        4
+      );
+    }
   });
   return items.slice(0, 4);
+}
+
+function renderExecMeta(item) {
+  const rows = [
+    { key: "time", emoji: "⏰", label: "時間", value: String(item?.time || "").trim() },
+    { key: "who", emoji: "👥", label: "對象", value: String(item?.who || "").trim() },
+    { key: "how", emoji: "🎯", label: "怎麼做", value: String(item?.how || "").trim() },
+  ].filter((row) => row.value);
+  if (!rows.length) {
+    const lead = String(item?.detail || "").trim();
+    return lead ? `<span class="exec-check__lead">${escapeHtml(lead)}</span>` : "";
+  }
+  return `<span class="exec-meta">
+    ${rows
+      .map(
+        (row) => `
+      <span class="exec-meta__row exec-meta__row--${row.key}">
+        <span class="exec-meta__badge">${row.emoji} ${row.label}</span>
+        <span class="exec-meta__value">${escapeHtml(row.value)}</span>
+      </span>`
+      )
+      .join("")}
+  </span>`;
 }
 
 function renderExecCheckCard(item, index, done) {
   const heading = done ? item.title : `${String(index + 1).padStart(2, "0")}｜${item.title}`;
   return `
-    <label class="check-line exec-check${done ? " is-done" : ""}" data-title="${escapeHtml(item.title)}" data-detail="${escapeHtml(item.detail || "")}">
+    <label class="check-line exec-check${done ? " is-done" : ""}" data-title="${escapeHtml(item.title)}" data-detail="${escapeHtml(item.detail || "")}" data-time="${escapeHtml(item.time || "")}" data-who="${escapeHtml(item.who || "")}" data-how="${escapeHtml(item.how || "")}">
       <input type="checkbox" value="${escapeHtml(item.title)}" ${done ? "checked" : ""} />
       <span class="exec-check__box" aria-hidden="true"></span>
       <span class="exec-check__body">
         <span class="exec-check__title">${escapeHtml(heading)}</span>
-        ${item.detail ? `<span class="exec-check__lead">${escapeHtml(item.detail)}</span>` : ""}
+        ${renderExecMeta(item)}
       </span>
     </label>
   `;
@@ -3781,7 +3915,7 @@ async function generateJournalChecklist(kind, options = {}) {
       : normalizeAiExecItems(remote.items, min, max, fallback);
     if (items.length < min) throw new Error("雲端回傳格式不完整");
     applyGeneratedChecklist(kind, items, sig);
-    showToast(isAware ? "今日 3 句核心金句已生成。" : "行動卡點與解法已生成。");
+    showToast(isAware ? "今日 3 句核心金句已生成。" : "行動指南已生成，每張都含時間、對象與做法。");
   } catch (error) {
     if (state.checklistToken[kind] !== token) return;
     applyGeneratedChecklist(kind, fallback.slice(0, max), sig);
@@ -5326,27 +5460,35 @@ function applyJournalMode(mode, options = {}) {
 
 function collectExecCheckItems() {
   return [...document.querySelectorAll("#execChecks .exec-check")]
-    .map((el) => ({
-      title: String(el.dataset.title || "").trim(),
-      detail: String(el.dataset.detail || "").trim(),
-    }))
-    .filter((item) => item.title);
+    .map((el) =>
+      normalizeExecCheckItem({
+        title: String(el.dataset.title || "").trim(),
+        detail: String(el.dataset.detail || "").trim(),
+        time: String(el.dataset.time || "").trim(),
+        who: String(el.dataset.who || "").trim(),
+        how: String(el.dataset.how || "").trim(),
+      })
+    )
+    .filter(Boolean);
 }
 
 function normalizeExecCheckItem(item) {
   if (!item) return null;
   if (typeof item === "string") {
     const parts = splitTaskText(item);
-    return parts.title ? { title: parts.title, detail: parts.detail } : null;
+    if (!parts.title) return null;
+    return { title: parts.title, ...execMetaFrom({ title: parts.title, detail: parts.detail }) };
   }
   if (typeof item !== "object") return null;
   const title = String(item.title || item.label || item.text || "").trim();
-  const detail = String(item.detail || item.lead || item.note || "").trim();
-  if (!title && !detail) return null;
-  if (!title) return splitTaskText(detail);
-  if (detail && detail !== title) return { title, detail };
-  const parts = splitTaskText(title);
-  return { title: parts.title, detail: parts.detail || detail };
+  const meta = execMetaFrom(item);
+  if (!title && !meta.how && !meta.detail) return null;
+  if (!title) {
+    const parts = splitTaskText(meta.detail || meta.how);
+    if (!parts.title) return null;
+    return { title: parts.title, ...execMetaFrom({ ...item, detail: parts.detail || meta.detail }) };
+  }
+  return { title, ...meta };
 }
 
 function normalizeExecCheckItems(list) {
@@ -5361,16 +5503,23 @@ function normalizeExecCheckItems(list) {
   return items;
 }
 
-function pushUniqueExec(list, title, detail, max) {
+function pushUniqueExec(list, title, extra, max) {
   const heading = String(title || "").trim();
   if (!heading || list.some((item) => item.title === heading) || list.length >= max) return list;
-  list.push({ title: heading, detail: String(detail || "").trim() });
+  const payload = typeof extra === "string" ? { how: extra, detail: extra } : extra && typeof extra === "object" ? extra : {};
+  const next = normalizeExecCheckItem({ title: heading, ...payload });
+  if (next) list.push(next);
   return list;
 }
 
 function formatExecCheckLine(item) {
   const next = normalizeExecCheckItem(item);
   if (!next) return "";
+  if (hasExecMeta(next)) {
+    return [next.title, next.time && `時間：${next.time}`, next.who && `對象：${next.who}`, next.how && `怎麼做：${next.how}`]
+      .filter(Boolean)
+      .join("｜");
+  }
   return next.detail ? `${next.title}：${next.detail}` : next.title;
 }
 
@@ -7006,7 +7155,7 @@ function renderTaskItem(task, options = {}) {
         <span class="task-todo__box" aria-hidden="true"></span>
         <span class="task-todo__body">
           <span class="task-card__title">${escapeHtml(heading)}</span>
-          ${parts.detail ? `<span class="task-card__lead">${escapeHtml(parts.detail)}</span>` : ""}
+          ${hasExecMeta(parts) ? renderExecMeta(parts) : parts.detail ? `<span class="task-card__lead">${escapeHtml(parts.detail)}</span>` : ""}
           <span class="task-card__meta">
             <span class="tag">${escapeHtml(task.source || "自行新增")}</span>
             ${later ? `<span class="tag tag--later">待辦</span>` : ""}
@@ -7413,6 +7562,21 @@ function historyItemsHtml(items) {
   return `<ul class="history-journal__list">${list.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
 }
 
+function historyExecChecksHtml(journal) {
+  const items = normalizeExecCheckItems(journal && journal.executionCheckItems);
+  if (items.length) {
+    return `<div class="history-exec-cards">${items
+      .map(
+        (item) => `<article class="history-exec-card">
+        <p class="history-exec-card__title">${escapeHtml(item.title)}</p>
+        ${renderExecMeta(item)}
+      </article>`
+      )
+      .join("")}</div>`;
+  }
+  return historyItemsHtml(execCheckHistoryLines(journal));
+}
+
 function historyListBlock(label, items) {
   const html = historyItemsHtml(items);
   if (!html) return "";
@@ -7544,7 +7708,7 @@ function renderHistoryJournal(review) {
     [
       "④ 執行力行動清單",
       "exec",
-      [...execFields, historyTextBlock("明天最小的一步", journal.smallestStep), historyListBlock("行動卡點／解法", execCheckHistoryLines(journal))],
+      [...execFields, historyTextBlock("明天最小的一步", journal.smallestStep), historyBlock("行動卡點／解法", historyExecChecksHtml(journal))],
     ],
     ["深度洞察", "insight", insightHtml],
     [
@@ -7907,6 +8071,9 @@ function bindEvents() {
             checked: execInput.checked,
             title: String(execInput.value || execInput.closest(".exec-check")?.dataset.title || "").trim(),
             detail: String(execInput.closest(".exec-check")?.dataset.detail || "").trim(),
+            time: String(execInput.closest(".exec-check")?.dataset.time || "").trim(),
+            who: String(execInput.closest(".exec-check")?.dataset.who || "").trim(),
+            how: String(execInput.closest(".exec-check")?.dataset.how || "").trim(),
           }
         : null;
       persistJournalQuietly();

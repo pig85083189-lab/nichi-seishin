@@ -4821,7 +4821,7 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   grid-template-columns: 22px minmax(0, 1fr);
   gap: 12px;
   align-items: start;
-  padding: 14px 16px;
+  padding: 16px;
   border: 1px solid var(--cream-border);
   border-radius: 14px;
   background: #fff;
@@ -4887,7 +4887,7 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
 }
 
 .exec-check__title {
@@ -4910,12 +4910,91 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   text-underline-offset: 0.18em;
 }
 
+.exec-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.exec-meta__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.exec-meta__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
+  padding: 2px 9px;
+  border: 1px solid var(--cream-border);
+  border-radius: 999px;
+  background: var(--tea-wash);
+  color: var(--heading);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.exec-meta__value {
+  min-width: 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.7;
+}
+
 .exec-check.is-done .exec-check__title,
-.exec-check.is-done .exec-check__lead {
+.exec-check.is-done .exec-check__lead,
+.exec-check.is-done .exec-meta__value {
   color: var(--muted);
   text-decoration: line-through;
   text-decoration-color: rgba(122, 101, 86, 0.55);
   opacity: 0.72;
+}
+
+.exec-check.is-done .exec-meta__badge {
+  opacity: 0.72;
+}
+
+.task-todo .exec-meta {
+  margin-top: 8px;
+}
+
+.task-todo.is-done .exec-meta__value {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: rgba(122, 101, 86, 0.55);
+  opacity: 0.72;
+}
+
+.task-todo.is-done .exec-meta__badge {
+  opacity: 0.72;
+}
+
+.history-exec-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.history-exec-card {
+  padding: 12px 14px;
+  border: 1px solid var(--cream-border);
+  border-radius: 12px;
+  background: var(--cream);
+}
+
+.history-exec-card__title {
+  margin: 0 0 8px;
+  color: var(--heading);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .ai-check-btn {
