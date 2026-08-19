@@ -2931,6 +2931,8 @@ function toggleQuickModule(key) {
     const sectionId = { body: "section-body", aware: "section-aware", exec: "section-exec", manifest: "section-manifest" }[key];
     setJournalFoldOpen(sectionId, true);
     document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  } else {
+    applyJournalFolds();
   }
   if (next.aware || next.exec) maybeAutoGenerateCorePrompts(journal);
   if (next.body) maybeAutoGenerateBodyCoach(journal);
@@ -5024,10 +5026,6 @@ function setCorePromptsLoading(loading) {
 }
 
 async function generateCorePrompts(options = {}) {
-  if (!options.auto) {
-    setJournalFoldOpen("section-aware", true);
-    setJournalFoldOpen("section-exec", true);
-  }
   if (state.corePromptsBusy) return;
   const journal = collectJournal();
   if (!coreStoryReady(journal)) {
@@ -5340,6 +5338,7 @@ function applyJournalMode(mode, options = {}) {
   }
   syncCompleteButtonLabel();
   syncQuickModules(state.quickModules);
+  if (!state.journalHydrating) applyJournalFolds();
   if (!options.silent && !state.journalHydrating) persistJournalQuietly();
   if (!options.silent && !state.journalHydrating && next === "quick") {
     maybeAutoGenerateInsight(collectJournal());
@@ -5587,12 +5586,39 @@ const JOURNAL_FOLD_IDS = [
   "section-quick-insight",
 ];
 
-function journalFoldPrefs() {
-  const saved = loadJson(STORAGE_KEYS.journalFolds, {});
-  return saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
+function journalFoldIsActive(id) {
+  const el = document.getElementById(id);
+  if (!el || el.hidden) return false;
+  const quick = state.journalMode === "quick";
+  if (id === "quickModules" || id === "section-quick-insight") return quick;
+  if (!quick) return id !== "quickModules" && id !== "section-quick-insight";
+  if (id === "section-insight" || id === "section-deep") return false;
+  if (id === "section-body") return Boolean(state.quickModules?.body);
+  if (id === "section-aware") return Boolean(state.quickModules?.aware);
+  if (id === "section-exec") return Boolean(state.quickModules?.exec);
+  if (id === "section-manifest") return Boolean(state.quickModules?.manifest);
+  return true;
 }
 
-function setJournalFoldOpen(id, open, options = {}) {
+function journalFoldPrefs() {
+  const saved = loadJson(STORAGE_KEYS.journalFolds, null);
+  if (saved == null) return { open: "section-thanks" };
+  if (typeof saved === "string") return { open: saved };
+  if (!saved || typeof saved !== "object" || Array.isArray(saved)) return { open: "section-thanks" };
+  if (typeof saved.open === "string") return { open: saved.open };
+  const open = JOURNAL_FOLD_IDS.find((id) => saved[id] === true) || "";
+  return { open };
+}
+
+function persistJournalFoldOpen(openId) {
+  try {
+    localStorage.setItem(STORAGE_KEYS.journalFolds, JSON.stringify({ open: openId || "" }));
+  } catch {
+    /* ignore quota */
+  }
+}
+
+function applyFoldState(id, open) {
   const root = document.getElementById(id);
   if (!root?.classList.contains("journal-fold")) return;
   const toggle = root.querySelector(":scope > [data-journal-fold]");
@@ -5604,27 +5630,41 @@ function setJournalFoldOpen(id, open, options = {}) {
     panel.inert = !next;
     panel.setAttribute("aria-hidden", next ? "false" : "true");
   }
-  if (options.persist === false) return;
-  const prefs = journalFoldPrefs();
-  prefs[id] = next;
-  try {
-    localStorage.setItem(STORAGE_KEYS.journalFolds, JSON.stringify(prefs));
-  } catch {
-    /* ignore quota */
+}
+
+function currentOpenJournalFold() {
+  return JOURNAL_FOLD_IDS.find((id) => document.getElementById(id)?.classList.contains("is-open")) || "";
+}
+
+function setJournalFoldOpen(id, open, options = {}) {
+  const root = document.getElementById(id);
+  if (!root?.classList.contains("journal-fold")) return;
+  const next = Boolean(open);
+  if (next && options.exclusive !== false) {
+    JOURNAL_FOLD_IDS.forEach((other) => {
+      if (other !== id) applyFoldState(other, false);
+    });
   }
+  applyFoldState(id, next);
+  if (options.persist === false) return;
+  persistJournalFoldOpen(next ? id : currentOpenJournalFold());
 }
 
 function toggleJournalFold(id) {
   const root = document.getElementById(id);
   if (!root) return;
-  setJournalFoldOpen(id, !root.classList.contains("is-open"));
+  const opening = !root.classList.contains("is-open");
+  setJournalFoldOpen(id, opening);
+  if (opening) {
+    root.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 }
 
 function applyJournalFolds() {
   const prefs = journalFoldPrefs();
-  JOURNAL_FOLD_IDS.forEach((id) => {
-    setJournalFoldOpen(id, prefs[id] !== false, { persist: false });
-  });
+  const visible = JOURNAL_FOLD_IDS.filter(journalFoldIsActive);
+  const openId = visible.includes(prefs.open) ? prefs.open : "";
+  JOURNAL_FOLD_IDS.forEach((id) => applyFoldState(id, id === openId));
 }
 
 function fillJournal(journal) {
@@ -7882,7 +7922,10 @@ function bindEvents() {
   }
   document.getElementById("btnCompleteToday")?.addEventListener("click", completeToday);
   document.getElementById("btnSaveDraft")?.addEventListener("click", saveJournalDraft);
-  document.getElementById("btnAwarePrompts")?.addEventListener("click", () => generateCorePrompts());
+  document.getElementById("btnAwarePrompts")?.addEventListener("click", () => {
+    setJournalFoldOpen("section-aware", true);
+    generateCorePrompts();
+  });
   document.getElementById("btnExecPrompts")?.addEventListener("click", () => {
     setJournalFoldOpen("section-exec", true);
     generateCorePrompts();
