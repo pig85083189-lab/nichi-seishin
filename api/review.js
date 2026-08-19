@@ -807,28 +807,41 @@ ${avoid.length ? avoid.slice(0, 16).map((item) => `- ${compactLine(item, 60)}`).
 請讓今天的深度思考主題承接他的進度：看見重複模式就換新視角，看見新突破就往下挖一層。`;
 }
 
-const CORE_PROMPTS_SYSTEM = `你是「日精進」的高階心靈教練。請精準讀取使用者今天寫下的感謝內容、事件經過與當下情緒，動態生成「只屬於今天」的覺察力與執行力題目。
+const AWARENESS_PROMPTS_SYSTEM = `你是「日精進」溫柔的覺察引導者。請讀取使用者今天寫下的感謝、事件、心情與身體覺察，生成剛好 3 道只屬於今天的覺察是非題。
+
+語氣：溫暖、陪伴、引導。像坐在旁邊輕輕問一句，不審判、不說教、不雞湯。
+
+規則：
+- 只輸出 JSON：{"awareness":[{"question":"..."},{"question":"..."},{"question":"..."}]}
+- 每題必須是一句可答「是」或「否」的陳述句，不要開放問句，不要一次問兩件事
+- 每題 16-42 字，繁體中文
+- 必須貼近今天的原文用詞，讓他一眼覺得「這題是為我今天寫的」
+- 三題由淺入深：①今天事件真正碰到的點 ②感謝或情緒背後還沒說出口的需求 ③還沒敢承認的防衛或盲點
+- 禁止空泛萬用題，禁止說教，禁止診斷`;
+
+const EXECUTION_PROMPTS_SYSTEM = `你是「日精進」的行動教練。請讀取使用者今天寫下的感謝、事件、心情與身體覺察，生成剛好 3 道只屬於今天的執行突破題。
+
+規則：
+- 只輸出 JSON：{"execution":[{"question":"...","placeholder":"..."},{"question":"...","placeholder":"..."},{"question":"...","placeholder":"..."}]}
+- 每題是完整問句，18-40 字，繁體中文
+- 對準今天卡住、生氣、拖延或做不下去的地方
+- 禁止空泛萬用題，禁止口號`;
+
+const CORE_PROMPTS_SYSTEM = `你是「日精進」溫柔的覺察與行動教練。請精準讀取使用者今天寫下的感謝、事件、心情與身體覺察，動態生成「只屬於今天」的覺察力與執行力題目。
 
 【任務】
-- awareness：剛好 3 道自我覺察是非題。每題必須是一句可回答「是」或「否」的陳述句（不要開放問句、不要問「是什麼／為什麼」）。三題都要直擊今日感謝與事件的核心，不要旁支、不要為了湊數而問。由淺入深、只打三層：①今天事件真正碰到的點 ②感謝或情緒背後還沒說出口的需求 ③今天真正的防衛或核心盲點。
-- execution：3 道針對性的執行突破題。必須對準今天事件裡的卡點、生氣、拖延或做不下去的地方：具體盲點是什麼、卡住的真正原因、明天最快能採取的突破行動。
+- awareness：剛好 3 道自我覺察是非題。每題必須是一句可回答「是」或「否」的陳述句。語氣溫暖、引導。由淺入深：①今天事件真正碰到的點 ②感謝或情緒背後還沒說出口的需求 ③今天真正的防衛或核心盲點。
+- execution：3 道針對性的執行突破題。必須對準今天事件裡的卡點、生氣、拖延或做不下去的地方。
 
 【必須遵守】
 - 只輸出 JSON
-- 題目裡要能看見今天的人、事、情緒，讓他一眼覺得「這題是為我今天出的」
-- 每天視角都要不同，不要重複使用者最近已經問過的題
-- 禁止使用固定題庫口吻。尤其禁止出現或改寫這些死題：
-  「今天哪一件事最觸動你」「你當時真正的感受是什麼」「你真正介意的是什麼」
-  「生命力或平靜」「防衛心或情緒波動」「翻白眼」「不好意思拒絕」「老方法處理」
-  「本來想做卻一直拖著」「卡住不想動」「明天只要花 5 分鐘」
-  「今天在執行目標時遇到了什麼實質卡點」
-- 禁止雞湯、禁止說教、禁止病例腔、禁止空泛「你真正的感受是什麼」「你要更努力」
-- 題目要具體、有畫面、有啟發，像一對一教練今天才想出來的
+- 題目裡要能看見今天的人、事、情緒
+- 禁止空泛萬用題、禁止雞湯、禁止說教
 - 繁體中文
 
 {
   "awareness": [
-    { "question": "可答是或否的陳述句，18-36字" }
+    { "question": "可答是或否的陳述句，16-42字" }
   ],
   "execution": [
     { "question": "完整問句，18-40字", "placeholder": "8-18字" }
@@ -837,18 +850,26 @@ const CORE_PROMPTS_SYSTEM = `你是「日精進」的高階心靈教練。請精
 awareness 必須剛好 3 題，execution 必須剛好 3 題。`;
 
 function isCorePromptsRequest(body) {
-  return body?.variant === "core" || body?.scope === "core" || body?.kind === "core";
+  if (body?.variant === "core" || body?.kind === "core") return true;
+  const scope = String(body?.scope || body?.promptKind || "").trim().toLowerCase();
+  return scope === "core" || scope === "awareness" || scope === "aware" || scope === "execution" || scope === "exec";
 }
 
-function corePromptsUserPrompt(body) {
+function corePromptKind(body) {
+  const ctx = body && body.context && typeof body.context === "object" ? body.context : {};
+  const kind = String(body?.promptKind || ctx.promptKind || body?.scope || ctx.scope || "").trim().toLowerCase();
+  if (kind === "awareness" || kind === "aware") return "awareness";
+  if (kind === "execution" || kind === "exec") return "execution";
+  return "core";
+}
+
+function corePromptsUserPrompt(body, kind = "core") {
   const ctx = body.context && typeof body.context === "object" ? body.context : {};
   const progress = body.progress && typeof body.progress === "object" ? body.progress : {};
   const thanks = formatThanksForPrompt(ctx) || "未寫";
   const avoid = Array.isArray(progress.avoidQuestions) ? progress.avoidQuestions.filter(Boolean) : [];
   const openActions = Array.isArray(progress.openActions) ? progress.openActions.filter(Boolean) : [];
-  return `請精準讀取以下「今天的原文」，生成只屬於這一天的覺察力 3 題是非題、執行力 3 題。覺察題必須直擊今日感謝與事件的核心，不要出成萬用題，也不要為了湊數而問。
-
-日期：${body.date || ""}
+  const today = `日期：${body.date || ""}
 連續復盤天數：${progress.streak || 0}
 
 【今天的輸入｜必須據此出題】
@@ -861,7 +882,24 @@ ${formatBodyCheckPrompt(ctx)}
 尚未完成的行動：${openActions.slice(0, 6).map((item) => compactLine(item, 40)).join("、") || "尚無"}
 
 【請避開、不要再出相近的題】
-${avoid.length ? avoid.slice(0, 16).map((item) => `- ${compactLine(item, 60)}`).join("\n") : "（無）"}
+${avoid.length ? avoid.slice(0, 12).map((item) => `- ${compactLine(item, 60)}`).join("\n") : "（無）"}`;
+  if (kind === "awareness") {
+    return `請只生成 3 道溫暖、引導式的覺察是非題。不要寫執行題，不要總結。
+
+${today}
+
+覺察是非題：剛好 3 句可答「是」或「否」的陳述，分別打中：今天事件碰到的點、感謝／情緒背後的需求、真正的防衛或盲點。`;
+  }
+  if (kind === "execution") {
+    return `請只生成 3 道執行突破題。不要寫覺察是非題。
+
+${today}
+
+執行題：針對今天卡住、生氣或拖延的部分，問具體盲點，以及明天最快的突破行動。`;
+  }
+  return `請精準讀取以下「今天的原文」，生成只屬於這一天的覺察力 3 題是非題、執行力 3 題。覺察題必須直擊今日感謝與事件的核心，語氣溫暖引導，不要出成萬用題。
+
+${today}
 
 覺察是非題：剛好 3 句可答「是」或「否」的陳述，分別打中：今天事件碰到的點、感謝／情緒背後的需求、真正的防衛或盲點。
 執行題：針對今天卡住、生氣或拖延的部分，問具體盲點，以及明天最快的突破行動。`;
@@ -869,11 +907,18 @@ ${avoid.length ? avoid.slice(0, 16).map((item) => `- ${compactLine(item, 60)}`).
 
 function asPromptList(raw) {
   if (Array.isArray(raw)) return raw;
-  if (typeof raw === "string" && raw.trim()) return [raw];
+  if (typeof raw === "string" && raw.trim()) {
+    const lines = raw
+      .split(/\r?\n/)
+      .map((line) => line.replace(/^\s*(?:[-*]|第?[一二三1-3][、.．)]|[1-3][\.、)])\s*/, "").trim())
+      .filter((line) => line.length >= 8);
+    return lines.length ? lines : [raw];
+  }
   if (raw && typeof raw === "object") {
     if (Array.isArray(raw.questions)) return raw.questions;
     if (Array.isArray(raw.items)) return raw.items;
     if (Array.isArray(raw.prompts)) return raw.prompts;
+    if (Array.isArray(raw.statements)) return raw.statements;
     if (raw.question || raw.title || raw.text || raw.prompt || raw.statement) return [raw];
     const values = Object.keys(raw)
       .sort()
@@ -887,7 +932,7 @@ function asPromptList(raw) {
 function normalizePromptItem(item) {
   if (typeof item === "string") {
     const question = item.trim();
-    return question ? { question, placeholder: "寫下那個時刻…" } : null;
+    return question ? { question: question.slice(0, 80), placeholder: "寫下那個時刻…" } : null;
   }
   if (!item || typeof item !== "object") return null;
   const question = String(
@@ -913,16 +958,65 @@ function normalizeDeepPromptItem(item) {
   };
 }
 
-function normalizePromptsResult(raw) {
-  const data = raw && typeof raw === "object" ? raw : {};
-  const awareness = asPromptList(data.awareness)
-    .map(normalizePromptItem)
-    .filter(Boolean)
-    .slice(0, 3);
-  const execution = asPromptList(data.execution)
-    .map(normalizePromptItem)
-    .filter(Boolean)
-    .slice(0, 3);
+function uniquePromptList(list) {
+  const seen = new Set();
+  const next = [];
+  (list || []).forEach((item) => {
+    const question = String(item?.question || "").trim();
+    if (!question || seen.has(question)) return;
+    seen.add(question);
+    next.push(item);
+  });
+  return next;
+}
+
+function padAwarenessPrompts(list, ctx) {
+  const eventBit = compactLine(ctx && (ctx.event || ctx.text), 12) || "今天這件事";
+  const extras = [
+    { question: `在「${eventBit}」裡，我真正被碰到的，其實不是表面看到的那一層。` },
+    { question: "我寫下的感謝，其實在說：我今天很想被好好對待。" },
+    { question: "這份心情底下，還有一句我還沒敢對自己承認的話。" },
+  ];
+  const next = uniquePromptList(list);
+  extras.forEach((item) => {
+    if (next.length >= 3) return;
+    next.push(item);
+  });
+  return next.slice(0, 3);
+}
+
+function padExecutionPrompts(list) {
+  const extras = [
+    { question: "明天只做一件 5 分鐘內能完成、和今天有關的小事，會先碰哪裡？", placeholder: "明天最小的一步…" },
+    { question: "今天卡住時，你最常用來保護自己的方式是什麼？", placeholder: "我習慣用的保護是…" },
+    { question: "哪一個 5 分鐘內做得到的動作，能讓今天鬆一口氣？", placeholder: "5 分鐘內能做的是…" },
+  ];
+  const next = uniquePromptList(list);
+  extras.forEach((item) => {
+    if (next.length >= 3) return;
+    next.push(item);
+  });
+  return next.slice(0, 3);
+}
+
+function normalizePromptsResult(raw, kind = "core") {
+  const wrapped = Array.isArray(raw) ? { awareness: raw, execution: raw } : raw;
+  const data = wrapped && typeof wrapped === "object" ? wrapped : {};
+  let awareness = uniquePromptList(
+    []
+      .concat(asPromptList(data.awareness), kind === "awareness" ? asPromptList(data.questions) : [])
+      .concat(kind === "awareness" ? asPromptList(data.statements) : [])
+      .concat(kind === "awareness" ? asPromptList(data.items) : [])
+      .map(normalizePromptItem)
+      .filter(Boolean)
+  ).slice(0, 3);
+  let execution = uniquePromptList(
+    []
+      .concat(asPromptList(data.execution), kind === "execution" ? asPromptList(data.questions) : [])
+      .concat(kind === "execution" ? asPromptList(data.items) : [])
+      .map(normalizePromptItem)
+      .filter(Boolean)
+  ).slice(0, 3);
   const deep = asPromptList(data.deep)
     .map(normalizeDeepPromptItem)
     .filter(Boolean)
@@ -1101,9 +1195,22 @@ module.exports = async function handler(req, res) {
         { role: "user", content: deepenUserPrompt(body) },
       ];
     } else if (mode === "prompts") {
+      const promptKind = isCorePromptsRequest(body) ? corePromptKind(body) : "";
       messages = [
-        { role: "system", content: isCorePromptsRequest(body) ? CORE_PROMPTS_SYSTEM : PROMPTS_SYSTEM },
-        { role: "user", content: isCorePromptsRequest(body) ? corePromptsUserPrompt(body) : promptsUserPrompt(body) },
+        {
+          role: "system",
+          content: promptKind === "awareness"
+            ? AWARENESS_PROMPTS_SYSTEM
+            : promptKind === "execution"
+              ? EXECUTION_PROMPTS_SYSTEM
+              : isCorePromptsRequest(body)
+                ? CORE_PROMPTS_SYSTEM
+                : PROMPTS_SYSTEM,
+        },
+        {
+          role: "user",
+          content: isCorePromptsRequest(body) ? corePromptsUserPrompt(body, promptKind || "core") : promptsUserPrompt(body),
+        },
       ];
     } else if (mode === "manifest") {
       messages = [
@@ -1135,19 +1242,24 @@ module.exports = async function handler(req, res) {
       ];
     }
 
+    const promptKind = isCorePromptsRequest(body) ? corePromptKind(body) : "";
     const data = await callOpenAI(messages, {
       temperature: mode === "prompts" ? 0.7 : 0.75,
-      timeoutMs: 22000,
+      timeoutMs: promptKind === "awareness" ? 18000 : 22000,
       maxTokens:
         mode === "insight" && isThinkGuideRequest(body)
           ? thinkGuideStep(body) === "close"
             ? 900
             : 400
-          : mode === "prompts" && isCorePromptsRequest(body)
-            ? 1100
-            : mode === "checklist"
-              ? 600
-              : 1400,
+          : mode === "prompts" && promptKind === "awareness"
+            ? 500
+            : mode === "prompts" && promptKind === "execution"
+              ? 700
+              : mode === "prompts" && isCorePromptsRequest(body)
+                ? 1100
+                : mode === "checklist"
+                  ? 600
+                  : 1400,
     });
     if (mode === "checklist") {
       const kind = body.kind === "execution" ? "execution" : "awareness";
@@ -1207,18 +1319,34 @@ module.exports = async function handler(req, res) {
       return;
     }
     if (mode === "prompts") {
-      const prompts = normalizePromptsResult(data);
-      if (isCorePromptsRequest(body)) {
-        if (prompts.awareness.length < 3) {
+      const kind = isCorePromptsRequest(body) ? corePromptKind(body) : "";
+      const ctx = body.context && typeof body.context === "object" ? body.context : {};
+      const prompts = normalizePromptsResult(data, kind || "core");
+      if (kind === "awareness") {
+        const awareness = padAwarenessPrompts(prompts.awareness, { ...ctx, text: body.text });
+        if (prompts.awareness.length < 1) {
           res.status(502).json({ ok: false, error: "今天的覺察題還沒準備好，請再試一次" });
           return;
         }
-        while (prompts.execution.length < 3) {
-          prompts.execution.push({
-            question: "明天只做一件 5 分鐘內能完成、和今天有關的小事，會先碰哪裡？",
-            placeholder: "明天最小的一步…",
-          });
+        res.status(200).json({ ok: true, source: "openai", data: { awareness, execution: [] } });
+        return;
+      }
+      if (isCorePromptsRequest(body)) {
+        if (kind === "execution") {
+          const execution = padExecutionPrompts(prompts.execution);
+          if (prompts.execution.length < 1) {
+            res.status(502).json({ ok: false, error: "今天的執行題還沒準備好，請再試一次" });
+            return;
+          }
+          res.status(200).json({ ok: true, source: "openai", data: { awareness: [], execution } });
+          return;
         }
+        if (prompts.awareness.length < 1) {
+          res.status(502).json({ ok: false, error: "今天的覺察題還沒準備好，請再試一次" });
+          return;
+        }
+        prompts.awareness = padAwarenessPrompts(prompts.awareness, { ...ctx, text: body.text });
+        prompts.execution = padExecutionPrompts(prompts.execution);
       } else if (prompts.deep.length < 4) {
         res.status(502).json({ ok: false, error: "AI 題目格式不完整，請再試一次" });
         return;

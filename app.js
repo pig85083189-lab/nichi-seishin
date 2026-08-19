@@ -5095,7 +5095,7 @@ function syncCorePromptGate() {
     awareBtn.hidden = hasAware;
     if (!awareBtn.hidden) {
       awareBtn.disabled = !ready || loading;
-      awareBtn.textContent = loading ? "正在為你準備…" : "✦ 開始今天的覺察";
+      awareBtn.textContent = loading ? "正在生成覺察題…" : "✦ 開始今天的覺察";
     }
   }
   if (execBtn) {
@@ -5160,7 +5160,7 @@ function renderAwarenessQuestions(prompts, options = {}) {
     if (genBtn) {
       genBtn.hidden = false;
       genBtn.disabled = !coreStoryReady() || Boolean(state.corePromptsBusy);
-      genBtn.textContent = state.corePromptsBusy ? "正在為你準備…" : "✦ 開始今天的覺察";
+      genBtn.textContent = state.corePromptsBusy ? "正在生成覺察題…" : "✦ 開始今天的覺察";
     }
     syncAwareQuoteGate();
     return;
@@ -5330,27 +5330,35 @@ function applyGeneratedPrompts(awareness, deep, execution, sig, fromAi) {
 function applyGeneratedCorePrompts(awareness, execution, sig, fromAi) {
   const journal = collectJournal();
   const keepAnswers = corePromptsHaveAnswers(journal);
-  const awareAnswers = ["", "", ""];
-  const execAnswers = keepAnswers ? journal.execution : ["", "", ""];
-  state.awarenessPrompts = normalizeAwarenessPrompts(awareness);
-  state.executionPrompts = normalizeExecutionPrompts(execution);
+  const awareList = normalizeAwarenessPrompts(awareness);
+  const execList = normalizeExecutionPrompts(execution);
+  if (awareList.length >= AWARENESS_QUIZ_COUNT) {
+    state.awarenessPrompts = awareList;
+    renderAwarenessQuestions(state.awarenessPrompts, { answers: ["", "", ""] });
+  }
+  if (execList.length >= 3) {
+    state.executionPrompts = execList;
+    renderExecutionQuestions(state.executionPrompts, { answers: keepAnswers ? journal.execution : ["", "", ""] });
+  }
   state.execQuestionTab = "open";
   state.journalMeta.corePromptsSig = sig;
-  state.journalMeta.corePromptsAi = Boolean(fromAi);
+  state.journalMeta.corePromptsAi = Boolean(fromAi) || Boolean(state.journalMeta.corePromptsAi);
   if (fromAi) state.corePromptsFailedSig = "";
-  renderAwarenessQuestions(state.awarenessPrompts, { answers: awareAnswers });
-  renderExecutionQuestions(state.executionPrompts, { answers: execAnswers });
   persistJournalQuietly();
   refreshJournalChecklists();
+  syncCorePromptGate();
 }
 
-function setCorePromptsLoading(loading) {
+function setCorePromptsLoading(loading, scope = "core") {
   state.corePromptsBusy = loading;
   state.corePromptsBusyAt = loading ? Date.now() : 0;
+  state.corePromptsScope = loading ? scope : "";
   const awareLoader = document.getElementById("awarePromptLoading");
   const execLoader = document.getElementById("execPromptLoading");
-  if (awareLoader) awareLoader.hidden = !loading;
-  if (execLoader) execLoader.hidden = !loading;
+  const awareLabel = awareLoader?.querySelector(".check-loading__label");
+  if (awareLabel) awareLabel.textContent = "正在生成覺察題…";
+  if (awareLoader) awareLoader.hidden = !(loading && (scope === "core" || scope === "awareness"));
+  if (execLoader) execLoader.hidden = !(loading && (scope === "core" || scope === "execution"));
   syncCorePromptGate();
 }
 
@@ -5372,8 +5380,12 @@ function localCorePrompts(journal) {
 }
 
 async function generateCorePrompts(options = {}) {
+  const scope =
+    options.scope === "execution" ? "execution" : options.scope === "core" ? "core" : "awareness";
   if (recoverStaleBusy(state.corePromptsBusy, state.corePromptsBusyAt, () => setCorePromptsLoading(false))) {
-    if (!options.auto) showToast("還在為你準備今天的覺察，請稍候。");
+    if (!options.auto) {
+      showToast(scope === "execution" ? "還在為你準備執行題，請稍候。" : "還在生成覺察題，請稍候。");
+    }
     return;
   }
   const journal = collectJournal();
@@ -5383,16 +5395,21 @@ async function generateCorePrompts(options = {}) {
     return;
   }
   const sig = corePromptsSignature(journal);
-  const hasSet = hasCorePromptSet();
-  if (!options.force && corePromptsHaveAnswers(journal) && hasSet) return;
-  if (options.auto && !options.force && hasSet && state.journalMeta.corePromptsAi && state.journalMeta.corePromptsSig === sig) {
+  const hasAware = normalizeAwarenessPrompts(state.awarenessPrompts).length >= AWARENESS_QUIZ_COUNT;
+  const hasExec = normalizeExecutionPrompts(state.executionPrompts).length >= 3;
+  if (!options.force) {
+    if (scope === "awareness" && hasAware && awarenessQuizAnsweredCount(journal.awareness) > 0) return;
+    if (scope === "execution" && hasExec && corePromptsHaveAnswers(journal)) return;
+    if (scope === "core" && hasAware && hasExec && corePromptsHaveAnswers(journal)) return;
+  }
+  if (options.auto && !options.force && state.journalMeta.corePromptsAi && state.journalMeta.corePromptsSig === sig) {
     return;
   }
   if (options.auto && !options.force && state.corePromptsFailedSig === sig) return;
 
   const token = (state.corePromptsToken || 0) + 1;
   state.corePromptsToken = token;
-  setCorePromptsLoading(true);
+  setCorePromptsLoading(true, scope);
   const watchdog = setTimeout(() => {
     if (state.corePromptsToken === token && state.corePromptsBusy) {
       setCorePromptsLoading(false);
@@ -5400,45 +5417,81 @@ async function generateCorePrompts(options = {}) {
     }
   }, 32000);
 
+  const fallback = localCorePrompts(journal);
+  const mergePrompts = (remoteList, localList, normalize, min) => {
+    const remote = normalize(remoteList);
+    if (remote.length >= min) return remote;
+    const next = remote.slice();
+    normalize(localList).forEach((item) => {
+      if (next.length >= min) return;
+      if (!next.some((entry) => entry.question === item.question)) next.push(item);
+    });
+    return next.slice(0, min);
+  };
+
   try {
     if (!state.user) throw new Error("請先登入，才能使用雲端出題。");
-    const remote = await postReview({
-      mode: "prompts",
-      variant: "core",
-      date: currentIso(),
-      text: journal.event,
-      context: {
-        journalMode: state.journalMode,
-        mode: state.journalMode,
-        thanks: thanksTextFrom(journal),
-        thanksText: thanksTextFrom(journal),
-        event: journal.event,
-        mood: journal.mood,
-        bodyTags: journal.bodyTags,
-        bodyNote: journal.bodyNote,
-        bodyCheck: journal.bodyCheck,
+    const progress = collectGrowthProgress();
+    const remote = await postReview(
+      {
+        mode: "prompts",
+        variant: "core",
+        scope,
+        date: currentIso(),
+        text: journal.event,
+        context: {
+          journalMode: state.journalMode,
+          mode: state.journalMode,
+          promptKind: scope,
+          scope,
+          thanks: thanksTextFrom(journal),
+          thanksText: thanksTextFrom(journal),
+          event: journal.event,
+          mood: journal.mood,
+          bodyTags: journal.bodyTags,
+          bodyNote: journal.bodyNote,
+          bodyCheck: journal.bodyCheck,
+        },
+        progress: {
+          streak: progress.streak,
+          avoidQuestions: (progress.avoidQuestions || []).slice(0, 8),
+          openActions: progress.openActions || [],
+        },
       },
-      progress: collectGrowthProgress(),
-    });
-    if (state.corePromptsToken !== token) return;
-    const fallback = localCorePrompts(journal);
-    const awareness = normalizeAwarenessPrompts(remote.awareness?.length ? remote.awareness : fallback.awareness);
-    const execution = normalizeExecutionPrompts(remote.execution?.length ? remote.execution : fallback.execution);
-    if (awareness.length < AWARENESS_QUIZ_COUNT) throw new Error("雲端回傳格式不完整");
-    applyGeneratedCorePrompts(
-      awareness,
-      execution.length >= 3 ? execution : fallback.execution,
-      sig,
-      true
+      22000
     );
+    if (state.corePromptsToken !== token) return;
+    if (scope === "awareness") {
+      const awareness = mergePrompts(remote.awareness, fallback.awareness, normalizeAwarenessPrompts, AWARENESS_QUIZ_COUNT);
+      if (awareness.length < AWARENESS_QUIZ_COUNT) throw new Error("雲端回傳格式不完整");
+      applyGeneratedCorePrompts(awareness, null, sig, true);
+      if (!options.auto) showToast("今天的覺察題已經準備好了。");
+      return;
+    }
+    if (scope === "execution") {
+      const execution = mergePrompts(remote.execution, fallback.execution, normalizeExecutionPrompts, 3);
+      if (execution.length < 3) throw new Error("雲端回傳格式不完整");
+      applyGeneratedCorePrompts(null, execution, sig, true);
+      if (!options.auto) showToast("今天的執行題已經準備好了。");
+      return;
+    }
+    const awareness = mergePrompts(remote.awareness, fallback.awareness, normalizeAwarenessPrompts, AWARENESS_QUIZ_COUNT);
+    const execution = mergePrompts(remote.execution, fallback.execution, normalizeExecutionPrompts, 3);
+    if (awareness.length < AWARENESS_QUIZ_COUNT) throw new Error("雲端回傳格式不完整");
+    applyGeneratedCorePrompts(awareness, execution, sig, true);
     if (!options.auto) showToast("今天的覺察題已經準備好了。");
   } catch (error) {
     if (state.corePromptsToken !== token) return;
-    const fallback = localCorePrompts(journal);
-    applyGeneratedCorePrompts(fallback.awareness, fallback.execution, sig, true);
+    if (scope === "awareness") applyGeneratedCorePrompts(fallback.awareness, null, sig, true);
+    else if (scope === "execution") applyGeneratedCorePrompts(null, fallback.execution, sig, true);
+    else applyGeneratedCorePrompts(fallback.awareness, fallback.execution, sig, true);
     if (options.auto) state.corePromptsFailedSig = sig;
     if (!options.auto) {
-      showToast(`雲端出題還沒好：${formatApiError(error)}，先用本地覺察題。`);
+      showToast(
+        scope === "execution"
+          ? `雲端執行題還沒好：${formatApiError(error)}，先用本地題目。`
+          : `覺察題生成失敗：${formatApiError(error)}。已先放下 3 道本地覺察題，請再試一次。`
+      );
     }
   } finally {
     clearTimeout(watchdog);
@@ -8354,11 +8407,17 @@ function bindEvents() {
   document.getElementById("btnSaveDraft")?.addEventListener("click", saveJournalDraft);
   document.getElementById("btnAwarePrompts")?.addEventListener("click", () => {
     setJournalFoldOpen("section-aware", true);
-    generateCorePrompts();
+    Promise.resolve(generateCorePrompts({ scope: "awareness" })).catch((error) => {
+      setCorePromptsLoading(false);
+      showToast(`覺察題生成失敗：${formatApiError(error)}`);
+    });
   });
   document.getElementById("btnExecPrompts")?.addEventListener("click", () => {
     setJournalFoldOpen("section-exec", true);
-    generateCorePrompts();
+    Promise.resolve(generateCorePrompts({ scope: "execution" })).catch((error) => {
+      setCorePromptsLoading(false);
+      showToast(`執行題生成失敗：${formatApiError(error)}`);
+    });
   });
   document.getElementById("btnAwareAi")?.addEventListener("click", () => generateJournalChecklist("awareness"));
   document.getElementById("btnExecAi")?.addEventListener("click", () => generateJournalChecklist("execution"));
