@@ -173,51 +173,39 @@ function manifestUserPrompt(body) {
 尚未完成的行動：${openActions.slice(0, 6).join("、") || "尚無"}`;
 }
 
-const CHECKLIST_EXECUTION_SYSTEM = `你是「日精進」的行動整理者。04 覺察力負責看懂自己；你只負責把已經看見的東西，收成明天做得到的下一步。
+const CHECKLIST_EXECUTION_SYSTEM = `你是「日精進」的行動整理者。04 負責看懂自己；你只把事情收成「可以勾選完成」的下一步。
 
-使用者剛回答今天的行動問題，也可能寫了「明天最小的一步」。請整理成「我的行動卡」。勾選後會進入他的個人行動清單。
+請同時讀取：行動問題的回答、以及使用者自己寫的「明天最小的一步」。若最小一步已寫，至少一張卡要承接它，或把它收成更小的第一個動作。
 
-【每張卡必須】
-- 具體：看完就知道要做什麼
-- 夠小：最好 5～15 分鐘內能開始
-- 有時間或觸發點：今晚洗澡後、明天起床後、午餐前、22:30、情緒出現時
-- 可以完成：一個能勾選的行為，不是抽象方向
+【標題必須是行動，不是分析】
+標題看完要能回答：「我什麼時候算完成它？」
+合格：今晚22:30開始準備睡覺／替明天三件事各排一個時間／情緒出現時先留3分鐘給自己
+不合格（禁止）：補睡眠vs運動的假二選一／計劃總是待辦的真因／被baby直接說話後的自我修復／睡眠時間難長的真實卡點
 
-【標題＝行動】
-直接寫要做什麼，例如「今晚22:30開始準備睡覺」「明天早餐後先做這件事5分鐘」。
-不要寫分析標題，例如「補睡眠vs運動的假二選一」「計劃總是待辦的真因」。
-detail 一句話：為什麼今天適合這樣做。
+只要標題裡有「vs、真因、卡點、假二選一、自我修復、模式、盲點、本質」，就重寫成具體行為。
 
-【數量 1～3 張，禁止湊數】
-- 只有一個明確重點 → 1 張
-- 兩個重要行動 → 2 張
-- 真的有三個不同且重要的行動 → 最多 3 張
-執行力不是增加待辦清單。
+【每張卡】
+- 具體、可執行、可完成、可勾選
+- 最好有時間、地點或觸發條件
+- 5～15 分鐘內能開始
+- title 8-18 字，直接寫做什麼，不要編號
+- detail 18-42 字，為什麼今天適合這一步
 
-【禁止】
-好好休息、對自己好一點、不要拖延、保持正向、持續努力、早點睡、多運動、多喝水。
-必須轉成具體行為：早點睡 → 今晚22:30開始準備睡覺；多運動 → 明天下午先走路10分鐘；不要拖延 → 明天早餐後先做這件事5分鐘。
-
-【依據】
-只能根據使用者今天實際輸入。禁止發明他沒說過的目標、情緒、身體問題、習慣或心理分析。資訊不足時，給更簡單的行動，不要硬做深度推論。
-禁止「你必須／你應該／不要再／一定要」。語氣像選擇：如果明天還是疲累，可以把 30 分鐘運動改成 10 分鐘走路。
+【數量 1～3，禁止湊數】
+一個重點 1 張；兩個重要行動 2 張；最多 3 張。
 
 【今天最重要的一步】
-從這些行動卡裡只挑優先順序最高的一件，放進 focus。只一件。
+從回答、最小一步與行動卡裡只挑一件最高優先，放進 focus。只一件。
 
-規則：
-- 只輸出 JSON
-- items 1 到 3 條
-- title：8-18 字，就是行動本身。不要編號
-- detail：18-42 字，說明今天為什麼適合這一步
-- 必須貼近他剛寫的回答、最小一步、事件與身心狀態
-- 不要重複「尚未完成的行動」裡已有的原句
-- 繁體中文
+禁止抽象：好好休息、早點睡、多運動、不要拖延。
+禁止發明他沒說過的目標。禁止你必須／你應該。
+
+只輸出 JSON：
 {
   "items": [
-    { "title": "今晚22:30開始準備睡覺", "detail": "昨晚休息偏短，今晚先把睡眠排在前面。" }
+    { "title": "今晚22:30開始準備睡覺", "detail": "先把睡眠放在前面，替明天保留基本精神。" }
   ],
-  "focus": { "title": "今晚22:30開始準備睡覺", "detail": "先讓身體有足夠能量，明天其他事情才比較容易開始。" }
+  "focus": { "title": "今晚22:30開始準備睡覺", "detail": "先讓身體恢復基本能量，明天其他事情才比較容易開始。" }
 }`;
 
 const INSIGHT_JSON_SHAPE = `{
@@ -829,7 +817,22 @@ function flattenExecSentence(item) {
   return how || extracted || detail;
 }
 
-function normalizeExecutionChecklistItems(raw, min, max) {
+function looksLikeAnalysisExecTitle(title) {
+  const text = String(title || "").trim();
+  if (!text) return true;
+  return /vs|VS|真因|卡點|假二選一|自我修復|盲點|真正的原因|突破策略|難長的真實/.test(text);
+}
+
+function rewriteExecActionTitle(title, detail, smallestStep, index) {
+  const cleaned = String(title || "").replace(/^[\d.、｜|\-\s]+/, "").trim();
+  if (cleaned && !looksLikeAnalysisExecTitle(cleaned)) return cleaned.slice(0, 22);
+  const step = String(smallestStep || "").trim().replace(/[。！？.]+$/g, "");
+  if (index === 0 && step && step.length <= 22 && !looksLikeAnalysisExecTitle(step)) return step.slice(0, 22);
+  const fallbacks = ["今晚22:30開始準備睡覺", "先做5分鐘就好", "替這件事排一個開始時間"];
+  return fallbacks[index] || fallbacks[0];
+}
+
+function normalizeExecutionChecklistItems(raw, min, max, smallestStep) {
   const list = Array.isArray(raw)
     ? raw
     : Array.isArray(raw?.items)
@@ -837,7 +840,7 @@ function normalizeExecutionChecklistItems(raw, min, max) {
       : [];
   const items = [];
   const seen = new Set();
-  list.forEach((item) => {
+  list.forEach((item, index) => {
     let title = "";
     let detail = "";
     if (typeof item === "string") {
@@ -853,10 +856,10 @@ function normalizeExecutionChecklistItems(raw, min, max) {
         detail = parts.detail;
       }
     }
-    title = title.replace(/^[\d.、｜|\-\s]+/, "").slice(0, 22);
-    detail = detail.slice(0, 56);
+    title = rewriteExecActionTitle(title.replace(/^[\d.、｜|\-\s]+/, ""), detail, smallestStep, index);
+    detail = String(detail || "").slice(0, 56);
     if (!title || seen.has(title)) return;
-    if (!detail) detail = "用最小、明天做得到的方式先走一步。";
+    if (!detail) detail = "小到明天幾乎沒有理由不開始。";
     seen.add(title);
     items.push({ title, detail });
   });
@@ -1014,35 +1017,38 @@ const AWARENESS_PROMPTS_SYSTEM = `你是「日精進」溫柔的覺察引導者�
 - 三題由淺入深：①今天事件真正碰到的點 ②感謝或情緒背後還沒說出口的需求 ③還沒敢承認的防衛或盲點
 - 禁止空泛萬用題，禁止說教，禁止診斷`;
 
-const EXECUTION_PROMPTS_SYSTEM = `你是「日精進」的行動教練。04 負責看懂自己；你只問能把卡點收成行動的問題。
+const EXECUTION_PROMPTS_SYSTEM = `你是「日精進」的行動教練。04 負責看懂自己；你只問能把事情縮小、讓人開始做的問題。
 
-請讀取今天的感謝、事件、心情、身體、睡眠、覺察內容、尚未完成／拖延的事，以及他提到的目標，動態生成 2～3 道行動問題。
+請先默默讀完今天的感謝、事件、心情、身體、睡眠、覺察與未完成事項，再出 2～3 題。
+資料只供你理解情境，禁止把數字、時數、連續天數、事件細節、名單抄進題目。
 
 原則：
-- 一題只問一件事
-- 每題 25～35 字
-- 不要預設他做錯，不要責備、質問、說教
-- 幫助他找到「為什麼沒做到」或「下一步怎麼做」
-- 不要大量重複心理探索
-- 最後一定要往行動靠近
+- 一題只問一件事，只能有一個問號
+- 每題 25～35 字，超過 36 字就不合格
+- 不質問、不責備、不預設他做錯
+- 幫助他找到卡點，或下一步可以怎麼做
+- 不要重複 04 的心理分析
+- 最後往「可以怎麼做」靠近
 
-好例子：
-「如果明天精神還是不夠，你會先休息，還是調整運動方式？」
-「這件事一直沒完成，真正卡住你的是什麼？」
+合格：
+「如果明天精神還是不夠，你會怎麼調整原本的運動計畫？」
+「這件事一直沒有完成，真正讓你卡住的是什麼？」
 「如果只能先完成一件事，你最想先做哪一件？」
-「要讓這件事真的開始，第一步可以再小一點嗎？」
+
+不合格（禁止）：
+「睡眠只有5小時精神普通，你明天早上30分鐘運動的能量從哪裡來？先補睡還是先動？」
+「連續4天列計畫但未完成，明天三件開心小事和運動，你打算怎麼做才不會又成為待辦清單？」
 
 規則：
 - 只輸出 JSON：{"execution":[{"question":"...","placeholder":"..."}]}
-- execution 必須 2 到 3 題，禁止固定湊滿 3 題
-- 禁止空泛萬用題，禁止口號
+- execution 2 到 3 題
 - 繁體中文`;
 
 const CORE_PROMPTS_SYSTEM = `你是「日精進」溫柔的覺察與行動教練。請精準讀取使用者今天寫下的感謝、事件、心情與身體覺察，動態生成「只屬於今天」的覺察力與執行力題目。
 
 【任務】
 - awareness：剛好 3 道自我覺察是非題。每題必須是一句可回答「是」或「否」的陳述句。語氣溫暖、引導。由淺入深：①今天事件真正碰到的點 ②感謝或情緒背後還沒說出口的需求 ③今天真正的防衛或核心盲點。
-- execution：2 到 3 道行動問題。對準為什麼沒做到、或下一步怎麼開始。不要質問，不要重複覺察力的心理探索。
+- execution：2 到 3 道短的行動問題。一題一事、25-35字、不質問。不要抄寫時數或連續天數。不要重複覺察力的心理分析。最後往「可以怎麼做」靠近。
 
 【必須遵守】
 - 只輸出 JSON
@@ -1080,10 +1086,9 @@ function corePromptsUserPrompt(body, kind = "core") {
   const thanks = formatThanksForPrompt(ctx) || "未寫";
   const avoid = Array.isArray(progress.avoidQuestions) ? progress.avoidQuestions.filter(Boolean) : [];
   const openActions = Array.isArray(progress.openActions) ? progress.openActions.filter(Boolean) : [];
-  const today = `日期：${body.date || ""}
+  const story = `日期：${body.date || ""}
 連續復盤天數：${progress.streak || 0}
 
-【今天的輸入｜必須據此出題】
 今日感謝：
 ${thanks}
 今日事件：${compactLine(ctx.event || body.text, 800) || "（未寫）"}
@@ -1094,6 +1099,8 @@ ${formatBodyCheckPrompt(ctx)}
 
 【請避開、不要再出相近的題】
 ${avoid.length ? avoid.slice(0, 12).map((item) => `- ${compactLine(item, 60)}`).join("\n") : "（無）"}`;
+  const today = `【今天的輸入｜必須據此出題】
+${story}`;
   if (kind === "awareness") {
     return `請只生成 3 道溫暖、引導式的覺察是非題。不要寫執行題，不要總結。
 
@@ -1102,20 +1109,24 @@ ${today}
 覺察是非題：剛好 3 句可答「是」或「否」的陳述，分別打中：今天事件碰到的點、感謝／情緒背後的需求、真正的防衛或盲點。`;
   }
   if (kind === "execution") {
-    return `請只生成 2 到 3 道行動問題。不要寫覺察是非題，不要質問，不要預設他做錯。
+    return `請只生成 2 到 3 道短的行動問題。不要寫覺察是非題。
 
-${today}
+下面資料只給你理解今天，禁止把時數、連續天數、事件細節、名單抄進題目。題目要短、一題一事、一個問號、不質問、不責備。
+
+【今天的輸入｜只供理解，不要照抄進題目】
+${story}
 今日覺察：${Array.isArray(ctx.awareness) ? ctx.awareness.filter(Boolean).join("／") || "未寫" : "未寫"}
-明天最小的一步：${ctx.smallestStep || "未寫"}
+明天最小的一步：${compactLine(ctx.smallestStep, 80) || "未寫"}
 
-執行題：幫助他把今天的卡點收成明天做得到的一小步。一題只問一件事，25-35 字。`;
+合格例子：如果明天精神還是不夠，你會怎麼調整原本的運動計畫？
+不合格：睡眠只有5小時……能量從哪裡來？先補睡還是先動？`;
   }
   return `請精準讀取以下「今天的原文」，生成只屬於這一天的覺察力 3 題是非題、執行力 2 到 3 題。覺察題必須直擊今日感謝與事件的核心，語氣溫暖引導，不要出成萬用題。
 
 ${today}
 
 覺察是非題：剛好 3 句可答「是」或「否」的陳述，分別打中：今天事件碰到的點、感謝／情緒背後的需求、真正的防衛或盲點。
-執行題：2 到 3 題，針對為什麼沒做到或下一步怎麼開始，最後要往行動靠近。`;
+執行題：2 到 3 題，每題 25-35 字、一題一事、不質問。不要抄時數或連續天數。最後往「可以怎麼做」靠近。`;
 }
 
 function asPromptList(raw) {
@@ -1198,14 +1209,38 @@ function padAwarenessPrompts(list, ctx) {
   return next.slice(0, 3);
 }
 
-function padExecutionPrompts(list) {
-  const extras = [
+function isBloatedExecQuestion(question) {
+  const text = String(question || "").trim();
+  if (!text) return true;
+  if (text.length > 36) return true;
+  if ((text.match(/[？?]/g) || []).length > 1) return true;
+  return /睡眠只有|\d小時|連續\d|能量從哪裡|先補睡還是|才不會又|待辦清單|突破策略|vs|真因|自我修復|卡點/.test(text);
+}
+
+function executionQuestionFallbacks() {
+  return [
+    { question: "如果明天精神還是不夠，你會怎麼調整原本的計畫？", placeholder: "我會先這樣調整…" },
+    { question: "這件事一直沒有完成，真正讓你卡住的是什麼？", placeholder: "真正卡住我的是…" },
     { question: "如果只能先完成一件事，你最想先做哪一件？", placeholder: "我最想先做的是…" },
-    { question: "要讓這件事真的開始，第一步可以再小一點嗎？", placeholder: "更小的第一步是…" },
   ];
-  const next = uniquePromptList(list);
-  extras.forEach((item) => {
+}
+
+function padExecutionPrompts(list) {
+  const fallbacks = executionQuestionFallbacks();
+  const cleaned = uniquePromptList(list).map((item, index) => {
+    const question = String(item?.question || "").trim();
+    if (!isBloatedExecQuestion(question)) {
+      return {
+        question: question.slice(0, 36),
+        placeholder: String(item?.placeholder || fallbacks[index]?.placeholder || "寫下你想到的一小步…").slice(0, 36),
+      };
+    }
+    return fallbacks[index] || fallbacks[0];
+  });
+  const next = uniquePromptList(cleaned);
+  fallbacks.forEach((item) => {
     if (next.length >= 2) return;
+    if (next.some((entry) => entry.question === item.question)) return;
     next.push(item);
   });
   return next.slice(0, 3);
@@ -1458,7 +1493,16 @@ module.exports = async function handler(req, res) {
 
     const promptKind = isCorePromptsRequest(body) ? corePromptKind(body) : "";
     const data = await callOpenAI(messages, {
-      temperature: mode === "bodycoach" ? 0.5 : mode === "prompts" ? 0.7 : 0.75,
+      temperature:
+        mode === "bodycoach"
+          ? 0.5
+          : mode === "prompts" && promptKind === "execution"
+            ? 0.35
+            : mode === "checklist" && body.kind === "execution"
+              ? 0.35
+              : mode === "prompts"
+                ? 0.7
+                : 0.75,
       timeoutMs: promptKind === "awareness" ? 18000 : 22000,
       maxTokens:
         mode === "bodycoach"
@@ -1490,13 +1534,15 @@ module.exports = async function handler(req, res) {
       }
       const min = 1;
       const max = 3;
-      const items = normalizeExecutionChecklistItems(data, min, max);
+      const smallestStep = String(body.context?.smallestStep || "").trim();
+      const items = normalizeExecutionChecklistItems(data, min, max, smallestStep);
       if (items.length < min) {
         res.status(502).json({ ok: false, error: "今天的行動卡還沒整理好，請再試一次" });
         return;
       }
       const focusSource = data && typeof data === "object" ? data.focus || data.priority || items[0] : items[0];
-      const focus = normalizeExecutionChecklistItems({ items: [focusSource] }, 1, 1)[0] || items[0];
+      const focusList = normalizeExecutionChecklistItems({ items: [focusSource] }, 1, 1, smallestStep);
+      const focus = focusList[0] || items[0];
       res.status(200).json({ ok: true, source: getProvider(), data: { items: items.slice(0, max), focus, kind } });
       return;
     }

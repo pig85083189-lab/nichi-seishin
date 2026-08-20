@@ -559,12 +559,14 @@
                   <p class="deep-empty" id="execEmpty">寫完今日感謝與事件後，再開始今天的行動整理。</p>
                   <button class="ai-check-btn" id="btnExecPrompts" type="button">✦ 開始今天的行動整理</button>
                   <div id="execQuestions"></div>
-                  <button class="ai-check-btn" id="btnExecAi" type="button" hidden>生成我的行動卡</button>
                 </div>
                 <div class="exec-next">
                   <p class="journal-label">明天最小的一步</p>
                   <p class="journal-core-q">不是完整計畫，只寫第一步。小到你明天幾乎沒有理由不開始。</p>
                   <textarea class="textarea" id="execNext" rows="3" placeholder="例如：換上運動服、設定22:30鬧鐘、把水杯放到桌上⋯"></textarea>
+                </div>
+                <div class="js-deep-only">
+                  <button class="ai-check-btn" id="btnExecAi" type="button" hidden>生成我的行動卡</button>
                 </div>
               </div>
               <div class="journal-col js-deep-only">
@@ -1013,6 +1015,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=158"></script>
+    <script src="app.js?v=160"></script>
   </body>
 </html>

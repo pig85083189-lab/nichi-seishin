@@ -2894,6 +2894,70 @@ const EXECUTION_PROMPT_MAX = 3;
 const EXECUTION_CARD_MIN = 1;
 const EXECUTION_CARD_MAX = 3;
 
+function isBloatedExecQuestion(question) {
+  const text = String(question || "").trim();
+  if (!text) return true;
+  if (text.length > 36) return true;
+  if ((text.match(/[？?]/g) || []).length > 1) return true;
+  return /睡眠只有|\d小時|連續\d|能量從哪裡|先補睡還是|才不會又|待辦清單|突破策略|vs|真因|自我修復|卡點/.test(text);
+}
+
+function executionQuestionFallbacks() {
+  return [
+    { question: "如果明天精神還是不夠，你會怎麼調整原本的計畫？", placeholder: "我會先這樣調整…" },
+    { question: "這件事一直沒有完成，真正讓你卡住的是什麼？", placeholder: "真正卡住我的是…" },
+    { question: "如果只能先完成一件事，你最想先做哪一件？", placeholder: "我最想先做的是…" },
+  ];
+}
+
+function executionPromptsAreStale(list) {
+  const prompts = normalizeExecutionPrompts(list);
+  return prompts.length >= EXECUTION_PROMPT_MIN && prompts.some((item) => isBloatedExecQuestion(item.question));
+}
+
+function sanitizeGeneratedExecutionPrompts(list) {
+  const fallbacks = executionQuestionFallbacks();
+  const cleaned = normalizeExecutionPrompts(list).map((item, index) => {
+    if (!isBloatedExecQuestion(item.question)) {
+      return {
+        ...item,
+        question: String(item.question || "").slice(0, 36),
+        parked: false,
+      };
+    }
+    return { ...fallbacks[index] || fallbacks[0], parked: false };
+  });
+  const next = [];
+  const seen = new Set();
+  cleaned.forEach((item) => {
+    if (!item.question || seen.has(item.question)) return;
+    seen.add(item.question);
+    next.push(item);
+  });
+  fallbacks.forEach((item) => {
+    if (next.length >= EXECUTION_PROMPT_MIN) return;
+    if (seen.has(item.question)) return;
+    seen.add(item.question);
+    next.push({ ...item, parked: false });
+  });
+  return next.slice(0, EXECUTION_PROMPT_MAX);
+}
+
+function looksLikeAnalysisExecTitle(title) {
+  const text = String(title || "").trim();
+  if (!text) return true;
+  return /vs|VS|真因|卡點|假二選一|自我修復|盲點|真正的原因|突破策略|難長的真實/.test(text);
+}
+
+function rewriteGeneratedExecTitle(title, smallestStep, index) {
+  const cleaned = String(title || "").replace(/^[\d.、｜|\-\s]+/, "").trim();
+  if (cleaned && !looksLikeAnalysisExecTitle(cleaned)) return cleaned.slice(0, 22);
+  const step = String(smallestStep || "").trim().replace(/[。！？.]+$/g, "");
+  if (index === 0 && step && step.length <= 22 && !looksLikeAnalysisExecTitle(step)) return step.slice(0, 22);
+  const fallbacks = ["今晚22:30開始準備睡覺", "先做5分鐘就好", "替這件事排一個開始時間"];
+  return fallbacks[index] || fallbacks[0];
+}
+
 function thanksItemsFrom(value) {
   if (Array.isArray(value)) {
     return value.map((item) => String(item || "").trim()).filter(Boolean);
@@ -3755,10 +3819,12 @@ function renderExecFocus(focus) {
     root.innerHTML = "";
     return;
   }
+  const title = data.title.replace(/^[「」]+|[「」]+$/g, "");
+  const titleText = /[。！？.]$/.test(title) ? title : `${title}。`;
   root.hidden = false;
   root.innerHTML = `
     <p class="exec-focus__kicker">今天最重要的一步</p>
-    <p class="exec-focus__title">「${escapeHtml(data.title.replace(/^[「」]+|[「」]+$/g, ""))}」</p>
+    <p class="exec-focus__title">「${escapeHtml(titleText)}」</p>
     ${data.detail ? `<p class="exec-focus__why">${escapeHtml(data.detail)}</p>` : ""}
   `;
 }
@@ -3823,7 +3889,7 @@ function refreshJournalChecklists(journal, options = {}) {
     : [];
   const execItems = keepExec
     ? normalizeExecCheckItems(data.executionCheckItems).slice(0, EXECUTION_CARD_MAX)
-    : buildExecutionCheckItems(data);
+    : [];
   const manifestItems = keepManifest ? data.manifestCheckItems.slice(0, 5) : [];
   const awareChecked = options.useSaved ? data.awarenessChecks : checkedValues("awareChecks");
   const execChecked = options.useSaved ? data.executionChecks : checkedValues("execChecks");
@@ -3831,7 +3897,7 @@ function refreshJournalChecklists(journal, options = {}) {
   if (!options.skipAware) renderChecklist("awareChecks", awareItems, awareChecked);
   if (!options.skipExec) {
     renderChecklist("execChecks", execItems, execChecked);
-    renderExecFocus(data.executionFocus || state.journalExecFocus || execItems[0]);
+    renderExecFocus(keepExec ? data.executionFocus || state.journalExecFocus || execItems[0] : emptyExecFocus());
   }
   if (!options.skipManifest) renderChecklist("manifestChecks", manifestItems, manifestChecked);
 }
@@ -3860,10 +3926,21 @@ function checklistSignature(answers) {
   return (answers || []).map((item) => String(item || "").trim()).join("\n");
 }
 
-function normalizeAiExecItems(raw, min, max, fallback) {
-  const items = normalizeExecCheckItems(raw);
-  normalizeExecCheckItems(fallback).forEach((item) => {
-    if (items.length < min && !items.some((entry) => entry.title === item.title)) items.push(item);
+function normalizeAiExecItems(raw, min, max, fallback, smallestStep) {
+  const seen = new Set();
+  const items = [];
+  normalizeExecCheckItems(raw).forEach((item, index) => {
+    const title = rewriteGeneratedExecTitle(item.title, smallestStep, index);
+    if (!title || seen.has(title)) return;
+    seen.add(title);
+    items.push({ ...item, title });
+  });
+  normalizeExecCheckItems(fallback).forEach((item, index) => {
+    if (items.length >= min) return;
+    const title = rewriteGeneratedExecTitle(item.title, smallestStep, items.length + index);
+    if (!title || seen.has(title)) return;
+    seen.add(title);
+    items.push({ ...item, title });
   });
   return items.slice(0, max);
 }
@@ -4014,11 +4091,15 @@ async function generateJournalChecklist(kind, options = {}) {
     if (state.checklistToken[kind] !== token) return;
     const items = isAware
       ? normalizeAwarenessQuotes(remote.quotes || remote.items, fallback)
-      : normalizeAiExecItems(remote.items, min, max, fallback);
+      : normalizeAiExecItems(remote.items, min, max, fallback, journal.smallestStep);
     if (items.length < min) throw new Error("雲端回傳格式不完整");
     if (!isAware) {
       const focus = normalizeExecFocus(remote.focus, items);
-      state.journalExecFocus = focus;
+      const focusTitle = rewriteGeneratedExecTitle(focus.title, journal.smallestStep, 0);
+      state.journalExecFocus = {
+        title: focusTitle || items[0]?.title || "",
+        detail: focus.detail || items[0]?.detail || "",
+      };
     }
     applyGeneratedChecklist(kind, items, sig);
     if (!isAware) renderExecFocus(state.journalExecFocus);
@@ -4046,9 +4127,6 @@ async function generateJournalChecklist(kind, options = {}) {
 function maybeAutoGenerateChecklists(journal) {
   if (state.journalHydrating) return;
   if (state.journalMode === "quick" && !state.quickModules?.aware && !state.quickModules?.exec) return;
-  if (quickModuleOn("exec", journal) && executionReady(journal.execution) && state.journalMeta.executionAiSig !== checklistSignature(journal.execution)) {
-    generateJournalChecklist("execution", { auto: true });
-  }
 }
 
 function manifestReady(journal) {
@@ -5197,22 +5275,8 @@ function localDeepPrompts(journal) {
   return pool[0];
 }
 
-function localExecutionPrompts(journal) {
-  const snippet = eventSnippet(journal);
-  return [
-    {
-      question: `「${snippet}」一直沒完成的話，真正卡住你的是什麼？`,
-      placeholder: "真正卡住我的是…",
-    },
-    {
-      question: "如果只能先完成一件事，你最想先做哪一件？",
-      placeholder: "我最想先做的是…",
-    },
-    {
-      question: "要讓這件事真的開始，第一步可以再小一點嗎？",
-      placeholder: "更小的第一步是…",
-    },
-  ].slice(0, EXECUTION_PROMPT_MAX);
+function localExecutionPrompts() {
+  return executionQuestionFallbacks().slice(0, EXECUTION_PROMPT_MAX);
 }
 
 function collectGrowthProgress() {
@@ -5356,6 +5420,7 @@ function syncCorePromptGate() {
   const loading = Boolean(state.corePromptsBusy);
   const hasAware = normalizeAwarenessPrompts(state.awarenessPrompts).length >= AWARENESS_QUIZ_COUNT;
   const hasExec = normalizeExecutionPrompts(state.executionPrompts).length >= EXECUTION_PROMPT_MIN;
+  const staleExec = executionPromptsAreStale(state.executionPrompts);
   const awareEmpty = document.getElementById("awareEmpty");
   const execEmpty = document.getElementById("execEmpty");
   const awareBtn = document.getElementById("btnAwarePrompts");
@@ -5379,12 +5444,16 @@ function syncCorePromptGate() {
     }
   }
   if (execBtn) {
-    execBtn.hidden = hasExec;
+    execBtn.hidden = hasExec && !staleExec;
     if (!execBtn.hidden) {
       execBtn.disabled = false;
       execBtn.classList.toggle("is-busy", loading);
       execBtn.setAttribute("aria-busy", loading ? "true" : "false");
-      execBtn.textContent = loading ? "正在整理行動問題…" : "✦ 開始今天的行動整理";
+      execBtn.textContent = loading
+        ? "正在整理行動問題…"
+        : staleExec
+          ? "重新整理行動問題"
+          : "✦ 開始今天的行動整理";
     }
   }
 }
@@ -5490,12 +5559,22 @@ function renderExecutionQuestions(prompts, options = {}) {
       genBtn.disabled = false;
       genBtn.classList.toggle("is-busy", Boolean(state.corePromptsBusy));
       genBtn.setAttribute("aria-busy", state.corePromptsBusy ? "true" : "false");
+      genBtn.textContent = state.corePromptsBusy ? "正在整理行動問題…" : "✦ 開始今天的行動整理";
     }
     if (checkBtn) checkBtn.hidden = true;
     return;
   }
   if (empty) empty.hidden = true;
-  if (genBtn) genBtn.hidden = true;
+  const stale = executionPromptsAreStale(items);
+  if (genBtn) {
+    genBtn.hidden = !stale;
+    if (!genBtn.hidden) {
+      genBtn.disabled = false;
+      genBtn.classList.toggle("is-busy", Boolean(state.corePromptsBusy));
+      genBtn.setAttribute("aria-busy", state.corePromptsBusy ? "true" : "false");
+      genBtn.textContent = state.corePromptsBusy ? "正在整理行動問題…" : "重新整理行動問題";
+    }
+  }
   if (checkBtn) checkBtn.hidden = false;
   const saved = Array.isArray(options.answers)
     ? options.answers.map((item) => String(item || ""))
@@ -5615,18 +5694,20 @@ function applyGeneratedPrompts(awareness, deep, execution, sig, fromAi) {
   persistJournalQuietly();
 }
 
-function applyGeneratedCorePrompts(awareness, execution, sig, fromAi) {
+function applyGeneratedCorePrompts(awareness, execution, sig, fromAi, options = {}) {
   const journal = collectJournal();
-  const keepAnswers = corePromptsHaveAnswers(journal);
+  const keepExecAnswers =
+    !options.resetExecutionAnswers && (journal.execution || []).some((item) => String(item || "").trim());
   const awareList = normalizeAwarenessPrompts(awareness);
-  const execList = normalizeExecutionPrompts(execution);
+  const execList =
+    execution == null ? [] : sanitizeGeneratedExecutionPrompts(normalizeExecutionPrompts(execution));
   if (awareList.length >= AWARENESS_QUIZ_COUNT) {
     state.awarenessPrompts = awareList;
     renderAwarenessQuestions(state.awarenessPrompts, { answers: ["", "", ""] });
   }
   if (execList.length >= EXECUTION_PROMPT_MIN) {
     state.executionPrompts = execList;
-    renderExecutionQuestions(state.executionPrompts, { answers: keepAnswers ? journal.execution : ["", "", ""] });
+    renderExecutionQuestions(state.executionPrompts, { answers: keepExecAnswers ? journal.execution : ["", "", ""] });
   }
   state.execQuestionTab = "open";
   state.journalMeta.corePromptsSig = sig;
@@ -5659,10 +5740,7 @@ function localCorePrompts(journal) {
       { question: "我寫下的感謝，其實在說：我今天很想被好好對待。" },
       { question: `「${mood}」底下，還有一句我還沒敢對自己承認的話。` },
     ],
-    execution: [
-      { question: `若明天只改「${eventBit}」裡最小的一步，你會先動哪裡？`, placeholder: "明天最小的一步…" },
-      { question: "如果只能先完成一件事，你最想先做哪一件？", placeholder: "我最想先做的是…" },
-    ],
+    execution: executionQuestionFallbacks().slice(0, EXECUTION_PROMPT_MIN),
   };
 }
 
@@ -5758,21 +5836,25 @@ async function generateCorePrompts(options = {}) {
       return;
     }
     if (scope === "execution") {
-      const execution = mergePrompts(remote.execution, fallback.execution, normalizeExecutionPrompts, EXECUTION_PROMPT_MIN);
+      const execution = sanitizeGeneratedExecutionPrompts(
+        mergePrompts(remote.execution, fallback.execution, normalizeExecutionPrompts, EXECUTION_PROMPT_MIN)
+      );
       if (execution.length < EXECUTION_PROMPT_MIN) throw new Error("雲端回傳格式不完整");
-      applyGeneratedCorePrompts(null, execution, sig, true);
+      applyGeneratedCorePrompts(null, execution, sig, true, { resetExecutionAnswers: Boolean(options.force) });
       if (!options.auto) showToast("今天的行動問題已經準備好了。");
       return;
     }
     const awareness = mergePrompts(remote.awareness, fallback.awareness, normalizeAwarenessPrompts, AWARENESS_QUIZ_COUNT);
-    const execution = mergePrompts(remote.execution, fallback.execution, normalizeExecutionPrompts, EXECUTION_PROMPT_MIN);
+    const execution = sanitizeGeneratedExecutionPrompts(
+      mergePrompts(remote.execution, fallback.execution, normalizeExecutionPrompts, EXECUTION_PROMPT_MIN)
+    );
     if (awareness.length < AWARENESS_QUIZ_COUNT) throw new Error("雲端回傳格式不完整");
     applyGeneratedCorePrompts(awareness, execution, sig, true);
     if (!options.auto) showToast("今天的覺察題已經準備好了。");
   } catch (error) {
     if (state.corePromptsToken !== token) return;
     if (scope === "awareness") applyGeneratedCorePrompts(fallback.awareness, null, sig, true);
-    else if (scope === "execution") applyGeneratedCorePrompts(null, fallback.execution, sig, true);
+    else if (scope === "execution") applyGeneratedCorePrompts(null, fallback.execution, sig, true, { resetExecutionAnswers: Boolean(options.force) });
     else applyGeneratedCorePrompts(fallback.awareness, fallback.execution, sig, true);
     if (options.auto) state.corePromptsFailedSig = sig;
     if (!options.auto) {
@@ -8664,7 +8746,7 @@ function handleTodayPointerClick(event) {
   if (node.closest("#btnExecPrompts")) {
     handled();
     setJournalFoldOpen("section-exec", true);
-    catchAsync(() => generateCorePrompts({ scope: "execution" }), "執行題生成失敗");
+    catchAsync(() => generateCorePrompts({ scope: "execution", force: true }), "執行題生成失敗");
     return true;
   }
   if (node.closest("#btnInsightAi") || node.closest("#btnQuickInsight")) {
