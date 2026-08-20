@@ -3053,7 +3053,7 @@ function emptyBodyCheck() {
 }
 
 function emptyBodyCoach() {
-  return { analysis: "", suggestions: [], sig: "" };
+  return { title: "", analysis: "", notice: "", suggestions: [], sig: "" };
 }
 
 function normalizeBodyGroup(group) {
@@ -3273,17 +3273,41 @@ function bodyCoachSignature(journal) {
     body: check.body,
     sleep: check.sleep,
     event: String(data.event || "").trim(),
+    thanks: thanksTextFrom(data),
+    moodLabel: String(data.mood || "").trim(),
   });
 }
 
 function normalizeBodyCoach(raw) {
   const data = raw && typeof raw === "object" ? raw : {};
   const suggestions = (Array.isArray(data.suggestions) ? data.suggestions : [])
-    .map((item) => String(item || "").trim())
+    .map((item) => {
+      if (item && typeof item === "object") {
+        const title = String(item.title || item.label || "").trim();
+        const detail = String(item.detail || item.body || "").trim();
+        if (title && detail) return `${title}。${detail}`;
+        return title || detail;
+      }
+      return String(item || "").trim();
+    })
     .filter(Boolean)
     .slice(0, 3);
+  let title = String(data.title || data.conclusion || "").trim();
+  let analysis = String(data.analysis || data.summary || "").trim();
+  const notice = String(data.notice || data.watch || "").trim();
+  if (!title && analysis) {
+    const match = analysis.match(/^[\s\S]*?[。！？]/);
+    title = match ? match[0].trim() : analysis;
+    const rest = analysis.slice(title.length).trim();
+    if (rest) analysis = rest;
+  }
+  if (title && analysis.startsWith(title)) {
+    analysis = analysis.slice(title.length).replace(/^[。！？\s]+/, "");
+  }
   return {
-    analysis: String(data.analysis || data.summary || "").trim(),
+    title,
+    analysis,
+    notice,
     suggestions,
     sig: String(data.sig || "").trim(),
   };
@@ -4724,12 +4748,12 @@ function renderBodyCoachCard(coach) {
   const root = document.getElementById("bodyCoachBody");
   if (!root) return;
   const data = normalizeBodyCoach(coach);
-  if (!data.analysis && !data.suggestions.length) {
+  if (!data.title && !data.analysis && !data.notice && !data.suggestions.length) {
     root.innerHTML = `<p class="insight-card__empty">先把左邊的心情、身體與睡眠看過，再點看看今天適合怎麼照顧自己。</p>`;
     return;
   }
   const tips = actionStepsHtml(data.suggestions);
-  const core = String(data.analysis || "").split(/[。！？]/).map((item) => item.trim()).filter(Boolean)[0];
+  const core = String(data.title || "").trim();
   root.innerHTML = `
     <article class="insight-card__result">
       ${core ? renderConclusionCallout(/[。！？]$/.test(core) ? core : `${core}。`) : ""}
@@ -4742,9 +4766,17 @@ function renderBodyCoachCard(coach) {
           : ""
       }
       ${
+        data.notice
+          ? `<section class="insight-block insight-block--review">
+        <p class="insight-block__label">② 今天值得留意的地方</p>
+        ${emphasizeLeadHtml(data.notice)}
+      </section>`
+          : ""
+      }
+      ${
         tips
           ? `<section class="insight-block insight-block--tips">
-        <p class="insight-block__label">③ 具體突破建議（怎麼做會更好）</p>
+        <p class="insight-block__label">③ 今晚可以這樣照顧自己</p>
         ${tips}
       </section>`
           : ""
@@ -4769,44 +4801,87 @@ function setBodyCoachLoading(loading) {
 function localBodyCoachFallback(journal) {
   const check = normalizeBodyCheck(journal.bodyCheck, journal.bodyTags, journal.bodyNote);
   const moodFlags = check.mood.flags || [];
-  const bodyFlags = check.body.flags || [];
-  const sleepFlags = check.sleep.flags || [];
-  const moodBits = moodFlags.length ? `心情是「${moodFlags.join("、")}」` : "心情大致平穩";
-  const bodyBits = bodyFlags.length ? `身體有「${bodyFlags.join("、")}」` : "身體沒有明顯不適";
-  const sleepBits = sleepFlags.join("、") || "未特別勾選睡眠狀況";
-  const moodIssue = moodFlags.includes("焦慮") || moodFlags.includes("煩躁") || moodFlags.includes("脾氣暴躁") || moodFlags.includes("不耐煩");
+  const bodyFlags = (check.body.flags || []).filter((flag) => flag !== "其他");
+  const duration = String(check.sleep.duration || "").trim();
+  const quality = String(check.sleep.quality || "").trim();
+  const energy = String(check.sleep.energy || "").trim();
+  const pleasant = moodFlags.includes("愉快") || moodFlags.includes("平靜") || journal.mood === "愉快" || journal.mood === "平靜";
+  const tense = moodFlags.includes("焦慮") || moodFlags.includes("煩躁");
   const bodyIssue =
     bodyFlags.includes("腸胃不適") ||
     bodyFlags.includes("頭痛") ||
     bodyFlags.includes("全身痠痛") ||
-    bodyFlags.includes("身體疲勞");
-  const sleepIssue = sleepFlags.includes("睡不著");
+    bodyFlags.includes("身體疲勞") ||
+    Boolean(check.body.other);
+  const sleepShort = duration === "少於5小時" || duration === "5–6小時";
+  const sleepPoor = quality === "差" || quality === "睡不著";
+  const sleepOrdinary = quality === "普通" || energy === "普通";
+  const tired = energy === "疲憊";
+  const restGap = sleepShort || sleepPoor || tired;
+  const stable = !tense && !bodyIssue && !restGap;
+
+  let title = "今天真正值得看的，是心情、身體與睡眠有沒有對上。";
+  if (pleasant && restGap) {
+    title = "今天的心是安定的，但身體正在提醒你：休息還需要再多一點。";
+  } else if (pleasant && bodyIssue) {
+    title = "心情看起來平穩，身體卻已經先發出訊號。";
+  } else if (tense && restGap) {
+    title = "今天的情緒與睡眠指向同一件事：負荷偏高，需要先把節奏放慢。";
+  } else if (tense && bodyIssue) {
+    title = "情緒與身體今天走在同一條線上，先處理最明顯的那一處緊。";
+  } else if (stable) {
+    title = "今天身心節奏大致對齊，沒有急著修正的缺口。";
+  }
+
+  let analysis = "";
+  if (pleasant && sleepShort) {
+    analysis = `今天情緒整體偏穩，生活裡也有被接住的感覺；但睡眠只有${duration}，代表心理狀態雖然穩定，身體的休息可能還沒完全跟上。`;
+  } else if (pleasant && (sleepPoor || tired || sleepOrdinary)) {
+    analysis = `心情這邊沒有明顯波動，可是睡眠品質或起床精神並沒有同樣到位。這通常不是「心情有問題」，比較像休息還沒補到身體需要的量。`;
+  } else if (tense && restGap) {
+    analysis = `情緒已經偏緊，再加上睡眠時間或品質不足，兩者容易互相放大：人會更薄、也更難真正停下來。`;
+  } else if (bodyIssue && pleasant) {
+    analysis = `表面的心情還過得去，身體卻出現具體不適。這時候不適比較像是負荷的出口，而不是心情自己說了算。`;
+  } else if (bodyIssue && tense) {
+    analysis = `身體的不適與情緒的緊同時出現，比較像同一套壓力在不同地方顯現，而不是兩件無關的事。`;
+  } else if (stable) {
+    analysis = `心情、身體與睡眠沒有明顯互相拉扯。今天比較適合維持既有節奏，不必另外製造需要被解決的問題。`;
+  } else {
+    analysis = `把心情、身體與睡眠放在一起看，今天比較像「某一處已經領先發出訊號」，而不是全面失控。`;
+  }
+
+  let notice = "";
+  if (pleasant && restGap) {
+    notice = "幸福或平穩的心情很容易蓋過短睡眠。真正被忽略的，往往是身體其實還沒補回來。";
+  } else if (bodyIssue && !tense) {
+    notice = "身體已經有具體訊號時，人常會因為心情還過得去而繼續撐。今晚值得先回應身體，而不是再加一件事。";
+  } else if (stable) {
+    notice = "今天沒有必須被修正的缺口。維持即可，不用硬找問題。";
+  } else if (tense) {
+    notice = "情緒偏緊時，人容易只處理事情本身，而略過睡眠與身體其實也一起緊了起來。";
+  } else {
+    notice = "今天的訊號不需要被放大成問題，但也不宜直接略過。先看最清楚的那一處即可。";
+  }
+
   const suggestions = [];
-  if (moodIssue || sleepIssue) {
-    suggestions.push("今晚先做 8 次「吸 4 秒、吐 6 秒」的腹式呼吸，讓交感神經慢慢降下來。");
-  } else {
-    suggestions.push("站起來把肩膀繞三圈、再慢慢轉頭，給身體一個明確的換檔訊號。");
+  if (sleepShort || sleepPoor) {
+    suggestions.push("今晚提早30分鐘準備睡覺。昨晚休息偏短或品質不佳，今晚先少排任務，把時間還給入睡。");
   }
-  if (bodyFlags.includes("腸胃不適") || bodyFlags.includes("頭痛")) {
-    suggestions.push("這一小時每 20 分鐘喝一小口水，先不要用咖啡或空腹撐過不適。");
-  } else if (bodyFlags.includes("身體疲勞") || bodyFlags.includes("全身痠痛")) {
-    suggestions.push("接下來 10 分鐘先坐下或躺平，把雙腿抬高或輕輕伸展，不要再硬撐下一件事。");
-  } else {
-    suggestions.push("現在補一杯溫水，接下來兩小時把飲料換成白開水。");
+  if (bodyFlags.includes("全身痠痛") || bodyFlags.includes("身體疲勞") || tired) {
+    suggestions.push("先留10分鐘坐下或伸展。身體已經有疲勞訊號，接下來不必再用下一件事把它蓋過去。");
+  } else if (bodyFlags.includes("腸胃不適") || bodyFlags.includes("頭痛")) {
+    suggestions.push("這一小時先把節奏放慢。腸胃或頭痛還在時，減少額外刺激，比硬撐下一件事更對症。");
   }
-  if (bodyFlags.includes("全身痠痛") || bodyFlags.includes("身體疲勞") || sleepIssue) {
-    suggestions.push("睡前 10 分鐘先把髖關節與小腿輕輕轉開，讓身體先進入休息，再關燈。");
-  } else if (sleepFlags.includes("10:00以前入睡") || sleepFlags.includes("睡得很好")) {
-    suggestions.push("維持今晚的入睡節奏，睡前把明天第一件小事寫在紙上，就不要再滑手機。");
-  } else {
-    suggestions.push("把睡前 20 分鐘留給伸展或熱水洗手臂，讓大腦有一段明確的下班儀式。");
+  if (tense && suggestions.length < 2) {
+    suggestions.push("把此刻的情緒用一句話寫下來。不是為了分析，只是讓緊的那一層先有個落地處。");
   }
-  const analysis =
-    moodIssue || bodyIssue || sleepIssue
-      ? `今天是${moodBits}，同時${bodyBits}；睡眠這邊是「${sleepBits}」。心情、身體與睡眠常常一起緊、也一起鬆。先讓身體有一小段被好好對待的時間，情緒才有地方慢慢落地。`
-      : `今天是${moodBits}，同時${bodyBits}；睡眠這邊是「${sleepBits}」。狀態偏穩，就用輕柔的小動作把這份安放守住，不必等到緊了才開始照顧自己。`;
+  if (!suggestions.length) {
+    suggestions.push("維持今晚原本的收工時間。狀態穩定時，最有用的照顧是不要臨時再塞進一件事。");
+  }
   return {
+    title,
     analysis,
+    notice,
     suggestions: suggestions.slice(0, 3),
     sig: bodyCoachSignature(journal),
   };
@@ -4845,7 +4920,7 @@ async function generateBodyCoach(options = {}) {
     });
     if (state.bodyCoachToken !== token) return;
     const coach = { ...normalizeBodyCoach(remote), sig };
-    if (!coach.analysis || coach.suggestions.length < 3) throw new Error("雲端回傳格式不完整");
+    if (!(coach.title || coach.analysis) || coach.suggestions.length < 1) throw new Error("雲端回傳格式不完整");
     state.journalBodyCoach = coach;
     state.journalMeta.bodyCoachSig = sig;
     renderBodyCoachCard(coach);
@@ -6034,10 +6109,21 @@ function composeJournalRawText(journal) {
   if (check.sleep.flags.length) lines.push(`昨日睡眠檢核：${check.sleep.flags.join("、")}`);
   if (check.sleep.reason) lines.push(`睡眠說明：${check.sleep.reason}`);
   const bodyCoach = normalizeBodyCoach(journal.bodyCoach);
-  if (bodyCoach.analysis) {
+  if (bodyCoach.title || bodyCoach.analysis) {
     lines.push("今日身心小結");
-    lines.push(bodyCoach.analysis);
-    bodyCoach.suggestions.forEach((item, index) => lines.push(`建議 ${index + 1}：${item}`));
+    if (bodyCoach.title) lines.push(bodyCoach.title);
+    if (bodyCoach.analysis) {
+      lines.push("① 今天的身心訊號");
+      lines.push(bodyCoach.analysis);
+    }
+    if (bodyCoach.notice) {
+      lines.push("② 今天值得留意的地方");
+      lines.push(bodyCoach.notice);
+    }
+    if (bodyCoach.suggestions.length) {
+      lines.push("③ 今晚可以這樣照顧自己");
+      bodyCoach.suggestions.forEach((item, index) => lines.push(`建議 ${index + 1}：${item}`));
+    }
   }
   const insight = normalizeInsight(journal.insight);
   if (
@@ -8176,8 +8262,10 @@ function historyBodyCheckHtml(journal) {
     );
   }
   const coach = normalizeBodyCoach(journal.bodyCoach);
+  if (coach.title) lines.push(`核心結論：${coach.title}`);
   if (coach.analysis) lines.push(coach.analysis);
-  (coach.suggestions || []).forEach((item, index) => lines.push(`建議 ${index + 1}：${item}`));
+  if (coach.notice) lines.push(`值得留意：${coach.notice}`);
+  (coach.suggestions || []).forEach((item, index) => lines.push(`今晚照顧 ${index + 1}：${item}`));
   return historyItemsHtml(lines);
 }
 

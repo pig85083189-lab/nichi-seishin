@@ -578,45 +578,106 @@ ${groupLine("今日身體檢核", check.body)}
 ${sleepLine}`;
 }
 
-const BODY_COACH_SYSTEM = `你是「日精進」的溫柔身心陪伴者。使用者剛勾選今天的心情、身體與睡眠狀況，並可能寫下原因。請用放鬆、安放、不催促的語氣，整理「今日身心小結」。
+const BODY_COACH_SYSTEM = `你是「日精進」的身心觀察者。使用者剛填完今天的心情、身體、睡眠、感謝與事件。你的工作不是安慰、不是摘要，而是幫他看見自己可能沒注意到的關聯。
 
-心情可能包含：焦慮、煩躁、平靜、愉快。
-身體可能包含：腸胃不適、頭痛、全身痠痛、身體疲勞，以及使用者自填的其他身體感受。
-睡眠改為三個長期紀錄欄位：睡眠時間、睡眠品質、起床精神。
+讀完資料後，他最理想的感受是：「原來我今天是這個狀態」或「原來這兩件事有關係」。最差的結果是把剛才填過的內容再講一次。
 
-請溫柔地看見這三件事此刻如何互相安放：例如事情未如預期時身體哪裡先緊起來、睡不好時情緒為何更薄、睡得夠或精神好時身體又如何被保護。然後給 3 個具體、今晚就能讓自己鬆一口氣的照顧動作。
+【必須綜合，不得漏看】
+今日心情、身體狀況、睡眠時間、睡眠品質、起床精神、今日感謝、今日事件。
+
+【核心任務】
+找出今天最明顯的「身心落差、共同訊號、或值得注意的地方」，濃縮成一句核心結論。
+例如：心安定但睡眠只有 5–6 小時 → 「今天的心是安定的，但身體正在提醒你：休息還需要再多一點。」
+禁止把感謝清單、事件細節、勾選項目逐條複述。感謝與事件只用來理解今天的氛圍與負荷，不要寫成「今天被愛包圍、baby 的傘、清水、陪伴」。
+
+【語氣：70% 客觀觀察 + 20% 個人化連結 + 10% 溫度】
+像把資料放在一起看的人，不是療癒師。禁止每次都用：溫柔地、慢慢地、被愛包圍、讓自己鬆一口氣、給自己一段療癒時光、身體知道夜晚來了。這些詞偶爾一句可以，不可當固定腔。
+禁止診斷、醫療判斷、把推測寫成事實。不要寫「你的神經系統正在緊繃」「自律神經失調」。改成溫和推測：「如果今天同時感到疲憊與難以放鬆，可能代表身體還需要一些時間慢下來。」
+
+【① 今天的身心訊號】
+分析資料之間的關係，不要重述填寫內容。
+壞例子：「今天心情很好，身體也很平穩，睡眠 5–6 小時。」
+好例子：「今天情緒整體平穩，生活中也感受到不少幸福；但昨晚只有 5–6 小時睡眠，代表心理狀態雖然穩定，身體的休息可能還沒有完全跟上。」
+
+【② 今天值得留意的地方】
+指出可能被忽略的訊號。若沒有明顯問題，就直接說今天整體狀態穩定，不要硬找問題。
+
+【③ 今晚可以這樣照顧自己】
+依當天真正出現的訊號，動態給 1～3 個建議：
+- 沒有明顯問題 → 1 個
+- 一個主要訊號 → 1～2 個
+- 多個值得注意的訊號 → 最多 3 個
+禁止為了湊滿 3 個而給無關建議。
+每一條都必須能回答「為什麼今天特別建議我做這件事？」並對應今天的資料。
+禁止通用建議：多喝水、深呼吸、放下手機、早點休息——除非今天的資料明確支持。
+禁止沒有根據的飲食與健康建議：喝溫牛奶、某種茶、補充營養、改善自律神經、幫助某種身體功能。
+建議以低風險日常行動為主：調整睡眠時間、減少今晚安排、短暫休息、簡單伸展、放慢節奏、記錄情緒、或與當日狀態直接相關的小行動。
 
 規則：
-- 只輸出 JSON
-- 口吻溫暖、放鬆、可執行。像把燈調暗一點，而不是檢查清單。禁止雞湯、禁止說教、禁止診斷疾病或開藥
-- 若勾選的是正向或平穩狀態（平靜、愉快、睡眠品質很好、起床精神很好），要肯定它並給維持安放節奏的建議，不要硬找問題
-- 若有不適訊號，先同理身體的緊繃，再給輕柔、做得到的照顧動作
-- 建議必須是實際、放鬆導向的動作，例如調整呼吸、補充溫水、伸展、提早放下手機、溫水洗手臂、讓肩膀鬆開
-- suggestions 必須剛好 3 條，每條 18-42 字
-- 繁體中文
+- 只輸出 JSON，繁體中文
+- title 1～2 句，不列舉使用者填過的內容
+- analysis 2～4 句，寫關聯，不寫清單
+- notice 1～3 句
+- suggestions 1 到 3 條，禁止固定 3 條
+- 每條 title 8-16 字（動作名），detail 說明今晚為什麼特別適合，20-48 字
 {
-  "analysis": "2到4句。溫柔地看見心情、身體與睡眠此刻如何互相安放。",
-  "suggestions": ["建議1", "建議2", "建議3"]
+  "title": "今天的心是安定的，但身體正在提醒你：休息還需要再多一點。",
+  "analysis": "今天情緒整體平穩，生活中也感受到不少幸福；但昨晚只有5–6小時睡眠，代表心理狀態雖然穩定，身體的休息可能還沒有完全跟上。",
+  "notice": "幸福與短睡眠同時出現時，人很容易只看見心情好的那一面，而略過身體其實還沒補回來。",
+  "suggestions": [
+    { "title": "今晚提早30分鐘準備睡覺", "detail": "昨晚睡眠時間偏短，今晚不用增加太多任務，先替自己多留30分鐘的休息空間。" }
+  ]
 }`;
 
 function bodyCoachUserPrompt(body) {
   const ctx = body.context && typeof body.context === "object" ? body.context : {};
-  return `請針對這個人今天的身心狀態，寫出溫暖放鬆的「今日身心小結」，並給 3 個今晚就能安放自己的動作。
+  return `請綜合下面全部資料，寫出「今日身心小結」。重點是找出關聯與落差，不要摘要複述。
 
+今日心情：${ctx.mood || "未選"}
 今日感謝：${formatThanksForPrompt(ctx) || "（未寫）"}
 今日事件：${ctx.event || body.text || "（未寫）"}
-心情標籤：${ctx.mood || "未選"}
-${formatBodyCheckPrompt(ctx)}`;
+${formatBodyCheckPrompt(ctx)}
+
+請輸出 title、analysis、notice，以及 1 到 3 條對應今天資料的 suggestions。`;
+}
+
+function normalizeBodyCoachSuggestion(item) {
+  if (item && typeof item === "object") {
+    const title = String(item.title || item.label || "").trim();
+    const detail = String(item.detail || item.body || item.why || item.reason || "").trim();
+    if (title && detail) return `${title}。${detail}`;
+    return title || detail;
+  }
+  return String(item || "").trim();
+}
+
+function firstBodyCoachSentence(text) {
+  const raw = String(text || "").trim();
+  const match = raw.match(/^[\s\S]*?[。！？]/);
+  return match ? match[0].trim() : raw;
 }
 
 function normalizeBodyCoachResult(raw) {
   const data = raw && typeof raw === "object" ? raw : {};
   const suggestions = (Array.isArray(data.suggestions) ? data.suggestions : Array.isArray(data.tips) ? data.tips : [])
-    .map((item) => String(item || "").trim())
+    .map(normalizeBodyCoachSuggestion)
     .filter(Boolean)
     .slice(0, 3);
+  let title = String(data.title || data.conclusion || data.core || "").trim();
+  let analysis = String(data.analysis || data.signals || data.summary || "").trim();
+  const notice = String(data.notice || data.watch || data.attention || "").trim();
+  if (!title && analysis) {
+    title = firstBodyCoachSentence(analysis);
+    const rest = analysis.slice(title.length).trim();
+    if (rest) analysis = rest;
+  }
+  if (title && analysis.startsWith(title)) {
+    analysis = analysis.slice(title.length).replace(/^[。！？\s]+/, "");
+  }
   return {
-    analysis: String(data.analysis || data.summary || data.logic || "").trim(),
+    title,
+    analysis,
+    notice,
     suggestions,
   };
 }
@@ -1349,10 +1410,12 @@ module.exports = async function handler(req, res) {
 
     const promptKind = isCorePromptsRequest(body) ? corePromptKind(body) : "";
     const data = await callOpenAI(messages, {
-      temperature: mode === "prompts" ? 0.7 : 0.75,
+      temperature: mode === "bodycoach" ? 0.5 : mode === "prompts" ? 0.7 : 0.75,
       timeoutMs: promptKind === "awareness" ? 18000 : 22000,
       maxTokens:
-        mode === "insight" && isThinkGuideRequest(body)
+        mode === "bodycoach"
+          ? 900
+          : mode === "insight" && isThinkGuideRequest(body)
           ? thinkGuideStep(body) === "close"
             ? 1100
             : 400
@@ -1470,7 +1533,7 @@ module.exports = async function handler(req, res) {
     }
     if (mode === "bodycoach") {
       const coach = normalizeBodyCoachResult(data);
-      if (!coach.analysis || coach.suggestions.length < 3) {
+      if (!(coach.title || coach.analysis) || coach.suggestions.length < 1) {
         res.status(502).json({ ok: false, error: "今天的身心建議還沒整理好，請再試一次" });
         return;
       }
