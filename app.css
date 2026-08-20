@@ -5081,6 +5081,53 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   opacity: 0.72;
 }
 
+.exec-focus {
+  margin-top: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--cream-border);
+  border-radius: 16px;
+  background: var(--cream);
+  box-shadow: 0 1px 0 rgba(122, 101, 86, 0.06);
+}
+
+.exec-focus[hidden] {
+  display: none;
+}
+
+.exec-focus__kicker {
+  margin: 0 0 8px;
+  color: var(--heading);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.exec-focus__title {
+  margin: 0;
+  color: var(--heading);
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.exec-focus__why {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+@media (max-width: 720px) {
+  .exec-focus {
+    padding: 14px 16px;
+  }
+
+  .exec-focus__title {
+    font-size: 17px;
+  }
+}
+
 .history-exec-cards {
   display: flex;
   flex-direction: column;

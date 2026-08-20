@@ -104,6 +104,7 @@ const state = {
   bodyCoachBusy: false,
   bodyCoachToken: 0,
   journalBodyCoach: null,
+  journalExecFocus: null,
   promptsBusy: false,
   promptsToken: 0,
   corePromptsBusy: false,
@@ -2695,7 +2696,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "05 執行力",
-        description: "寫完今日感謝與事件後，會生成 3 道今天專屬的執行題。右側行動卡一打勾，就會立刻同步到側邊欄「執行力」。",
+        description: "寫完感謝與事件後，整理 2～3 道行動問題，再收成明天真正做得到的一小步。行動卡一打勾，就會同步到側邊欄「執行力」。",
         side: "top",
       },
     },
@@ -2885,9 +2886,13 @@ const AWARENESS_QUESTIONS = [
 const CORE_AWARENESS_PROMPT = AWARENESS_QUESTIONS[0];
 
 const CORE_EXECUTION_PROMPT = {
-  question: "今天在執行目標時遇到了什麼實質卡點？你打算採取什麼全面性的行動或突破策略來解決它？",
-  placeholder: "寫下卡點、卡住的真正原因，以及你打算採取的突破策略…",
+  question: "如果只能先完成一件事，你最想先做哪一件？",
+  placeholder: "我最想先做的是…",
 };
+const EXECUTION_PROMPT_MIN = 2;
+const EXECUTION_PROMPT_MAX = 3;
+const EXECUTION_CARD_MIN = 1;
+const EXECUTION_CARD_MAX = 3;
 
 function thanksItemsFrom(value) {
   if (Array.isArray(value)) {
@@ -2989,6 +2994,7 @@ function emptyJournal() {
     execution: ["", "", ""],
     executionChecks: [],
     executionCheckItems: [],
+    executionFocus: emptyExecFocus(),
     smallestStep: "",
     mode: state.journalMode === "quick" ? "quick" : "deep",
     deepExpanded: false,
@@ -3042,6 +3048,10 @@ function emptyInsight() {
     guide: emptyThinkGuide(),
     sig: "",
   };
+}
+
+function emptyExecFocus() {
+  return { title: "", detail: "" };
 }
 
 function emptyBodyCheck() {
@@ -3494,7 +3504,7 @@ function awarenessReady(answers) {
 function executionReady(answers) {
   const prompts = normalizeExecutionPrompts(state.executionPrompts);
   const list = Array.isArray(answers) ? answers : [];
-  if (prompts.length >= 3) {
+  if (prompts.length >= EXECUTION_PROMPT_MIN) {
     return prompts.every((_, index) => String(list[index] || "").trim());
   }
   return coreAnswerFilled(list);
@@ -3679,29 +3689,32 @@ function syncAwareQuoteGate() {
 function buildExecutionCheckItems(journal) {
   const items = [];
   const answers = (journal.execution || []).map((item) => String(item || "").trim()).filter(Boolean);
-  const answer = joinJournalAnswers(journal.execution);
-  const blob = `${answer}\n${journal.event || ""}\n${journal.bodyNote || ""}`;
-  if (answer) {
-    const short = answer.length > 18 ? `${answer.slice(0, 18)}…` : answer;
-    pushUniqueExec(items, "先處理今天最卡的那一步", `把「${short}」收成一個 5 分鐘動作，做完立刻停。`, 4);
+  const step = String(journal.smallestStep || "").trim();
+  const blob = `${answers.join("\n")}\n${journal.event || ""}\n${journal.bodyNote || ""}`;
+  const check = normalizeBodyCheck(journal.bodyCheck, journal.bodyTags, journal.bodyNote);
+  const duration = String(check.sleep?.duration || "");
+  const energy = String(check.sleep?.energy || "");
+  const sleepShort = duration === "少於5小時" || duration === "5–6小時" || energy === "疲憊";
+  if (step) {
+    const short = step.length > 18 ? `${step.slice(0, 18)}…` : step;
+    pushUniqueExec(items, short.replace(/[。！？.]+$/g, ""), "先從你寫下的這一步開始，明天幾乎沒有理由不做。", EXECUTION_CARD_MAX);
   }
-  if (/累|疲|睡|沒力|能量|頭痛|緊繃/.test(blob)) {
-    pushUniqueExec(items, "先讓身體休息", "先停十分鐘，喝口水、鬆開肩膀，再決定下一小步。", 4);
+  if (sleepShort) {
+    pushUniqueExec(items, "今晚22:30開始準備睡覺", "先替明天留一點精神，其他事情才比較容易開始。", EXECUTION_CARD_MAX);
   }
-  if (/怕|完美|失敗|丟臉|被看/.test(blob)) {
-    pushUniqueExec(items, "只做醜一點的第一版", "設 10 分鐘計時，只交出能開始的草稿，不求一次做好。", 4);
+  if (/運動|跑步|健身|走路/.test(blob) && sleepShort) {
+    pushUniqueExec(items, "明天下午先走路10分鐘", "如果精神還不夠，先把運動收成走得動的一小段。", EXECUTION_CARD_MAX);
+  } else if (/拖|沒做|未完成|待辦|計畫/.test(blob)) {
+    pushUniqueExec(items, "明天早餐後先做5分鐘", "不要求一次做完，先讓這件一直沒開始的事真正開始。", EXECUTION_CARD_MAX);
   }
-  if (/卡|拖|大|不知|從哪|複雜|太多/.test(blob)) {
-    pushUniqueExec(items, "拆成最小一步", "在紙上只寫「明天第一件小事」，寫完就收工。", 4);
+  if (!items.length && answers[0]) {
+    const short = answers[0].length > 16 ? `${answers[0].slice(0, 16)}…` : answers[0];
+    pushUniqueExec(items, "先做5分鐘就好", `把「${short}」收成明天第一個可勾選的小動作。`, EXECUTION_CARD_MAX);
   }
-  if (/策略|突破|行動|下一步/.test(blob)) {
-    pushUniqueExec(items, "把策略變成動作", "把突破策略改寫成明天第一個可勾選的具體動作。", 4);
+  if (!items.length) {
+    pushUniqueExec(items, "先做5分鐘就好", "不要求一次完成，先讓自己真正開始。", EXECUTION_CARD_MAX);
   }
-  answers.slice(0, 2).forEach((item) => {
-    const parts = splitTaskText(item.slice(0, 36));
-    if (items.length < 3) pushUniqueExec(items, parts.title, parts.detail || "用最小、明天做得到的方式先走一步。", 4);
-  });
-  return items.slice(0, 4);
+  return items.slice(0, EXECUTION_CARD_MAX);
 }
 
 function renderExecCheckCard(item, index, done) {
@@ -3716,6 +3729,37 @@ function renderExecCheckCard(item, index, done) {
         ${lead ? `<span class="exec-check__lead">${escapeHtml(lead)}</span>` : ""}
       </span>
     </label>
+  `;
+}
+
+function normalizeExecFocus(raw, items) {
+  const list = Array.isArray(items) ? items : [];
+  if (typeof raw === "string") {
+    const parts = splitTaskText(raw);
+    return parts.title ? { title: parts.title, detail: flattenExecSentence(parts.detail) } : emptyExecFocus();
+  }
+  const data = raw && typeof raw === "object" ? raw : {};
+  const title = String(data.title || "").trim();
+  const detail = flattenExecSentence(data.detail || data.why || data.reason || "");
+  if (title) return { title, detail };
+  if (list[0]) return { title: list[0].title, detail: list[0].detail };
+  return emptyExecFocus();
+}
+
+function renderExecFocus(focus) {
+  const root = document.getElementById("execFocus");
+  if (!root) return;
+  const data = normalizeExecFocus(focus);
+  if (!data.title) {
+    root.hidden = true;
+    root.innerHTML = "";
+    return;
+  }
+  root.hidden = false;
+  root.innerHTML = `
+    <p class="exec-focus__kicker">今天最重要的一步</p>
+    <p class="exec-focus__title">「${escapeHtml(data.title.replace(/^[「」]+|[「」]+$/g, ""))}」</p>
+    ${data.detail ? `<p class="exec-focus__why">${escapeHtml(data.detail)}</p>` : ""}
   `;
 }
 
@@ -3778,14 +3822,17 @@ function refreshJournalChecklists(journal, options = {}) {
     ? normalizeAwarenessQuotes(data.awarenessCheckItems).slice(0, AWARENESS_QUOTE_COUNT)
     : [];
   const execItems = keepExec
-    ? normalizeExecCheckItems(data.executionCheckItems).slice(0, 4)
+    ? normalizeExecCheckItems(data.executionCheckItems).slice(0, EXECUTION_CARD_MAX)
     : buildExecutionCheckItems(data);
   const manifestItems = keepManifest ? data.manifestCheckItems.slice(0, 5) : [];
   const awareChecked = options.useSaved ? data.awarenessChecks : checkedValues("awareChecks");
   const execChecked = options.useSaved ? data.executionChecks : checkedValues("execChecks");
   const manifestChecked = options.useSaved ? data.manifestChecks : checkedValues("manifestChecks");
   if (!options.skipAware) renderChecklist("awareChecks", awareItems, awareChecked);
-  if (!options.skipExec) renderChecklist("execChecks", execItems, execChecked);
+  if (!options.skipExec) {
+    renderChecklist("execChecks", execItems, execChecked);
+    renderExecFocus(data.executionFocus || state.journalExecFocus || execItems[0]);
+  }
   if (!options.skipManifest) renderChecklist("manifestChecks", manifestItems, manifestChecked);
 }
 
@@ -3843,7 +3890,7 @@ function checklistUi(kind) {
   if (kind === "awareness") {
     return { btn: "btnAwareAi", loader: "awareLoading", list: "awareChecks", idle: "✦ 看見我的核心覺察" };
   }
-  return { btn: "btnExecAi", loader: "execLoading", list: "execChecks", idle: "生成專屬行動卡點勾勾表" };
+  return { btn: "btnExecAi", loader: "execLoading", list: "execChecks", idle: "生成我的行動卡" };
 }
 
 function setChecklistLoading(kind, loading) {
@@ -3859,7 +3906,9 @@ function setChecklistLoading(kind, loading) {
     btn.textContent = loading
       ? kind === "awareness"
         ? "正在為你整理…"
-        : "分析中…"
+        : kind === "execution"
+          ? "正在整理行動卡…"
+          : "分析中…"
       : ui.idle;
   }
   if (loader) loader.hidden = !loading;
@@ -3911,7 +3960,7 @@ async function generateJournalChecklist(kind, options = {}) {
       showToast(
         isAware
           ? "先回答完 3 個問題，再看見今天的核心覺察。"
-          : "先把執行突破題寫完，再生成勾勾表。"
+          : "先回答完行動問題，再整理行動卡。"
       );
     }
     return;
@@ -3930,8 +3979,8 @@ async function generateJournalChecklist(kind, options = {}) {
   }, 32000);
 
   const fallback = isAware ? buildAwarenessCheckItems(journal) : buildExecutionCheckItems(journal);
-  const min = isAware ? AWARENESS_QUOTE_COUNT : 3;
-  const max = isAware ? AWARENESS_QUOTE_COUNT : 4;
+  const min = isAware ? AWARENESS_QUOTE_COUNT : EXECUTION_CARD_MIN;
+  const max = isAware ? AWARENESS_QUOTE_COUNT : EXECUTION_CARD_MAX;
 
   try {
     if (!state.user) {
@@ -3946,11 +3995,14 @@ async function generateJournalChecklist(kind, options = {}) {
         ? currentAwarenessQuestions()
         : currentExecutionQuestions(),
       context: {
+        thanks: thanksTextFrom(journal),
+        thanksText: thanksTextFrom(journal),
         event: journal.event,
         mood: journal.mood,
         bodyTags: journal.bodyTags,
         bodyNote: journal.bodyNote,
         bodyCheck: journal.bodyCheck,
+        awareness: journal.awareness,
         openActions: getTasks()
           .filter((task) => task.status !== "done")
           .slice(0, 6)
@@ -3964,16 +4016,25 @@ async function generateJournalChecklist(kind, options = {}) {
       ? normalizeAwarenessQuotes(remote.quotes || remote.items, fallback)
       : normalizeAiExecItems(remote.items, min, max, fallback);
     if (items.length < min) throw new Error("雲端回傳格式不完整");
+    if (!isAware) {
+      const focus = normalizeExecFocus(remote.focus, items);
+      state.journalExecFocus = focus;
+    }
     applyGeneratedChecklist(kind, items, sig);
+    if (!isAware) renderExecFocus(state.journalExecFocus);
     showToast(
       isAware
         ? awarenessQuoteGenCount() >= AWARENESS_QUOTE_GEN_MAX
           ? "今天的核心覺察，已經留下來了。"
           : "今天的核心覺察，已經留下來了。"
-        : "行動卡點已生成。"
+        : "行動卡已經整理好了。"
     );
   } catch (error) {
     if (state.checklistToken[kind] !== token) return;
+    if (!isAware) {
+      state.journalExecFocus = normalizeExecFocus(fallback[0], fallback);
+      renderExecFocus(state.journalExecFocus);
+    }
     applyGeneratedChecklist(kind, fallback.slice(0, max), sig);
     showToast(`雲端分析失敗：${formatApiError(error)}，先用本地整理。`);
   } finally {
@@ -5033,7 +5094,7 @@ function normalizeExecQuestionTab(value) {
 function collectExecutionAnswers() {
   const prompts = normalizeExecutionPrompts(state.executionPrompts);
   const prev = getReview(currentIso())?.journal?.execution || [];
-  const count = Math.max(prompts.length, 3);
+  const count = Math.max(prompts.length, 1);
   return Array.from({ length: count }, (_, index) => {
     const el = document.getElementById(`exec${index + 1}`);
     if (el) return String(el.value || "");
@@ -5140,18 +5201,18 @@ function localExecutionPrompts(journal) {
   const snippet = eventSnippet(journal);
   return [
     {
-      question: `針對「${snippet}」，今天最需要被突破的是哪一件事？`,
-      placeholder: "最需要突破的是…",
+      question: `「${snippet}」一直沒完成的話，真正卡住你的是什麼？`,
+      placeholder: "真正卡住我的是…",
     },
     {
-      question: "真正把你卡住的，是事情本身、情緒，還是還沒跨出去的那一步？",
-      placeholder: "卡住我的是…",
+      question: "如果只能先完成一件事，你最想先做哪一件？",
+      placeholder: "我最想先做的是…",
     },
     {
-      question: "明天可以採取的最快行動是什麼？小到今天晚上或明天早上就能做完。",
-      placeholder: "明天最快能做的是…",
+      question: "要讓這件事真的開始，第一步可以再小一點嗎？",
+      placeholder: "更小的第一步是…",
     },
-  ];
+  ].slice(0, EXECUTION_PROMPT_MAX);
 }
 
 function collectGrowthProgress() {
@@ -5199,6 +5260,7 @@ function collectGrowthProgress() {
   };
 }
 
+const EXEC_WAIT_COPY = "寫完今日感謝與事件後，再開始今天的行動整理。";
 const CORE_WAIT_COPY = "請先完成上方今日感謝與事件，將為你準備今日專屬的覺察與執行題";
 const AWARE_WAIT_COPY = "完成「今日感謝」與「今日事件」後，會依照你今天寫下的內容，產生專屬於你的覺察題。";
 
@@ -5272,14 +5334,16 @@ function hydrateExecutionPrompts(data) {
   const prompts = normalizeExecutionPrompts(data?.executionPrompts);
   const hasAnswers =
     (data?.execution || []).some((item) => String(item || "").trim()) || prompts.some((item) => item.parked);
-  if (keepHydratedCorePrompts(prompts, hasAnswers, data?.corePromptsAi, 3)) return prompts.slice(0, 3);
+  if (keepHydratedCorePrompts(prompts, hasAnswers, data?.corePromptsAi, EXECUTION_PROMPT_MIN)) {
+    return prompts.slice(0, EXECUTION_PROMPT_MAX);
+  }
   return [];
 }
 
 function hasCorePromptSet() {
   return (
     normalizeAwarenessPrompts(state.awarenessPrompts).length >= AWARENESS_QUIZ_COUNT &&
-    normalizeExecutionPrompts(state.executionPrompts).length >= 3
+    normalizeExecutionPrompts(state.executionPrompts).length >= EXECUTION_PROMPT_MIN
   );
 }
 
@@ -5291,7 +5355,7 @@ function syncCorePromptGate() {
   const ready = coreStoryReady();
   const loading = Boolean(state.corePromptsBusy);
   const hasAware = normalizeAwarenessPrompts(state.awarenessPrompts).length >= AWARENESS_QUIZ_COUNT;
-  const hasExec = normalizeExecutionPrompts(state.executionPrompts).length >= 3;
+  const hasExec = normalizeExecutionPrompts(state.executionPrompts).length >= EXECUTION_PROMPT_MIN;
   const awareEmpty = document.getElementById("awareEmpty");
   const execEmpty = document.getElementById("execEmpty");
   const awareBtn = document.getElementById("btnAwarePrompts");
@@ -5301,7 +5365,7 @@ function syncCorePromptGate() {
     awareEmpty.hidden = loading || hasAware;
   }
   if (execEmpty) {
-    execEmpty.textContent = CORE_WAIT_COPY;
+    execEmpty.textContent = EXEC_WAIT_COPY;
     execEmpty.hidden = loading || hasExec;
   }
   if (awareBtn) {
@@ -5320,7 +5384,7 @@ function syncCorePromptGate() {
       execBtn.disabled = false;
       execBtn.classList.toggle("is-busy", loading);
       execBtn.setAttribute("aria-busy", loading ? "true" : "false");
-      execBtn.textContent = loading ? "出題中…" : "生成今日專屬行動題";
+      execBtn.textContent = loading ? "正在整理行動問題…" : "✦ 開始今天的行動整理";
     }
   }
 }
@@ -5418,7 +5482,7 @@ function renderExecutionQuestions(prompts, options = {}) {
   if (!items.length) {
     root.innerHTML = "";
     if (empty) {
-      empty.textContent = CORE_WAIT_COPY;
+      empty.textContent = EXEC_WAIT_COPY;
       empty.hidden = Boolean(state.corePromptsBusy);
     }
     if (genBtn) {
@@ -5442,7 +5506,7 @@ function renderExecutionQuestions(prompts, options = {}) {
           (item, index) => `
         <div class="aware-q exec-q" data-exec-index="${index}">
           <p class="journal-core-q">${escapeHtml(item.question)}</p>
-          <textarea class="textarea" id="exec${index + 1}" rows="4" placeholder="${escapeHtml(item.placeholder || "寫下今天的行動卡點…")}">${escapeHtml(saved[index] || "")}</textarea>
+          <textarea class="textarea" id="exec${index + 1}" rows="4" placeholder="${escapeHtml(item.placeholder || "寫下你想到的一小步…")}">${escapeHtml(saved[index] || "")}</textarea>
         </div>
       `
         )
@@ -5560,7 +5624,7 @@ function applyGeneratedCorePrompts(awareness, execution, sig, fromAi) {
     state.awarenessPrompts = awareList;
     renderAwarenessQuestions(state.awarenessPrompts, { answers: ["", "", ""] });
   }
-  if (execList.length >= 3) {
+  if (execList.length >= EXECUTION_PROMPT_MIN) {
     state.executionPrompts = execList;
     renderExecutionQuestions(state.executionPrompts, { answers: keepAnswers ? journal.execution : ["", "", ""] });
   }
@@ -5597,8 +5661,7 @@ function localCorePrompts(journal) {
     ],
     execution: [
       { question: `若明天只改「${eventBit}」裡最小的一步，你會先動哪裡？`, placeholder: "明天最小的一步…" },
-      { question: "今天卡住時，你最常用來保護自己的方式是什麼？", placeholder: "我習慣用的保護是…" },
-      { question: "哪一個 5 分鐘內做得到的動作，能讓今天鬆一口氣？", placeholder: "5 分鐘內能做的是…" },
+      { question: "如果只能先完成一件事，你最想先做哪一件？", placeholder: "我最想先做的是…" },
     ],
   };
 }
@@ -5620,7 +5683,7 @@ async function generateCorePrompts(options = {}) {
   }
   const sig = corePromptsSignature(journal);
   const hasAware = normalizeAwarenessPrompts(state.awarenessPrompts).length >= AWARENESS_QUIZ_COUNT;
-  const hasExec = normalizeExecutionPrompts(state.executionPrompts).length >= 3;
+  const hasExec = normalizeExecutionPrompts(state.executionPrompts).length >= EXECUTION_PROMPT_MIN;
   if (!options.force) {
     if (scope === "awareness" && hasAware && awarenessQuizAnsweredCount(journal.awareness) > 0) return;
     if (scope === "execution" && hasExec && corePromptsHaveAnswers(journal)) return;
@@ -5675,6 +5738,8 @@ async function generateCorePrompts(options = {}) {
           bodyTags: journal.bodyTags,
           bodyNote: journal.bodyNote,
           bodyCheck: journal.bodyCheck,
+          awareness: journal.awareness,
+          smallestStep: journal.smallestStep,
         },
         progress: {
           streak: progress.streak,
@@ -5693,14 +5758,14 @@ async function generateCorePrompts(options = {}) {
       return;
     }
     if (scope === "execution") {
-      const execution = mergePrompts(remote.execution, fallback.execution, normalizeExecutionPrompts, 3);
-      if (execution.length < 3) throw new Error("雲端回傳格式不完整");
+      const execution = mergePrompts(remote.execution, fallback.execution, normalizeExecutionPrompts, EXECUTION_PROMPT_MIN);
+      if (execution.length < EXECUTION_PROMPT_MIN) throw new Error("雲端回傳格式不完整");
       applyGeneratedCorePrompts(null, execution, sig, true);
-      if (!options.auto) showToast("今天的執行題已經準備好了。");
+      if (!options.auto) showToast("今天的行動問題已經準備好了。");
       return;
     }
     const awareness = mergePrompts(remote.awareness, fallback.awareness, normalizeAwarenessPrompts, AWARENESS_QUIZ_COUNT);
-    const execution = mergePrompts(remote.execution, fallback.execution, normalizeExecutionPrompts, 3);
+    const execution = mergePrompts(remote.execution, fallback.execution, normalizeExecutionPrompts, EXECUTION_PROMPT_MIN);
     if (awareness.length < AWARENESS_QUIZ_COUNT) throw new Error("雲端回傳格式不完整");
     applyGeneratedCorePrompts(awareness, execution, sig, true);
     if (!options.auto) showToast("今天的覺察題已經準備好了。");
@@ -6060,6 +6125,7 @@ function collectJournal() {
       const collected = collectExecCheckItems();
       return collected.length ? collected : normalizeExecCheckItems(checklistItems("execChecks"));
     })(),
+    executionFocus: normalizeExecFocus(state.journalExecFocus, collectExecCheckItems()),
     smallestStep: journalFieldValue("execNext"),
     mode: state.journalMode === "quick" ? "quick" : "deep",
     deepExpanded: Boolean(state.deepExpanded),
@@ -6182,7 +6248,8 @@ function composeJournalRawText(journal) {
   }
   if (String(journal.smallestStep || "").trim()) lines.push(`明天最小的一步：${String(journal.smallestStep).trim()}`);
   const execLines = execCheckHistoryLines(journal);
-  if (execLines.length) lines.push(`我的行動卡點：${execLines.join("、")}`);
+  if (execLines.length) lines.push(`我的行動卡：${execLines.join("、")}`);
+  if (journal.executionFocus?.title) lines.push(`今天最重要的一步：${journal.executionFocus.title}`);
   if (String(journal.manifest || "").trim()) lines.push(`明天想顯化：${journal.manifest.trim()}`);
   if ((journal.manifestChecks || []).length) lines.push(`顯化執行目標：${journal.manifestChecks.join("、")}`);
   const deepQs = (journal.deepPrompts || state.deepPrompts || []).map((item) => item.title || item.question || item);
@@ -6408,6 +6475,7 @@ function fillJournal(journal) {
   };
   state.journalInsight = normalizeInsight(data.insight);
   state.journalBodyCoach = normalizeBodyCoach(data.bodyCoach);
+  state.journalExecFocus = normalizeExecFocus(data.executionFocus, data.executionCheckItems);
   state.awarenessPrompts = hydrateAwarenessPrompts(data);
   state.executionPrompts = hydrateExecutionPrompts(data);
   state.execQuestionTab = normalizeExecQuestionTab(data.executionQuestionTab);
@@ -7838,7 +7906,7 @@ function renderTasks() {
   const filter = ["doing", "later", "done"].includes(state.taskFilter) ? state.taskFilter : "doing";
 
   if (!all.length) {
-    list.innerHTML = `<div class="empty"><p class="empty__title">執行力還是空的</p>在今日復盤勾選行動卡點或解法，完成復盤後就會匯集到這裡。</div>`;
+    list.innerHTML = `<div class="empty"><p class="empty__title">執行力還是空的</p>在今日復盤勾選行動卡，完成復盤後就會匯集到這裡。</div>`;
     return;
   }
 
@@ -8387,7 +8455,7 @@ function renderHistoryJournal(review) {
     [
       "④ 執行力行動清單",
       "exec",
-      [...execFields, historyTextBlock("明天最小的一步", journal.smallestStep), historyBlock("行動卡點／解法", historyExecChecksHtml(journal))],
+      [...execFields, historyTextBlock("明天最小的一步", journal.smallestStep), historyBlock("我的行動卡", historyExecChecksHtml(journal)), journal.executionFocus?.title ? historyTextBlock("今天最重要的一步", `${journal.executionFocus.title}${journal.executionFocus.detail ? `｜${journal.executionFocus.detail}` : ""}`) : ""],
     ],
     ["深度思考", "insight", insightHtml],
     [

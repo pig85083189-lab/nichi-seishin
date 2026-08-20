@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=136" />
+    <link rel="stylesheet" href="app.css?v=137" />
     <style>
       .splash {
         position: fixed;
@@ -541,40 +541,41 @@
                 <h2 class="journal-card__title js-quick-only"><span>04</span> 今日最小行動</h2>
                 <h2 class="journal-card__title js-deep-only"><span>05</span> 執行力</h2>
                 <p class="journal-fold__summary js-quick-only">明天只要一件 5 分鐘內能完成的小事。點開後可寫下，並同步到側邊欄。</p>
-                <p class="journal-fold__summary js-deep-only">寫執行突破題、勾選行動卡。點開後可檢視與操作，完成會同步到側邊欄。</p>
+                <p class="journal-fold__summary js-deep-only">把今天的卡點，變成明天可以開始的一小步。完成會同步到側邊欄。</p>
               </span>
               <span class="journal-fold__chevron" aria-hidden="true"></span>
             </button>
             <div class="journal-fold__panel" id="execFoldPanel" inert aria-hidden="true">
               <div class="journal-fold__inner">
                 <p class="journal-guide js-quick-only">明天只要做一件小到 5 分鐘內能完成的事。完成復盤後會進到側邊欄「執行力」清單，方便追蹤。</p>
-                <p class="journal-guide js-deep-only">完成上方感謝與事件後，會依今天的卡點、生氣或拖延動態生成 3 道執行突破題。寫完再一鍵生成專屬行動卡點勾勾表，並同步至側邊欄「執行力」。</p>
+                <p class="journal-guide js-deep-only">有些事情，不是想得不夠，而是還沒找到真正做得到的方法。<br />這裡會陪你把今天的卡點，變成明天可以開始的一小步。</p>
                 <div class="journal-split">
               <div class="journal-col">
                 <div class="js-deep-only">
                   <div class="check-loading" id="execPromptLoading" hidden>
-                    <p class="check-loading__label">正在為你生成今天的執行力題目…</p>
+                    <p class="check-loading__label">正在整理今天的行動問題…</p>
                     <div class="ai-thinking__bar"><i></i></div>
                   </div>
-                  <p class="deep-empty" id="execEmpty">請先完成上方今日感謝與事件，將為你生成今日專屬的覺察與執行反思題</p>
-                  <button class="ai-check-btn" id="btnExecPrompts" type="button">生成今日專屬行動題</button>
+                  <p class="deep-empty" id="execEmpty">寫完今日感謝與事件後，再開始今天的行動整理。</p>
+                  <button class="ai-check-btn" id="btnExecPrompts" type="button">✦ 開始今天的行動整理</button>
                   <div id="execQuestions"></div>
-                  <button class="ai-check-btn" id="btnExecAi" type="button" hidden>生成專屬行動卡點勾勾表</button>
+                  <button class="ai-check-btn" id="btnExecAi" type="button" hidden>生成我的行動卡</button>
                 </div>
                 <div class="exec-next">
                   <p class="journal-label">明天最小的一步</p>
-                  <p class="journal-core-q">一件微小、具體、5 分鐘內能做完的事。</p>
-                  <textarea class="textarea" id="execNext" rows="3" placeholder="寫下明天最小的一步…"></textarea>
+                  <p class="journal-core-q">不是完整計畫，只寫第一步。小到你明天幾乎沒有理由不開始。</p>
+                  <textarea class="textarea" id="execNext" rows="3" placeholder="例如：換上運動服、設定22:30鬧鐘、把水杯放到桌上⋯"></textarea>
                 </div>
               </div>
               <div class="journal-col js-deep-only">
-                <p class="journal-label">我的行動卡點／解法</p>
-                <p class="journal-guide journal-guide--tight">寫完左側後，會生成 3 到 4 張專屬行動卡。每張只有一個標題，底下一句精準的執行描述。勾選後會加上刪除線、移到已完成，並立刻同步到側邊欄「執行力」。</p>
+                <p class="journal-label">我的行動卡</p>
+                <p class="journal-guide journal-guide--tight">根據今天的回答，整理出真正做得到的下一步。每張只留一件事，完成就勾起來。</p>
                 <div class="check-loading" id="execLoading" hidden>
-                  <p class="check-loading__label">正在分析你的行動卡點與解法…</p>
+                  <p class="check-loading__label">正在整理你的行動卡…</p>
                   <div class="ai-thinking__bar"><i></i></div>
                 </div>
                 <div class="check-list" id="execChecks"></div>
+                <article class="exec-focus" id="execFocus" hidden></article>
               </div>
                 </div>
               </div>
@@ -858,7 +859,7 @@
                 <p class="guide-step__text">覺察力會依照你今天寫下的感謝與事件，準備 3 個簡單的問題。回答完後，把今天最重要的發現整理成一句值得留下來的話；執行力則準備專屬行動卡。快速復盤只要勾選對應模組，就會走同一套今天專屬的陪伴。</p>
                 <div class="guide-pills">
                   <span class="guide-pill"><strong>覺察力</strong> 3 個問題 → 一句核心覺察</span>
-                  <span class="guide-pill"><strong>執行力</strong> 3 道突破題 → 行動卡點</span>
+                  <span class="guide-pill"><strong>執行力</strong> 行動問題 → 行動卡</span>
                 </div>
               </div>
             </li>
@@ -1012,6 +1013,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=157"></script>
+    <script src="app.js?v=158"></script>
   </body>
 </html>
