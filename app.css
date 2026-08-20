@@ -4088,6 +4088,12 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   margin-top: 18px;
 }
 
+.exec-q .journal-core-q,
+.exec-next .journal-core-q {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .exec-q-empty {
   margin: 0;
   padding: 16px 14px;
@@ -5059,6 +5065,8 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   font-size: 15px;
   font-weight: 700;
   line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.22em;
 }
@@ -5069,6 +5077,8 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   font-size: 13px;
   font-weight: 400;
   line-height: 1.7;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.18em;
 }
@@ -5109,6 +5119,8 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   font-size: 18px;
   font-weight: 700;
   line-height: 1.55;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .exec-focus__why {
@@ -5116,6 +5128,8 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   color: var(--muted);
   font-size: 14px;
   line-height: 1.7;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 @media (max-width: 720px) {

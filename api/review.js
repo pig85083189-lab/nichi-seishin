@@ -173,39 +173,40 @@ function manifestUserPrompt(body) {
 尚未完成的行動：${openActions.slice(0, 6).join("、") || "尚無"}`;
 }
 
-const CHECKLIST_EXECUTION_SYSTEM = `你是「日精進」的行動整理者。04 負責看懂自己；你只把事情收成「可以勾選完成」的下一步。
+const CHECKLIST_EXECUTION_SYSTEM = `你是「日精進」的行動整理者。04 負責分析；你只收成「現在／明天做得出來」的下一步。少分析、多行動。
 
-請同時讀取：行動問題的回答、以及使用者自己寫的「明天最小的一步」。若最小一步已寫，至少一張卡要承接它，或把它收成更小的第一個動作。
+請同時讀取：行動問題的回答、以及使用者自己寫的「明天最小的一步」。若最小一步已寫「時間＋動作」，至少一張卡要承接它。
 
-【標題必須是行動，不是分析】
-標題看完要能回答：「我什麼時候算完成它？」
-合格：今晚22:30開始準備睡覺／替明天三件事各排一個時間／情緒出現時先留3分鐘給自己
-不合格（禁止）：補睡眠vs運動的假二選一／計劃總是待辦的真因／被baby直接說話後的自我修復／睡眠時間難長的真實卡點
+【標題＝可勾選的行動】
+必須能回答：「我什麼時候算完成它？」
+最好有時間或觸發條件：今晚10:30、早餐後、下午3點、起床後。
+合格：今晚10:30開始準備睡覺／明天早餐後寫下3件開心小事／明天下午做30分鐘運動
+不合格：補睡眠vs運動的假二選一／計劃總是待辦的真因／跟自己好好相處／我要早點睡
 
-只要標題裡有「vs、真因、卡點、假二選一、自我修復、模式、盲點、本質」，就重寫成具體行為。
-
-【每張卡】
-- 具體、可執行、可完成、可勾選
-- 最好有時間、地點或觸發條件
-- 5～15 分鐘內能開始
-- title 8-18 字，直接寫做什麼，不要編號
-- detail 18-42 字，為什麼今天適合這一步
+【說明＝一句怎麼做】
+detail 只寫執行方式，1 句，最多 22 字。
+合格：洗澡後放下手機，11:00前上床。／不用想完整，先花3分鐘寫完。／睡飽後再動，不用勉強自己早起。
+不要寫長原因，不要「真正卡住」「深層原因」「自我修復」「真因」「核心卡點」。
 
 【數量 1～3，禁止湊數】
-一個重點 1 張；兩個重要行動 2 張；最多 3 張。
+一張卡只做一件事。
 
-【今天最重要的一步】
-從回答、最小一步與行動卡裡只挑一件最高優先，放進 focus。只一件。
+【今天最重要的一步｜focus】
+只能一件，而且必須是「今天／現在就能開始」的行動。
+優先挑：最會擋住其他事情的那一件。睡眠不足就先顧今晚睡覺，不要先列明天運動。
+合格：今晚10:30開始準備睡覺。
+不合格：明天11:00前睡覺，今晚開始準備。／同時列出兩件明天的目標。
+focus.detail 只一句短原因，例如：先把睡眠顧好，明天才有體力完成其他計畫。
 
-禁止抽象：好好休息、早點睡、多運動、不要拖延。
+禁止抽象：好好休息、早點睡、多運動、我要完成計畫。
 禁止發明他沒說過的目標。禁止你必須／你應該。
 
 只輸出 JSON：
 {
   "items": [
-    { "title": "今晚22:30開始準備睡覺", "detail": "先把睡眠放在前面，替明天保留基本精神。" }
+    { "title": "今晚10:30開始準備睡覺", "detail": "洗澡後放下手機，11:00前上床。" }
   ],
-  "focus": { "title": "今晚22:30開始準備睡覺", "detail": "先讓身體恢復基本能量，明天其他事情才比較容易開始。" }
+  "focus": { "title": "今晚10:30開始準備睡覺", "detail": "先把睡眠顧好，明天才有體力完成其他計畫。" }
 }`;
 
 const INSIGHT_JSON_SHAPE = `{
@@ -820,7 +821,37 @@ function flattenExecSentence(item) {
 function looksLikeAnalysisExecTitle(title) {
   const text = String(title || "").trim();
   if (!text) return true;
-  return /vs|VS|真因|卡點|假二選一|自我修復|盲點|真正的原因|突破策略|難長的真實/.test(text);
+  return /vs|VS|真因|卡點|假二選一|自我修復|盲點|真正的原因|突破策略|難長的真實|深層原因|跟自己相處/.test(text);
+}
+
+function firstExecSentence(text, max) {
+  const raw = String(text || "").replace(/\s+/g, " ").trim();
+  const match = raw.match(/^[^。！？!?]+[。！？!?]?/);
+  return (match ? match[0] : raw).trim().slice(0, max || 22);
+}
+
+function shortenExecHow(detail) {
+  const text = firstExecSentence(detail, 22);
+  if (/真正卡住|深層原因|自我修復|真因|核心卡點|為什麼|才比較容易|先讓身體|替明天保留/.test(text)) {
+    return "先做5分鐘，做完就勾起來。";
+  }
+  return text || "先做5分鐘，做完就勾起來。";
+}
+
+function shortenExecWhy(detail) {
+  const text = firstExecSentence(detail, 28);
+  if (/真正卡住|深層原因|自我修復|真因|核心卡點/.test(text)) {
+    return "先做會影響其他事情的那一件。";
+  }
+  return text || "先做會影響其他事情的那一件。";
+}
+
+function looksLikeTodayStartable(title) {
+  const text = String(title || "").trim();
+  if (!text) return false;
+  if (/明天/.test(text) && /今晚|現在/.test(text)) return false;
+  if (/^明天/.test(text) || /明天\d|明天11|明天.*睡覺/.test(text)) return false;
+  return /今晚|現在|此刻|睡前|回家後|洗澡後|放下手機|準備睡/.test(text);
 }
 
 function rewriteExecActionTitle(title, detail, smallestStep, index) {
@@ -828,8 +859,25 @@ function rewriteExecActionTitle(title, detail, smallestStep, index) {
   if (cleaned && !looksLikeAnalysisExecTitle(cleaned)) return cleaned.slice(0, 22);
   const step = String(smallestStep || "").trim().replace(/[。！？.]+$/g, "");
   if (index === 0 && step && step.length <= 22 && !looksLikeAnalysisExecTitle(step)) return step.slice(0, 22);
-  const fallbacks = ["今晚22:30開始準備睡覺", "先做5分鐘就好", "替這件事排一個開始時間"];
+  const fallbacks = ["今晚22:30開始準備睡覺", "明天早餐後先做5分鐘", "替這件事排一個開始時間"];
   return fallbacks[index] || fallbacks[0];
+}
+
+function rewriteExecFocus(focus, items, smallestStep, ctx) {
+  const list = Array.isArray(items) ? items : [];
+  const source = focus && typeof focus === "object" ? focus : {};
+  let title = rewriteExecActionTitle(source.title || list[0]?.title || "", source.detail, smallestStep, 0);
+  const blob = [title, smallestStep, list.map((item) => item.title).join(" "), JSON.stringify(ctx || {})].join(" ");
+  if (!looksLikeTodayStartable(title)) {
+    const todayCard = list.find((item) => looksLikeTodayStartable(item.title));
+    if (todayCard) title = todayCard.title;
+    else if (/睡|疲|累|精神不足/.test(blob)) title = "今晚22:30開始準備睡覺";
+    else title = "現在先設定一個開始時間";
+  }
+  return {
+    title: String(title || "今晚22:30開始準備睡覺").slice(0, 22),
+    detail: shortenExecWhy(source.detail || list[0]?.detail),
+  };
 }
 
 function normalizeExecutionChecklistItems(raw, min, max, smallestStep) {
@@ -857,9 +905,8 @@ function normalizeExecutionChecklistItems(raw, min, max, smallestStep) {
       }
     }
     title = rewriteExecActionTitle(title.replace(/^[\d.、｜|\-\s]+/, ""), detail, smallestStep, index);
-    detail = String(detail || "").slice(0, 56);
+    detail = shortenExecHow(detail);
     if (!title || seen.has(title)) return;
-    if (!detail) detail = "小到明天幾乎沒有理由不開始。";
     seen.add(title);
     items.push({ title, detail });
   });
@@ -879,13 +926,16 @@ function checklistUserPrompt(kind, body) {
           .map((question, index) => `${index + 1}. ${question}\n回答：${answers[index] || "（未填）"}`)
           .join("\n\n")
       : `深度回答：${answer || "（未填）"}`;
-    return `請依這個人今天的行動問題與最小一步，產出 1 到 3 張「行動卡」。標題直接寫要做什麼，下面一句說明今天為什麼適合。不要湊數，不要抽象口號，不要重複心理分析。
+    return `請依這個人今天的行動問題與「明天最小的一步」，產出 1 到 3 張行動卡。
+
+標題直接寫時間＋動作。說明只寫一句怎麼做，不要寫為什麼。
+今天最重要的一步只能一件，而且必須是今天／現在就能開始的行動。睡眠會擋住其他事時，先顧今晚睡覺。
 
 ${labeled}
 
-明天最小的一步：${ctx.smallestStep || "未寫"}
+明天最小的一步（請盡量收成時間＋動作）：${ctx.smallestStep || "未寫"}
 
-背景（只能用來對準行動，不要複述成分析）：
+背景（只用來對準行動，不要寫成分析）：
 今日感謝：${formatThanksForPrompt(ctx) || "未寫"}
 心情：${ctx.mood || "未選"}
 今日事件：${ctx.event || "未寫"}
@@ -1017,30 +1067,32 @@ const AWARENESS_PROMPTS_SYSTEM = `你是「日精進」溫柔的覺察引導者�
 - 三題由淺入深：①今天事件真正碰到的點 ②感謝或情緒背後還沒說出口的需求 ③還沒敢承認的防衛或盲點
 - 禁止空泛萬用題，禁止說教，禁止診斷`;
 
-const EXECUTION_PROMPTS_SYSTEM = `你是「日精進」的行動教練。04 負責看懂自己；你只問能把事情縮小、讓人開始做的問題。
+const EXECUTION_PROMPTS_SYSTEM = `你是「日精進」的行動教練。04 負責分析；你只問「接下來怎麼做」。少分析、多行動。
 
-請先默默讀完今天的感謝、事件、心情、身體、睡眠、覺察與未完成事項，再出 2～3 題。
-資料只供你理解情境，禁止把數字、時數、連續天數、事件細節、名單抄進題目。
+請先默默讀完今天的感謝、事件、心情、身體、睡眠與覺察，再出 2～3 題。
+可以輕輕點出今天的人／事，方便對準；禁止抄寫時數、連續天數，禁止二選一質問。
 
-原則：
-- 一題只問一件事，只能有一個問號
-- 每題 25～35 字，超過 36 字就不合格
-- 不質問、不責備、不預設他做錯
-- 幫助他找到卡點，或下一步可以怎麼做
-- 不要重複 04 的心理分析
-- 最後往「可以怎麼做」靠近
+出題順序：
+1. 調整策略：如果明天狀況還是不理想，原本想做的事要怎麼改。不要逼他先休息或先做某件。
+   合格：「如果明天還是覺得累，你準備怎麼調整原本想做的事？」
+   不合格：「身體疲勞的狀態下，明天三件開心小事和運動，你想先從哪一件開始？」
+2. 推進到具體行動：今天若有難受或卡住，問明天要做哪一件事讓自己比較好。不要停在怎麼想、怎麼感受、怎麼跟自己相處。
+   合格：「今天和寶貝的對話讓你有些難受，明天你想做哪一件事，讓自己回到比較好的狀態？」
+   不合格：「今天和寶貝的對話讓你有些難受，明天想用什麼方式跟自己相處？」
+3. 可選：把行動收到時間。「明天你準備什麼時間開始做這件事？」
 
-合格：
-「如果明天精神還是不夠，你會怎麼調整原本的運動計畫？」
-「這件事一直沒有完成，真正讓你卡住的是什麼？」
-「如果只能先完成一件事，你最想先做哪一件？」
+語言請用：
+你準備怎麼調整？你要先做哪一步？明天什麼時間開始？這件事可以再小一點嗎？現在先做什麼？
+禁止：真正卡住你的、深層原因、自我修復、假二選一、真因、核心卡點。
 
-不合格（禁止）：
-「睡眠只有5小時精神普通，你明天早上30分鐘運動的能量從哪裡來？先補睡還是先動？」
-「連續4天列計畫但未完成，明天三件開心小事和運動，你打算怎麼做才不會又成為待辦清單？」
+placeholder 給具體做法，不要給分析句。
+第1題：「例如：運動改到下午／先完成一件最重要的事／先休息再開始」
+第2題：「例如：散步10分鐘／寫下心情／留30分鐘做喜歡的事」
 
 規則：
 - 只輸出 JSON：{"execution":[{"question":"...","placeholder":"..."}]}
+- 一題一事，一個問號
+- 每題 24-48 字
 - execution 2 到 3 題
 - 繁體中文`;
 
@@ -1048,7 +1100,7 @@ const CORE_PROMPTS_SYSTEM = `你是「日精進」溫柔的覺察與行動教練
 
 【任務】
 - awareness：剛好 3 道自我覺察是非題。每題必須是一句可回答「是」或「否」的陳述句。語氣溫暖、引導。由淺入深：①今天事件真正碰到的點 ②感謝或情緒背後還沒說出口的需求 ③今天真正的防衛或核心盲點。
-- execution：2 到 3 道短的行動問題。一題一事、25-35字、不質問。不要抄寫時數或連續天數。不要重複覺察力的心理分析。最後往「可以怎麼做」靠近。
+- execution：2 到 3 道行動問題。第1題問怎麼調整，不要二選一。第2題問明天要做哪一件事，不要停在感受。不要用真正卡住、真因、自我修復。
 
 【必須遵守】
 - 只輸出 JSON
@@ -1061,7 +1113,7 @@ const CORE_PROMPTS_SYSTEM = `你是「日精進」溫柔的覺察與行動教練
     { "question": "可答是或否的陳述句，16-42字" }
   ],
   "execution": [
-    { "question": "完整問句，25-35字", "placeholder": "8-18字" }
+    { "question": "完整問句，24-48字", "placeholder": "例如：具體做法…" }
   ]
 }
 awareness 必須剛好 3 題。execution 2 到 3 題即可，不要為了湊數硬出。`;
@@ -1109,24 +1161,29 @@ ${today}
 覺察是非題：剛好 3 句可答「是」或「否」的陳述，分別打中：今天事件碰到的點、感謝／情緒背後的需求、真正的防衛或盲點。`;
   }
   if (kind === "execution") {
-    return `請只生成 2 到 3 道短的行動問題。不要寫覺察是非題。
+    return `請只生成 2 到 3 道行動問題。不要寫覺察是非題。少分析、多行動。
 
-下面資料只給你理解今天，禁止把時數、連續天數、事件細節、名單抄進題目。題目要短、一題一事、一個問號、不質問、不責備。
-
-【今天的輸入｜只供理解，不要照抄進題目】
+【今天的輸入｜理解情境，不要把時數或連續天數抄進題目】
 ${story}
 今日覺察：${Array.isArray(ctx.awareness) ? ctx.awareness.filter(Boolean).join("／") || "未寫" : "未寫"}
 明天最小的一步：${compactLine(ctx.smallestStep, 80) || "未寫"}
 
-合格例子：如果明天精神還是不夠，你會怎麼調整原本的運動計畫？
-不合格：睡眠只有5小時……能量從哪裡來？先補睡還是先動？`;
+第1題必須是調整策略，不要二選一：
+合格：如果明天還是覺得累，你準備怎麼調整原本想做的事？
+不合格：身體疲勞的狀態下，明天三件開心小事和運動，你想先從哪一件開始？
+
+第2題必須問「明天做哪一件事」，不要問怎麼跟自己相處：
+合格：今天和寶貝的對話讓你有些難受，明天你想做哪一件事，讓自己回到比較好的狀態？
+不合格：明天想用什麼方式跟自己相處？
+
+placeholder 用具體做法，例如：運動改到下午／散步10分鐘。`;
   }
   return `請精準讀取以下「今天的原文」，生成只屬於這一天的覺察力 3 題是非題、執行力 2 到 3 題。覺察題必須直擊今日感謝與事件的核心，語氣溫暖引導，不要出成萬用題。
 
 ${today}
 
 覺察是非題：剛好 3 句可答「是」或「否」的陳述，分別打中：今天事件碰到的點、感謝／情緒背後的需求、真正的防衛或盲點。
-執行題：2 到 3 題，每題 25-35 字、一題一事、不質問。不要抄時數或連續天數。最後往「可以怎麼做」靠近。`;
+執行題：2 到 3 題。第1題問怎麼調整，第2題問明天做哪一件事。不要二選一，不要分析用語。`;
 }
 
 function asPromptList(raw) {
@@ -1165,7 +1222,7 @@ function normalizePromptItem(item) {
   if (!question) return null;
   return {
     question: question.slice(0, 80),
-    placeholder: String(item.placeholder || "寫下那個時刻…").trim().slice(0, 36) || "寫下那個時刻…",
+    placeholder: String(item.placeholder || "寫下那個時刻…").trim().slice(0, 48) || "寫下那個時刻…",
   };
 }
 
@@ -1212,16 +1269,25 @@ function padAwarenessPrompts(list, ctx) {
 function isBloatedExecQuestion(question) {
   const text = String(question || "").trim();
   if (!text) return true;
-  if (text.length > 36) return true;
+  if (text.length > 48) return true;
   if ((text.match(/[？?]/g) || []).length > 1) return true;
-  return /睡眠只有|\d小時|連續\d|能量從哪裡|先補睡還是|才不會又|待辦清單|突破策略|vs|真因|自我修復|卡點/.test(text);
+  return /睡眠只有|\d小時|連續\d|能量從哪裡|先補睡還是|才不會又|待辦清單|突破策略|vs|真因|自我修復|卡點|真正卡住|跟自己相處|先從哪一件|深層原因/.test(text);
 }
 
 function executionQuestionFallbacks() {
   return [
-    { question: "如果明天精神還是不夠，你會怎麼調整原本的計畫？", placeholder: "我會先這樣調整…" },
-    { question: "這件事一直沒有完成，真正讓你卡住的是什麼？", placeholder: "真正卡住我的是…" },
-    { question: "如果只能先完成一件事，你最想先做哪一件？", placeholder: "我最想先做的是…" },
+    {
+      question: "如果明天還是覺得累，你準備怎麼調整原本想做的事？",
+      placeholder: "例如：運動改到下午／先完成一件最重要的事／先休息再開始",
+    },
+    {
+      question: "明天你想做哪一件事，讓自己回到比較好的狀態？",
+      placeholder: "例如：散步10分鐘／寫下心情／留30分鐘做喜歡的事",
+    },
+    {
+      question: "明天你準備什麼時間開始做這件事？",
+      placeholder: "例如：早餐後／22:30／下午3點",
+    },
   ];
 }
 
@@ -1231,8 +1297,8 @@ function padExecutionPrompts(list) {
     const question = String(item?.question || "").trim();
     if (!isBloatedExecQuestion(question)) {
       return {
-        question: question.slice(0, 36),
-        placeholder: String(item?.placeholder || fallbacks[index]?.placeholder || "寫下你想到的一小步…").slice(0, 36),
+        question: question.slice(0, 48),
+        placeholder: String(item?.placeholder || fallbacks[index]?.placeholder || "寫下你準備做的一小步…").slice(0, 48),
       };
     }
     return fallbacks[index] || fallbacks[0];
@@ -1541,8 +1607,7 @@ module.exports = async function handler(req, res) {
         return;
       }
       const focusSource = data && typeof data === "object" ? data.focus || data.priority || items[0] : items[0];
-      const focusList = normalizeExecutionChecklistItems({ items: [focusSource] }, 1, 1, smallestStep);
-      const focus = focusList[0] || items[0];
+      const focus = rewriteExecFocus(focusSource, items, smallestStep, body.context);
       res.status(200).json({ ok: true, source: getProvider(), data: { items: items.slice(0, max), focus, kind } });
       return;
     }
