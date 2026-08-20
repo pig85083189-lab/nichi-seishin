@@ -80,6 +80,7 @@ const state = {
   remindedDate: "",
   journalHydrating: false,
   journalCheckTimer: 0,
+  journalFoldCollapseTimer: 0,
   journalMeta: {
     awarenessAi: false,
     executionAi: false,
@@ -2611,7 +2612,7 @@ function prepareTourStep(step) {
   }
   if (step.tourPage) switchPage(step.tourPage, { keepSidebar: Boolean(step.tourSidebar) });
   if (typeof step.element === "string" && step.element.startsWith("#")) {
-    setJournalFoldOpen(step.element.slice(1), true, { persist: false, pin: false });
+    setJournalFoldOpen(step.element.slice(1), true, { persist: false, pin: false, manual: true });
   }
 }
 
@@ -3094,7 +3095,7 @@ function toggleQuickModule(key) {
   const journal = collectJournal();
   if (next[key]) {
     const sectionId = { body: "section-body", aware: "section-aware", exec: "section-exec", manifest: "section-manifest" }[key];
-    setJournalFoldOpen(sectionId, true);
+    setJournalFoldOpen(sectionId, true, { manual: true });
   } else {
     applyJournalFolds();
   }
@@ -4190,6 +4191,7 @@ function scheduleJournalChecklists() {
   state.journalCheckTimer = setTimeout(() => {
     const data = collectJournal();
     refreshJournalChecklists(data);
+    if (isJournalFoldEditing()) return;
     maybeAutoGenerateChecklists(data);
     maybeAutoGenerateManifest(data);
     maybeAutoGenerateInsight(data);
@@ -4294,8 +4296,8 @@ function applyGeneratedChecklist(kind, items, sig) {
 }
 
 async function generateJournalChecklist(kind, options = {}) {
-  if (kind === "execution") setJournalFoldOpen("section-exec", true);
-  if (kind === "awareness") setJournalFoldOpen("section-aware", true);
+  if (kind === "execution") setJournalFoldOpen("section-exec", true, { manual: true });
+  if (kind === "awareness") setJournalFoldOpen("section-aware", true, { manual: true });
   if (kind === "manifest") {
     await generateManifestChecklist(options);
     return;
@@ -4648,7 +4650,7 @@ function applyGeneratedManifestPrompts(prompts, answers) {
 }
 
 async function generateManifestPrompts(options = {}) {
-  setJournalFoldOpen("section-manifest", true);
+  if (!options.auto) setJournalFoldOpen("section-manifest", true, { manual: true });
   if (state.manifestPromptsBusy && !options.force) return;
   const journal = collectJournal();
   const vision = String(journal.manifest || "").trim();
@@ -4688,7 +4690,7 @@ async function generateManifestPrompts(options = {}) {
 }
 
 async function generateManifestChecklist(options = {}) {
-  setJournalFoldOpen("section-manifest", true);
+  if (!options.auto) setJournalFoldOpen("section-manifest", true, { manual: true });
   if (state.checklistBusy.manifest && !options.auto) return;
   const journal = collectJournal();
   const vision = String(journal.manifest || "").trim();
@@ -5268,7 +5270,7 @@ function recoverStaleBusy(flag, startedAt, clearFn, limitMs = 32000) {
 }
 
 async function generateThinkGuideAsk(options = {}) {
-  setJournalFoldOpen(thinkGuideFoldId(), true);
+  if (!options.auto) setJournalFoldOpen(thinkGuideFoldId(), true, { manual: true });
   if (recoverStaleBusy(state.insightBusy, state.insightBusyAt, () => setInsightLoading(false))) {
     if (!options.auto) showToast("還在為你想下一問，請稍候。");
     return false;
@@ -5333,7 +5335,7 @@ async function generateThinkGuideAsk(options = {}) {
 }
 
 async function generateThinkGuideClose(options = {}) {
-  setJournalFoldOpen(thinkGuideFoldId(), true);
+  if (!options.auto) setJournalFoldOpen(thinkGuideFoldId(), true, { manual: true });
   if (recoverStaleBusy(state.insightBusy, state.insightBusyAt, () => setInsightLoading(false))) {
     if (!options.auto) showToast("還在為你整理今日覺察總結，請稍候。");
     return false;
@@ -5575,7 +5577,7 @@ function localBodyCoachFallback(journal) {
 }
 
 async function generateBodyCoach(options = {}) {
-  setJournalFoldOpen("section-body", true);
+  if (!options.auto) setJournalFoldOpen("section-body", true, { manual: true });
   if (state.bodyCoachBusy) return;
   const journal = collectJournal();
   if (!bodyCoachReady(journal, options)) {
@@ -7014,6 +7016,126 @@ function journalScroller(el) {
 }
 
 let foldAnchorFrame = 0;
+let foldTogglePointer = { id: "", at: 0 };
+const JOURNAL_EDIT_SELECTOR =
+  "textarea, input:not([type='hidden']):not([type='button']):not([type='submit']):not([type='checkbox']):not([type='radio']):not([type='file']):not([type='reset']):not([type='image']), [contenteditable='true']";
+const FOLD_COLLAPSE_GUARD_MS = 1200;
+const journalFoldEdit = {
+  foldId: "",
+  active: false,
+  lastFocusAt: 0,
+  lastBlurAt: 0,
+};
+
+function isJournalEditField(el) {
+  if (!el || el.nodeType !== 1) return false;
+  if (el.matches?.(JOURNAL_EDIT_SELECTOR)) return true;
+  return Boolean(el.closest?.(JOURNAL_EDIT_SELECTOR));
+}
+
+function journalFoldRootFrom(node) {
+  return node?.closest?.(".journal-fold") || null;
+}
+
+function clearJournalFoldCollapseTimer() {
+  if (state.journalFoldCollapseTimer) {
+    clearTimeout(state.journalFoldCollapseTimer);
+    state.journalFoldCollapseTimer = 0;
+  }
+}
+
+function markJournalFoldEditing(foldId, editing) {
+  if (editing) {
+    clearJournalFoldCollapseTimer();
+    journalFoldEdit.active = true;
+    journalFoldEdit.foldId = foldId || journalFoldEdit.foldId || "";
+    journalFoldEdit.lastFocusAt = Date.now();
+    journalFoldEdit.lastBlurAt = 0;
+    return;
+  }
+  journalFoldEdit.active = false;
+  journalFoldEdit.lastBlurAt = Date.now();
+}
+
+function editingJournalFoldId() {
+  const active = document.activeElement;
+  if (isJournalEditField(active)) {
+    const fold = journalFoldRootFrom(active);
+    if (fold?.id) return fold.id;
+  }
+  if (journalFoldEdit.active && journalFoldEdit.foldId) return journalFoldEdit.foldId;
+  return "";
+}
+
+function isJournalFoldEditing(foldId) {
+  const current = editingJournalFoldId();
+  if (foldId) {
+    if (current === foldId) return true;
+    if (
+      journalFoldEdit.foldId === foldId &&
+      journalFoldEdit.lastBlurAt &&
+      Date.now() - journalFoldEdit.lastBlurAt < FOLD_COLLAPSE_GUARD_MS
+    ) {
+      return true;
+    }
+    return false;
+  }
+  return Boolean(current || journalFoldEdit.active);
+}
+
+function canAutoCollapseJournalFold(id) {
+  if (!id) return true;
+  return !isJournalFoldEditing(id);
+}
+
+function handleJournalFoldFocusIn(event) {
+  const target = event.target;
+  if (!isJournalEditField(target)) return;
+  const fold = journalFoldRootFrom(target);
+  markJournalFoldEditing(fold?.id || "", true);
+}
+
+function handleJournalFoldFocusOut(event) {
+  const target = event.target;
+  if (!isJournalEditField(target)) return;
+  const fold = journalFoldRootFrom(target);
+  const next = event.relatedTarget;
+  if (next && fold && fold.contains(next) && isJournalEditField(next)) {
+    markJournalFoldEditing(fold.id, true);
+    return;
+  }
+  markJournalFoldEditing(fold?.id || "", false);
+  clearJournalFoldCollapseTimer();
+  state.journalFoldCollapseTimer = setTimeout(() => {
+    state.journalFoldCollapseTimer = 0;
+    if (isJournalFoldEditing()) return;
+    scheduleJournalChecklists();
+  }, FOLD_COLLAPSE_GUARD_MS);
+}
+
+function bindJournalFoldEditGuards() {
+  const page = document.getElementById("page-today");
+  if (!page || page.dataset.foldEditBound === "1") return;
+  page.dataset.foldEditBound = "1";
+  page.addEventListener("focusin", handleJournalFoldFocusIn);
+  page.addEventListener("focusout", handleJournalFoldFocusOut);
+  page.addEventListener("compositionstart", handleJournalFoldFocusIn);
+  page.addEventListener(
+    "pointerdown",
+    (event) => {
+      const toggle = event.target.closest?.("[data-journal-fold]");
+      if (toggle && page.contains(toggle) && !event.target.closest(".journal-fold__panel")) {
+        const root = toggle.closest(".journal-fold");
+        foldTogglePointer = { id: root?.id || "", at: Date.now() };
+      }
+      const field = event.target.closest?.(JOURNAL_EDIT_SELECTOR);
+      if (field && event.target.closest(".journal-fold__panel")) {
+        event.stopPropagation();
+      }
+    },
+    true
+  );
+}
 
 function stopFoldAnchor() {
   if (foldAnchorFrame) cancelAnimationFrame(foldAnchorFrame);
@@ -7047,12 +7169,13 @@ function pinFoldWhileAnimating(root, mutate) {
   foldAnchorFrame = requestAnimationFrame(tick);
 }
 
-function applyFoldState(id, open) {
+function applyFoldState(id, open, options = {}) {
   const root = document.getElementById(id);
-  if (!root?.classList.contains("journal-fold")) return;
+  if (!root?.classList.contains("journal-fold")) return false;
+  const next = Boolean(open);
+  if (!next && !options.force && !canAutoCollapseJournalFold(id)) return false;
   const toggle = root.querySelector(":scope > [data-journal-fold]");
   const panel = root.querySelector(":scope > .journal-fold__panel");
-  const next = Boolean(open);
   root.classList.toggle("is-open", next);
   if (toggle) toggle.setAttribute("aria-expanded", next ? "true" : "false");
   if (panel) {
@@ -7066,6 +7189,7 @@ function applyFoldState(id, open) {
       panel.setAttribute("aria-hidden", "true");
     }
   }
+  return true;
 }
 
 function currentOpenJournalFold() {
@@ -7076,13 +7200,15 @@ function setJournalFoldOpen(id, open, options = {}) {
   const root = document.getElementById(id);
   if (!root?.classList.contains("journal-fold")) return;
   const next = Boolean(open);
+  const force = options.force === true || options.manual === true;
+  if (next && !force && isJournalFoldEditing() && editingJournalFoldId() !== id) return;
   const run = () => {
     if (next && options.exclusive !== false) {
       JOURNAL_FOLD_IDS.forEach((other) => {
-        if (other !== id) applyFoldState(other, false);
+        if (other !== id) applyFoldState(other, false, { force });
       });
     }
-    applyFoldState(id, next);
+    applyFoldState(id, next, { force });
     if (options.persist !== false) persistJournalFoldOpen(next ? id : currentOpenJournalFold());
   };
   if (options.pin === false) run();
@@ -7092,14 +7218,20 @@ function setJournalFoldOpen(id, open, options = {}) {
 function toggleJournalFold(id) {
   const root = document.getElementById(id);
   if (!root) return;
-  setJournalFoldOpen(id, !root.classList.contains("is-open"));
+  setJournalFoldOpen(id, !root.classList.contains("is-open"), { manual: true });
 }
 
 function applyJournalFolds() {
   const prefs = journalFoldPrefs();
   const visible = JOURNAL_FOLD_IDS.filter(journalFoldIsActive);
-  const openId = visible.includes(prefs.open) ? prefs.open : "";
-  JOURNAL_FOLD_IDS.forEach((id) => applyFoldState(id, id === openId));
+  const editingId = editingJournalFoldId();
+  let openId = visible.includes(prefs.open) ? prefs.open : "";
+  if (editingId && visible.includes(editingId)) openId = editingId;
+  JOURNAL_FOLD_IDS.forEach((id) => {
+    const wantOpen = id === openId;
+    if (!wantOpen && !canAutoCollapseJournalFold(id)) return;
+    applyFoldState(id, wantOpen, { force: wantOpen });
+  });
 }
 
 function fillJournal(journal) {
@@ -9359,19 +9491,19 @@ function handleTodayPointerClick(event) {
 
   if (node.closest("#btnAwarePrompts")) {
     handled();
-    setJournalFoldOpen("section-aware", true);
+    setJournalFoldOpen("section-aware", true, { manual: true });
     catchAsync(() => generateCorePrompts({ scope: "awareness" }), "覺察題生成失敗");
     return true;
   }
   if (node.closest("#btnExecPrompts")) {
     handled();
-    setJournalFoldOpen("section-exec", true);
+    setJournalFoldOpen("section-exec", true, { manual: true });
     catchAsync(() => generateCorePrompts({ scope: "execution", force: true }), "執行題生成失敗");
     return true;
   }
   if (node.closest("#btnInsightAi") || node.closest("#btnQuickInsight")) {
     handled();
-    setJournalFoldOpen(thinkGuideFoldId(), true);
+    setJournalFoldOpen(thinkGuideFoldId(), true, { manual: true });
     catchAsync(() => generateJournalInsight(), "深度思考還沒開始");
     return true;
   }
@@ -9402,9 +9534,15 @@ function handleTodayPointerClick(event) {
   }
   const foldBtn = node.closest("[data-journal-fold]");
   if (foldBtn) {
-    handled();
+    if (node.closest(".journal-fold__panel")) return false;
     const root = foldBtn.closest(".journal-fold");
-    if (root?.id) toggleJournalFold(root.id);
+    handled();
+    if (!root?.id) return true;
+    const pointerOk = foldTogglePointer.id === root.id && Date.now() - foldTogglePointer.at < 800;
+    const keyboardOk = foldBtn === document.activeElement || foldBtn.contains(document.activeElement);
+    if (!pointerOk && !keyboardOk) return true;
+    foldTogglePointer = { id: "", at: 0 };
+    toggleJournalFold(root.id);
     return true;
   }
   const nextThink = node.closest("[data-think-guide-next]");
@@ -9473,6 +9611,7 @@ function bindEvents() {
 
   const toggle = navToggleEl();
   if (toggle) toggle.addEventListener("click", toggleMenu);
+  bindJournalFoldEditGuards();
   const scrim = document.getElementById("scrim");
   if (scrim) scrim.addEventListener("click", () => setSidebarOpen(false));
 
