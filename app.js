@@ -16,6 +16,8 @@ const STORAGE_KEYS = {
   journalFolds: "nichi.journalFolds",
 };
 
+const CLOUD_STORE_NAMES = ["reviews", "tasks", "sfm", "insights", "manifests", "reports"];
+
 const REVIEW_API = "/api/review";
 const CHAT_API = "/api/chat";
 const NEWEBPAY_EPG_URL = "https://core.newebpay.com/EPG/HTC109030010100/QLBIYc";
@@ -133,11 +135,38 @@ const state = {
   membership: null,
   authReady: false,
   syncing: false,
+  cloudDirty: false,
+  syncKind: "",
+  syncText: "",
 };
 
 /* =============================================================================
  * 工具
  * =========================================================================== */
+
+function cloudStoreKey(name) {
+  const uid = state.user && state.user.id;
+  return uid ? `nichi.u.${uid}.${name}` : `nichi.${name}`;
+}
+
+function isCloudStoreKey(key) {
+  return CLOUD_STORE_NAMES.some((name) => key === `nichi.${name}` || key.endsWith(`.${name}`) && key.startsWith("nichi.u."));
+}
+
+function adoptUserScopedStorage(userId) {
+  const id = String(userId || "").trim();
+  if (!id) return;
+  CLOUD_STORE_NAMES.forEach((name) => {
+    const scoped = `nichi.u.${id}.${name}`;
+    try {
+      if (localStorage.getItem(scoped)) return;
+      const shared = localStorage.getItem(`nichi.${name}`);
+      if (shared) localStorage.setItem(scoped, shared);
+    } catch {
+      /* 本機搬移失敗不擋雲端同步 */
+    }
+  });
+}
 
 function loadJson(key, fallback) {
   try {
@@ -150,10 +179,7 @@ function loadJson(key, fallback) {
 
 function saveJson(key, value, options = {}) {
   localStorage.setItem(key, JSON.stringify(value));
-  if (
-    !options.silent &&
-    [STORAGE_KEYS.reviews, STORAGE_KEYS.tasks, STORAGE_KEYS.sfm, STORAGE_KEYS.insights, STORAGE_KEYS.manifests, STORAGE_KEYS.reports].includes(key)
-  ) {
+  if (!options.silent && isCloudStoreKey(key)) {
     scheduleCloudSync();
   }
 }
@@ -260,12 +286,12 @@ function isMobile() {
  * =========================================================================== */
 
 function getReviews() {
-  const stored = loadJson(STORAGE_KEYS.reviews, {});
+  const stored = loadJson(cloudStoreKey("reviews"), {});
   return stored && typeof stored === "object" && !Array.isArray(stored) ? stored : {};
 }
 
 function saveReviews(reviews) {
-  saveJson(STORAGE_KEYS.reviews, reviews);
+  saveJson(cloudStoreKey("reviews"), reviews);
 }
 
 function getReview(iso) {
@@ -275,18 +301,24 @@ function getReview(iso) {
 function upsertReview(iso, patch) {
   const reviews = getReviews();
   const prev = reviews[iso] && typeof reviews[iso] === "object" ? reviews[iso] : {};
-  reviews[iso] = { ...prev, ...patch, date: iso };
+  reviews[iso] = {
+    ...prev,
+    ...patch,
+    date: iso,
+    userId: (state.user && state.user.id) || prev.userId || "",
+    updatedAt: patch.updatedAt || new Date().toISOString(),
+  };
   saveReviews(reviews);
   return reviews[iso];
 }
 
 function getTasks() {
-  const saved = loadJson(STORAGE_KEYS.tasks, []);
+  const saved = loadJson(cloudStoreKey("tasks"), []);
   return Array.isArray(saved) ? saved : [];
 }
 
 function saveTasks(tasks) {
-  saveJson(STORAGE_KEYS.tasks, tasks);
+  saveJson(cloudStoreKey("tasks"), tasks);
 }
 
 function splitTaskText(text) {
@@ -408,30 +440,30 @@ function syncGuideToNextSteps(input, checked) {
 }
 
 function getSfm() {
-  const saved = loadJson(STORAGE_KEYS.sfm, []);
+  const saved = loadJson(cloudStoreKey("sfm"), []);
   return Array.isArray(saved) ? saved : [];
 }
 
 function saveSfm(items) {
-  saveJson(STORAGE_KEYS.sfm, items);
+  saveJson(cloudStoreKey("sfm"), items);
 }
 
 function getInsights() {
-  const saved = loadJson(STORAGE_KEYS.insights, []);
+  const saved = loadJson(cloudStoreKey("insights"), []);
   return Array.isArray(saved) ? saved : [];
 }
 
 function saveInsights(items) {
-  saveJson(STORAGE_KEYS.insights, items);
+  saveJson(cloudStoreKey("insights"), items);
 }
 
 function getManifests() {
-  const saved = loadJson(STORAGE_KEYS.manifests, []);
+  const saved = loadJson(cloudStoreKey("manifests"), []);
   return Array.isArray(saved) ? saved : [];
 }
 
 function saveManifests(items) {
-  saveJson(STORAGE_KEYS.manifests, items);
+  saveJson(cloudStoreKey("manifests"), items);
 }
 
 function addManifest({ key, title, vision, date }) {
@@ -1249,7 +1281,7 @@ function buildReport(type, rangeOverride) {
 }
 
 function getStoredReports() {
-  const saved = loadJson(STORAGE_KEYS.reports, {});
+  const saved = loadJson(cloudStoreKey("reports"), {});
   return saved && typeof saved === "object" ? saved : {};
 }
 
@@ -1273,7 +1305,7 @@ function readLatestCachedReport(type) {
 function writeCachedReport(type, period, report) {
   const all = getStoredReports();
   all[reportCacheKey(type, period)] = report;
-  saveJson(STORAGE_KEYS.reports, all);
+  saveJson(cloudStoreKey("reports"), all);
 }
 
 function compactReviewsForRange(fromIso, toIso) {
@@ -1371,138 +1403,212 @@ async function fetchArchivedReportList() {
   }
 }
 
+function syncStatusLabel(kind, text) {
+  if (text) return text;
+  if (kind === "saving") return "資料儲存中…";
+  if (kind === "pulling") return "正在讀取雲端紀錄…";
+  if (kind === "saved") return "已同步到雲端";
+  if (kind === "error") return "同步失敗，將再試一次";
+  return "";
+}
+
+function applySyncStatus() {
+  const label = syncStatusLabel(state.syncKind, state.syncText);
+  document.querySelectorAll("[data-sync-status]").forEach((el) => {
+    const show = Boolean(state.user && label);
+    el.hidden = !show;
+    el.dataset.state = state.syncKind || "idle";
+    el.textContent = show ? label : "";
+  });
+}
+
+function setSyncStatus(kind, text) {
+  state.syncKind = kind || "";
+  state.syncText = text || "";
+  applySyncStatus();
+}
+
+function journalHasFocus() {
+  const el = document.activeElement;
+  return Boolean(el && el.closest && el.closest("#page-today") && (el.tagName === "TEXTAREA" || el.tagName === "INPUT" || el.isContentEditable));
+}
+
 function scheduleCloudSync() {
-  if (!state.user || state.syncing) return;
+  if (!state.user) return;
+  if (state.syncing) {
+    state.cloudDirty = true;
+    return;
+  }
   clearTimeout(scheduleCloudSync.timer);
   scheduleCloudSync.timer = setTimeout(() => {
     pushCloudData().catch(() => {});
   }, 900);
 }
 
+function scheduleCloudRetry() {
+  clearTimeout(scheduleCloudRetry.timer);
+  const attempt = Math.min((scheduleCloudRetry.fails || 0) + 1, 6);
+  scheduleCloudRetry.fails = attempt;
+  scheduleCloudRetry.timer = setTimeout(() => {
+    pushCloudData().catch(() => {});
+  }, attempt * 2000);
+}
+
 function collectCloudBundle() {
   return {
+    userId: state.user && state.user.id,
     reviews: getReviews(),
     tasks: getTasks(),
     sfm: getSfm(),
     insights: getInsights(),
     manifests: getManifests(),
     reports: getStoredReports(),
+    updatedAt: new Date().toISOString(),
   };
 }
 
 async function pushCloudData() {
   if (!state.user || typeof location === "undefined" || location.protocol === "file:") return;
-  const bundle = collectCloudBundle();
-  const client = await getSupabase();
-  if (client) {
-    const { error } = await client.from("nichi_user_data").upsert(
-      {
-        user_id: state.user.id,
-        email: state.user.email || "",
-        reviews: bundle.reviews,
-        tasks: bundle.tasks,
-        sfm: bundle.sfm,
-        reports: { ...(bundle.reports || {}), __insights: bundle.insights || [], __manifests: bundle.manifests || [] },
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id" }
-    );
-    if (error) console.warn("[日精進] Supabase 寫入失敗", error.message);
+  if (state.syncing) {
+    state.cloudDirty = true;
+    return;
   }
-  const response = await fetch(`${location.origin}/api/sync`, {
-    method: "PUT",
-    credentials: "include",
-    headers: authHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ ...bundle, email: state.user.email || "" }),
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.ok === false) {
-    if (client) return;
-    throw new Error(payload.error || `HTTP ${response.status}`);
+  state.syncing = true;
+  setSyncStatus("saving");
+  try {
+    await ensureFreshAccessToken();
+    const bundle = collectCloudBundle();
+    const response = await fetch(`${location.origin}/api/sync`, {
+      method: "PUT",
+      credentials: "include",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ ...bundle, email: state.user.email || "" }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload.ok === false) {
+      throw new Error(payload.error || `HTTP ${response.status}`);
+    }
+    if (payload.data) mergeCloudBundle(payload.data);
+    scheduleCloudRetry.fails = 0;
+    setSyncStatus("saved");
+  } catch (error) {
+    console.warn("[進行式 ING] 雲端同步失敗", error && error.message ? error.message : error);
+    setSyncStatus("error");
+    scheduleCloudRetry();
+    throw error;
+  } finally {
+    state.syncing = false;
+    if (state.cloudDirty) {
+      state.cloudDirty = false;
+      scheduleCloudSync();
+    }
   }
+}
+
+function stampMs(value) {
+  const raw = value && typeof value === "object" ? value.updatedAt || value.generatedAt || value.createdAt || "" : "";
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function newerStamp(left, right) {
-  return String((left && left.updatedAt) || "") >= String((right && right.updatedAt) || "");
+  return stampMs(left) >= stampMs(right);
+}
+
+function reviewContentScore(review) {
+  if (!review || typeof review !== "object") return 0;
+  const journal = review.journal && typeof review.journal === "object" ? review.journal : {};
+  const chunks = [
+    review.rawText,
+    review.gratitude,
+    journal.thanksText,
+    journal.thanks,
+    journal.event,
+    journal.feel,
+    journal.body,
+    journal.aware,
+    journal.exec,
+    journal.manifest,
+    journal.deep && typeof journal.deep === "object" ? JSON.stringify(journal.deep) : "",
+    journal.awarenessResult ? JSON.stringify(journal.awarenessResult) : "",
+    review.organize ? JSON.stringify(review.organize) : "",
+  ];
+  return chunks.reduce((sum, chunk) => sum + String(chunk || "").trim().length, 0);
+}
+
+function pickReview(left, right) {
+  if (!left) return right || null;
+  if (!right) return left;
+  const scoreL = reviewContentScore(left);
+  const scoreR = reviewContentScore(right);
+  if (scoreL > 40 && scoreR < 20) return left;
+  if (scoreR > 40 && scoreL < 20) return right;
+  if (Math.abs(scoreL - scoreR) > 80) return scoreL >= scoreR ? left : right;
+  return newerStamp(left, right) ? left : right;
 }
 
 function mergeCloudBundle(cloud) {
-  state.syncing = true;
-  try {
-    const localReviews = getReviews();
-    const nextReviews = { ...localReviews };
-    Object.entries(cloud.reviews || {}).forEach(([iso, review]) => {
-      if (!nextReviews[iso] || newerStamp(review, nextReviews[iso])) nextReviews[iso] = review;
-    });
-    saveJson(STORAGE_KEYS.reviews, nextReviews, { silent: true });
+  if (!cloud || typeof cloud !== "object") return;
+  const localReviews = getReviews();
+  const nextReviews = { ...localReviews };
+  Object.entries(cloud.reviews || {}).forEach(([iso, review]) => {
+    nextReviews[iso] = pickReview(nextReviews[iso], review);
+  });
+  saveJson(cloudStoreKey("reviews"), nextReviews, { silent: true });
 
-    const taskMap = new Map();
-    [...getTasks(), ...(Array.isArray(cloud.tasks) ? cloud.tasks : [])].forEach((task) => {
-      if (!task || !task.id) return;
-      const current = taskMap.get(task.id);
-      if (!current || newerStamp(task, current)) taskMap.set(task.id, task);
-    });
-    saveJson(STORAGE_KEYS.tasks, [...taskMap.values()], { silent: true });
+  const taskMap = new Map();
+  [...getTasks(), ...(Array.isArray(cloud.tasks) ? cloud.tasks : [])].forEach((task) => {
+    if (!task || !task.id) return;
+    const current = taskMap.get(task.id);
+    if (!current || newerStamp(task, current)) taskMap.set(task.id, task);
+  });
+  saveJson(cloudStoreKey("tasks"), [...taskMap.values()], { silent: true });
 
-    const sfmMap = new Map();
-    [...getSfm(), ...(Array.isArray(cloud.sfm) ? cloud.sfm : [])].forEach((item) => {
-      if (!item || !item.id) return;
-      const current = sfmMap.get(item.id);
-      if (!current || newerStamp(item, current)) sfmMap.set(item.id, item);
-    });
-    saveJson(STORAGE_KEYS.sfm, [...sfmMap.values()], { silent: true });
+  const sfmMap = new Map();
+  [...getSfm(), ...(Array.isArray(cloud.sfm) ? cloud.sfm : [])].forEach((item) => {
+    if (!item || !item.id) return;
+    const current = sfmMap.get(item.id);
+    if (!current || newerStamp(item, current)) sfmMap.set(item.id, item);
+  });
+  saveJson(cloudStoreKey("sfm"), [...sfmMap.values()], { silent: true });
 
-    const rawInsights = Array.isArray(cloud.insights)
-      ? cloud.insights
-      : Array.isArray(cloud.reports && cloud.reports.__insights)
-        ? cloud.reports.__insights
-        : [];
-    const insightMap = new Map();
-    [...getInsights(), ...rawInsights].forEach((item) => {
-      if (!item || !item.id) return;
-      const current = insightMap.get(item.id);
-      if (!current || newerStamp(item, current)) insightMap.set(item.id, item);
-    });
-    saveJson(STORAGE_KEYS.insights, [...insightMap.values()], { silent: true });
+  const rawInsights = Array.isArray(cloud.insights)
+    ? cloud.insights
+    : Array.isArray(cloud.reports && cloud.reports.__insights)
+      ? cloud.reports.__insights
+      : [];
+  const insightMap = new Map();
+  [...getInsights(), ...rawInsights].forEach((item) => {
+    if (!item || !item.id) return;
+    const current = insightMap.get(item.id);
+    if (!current || newerStamp(item, current)) insightMap.set(item.id, item);
+  });
+  saveJson(cloudStoreKey("insights"), [...insightMap.values()], { silent: true });
 
-    const rawManifests = Array.isArray(cloud.manifests)
-      ? cloud.manifests
-      : Array.isArray(cloud.reports && cloud.reports.__manifests)
-        ? cloud.reports.__manifests
-        : [];
-    const manifestMap = new Map();
-    [...getManifests(), ...rawManifests].forEach((item) => {
-      if (!item || !item.id) return;
-      const current = manifestMap.get(item.id);
-      if (!current || newerStamp(item, current)) manifestMap.set(item.id, item);
-    });
-    saveJson(STORAGE_KEYS.manifests, [...manifestMap.values()], { silent: true });
+  const rawManifests = Array.isArray(cloud.manifests)
+    ? cloud.manifests
+    : Array.isArray(cloud.reports && cloud.reports.__manifests)
+      ? cloud.reports.__manifests
+      : [];
+  const manifestMap = new Map();
+  [...getManifests(), ...rawManifests].forEach((item) => {
+    if (!item || !item.id) return;
+    const current = manifestMap.get(item.id);
+    if (!current || newerStamp(item, current)) manifestMap.set(item.id, item);
+  });
+  saveJson(cloudStoreKey("manifests"), [...manifestMap.values()], { silent: true });
 
-    const reports = { ...(cloud.reports || {}) };
-    delete reports.__insights;
-    delete reports.__manifests;
-    saveJson(STORAGE_KEYS.reports, { ...getStoredReports(), ...reports }, { silent: true });
-  } finally {
-    state.syncing = false;
-  }
+  const reports = { ...(cloud.reports || {}) };
+  delete reports.__insights;
+  delete reports.__manifests;
+  saveJson(cloudStoreKey("reports"), { ...getStoredReports(), ...reports }, { silent: true });
 }
 
-async function pullCloudData() {
-  if (!state.user) return;
-  const fromSb = await loadSupabaseRecords();
-  if (fromSb) {
-    mergeCloudBundle(fromSb);
-  } else {
-    const response = await fetch(`${location.origin}/api/sync`, {
-      method: "GET",
-      credentials: "include",
-      headers: authHeaders(),
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (response.ok && payload.ok !== false) mergeCloudBundle(payload.data || {});
-  }
+function refreshCloudViews(options = {}) {
   try {
-    loadReviewForDate(currentIso());
+    if (!(options.quiet && journalHasFocus())) {
+      loadReviewForDate(currentIso());
+    }
     updateStats();
     if (state.page === "next") renderInsights();
     if (state.page === "sfm") renderTasks();
@@ -1511,6 +1617,81 @@ async function pullCloudData() {
     if (state.page === "report") renderReport();
   } catch {
     /* 畫面重整失敗也不擋同步 */
+  }
+}
+
+async function pullCloudData(options = {}) {
+  if (!state.user) return;
+  if (!options.quiet) setSyncStatus("pulling");
+  await ensureFreshAccessToken();
+  let cloud = null;
+  try {
+    const response = await fetch(`${location.origin}/api/sync`, {
+      method: "GET",
+      credentials: "include",
+      headers: authHeaders(),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (response.ok && payload.ok !== false) cloud = payload.data || {};
+  } catch (error) {
+    console.warn("[進行式 ING] 讀取 /api/sync 失敗", error && error.message ? error.message : error);
+  }
+  if (!cloud) cloud = await loadSupabaseRecords();
+  if (cloud) mergeCloudBundle(cloud);
+  refreshCloudViews(options);
+  if (!options.quiet && state.syncKind !== "error") setSyncStatus("saved");
+}
+
+function startCloudLiveSync() {
+  stopCloudLiveSync();
+  if (!state.user) return;
+  startCloudLiveSync.timer = setInterval(() => {
+    if (document.visibilityState !== "visible" || !state.user || state.syncing) return;
+    pullCloudData({ quiet: true }).catch(() => {});
+  }, 45000);
+}
+
+function stopCloudLiveSync() {
+  clearInterval(startCloudLiveSync.timer);
+  startCloudLiveSync.timer = 0;
+}
+
+function bindCloudLiveSync() {
+  if (bindCloudLiveSync.bound) return;
+  bindCloudLiveSync.bound = true;
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && state.user) {
+      pullCloudData({ quiet: true }).catch(() => {});
+    }
+  });
+  window.addEventListener("online", () => {
+    if (!state.user) return;
+    pushCloudData().catch(() => {});
+    pullCloudData({ quiet: true }).catch(() => {});
+  });
+}
+
+let cloudAccountSync = null;
+
+async function syncAccountCloud() {
+  if (!state.user) {
+    stopCloudLiveSync();
+    setSyncStatus("");
+    return;
+  }
+  if (cloudAccountSync) return cloudAccountSync;
+  cloudAccountSync = (async () => {
+    adoptUserScopedStorage(state.user.id);
+    startCloudLiveSync();
+    await pullCloudData();
+    await pushCloudData().catch(() => {});
+  })();
+  try {
+    await cloudAccountSync;
+  } finally {
+    setTimeout(() => {
+      cloudAccountSync = null;
+    }, 1200);
   }
 }
 
@@ -1524,6 +1705,7 @@ function renderAuth() {
   }
   if (!side) {
     applyAccessLock();
+    applySyncStatus();
     return;
   }
   if (!user) {
@@ -1542,6 +1724,7 @@ function renderAuth() {
     `;
     if (lastAuthError) setAuthError(lastAuthError);
     applyAccessLock();
+    applySyncStatus();
     return;
   }
   const initial = escapeHtml((user.name || user.email || "我").slice(0, 1));
@@ -1571,10 +1754,12 @@ function renderAuth() {
     </div>
     ${payBtn}
     <button class="auth-logout" id="btnSignOut" type="button"><span>登出</span></button>
+    <p class="sync-status" data-sync-status role="status"></p>
     ${trialHint}
   `;
   bindSubscribeButton();
   applyAccessLock();
+  applySyncStatus();
 }
 
 let supabaseClient = null;
@@ -1609,7 +1794,14 @@ async function getSupabase() {
       const prev = state.user && state.user.id;
       applySession(session);
       const next = state.user && state.user.id;
-      if (prev !== next) renderAuth();
+      if (prev !== next) {
+        renderAuth();
+        if (next) syncAccountCloud().catch(() => {});
+        else {
+          stopCloudLiveSync();
+          setSyncStatus("");
+        }
+      }
     });
     return supabaseClient;
   })();
@@ -1683,8 +1875,7 @@ async function afterAuthSuccess() {
   renderAuth();
   showToast("已登入，正在讀取你的紀錄…");
   try {
-    await pullCloudData();
-    await pushCloudData();
+    await syncAccountCloud();
     showToast("已載入你的個人紀錄。");
   } catch (error) {
     showToast(`紀錄讀取失敗：${error.message || error}`);
@@ -1741,11 +1932,13 @@ async function signInWithGoogle() {
 }
 
 async function signOutUser() {
+  stopCloudLiveSync();
   const client = await getSupabase();
   if (client) await client.auth.signOut();
   state.user = null;
   state.accessToken = "";
   state.membership = null;
+  setSyncStatus("");
   renderAuth();
   showToast("已登出。本機草稿仍在這台裝置上。");
 }
@@ -2022,7 +2215,7 @@ async function loadSupabaseRecords() {
   return null;
 }
 
-async function refreshAuth() {
+async function refreshAuth(options = {}) {
   renderAuth();
   try {
     const client = await getSupabase();
@@ -2044,10 +2237,9 @@ async function refreshAuth() {
     state.authReady = true;
     renderAuth();
     applyAccessLock();
-    if (state.user) {
-      await pullCloudData();
-      await pushCloudData();
-    }
+    if (state.user && !options.skipCloud) await syncAccountCloud();
+    else if (state.user) startCloudLiveSync();
+    else stopCloudLiveSync();
   } catch {
     state.authReady = true;
     renderAuth();
@@ -2059,7 +2251,7 @@ async function watchPaidUnlock() {
   showToast("付款已送出。正在確認會員狀態…");
   for (let attempt = 0; attempt < 8; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, attempt === 0 ? 900 : 2000));
-    await refreshAuth();
+    await refreshAuth({ skipCloud: true });
     if (state.membership && (state.membership.paid || state.membership.isPaid)) {
       showToast("付款成功，功能已全部解鎖。");
       return;
@@ -10147,6 +10339,7 @@ function init() {
     setInterval(tickReminder, 20000);
     probeReviewApi();
     applyAccessLock();
+    bindCloudLiveSync();
     refreshAuth();
     handleAuthQuery();
     setInterval(() => {

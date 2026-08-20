@@ -667,6 +667,42 @@ body.nav-closed .side-logout {
   line-height: 1.5;
 }
 
+.sync-status,
+.sync-chip {
+  margin: 8px 2px 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+  letter-spacing: 0.02em;
+}
+
+.sync-chip {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 0 6px;
+  max-width: 11rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sync-status[data-state="saving"],
+.sync-chip[data-state="saving"],
+.sync-status[data-state="pulling"],
+.sync-chip[data-state="pulling"] {
+  color: var(--header);
+}
+
+.sync-status[data-state="saved"],
+.sync-chip[data-state="saved"] {
+  color: #7a6a5c;
+}
+
+.sync-status[data-state="error"],
+.sync-chip[data-state="error"] {
+  color: #a65b4a;
+}
+
 .auth-form {
   display: flex;
   flex-direction: column;
@@ -782,6 +818,7 @@ body.nav-closed .side-logout {
 }
 
 body.nav-closed .auth-hint,
+body.nav-closed .sync-status,
 body.nav-closed .auth-user__meta,
 body.nav-closed .auth-login span,
 body.nav-closed .auth-logout span,

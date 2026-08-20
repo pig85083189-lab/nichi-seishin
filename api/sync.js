@@ -1,5 +1,5 @@
-const { requireUser } = require("../lib/auth");
-const { kvConfigured, loadUserData, saveUserData } = require("../lib/store");
+const { requireUser, bearerToken } = require("../lib/auth");
+const { cloudStoreConfigured, loadUserData, saveUserData } = require("../lib/store");
 
 function readJsonBody(req) {
   const raw = req.body;
@@ -31,21 +31,23 @@ module.exports = async function handler(req, res) {
   const user = await requireUser(req, res);
   if (!user) return;
 
-  if (!kvConfigured()) {
-    res.status(503).json({ ok: false, error: "尚未設定 Vercel KV，無法同步雲端備份" });
+  if (!cloudStoreConfigured()) {
+    res.status(503).json({ ok: false, error: "尚未設定雲端資料庫（Supabase 或 Vercel KV），無法同步" });
     return;
   }
 
+  const extra = { userToken: bearerToken(req), email: user.email || "" };
+
   try {
     if (req.method === "GET") {
-      const data = await loadUserData(user.id);
+      const data = await loadUserData(user.id, extra);
       res.status(200).json({ ok: true, userId: user.id, data });
       return;
     }
 
     if (req.method === "PUT" || req.method === "POST") {
       const body = readJsonBody(req);
-      const saved = await saveUserData(user.id, body);
+      const saved = await saveUserData(user.id, { ...body, email: body.email || user.email || "" }, extra);
       res.status(200).json({ ok: true, userId: user.id, data: saved });
       return;
     }
