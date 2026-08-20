@@ -4997,6 +4997,31 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   font-weight: 400;
 }
 
+.manifest-path__kicker {
+  margin: 0 0 4px;
+  color: var(--heading);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.manifest-path .exec-check__title,
+.manifest-path .exec-check__lead,
+#manifestQuestions .journal-core-q,
+.manifest-sentence .exec-focus__title,
+.manifest-sentence .exec-focus__why {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+#manifestQuestions {
+  margin-top: 16px;
+}
+
+#btnManifestPaths {
+  margin-top: 8px;
+}
+
 .exec-check:hover {
   background: var(--cream);
 }

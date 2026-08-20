@@ -88,6 +88,8 @@ const state = {
     awarenessQuoteGenCount: 0,
     manifestAi: false,
     manifestAiSig: "",
+    manifestPromptsAi: false,
+    manifestPromptsSig: "",
     insightSig: "",
     bodyCoachSig: "",
     promptsSig: "",
@@ -105,6 +107,10 @@ const state = {
   bodyCoachToken: 0,
   journalBodyCoach: null,
   journalExecFocus: null,
+  journalManifestSentence: "",
+  manifestPrompts: [],
+  manifestPromptsBusy: false,
+  manifestPromptsToken: 0,
   promptsBusy: false,
   promptsToken: 0,
   corePromptsBusy: false,
@@ -2714,7 +2720,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "07 顯化力",
-        description: "左側寫下明天想顯化的心念，右側會拆成做得到的步驟。勾選後會立刻同步到側邊欄「顯化力」，完成復盤也會再匯集一次。",
+        description: "寫下真正想靠近的事，先想生活與自己會怎麼不同，再找出能慢慢靠近的方向。勾選後會同步到側邊欄「顯化力」。",
         side: "top",
       },
     },
@@ -3124,10 +3130,15 @@ function emptyJournal() {
     executionAiSig: "",
     awarenessQuoteGenCount: 0,
     manifest: "",
+    manifestThink: ["", ""],
+    manifestPrompts: [],
+    manifestSentence: "",
     manifestChecks: [],
     manifestCheckItems: [],
     manifestAi: false,
     manifestAiSig: "",
+    manifestPromptsAi: false,
+    manifestPromptsSig: "",
     insight: emptyInsight(),
     deep: emptyDeep(),
     awarenessPrompts: [],
@@ -3541,7 +3552,9 @@ function journalHasContent(journal) {
     journal.smallestStep,
     ...(journal.awareness || []),
     ...(journal.execution || []),
+    ...(journal.manifestThink || []),
     journal.manifest,
+    journal.manifestSentence,
   ];
   if (textBits.some((item) => String(item || "").trim())) return true;
   if (deepHasContent(journal.deep)) return true;
@@ -3916,6 +3929,10 @@ function renderChecklist(rootId, items, checked) {
     renderAwareQuote(items, checked);
     return;
   }
+  if (rootId === "manifestChecks") {
+    renderManifestPaths(items, checked);
+    return;
+  }
   const root = document.getElementById(rootId);
   if (!root) return;
   const set = new Set(checked || []);
@@ -3945,7 +3962,7 @@ function refreshJournalChecklists(journal, options = {}) {
   const execItems = keepExec
     ? normalizeExecCheckItems(data.executionCheckItems).slice(0, EXECUTION_CARD_MAX)
     : [];
-  const manifestItems = keepManifest ? data.manifestCheckItems.slice(0, 5) : [];
+  const manifestItems = keepManifest ? normalizeManifestPathItems(data.manifestCheckItems).slice(0, 5) : [];
   const awareChecked = options.useSaved ? data.awarenessChecks : checkedValues("awareChecks");
   const execChecked = options.useSaved ? data.executionChecks : checkedValues("execChecks");
   const manifestChecked = options.useSaved ? data.manifestChecks : checkedValues("manifestChecks");
@@ -3954,7 +3971,10 @@ function refreshJournalChecklists(journal, options = {}) {
     renderChecklist("execChecks", execItems, execChecked);
     renderExecFocus(keepExec ? data.executionFocus || state.journalExecFocus || execItems[0] : emptyExecFocus());
   }
-  if (!options.skipManifest) renderChecklist("manifestChecks", manifestItems, manifestChecked);
+  if (!options.skipManifest) {
+    renderChecklist("manifestChecks", manifestItems, manifestChecked);
+    renderManifestSentence(data.manifestSentence || state.journalManifestSentence);
+  }
 }
 
 function scheduleJournalChecklists() {
@@ -4017,7 +4037,7 @@ function normalizeAiChecklistItems(raw, min, max, fallback) {
 
 function checklistUi(kind) {
   if (kind === "manifest") {
-    return { btn: "btnManifestAi", loader: "manifestLoading", list: "manifestChecks", idle: "生成執行目標" };
+    return { btn: "btnManifestPaths", loader: "manifestLoading", list: "manifestChecks", idle: "✦ 讓願望靠近現實" };
   }
   if (kind === "awareness") {
     return { btn: "btnAwareAi", loader: "awareLoading", list: "awareChecks", idle: "✦ 看見我的核心覺察" };
@@ -4040,7 +4060,7 @@ function setChecklistLoading(kind, loading) {
         ? "正在為你整理…"
         : kind === "execution"
           ? "正在整理行動卡…"
-          : "分析中…"
+          : "正在整理靠近的方向…"
       : ui.idle;
   }
   if (loader) loader.hidden = !loading;
@@ -4183,17 +4203,272 @@ function manifestReady(journal) {
   return String((journal || collectJournal()).manifest || "").trim().length >= 4;
 }
 
-function buildManifestCheckItems(journal) {
-  const vision = String(journal.manifest || "").trim();
-  const short = vision.length > 14 ? `${vision.slice(0, 14)}…` : vision || "這份願景";
+const MANIFEST_KIND_META = {
+  start: "今天可以開始的一小步",
+  habit: "需要慢慢建立的一個習慣",
+  limit: "目前最值得突破的一個限制",
+};
+
+function manifestPromptFallbacks(vision) {
+  const bit = String(vision || "").trim().slice(0, 10) || "這件事";
+  return [
+    {
+      question: `如果「${bit}」已經成真，你最希望生活中的哪一件事先改變？`,
+      placeholder: "生活裡會先不一樣的是…",
+    },
+    {
+      question: "那個已經做到的你，現在最不一樣的可能是什麼？",
+      placeholder: "做事方式或狀態會不同的是…",
+    },
+  ];
+}
+
+function normalizeManifestPrompts(list) {
+  return (Array.isArray(list) ? list : [])
+    .map((item) => {
+      const question = String(item?.question || item?.title || item || "").trim();
+      if (!question) return null;
+      return {
+        question: question.slice(0, 56),
+        placeholder: String(item?.placeholder || "我想的是…").trim().slice(0, 24) || "我想的是…",
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 2);
+}
+
+function collectManifestThinkAnswers() {
+  const prompts = normalizeManifestPrompts(state.manifestPrompts);
+  const prev = getReview(currentIso())?.journal?.manifestThink || [];
+  const count = Math.max(prompts.length, 2);
+  return Array.from({ length: count }, (_, index) => {
+    const el = document.getElementById(`manifestThink${index + 1}`);
+    if (el) return String(el.value || "");
+    return String(prev[index] || "");
+  });
+}
+
+function manifestThinkReady(answers) {
+  const prompts = normalizeManifestPrompts(state.manifestPrompts);
+  const list = Array.isArray(answers) ? answers : [];
+  if (prompts.length < 2) return false;
+  return prompts.every((_, index) => String(list[index] || "").trim());
+}
+
+function normalizeManifestPathItem(item) {
+  if (!item) return null;
+  if (typeof item === "string") {
+    const title = item.trim();
+    return title ? { kind: "", label: "", title, detail: "" } : null;
+  }
+  if (typeof item !== "object") return null;
+  let kind = String(item.kind || "").trim().toLowerCase();
+  if (kind === "step" || kind === "today") kind = "start";
+  if (kind === "weekly") kind = "habit";
+  if (kind === "block") kind = "limit";
+  const title = String(item.title || item.label || item.text || "").trim();
+  const detail = String(item.detail || item.note || "").trim();
+  if (!title) return null;
+  return {
+    kind: MANIFEST_KIND_META[kind] ? kind : "",
+    label: MANIFEST_KIND_META[kind] || "",
+    title,
+    detail,
+  };
+}
+
+function normalizeManifestPathItems(list) {
   const items = [];
-  pushUnique(items, `明天先為「${short}」做一件最小的事`, 5);
-  pushUnique(items, "把願景寫成一句明天做得到的話，貼在看得到的地方", 5);
-  pushUnique(items, "安排 10 分鐘，只靠近這件事一步", 5);
-  if (/錢|收入|客戶|成交|訂單/.test(vision)) pushUnique(items, "主動聯絡一位可能幫忙的人", 5);
-  if (/關係|愛|陪伴|溝通/.test(vision)) pushUnique(items, "對在乎的人說一句真心話", 5);
-  if (/睡|休息|健康|身體/.test(vision)) pushUnique(items, "今晚固定時間放下螢幕，讓身體先休息", 5);
-  return items.slice(0, 5);
+  const seen = new Set();
+  (Array.isArray(list) ? list : []).forEach((item) => {
+    const next = normalizeManifestPathItem(item);
+    if (!next || seen.has(next.title)) return;
+    seen.add(next.title);
+    items.push(next);
+  });
+  return items;
+}
+
+function collectManifestPathItems() {
+  const cards = [...document.querySelectorAll("#manifestChecks .manifest-path")].map((el) => ({
+    kind: String(el.dataset.kind || "").trim(),
+    title: String(el.dataset.title || "").trim(),
+    detail: String(el.dataset.detail || "").trim(),
+  })).filter((item) => item.title);
+  if (cards.length) return cards;
+  return checklistItems("manifestChecks").map((title) => ({ kind: "", title, detail: "" })).filter((item) => item.title);
+}
+
+function buildManifestPathItems(journal) {
+  const vision = String(journal.manifest || "").trim();
+  const short = vision.length > 12 ? `${vision.slice(0, 12)}…` : vision || "這件事";
+  const items = [
+    { kind: "start", label: MANIFEST_KIND_META.start, title: `寫下「${short}」對你真正意味著什麼，以及下一步想靠近的方向。`, detail: "" },
+    { kind: "habit", label: MANIFEST_KIND_META.habit, title: "每週留一次時間，回顧什麼有靠近、什麼只是空想。", detail: "" },
+  ];
+  if (/錢|收入|客戶|品牌|事業/.test(vision)) {
+    items.push({ kind: "limit", label: MANIFEST_KIND_META.limit, title: "確認最容易讓自己停下來的，是方向不清楚、不敢曝光，還是還沒開始。", detail: "" });
+  }
+  return items.slice(0, 3);
+}
+
+function buildManifestSentence(journal) {
+  const bit = String(journal.manifest || "").trim().slice(0, 8) || "這件事";
+  return `我正在一步一步，讓「${bit}」從心念變成可以靠近的方向。`;
+}
+
+function renderManifestQuestions(prompts, options = {}) {
+  const root = document.getElementById("manifestQuestions");
+  const pathsBtn = document.getElementById("btnManifestPaths");
+  const items = normalizeManifestPrompts(prompts);
+  if (!root) return;
+  if (!items.length) {
+    root.innerHTML = "";
+    if (pathsBtn) pathsBtn.hidden = true;
+    return;
+  }
+  const saved = Array.isArray(options.answers) ? options.answers : collectManifestThinkAnswers();
+  root.innerHTML = items
+    .map(
+      (item, index) => `
+        <div class="aware-q exec-q">
+          <p class="journal-core-q">${escapeHtml(item.question)}</p>
+          <textarea class="textarea" id="manifestThink${index + 1}" rows="3" placeholder="${escapeHtml(item.placeholder || "我想的是…")}">${escapeHtml(String(saved[index] || ""))}</textarea>
+        </div>
+      `
+    )
+    .join("");
+  if (pathsBtn) pathsBtn.hidden = false;
+}
+
+function renderManifestPathCard(item, index, done) {
+  const heading = item.label ? `${String(index + 1).padStart(2, "0")}｜${item.label}` : "";
+  return `
+    <label class="check-line exec-check manifest-path${done ? " is-done" : ""}" data-kind="${escapeHtml(item.kind || "")}" data-title="${escapeHtml(item.title)}" data-detail="${escapeHtml(item.detail || "")}">
+      <input type="checkbox" value="${escapeHtml(item.title)}" ${done ? "checked" : ""} />
+      <span class="exec-check__box" aria-hidden="true"></span>
+      <span class="exec-check__body">
+        ${heading ? `<span class="manifest-path__kicker">${escapeHtml(heading)}</span>` : ""}
+        <span class="exec-check__title">${escapeHtml(item.title)}</span>
+        ${item.detail ? `<span class="exec-check__lead">${escapeHtml(item.detail)}</span>` : ""}
+      </span>
+    </label>
+  `;
+}
+
+function renderManifestPaths(items, checked) {
+  const root = document.getElementById("manifestChecks");
+  if (!root) return;
+  const normalized = normalizeManifestPathItems(items);
+  if (!normalized.length) {
+    root.innerHTML = "";
+    return;
+  }
+  const set = new Set((checked || []).map((item) => (typeof item === "string" ? item : item && item.title)).filter(Boolean));
+  const rich = normalized.some((item) => item.kind);
+  if (!rich) {
+    root.innerHTML = normalized
+      .map(
+        (item) => `
+        <label class="check-line">
+          <input type="checkbox" value="${escapeHtml(item.title)}" ${set.has(item.title) ? "checked" : ""} />
+          <span>${escapeHtml(item.title)}</span>
+        </label>
+      `
+      )
+      .join("");
+    return;
+  }
+  const open = [];
+  const done = [];
+  normalized.forEach((item) => (set.has(item.title) ? done : open).push(item));
+  root.innerHTML = `
+    <div class="exec-check-open">
+      ${open.map((item, index) => renderManifestPathCard(item, index, false)).join("")}
+    </div>
+    ${
+      done.length
+        ? `<div class="exec-check-done">
+            <h4 class="exec-check-done__title">已靠近</h4>
+            ${done.map((item, index) => renderManifestPathCard(item, index, true)).join("")}
+          </div>`
+        : ""
+    }
+  `;
+}
+
+function renderManifestSentence(text) {
+  const root = document.getElementById("manifestSentence");
+  if (!root) return;
+  const sentence = String(text || "").trim();
+  if (!sentence) {
+    root.hidden = true;
+    root.innerHTML = "";
+    return;
+  }
+  root.hidden = false;
+  root.innerHTML = `
+    <p class="exec-focus__kicker">我的顯化句</p>
+    <p class="exec-focus__title">「${escapeHtml(sentence.replace(/^[「」]+|[「」]+$/g, ""))}」</p>
+  `;
+}
+
+function setManifestPromptsLoading(loading) {
+  state.manifestPromptsBusy = loading;
+  const btn = document.getElementById("btnManifestAi");
+  const loader = document.getElementById("manifestPromptLoading");
+  if (btn) {
+    btn.disabled = loading;
+    btn.textContent = loading ? "正在看看這個願望…" : "✦ 看看這個願望";
+    btn.classList.toggle("is-busy", loading);
+  }
+  if (loader) loader.hidden = !loading;
+}
+
+function applyGeneratedManifestPrompts(prompts, answers) {
+  state.manifestPrompts = normalizeManifestPrompts(prompts);
+  renderManifestQuestions(state.manifestPrompts, { answers: answers || ["", ""] });
+  persistJournalQuietly();
+}
+
+async function generateManifestPrompts(options = {}) {
+  setJournalFoldOpen("section-manifest", true);
+  if (state.manifestPromptsBusy && !options.force) return;
+  const journal = collectJournal();
+  const vision = String(journal.manifest || "").trim();
+  if (vision.length < 4) {
+    if (!options.auto) showToast("先寫下一件你真正想讓它慢慢成為現實的事。");
+    return;
+  }
+  const token = (state.manifestPromptsToken || 0) + 1;
+  state.manifestPromptsToken = token;
+  setManifestPromptsLoading(true);
+  const fallback = manifestPromptFallbacks(vision);
+  try {
+    if (!state.user) throw new Error("請先登入，才能使用雲端出題。");
+    const remote = await postReview({
+      mode: "manifest",
+      step: "prompts",
+      date: currentIso(),
+      vision,
+      text: vision,
+    });
+    if (state.manifestPromptsToken !== token) return;
+    const questions = normalizeManifestPrompts(remote.questions || remote.items);
+    if (questions.length < 2) throw new Error("雲端回傳格式不完整");
+    state.journalMeta.manifestPromptsAi = true;
+    state.journalMeta.manifestPromptsSig = vision;
+    applyGeneratedManifestPrompts(questions, ["", ""]);
+    if (!options.auto) showToast("先看看這個願望會怎麼改變生活。");
+  } catch (error) {
+    if (state.manifestPromptsToken !== token) return;
+    state.journalMeta.manifestPromptsAi = true;
+    state.journalMeta.manifestPromptsSig = vision;
+    applyGeneratedManifestPrompts(fallback, ["", ""]);
+    if (!options.auto) showToast(`雲端顯化題還沒好：${formatApiError(error)}，先用本地題目。`);
+  } finally {
+    if (state.manifestPromptsToken === token) setManifestPromptsLoading(false);
+  }
 }
 
 async function generateManifestChecklist(options = {}) {
@@ -4202,55 +4477,62 @@ async function generateManifestChecklist(options = {}) {
   const journal = collectJournal();
   const vision = String(journal.manifest || "").trim();
   if (vision.length < 4) {
-    if (!options.auto) showToast("先寫下明天想顯化的事情，再拆成執行目標。");
+    if (!options.auto) showToast("先寫下一件你真正想讓它慢慢成為現實的事。");
     return;
   }
-  const sig = vision;
+  if (!manifestThinkReady(journal.manifestThink)) {
+    if (!options.auto) showToast("先回答兩道顯化思考題，再讓願望靠近現實。");
+    return;
+  }
+  const sig = [vision, ...(journal.manifestThink || [])].join("\n");
   if (options.auto && state.journalMeta.manifestAiSig === sig) return;
 
   const token = (state.checklistToken.manifest || 0) + 1;
   state.checklistToken.manifest = token;
   setChecklistLoading("manifest", true);
-  const fallback = buildManifestCheckItems(journal);
+  const fallback = buildManifestPathItems(journal);
+  const fallbackSentence = buildManifestSentence(journal);
 
   try {
     if (!state.user) throw new Error("請先登入，才能使用雲端分析。");
     const remote = await postReview({
       mode: "manifest",
+      step: "paths",
       date: currentIso(),
       vision,
       text: vision,
+      questions: (state.manifestPrompts || []).map((item) => item.question),
+      answers: journal.manifestThink,
       context: {
         event: journal.event,
         mood: journal.mood,
         bodyTags: journal.bodyTags,
         bodyNote: journal.bodyNote,
-        openActions: getTasks()
-          .filter((task) => task.status !== "done")
-          .slice(0, 6)
-          .map((task) => task.title),
       },
     });
     if (state.checklistToken.manifest !== token) return;
-    const items = normalizeAiChecklistItems(remote.items, 3, 5, fallback);
-    if (items.length < 3) throw new Error("雲端回傳格式不完整");
+    const items = normalizeManifestPathItems(remote.items);
+    if (items.length < 2) throw new Error("雲端回傳格式不完整");
+    const sentence = String(remote.sentence || fallbackSentence).trim() || fallbackSentence;
+    state.journalManifestSentence = sentence;
     applyGeneratedChecklist("manifest", items, sig);
-    showToast("顯化執行目標已生成。");
+    renderManifestSentence(sentence);
+    persistJournalQuietly();
+    showToast("已經整理出靠近現實的方向。");
   } catch (error) {
     if (state.checklistToken.manifest !== token) return;
-    applyGeneratedChecklist("manifest", fallback.slice(0, 5), sig);
-    showToast(`雲端分析失敗：${formatApiError(error)}，先用本地步驟。`);
+    state.journalManifestSentence = fallbackSentence;
+    applyGeneratedChecklist("manifest", fallback, sig);
+    renderManifestSentence(fallbackSentence);
+    persistJournalQuietly();
+    showToast(`雲端整理失敗：${formatApiError(error)}，先用本地方向。`);
   } finally {
     if (state.checklistToken.manifest === token) setChecklistLoading("manifest", false);
   }
 }
 
-function maybeAutoGenerateManifest(journal) {
+function maybeAutoGenerateManifest() {
   if (state.journalHydrating) return;
-  if (state.journalMode === "quick" && !state.quickModules?.manifest) return;
-  if (manifestReady(journal) && state.journalMeta.manifestAiSig !== String(journal.manifest || "").trim()) {
-    generateManifestChecklist({ auto: true });
-  }
 }
 
 function thanksFilled(journal) {
@@ -6267,10 +6549,18 @@ function collectJournal() {
     executionAiSig: state.journalMeta.executionAiSig || "",
     awarenessQuoteGenCount: awarenessQuoteGenCount(),
     manifest: journalFieldValue("manifestVision"),
+    manifestThink: collectManifestThinkAnswers(),
+    manifestPrompts: normalizeManifestPrompts(state.manifestPrompts),
+    manifestSentence: String(state.journalManifestSentence || "").trim(),
     manifestChecks: checkedValues("manifestChecks"),
-    manifestCheckItems: checklistItems("manifestChecks"),
+    manifestCheckItems: (() => {
+      const collected = collectManifestPathItems();
+      return collected.length ? collected : normalizeManifestPathItems(checklistItems("manifestChecks"));
+    })(),
     manifestAi: Boolean(state.journalMeta.manifestAi),
     manifestAiSig: state.journalMeta.manifestAiSig || "",
+    manifestPromptsAi: Boolean(state.journalMeta.manifestPromptsAi),
+    manifestPromptsSig: state.journalMeta.manifestPromptsSig || "",
     insight: state.journalInsight || emptyInsight(),
     deep: [1, 2, 3, 4].map(collectDeepSlot),
     awarenessPrompts: state.awarenessPrompts || [],
@@ -6382,8 +6672,17 @@ function composeJournalRawText(journal) {
   const execLines = execCheckHistoryLines(journal);
   if (execLines.length) lines.push(`我的行動卡：${execLines.join("、")}`);
   if (journal.executionFocus?.title) lines.push(`今天最重要的一步：${journal.executionFocus.title}`);
-  if (String(journal.manifest || "").trim()) lines.push(`明天想顯化：${journal.manifest.trim()}`);
-  if ((journal.manifestChecks || []).length) lines.push(`顯化執行目標：${journal.manifestChecks.join("、")}`);
+  if (String(journal.manifest || "").trim()) lines.push(`我想顯化的事情：${journal.manifest.trim()}`);
+  const manifestPrompts = normalizeManifestPrompts(journal.manifestPrompts || state.manifestPrompts);
+  const manifestThink = Array.isArray(journal.manifestThink) ? journal.manifestThink : [];
+  manifestPrompts.forEach((item, index) => {
+    const answer = String(manifestThink[index] || "").trim();
+    if (answer) lines.push(`${item.question} ${answer}`);
+  });
+  const manifestPaths = normalizeManifestPathItems(journal.manifestCheckItems);
+  if (manifestPaths.length) lines.push(`讓願望靠近現實：${manifestPaths.map((item) => item.title).join("、")}`);
+  else if ((journal.manifestChecks || []).length) lines.push(`讓願望靠近現實：${journal.manifestChecks.join("、")}`);
+  if (String(journal.manifestSentence || "").trim()) lines.push(`我的顯化句：${String(journal.manifestSentence).trim()}`);
   const deepQs = (journal.deepPrompts || state.deepPrompts || []).map((item) => item.title || item.question || item);
   normalizeDeep(journal.deep).forEach((item, index) => {
     const plain = String(item.plain || "").trim();
@@ -6580,6 +6879,8 @@ function fillJournal(journal) {
   setChecklistLoading("awareness", false);
   setChecklistLoading("execution", false);
   setChecklistLoading("manifest", false);
+  setManifestPromptsLoading(false);
+  state.manifestPromptsToken += 1;
   setInsightLoading(false);
   setBodyCoachLoading(false);
   setPromptsLoading(false);
@@ -6598,6 +6899,8 @@ function fillJournal(journal) {
     ),
     manifestAi: Boolean(data.manifestAi),
     manifestAiSig: data.manifestAiSig || "",
+    manifestPromptsAi: Boolean(data.manifestPromptsAi),
+    manifestPromptsSig: data.manifestPromptsSig || "",
     insightSig: data.insight?.sig || "",
     bodyCoachSig: data.bodyCoach?.sig || "",
     promptsSig: data.promptsSig || "",
@@ -6608,6 +6911,8 @@ function fillJournal(journal) {
   state.journalInsight = normalizeInsight(data.insight);
   state.journalBodyCoach = normalizeBodyCoach(data.bodyCoach);
   state.journalExecFocus = normalizeExecFocus(data.executionFocus, data.executionCheckItems);
+  state.journalManifestSentence = String(data.manifestSentence || "").trim();
+  state.manifestPrompts = normalizeManifestPrompts(data.manifestPrompts);
   state.awarenessPrompts = hydrateAwarenessPrompts(data);
   state.executionPrompts = hydrateExecutionPrompts(data);
   state.execQuestionTab = normalizeExecQuestionTab(data.executionQuestionTab);
@@ -6625,6 +6930,8 @@ function fillJournal(journal) {
   fillBodyCheck(normalizeBodyCheck(data.bodyCheck, data.bodyTags, data.bodyNote));
   const manifestVision = document.getElementById("manifestVision");
   if (manifestVision) manifestVision.value = data.manifest || "";
+  renderManifestQuestions(state.manifestPrompts, { answers: data.manifestThink });
+  renderManifestSentence(state.journalManifestSentence);
   renderAwarenessQuestions(state.awarenessPrompts, { answers: data.awareness });
   renderExecutionQuestions(state.executionPrompts, { answers: data.execution });
   const execNext = document.getElementById("execNext");
@@ -8225,7 +8532,7 @@ function renderManifests() {
   const filter = ["doing", "later", "done"].includes(state.manifestFilter) ? state.manifestFilter : "doing";
 
   if (!all.length) {
-    list.innerHTML = `<div class="empty"><p class="empty__title">顯化力還是空的</p>在今日復盤勾選顯化執行目標，完成復盤後就會匯集到這裡。</div>`;
+    list.innerHTML = `<div class="empty"><p class="empty__title">顯化力還是空的</p>在今日復盤勾選「讓願望靠近現實」的方向，完成復盤後就會匯集到這裡。</div>`;
     return;
   }
 
@@ -8591,9 +8898,21 @@ function renderHistoryJournal(review) {
     ],
     ["深度思考", "insight", insightHtml],
     [
-      "⑤ 顯化力願景",
+      "⑤ 顯化力",
       "manifest",
-      [historyTextBlock("明天想顯化", journal.manifest), historyListBlock("顯化執行目標", journal.manifestChecks)],
+      [
+        historyTextBlock("我想顯化的事情", journal.manifest),
+        ...normalizeManifestPrompts(journal.manifestPrompts).map((item, index) =>
+          historyTextBlock(item.question, (journal.manifestThink || [])[index])
+        ),
+        historyListBlock(
+          "讓願望靠近現實",
+          (normalizeManifestPathItems(journal.manifestCheckItems).map((item) => item.title).filter(Boolean).length
+            ? normalizeManifestPathItems(journal.manifestCheckItems).map((item) => item.title).filter(Boolean)
+            : journal.manifestChecks)
+        ),
+        journal.manifestSentence ? historyTextBlock("我的顯化句", journal.manifestSentence) : "",
+      ],
     ],
   ]);
 
@@ -8817,7 +9136,12 @@ function handleTodayPointerClick(event) {
   }
   if (node.closest("#btnManifestAi")) {
     handled();
-    catchAsync(() => generateJournalChecklist("manifest"), "顯化步驟還沒整理好");
+    catchAsync(() => generateManifestPrompts({ force: true }), "顯化思考題還沒準備好");
+    return true;
+  }
+  if (node.closest("#btnManifestPaths")) {
+    handled();
+    catchAsync(() => generateManifestChecklist(), "靠近現實的方向還沒整理好");
     return true;
   }
   if (node.closest("#btnBodyCoach")) {
@@ -9035,8 +9359,8 @@ function bindEvents() {
 
   document.getElementById("page-today")?.addEventListener("input", (event) => {
     const id = event.target && event.target.id;
-    if (/^thanksText$|^thanks\d+$|^(aware|exec)\d$|^execNext$|^eventText$|^bodyNote$|^bodyOtherNote$|^bodyMoodReason$|^bodyBodyReason$|^bodySleepReason$|^manifestVision$/.test(id || "")) {
-      if (/^thanksText$|^thanks\d+$|^(aware|exec)\d$|^execNext$|^eventText$|^bodyOtherNote$|^body(Mood|Body|Sleep)Reason$|^manifestVision$/.test(id || "")) persistJournalQuietly();
+    if (/^thanksText$|^thanks\d+$|^(aware|exec)\d$|^execNext$|^eventText$|^bodyNote$|^bodyOtherNote$|^bodyMoodReason$|^bodyBodyReason$|^bodySleepReason$|^manifestVision$|^manifestThink\d$/.test(id || "")) {
+      if (/^thanksText$|^thanks\d+$|^(aware|exec)\d$|^execNext$|^eventText$|^bodyOtherNote$|^body(Mood|Body|Sleep)Reason$|^manifestVision$|^manifestThink\d$/.test(id || "")) persistJournalQuietly();
       scheduleJournalChecklists();
     }
   });

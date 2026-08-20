@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=138" />
+    <link rel="stylesheet" href="app.css?v=139" />
     <style>
       .splash {
         position: fixed;
@@ -609,27 +609,34 @@
             <button class="journal-fold__toggle" type="button" data-journal-fold aria-expanded="false" aria-controls="manifestFoldPanel">
               <span class="journal-fold__copy">
                 <h2 class="journal-card__title"><span>07</span> 顯化力</h2>
-                <p class="journal-fold__summary">把明天想顯化的事，拆成做得到的步驟。</p>
+                <p class="journal-fold__summary">看見自己想去哪裡，開始成為那個人。</p>
               </span>
               <span class="journal-fold__chevron" aria-hidden="true"></span>
             </button>
             <div class="journal-fold__panel" id="manifestFoldPanel" inert aria-hidden="true">
               <div class="journal-fold__inner">
-            <p class="journal-guide">明天想顯化的事情。先寫下心念，會把它拆成具體、做得到的執行目標。</p>
+            <p class="journal-guide">有些想要的生活，要先看見，才知道自己正在往哪裡走。<br />寫下一件你真正想讓它慢慢成為現實的事。</p>
             <div class="journal-split">
               <div class="journal-col">
-                <p class="journal-label">明天想顯化的事情</p>
-                <textarea class="textarea" id="manifestVision" rows="5" placeholder="寫下明天想顯化的事…"></textarea>
-                <button class="ai-check-btn" id="btnManifestAi" type="button">生成執行目標</button>
+                <p class="journal-label">我想顯化的事情</p>
+                <textarea class="textarea" id="manifestVision" rows="5" placeholder="例如：收入突破100萬／擁有自己的品牌／完成一直想做的事⋯"></textarea>
+                <div class="check-loading" id="manifestPromptLoading" hidden>
+                  <p class="check-loading__label">正在看看這個願望…</p>
+                  <div class="ai-thinking__bar"><i></i></div>
+                </div>
+                <button class="ai-check-btn" id="btnManifestAi" type="button">✦ 看看這個願望</button>
+                <div id="manifestQuestions"></div>
+                <button class="ai-check-btn" id="btnManifestPaths" type="button" hidden>✦ 讓願望靠近現實</button>
               </div>
               <div class="journal-col">
-                <p class="journal-label">顯化執行目標</p>
-                <p class="journal-guide journal-guide--tight">寫下願景後，會生成 3 到 5 個具體步驟。勾選後會立刻同步到側邊欄「顯化力」；完成今日復盤也會再匯集一次，方便長期追蹤。</p>
+                <p class="journal-label">讓願望靠近現實</p>
+                <p class="journal-guide journal-guide--tight">不用一次做到全部。從現在開始，找出幾個能讓自己慢慢靠近它的方向。</p>
                 <div class="check-loading" id="manifestLoading" hidden>
-                  <p class="check-loading__label">正在把心念拆成明天做得到的行動…</p>
+                  <p class="check-loading__label">正在整理靠近的方向…</p>
                   <div class="ai-thinking__bar"><i></i></div>
                 </div>
                 <div class="check-list" id="manifestChecks"></div>
+                <article class="exec-focus manifest-sentence" id="manifestSentence" hidden></article>
               </div>
             </div>
               </div>
@@ -1015,6 +1022,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=161"></script>
+    <script src="app.js?v=162"></script>
   </body>
 </html>

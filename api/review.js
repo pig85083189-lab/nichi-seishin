@@ -148,29 +148,208 @@ const CHECKLIST_AWARENESS_SYSTEM = `你是「日精進」洞察力極高、一�
 - 犀利但不殘忍：一針見血，不是貶低
 - 繁體中文`;
 
-const CHECKLIST_MANIFEST_SYSTEM = `你是「日精進」的高階心靈教練。使用者剛寫下明天想顯化的願景或目標。
-請把這句心念拆成具體、明天做得到的執行目標，讓他能用行動去靠近它。
+const MANIFEST_PROMPTS_SYSTEM = `你是「日精進」的顯化引導者。04 看見自己，05 把事情做出來；你幫他看見自己想去哪裡，開始成為那個人。
 
-規則：
-- 只輸出 JSON：{"items":["..."]}
-- items 必須 3 到 5 條，不可少於 3、不可超過 5
-- 每一條 12-28 字，是可勾選的具體步驟，不要口號、不要空泛「相信宇宙」
-- 步驟要小、可執行、貼近這個人今天的事件與心情
-- 禁止雞湯、禁止說教、禁止病例腔
-- 繁體中文`;
+使用者剛寫下「我想顯化的事情」。請只生成 2 道顯化思考題，不要拆待辦，不要給執行清單。
 
-function manifestUserPrompt(body) {
+第1題：如果這件事已經成真，生活會有什麼不同？
+第2題：那個已經做到的你，現在最不一樣的是什麼？
+
+可以依願望輕輕個人化，但必須：
+- 一題只問一件事，一個問號
+- 24-48 字，簡短自然
+- 不玄學、不預言、不保證一定會成真
+- 禁止：宇宙會給你、頻率、相信就會發生、你注定會得到、只要想像就能得到
+- 幫助他看見理想生活與身份狀態
+
+合格：
+「如果收入真的來到100萬，你最希望生活中的哪一件事先改變？」
+「那個能創造這份收入的你，做事方式可能和現在有什麼不同？」
+
+不合格：
+「宇宙會把100萬帶給你，你準備好接受了嗎？」
+「明天你要先打哪三通電話？」
+
+只輸出 JSON：
+{"questions":[{"question":"...","placeholder":"..."},{"question":"...","placeholder":"..."}]}
+placeholder 8-24 字，像「生活裡會先鬆開的是…」
+繁體中文`;
+
+const MANIFEST_PATHS_SYSTEM = `你是「日精進」的顯化整理者。不要把它變成 05 執行力的待辦清單。
+
+05 問「明天／現在具體要做什麼」。
+你問「我想去哪裡？我要慢慢成為什麼樣的人？」
+
+請讀取願望、兩道思考題的回答，整理成「讓願望靠近現實」的 2～3 個方向，以及一句「我的顯化句」。
+
+【方向 2～3 個，不要硬湊】
+1. start｜今天可以開始的一小步：一個能開始靠近的方向，不是明天幾點的任務
+2. habit｜需要慢慢建立的一個習慣：長期累積
+3. limit｜目前最值得突破的一個限制：看見會讓自己停下來的地方
+某類不適用就省略，不要湊滿。
+
+【不要這樣寫】
+找3個賺錢機會／聯絡一個客戶／明天打電話／今天做30分鐘／明天完成3項工作
+宇宙會回應你／願望一定會實現／相信就會發生／頻率對了就會吸引／你注定會得到／只要想像就能得到
+
+【要這樣寫】
+start：「寫下目前最有可能帶來收入的1項服務，想出下一個曝光方式。」
+habit：「每週固定一次回顧收入來源與有效曝光方式。」
+limit：「確認最容易讓自己停下來的，是曝光不足、產品不清楚，還是不敢主動邀請。」
+
+title 18-42 字，就是方向本身。detail 可空，或一句更短的補充（最多 22 字）。
+視角要比執行力高一層：累積什麼、成為什麼，不是明天幾點做完。
+
+【我的顯化句】
+1～2 句。身份認同＋正在前進。
+合格：我正在成為一個能持續創造價值，也有能力承接更多收入的人。
+不合格：我一定會成功。／我一定會賺到100萬。／宇宙正在把100萬送給我。
+
+只輸出 JSON：
+{
+  "items": [
+    { "kind": "start", "title": "...", "detail": "..." }
+  ],
+  "sentence": "我正在……"
+}
+繁體中文`;
+
+function isManifestPromptsRequest(body) {
+  const step = String(body?.step || body?.kind || "").trim().toLowerCase();
+  return step === "prompts" || step === "questions" || step === "think";
+}
+
+function mysticManifestText(text) {
+  return /宇宙會|宇宙正在|一定會實現|一定會成功|一定會賺|相信就會|頻率對了|注定會|只要想像就能|吸引而來/.test(String(text || ""));
+}
+
+function looksLikeExecTaskManifest(text) {
+  return /明天\d|明天幾點|今天做\d+分鐘|明天打電話|明天完成\d|聯絡一個客戶|找3個|找三個/.test(String(text || ""));
+}
+
+function manifestPromptFallbacks(vision) {
+  const bit = compactLine(vision, 10) || "這件事";
+  return [
+    {
+      question: `如果「${bit}」已經成真，你最希望生活中的哪一件事先改變？`,
+      placeholder: "生活裡會先不一樣的是…",
+    },
+    {
+      question: "那個已經做到的你，現在最不一樣的可能是什麼？",
+      placeholder: "做事方式或狀態會不同的是…",
+    },
+  ];
+}
+
+function normalizeManifestPromptItems(raw, vision) {
+  const list = Array.isArray(raw)
+    ? raw
+    : Array.isArray(raw?.questions)
+      ? raw.questions
+      : Array.isArray(raw?.items)
+        ? raw.items
+        : [];
+  const fallbacks = manifestPromptFallbacks(vision);
+  const items = [];
+  const seen = new Set();
+  list.forEach((item, index) => {
+    const question = String(item?.question || item?.title || item || "").trim();
+    if (!question || question.length > 56 || (question.match(/[？?]/g) || []).length !== 1) return;
+    if (mysticManifestText(question) || looksLikeExecTaskManifest(question)) return;
+    if (seen.has(question)) return;
+    seen.add(question);
+    items.push({
+      question: question.slice(0, 48),
+      placeholder: String(item?.placeholder || fallbacks[index]?.placeholder || "我想的是…").slice(0, 24),
+    });
+  });
+  fallbacks.forEach((item) => {
+    if (items.length >= 2) return;
+    if (seen.has(item.question)) return;
+    seen.add(item.question);
+    items.push(item);
+  });
+  return items.slice(0, 2);
+}
+
+function normalizeManifestPathItems(raw) {
+  const list = Array.isArray(raw)
+    ? raw
+    : Array.isArray(raw?.items)
+      ? raw.items
+      : [];
+  const order = ["start", "habit", "limit"];
+  const labels = {
+    start: "今天可以開始的一小步",
+    habit: "需要慢慢建立的一個習慣",
+    limit: "目前最值得突破的一個限制",
+  };
+  const byKind = new Map();
+  list.forEach((item, index) => {
+    let kind = "";
+    let title = "";
+    let detail = "";
+    if (typeof item === "string") {
+      title = item.trim();
+    } else if (item && typeof item === "object") {
+      kind = String(item.kind || item.role || item.type || "").trim().toLowerCase();
+      if (kind === "step" || kind === "today") kind = "start";
+      if (kind === "habit_building" || kind === "weekly") kind = "habit";
+      if (kind === "block" || kind === "limitations") kind = "limit";
+      title = String(item.title || item.label || item.text || "").trim();
+      detail = String(item.detail || item.note || "").trim();
+    }
+    if (!title || mysticManifestText(title) || looksLikeExecTaskManifest(title)) return;
+    if (!order.includes(kind)) kind = order[Math.min(index, order.length - 1)];
+    if (byKind.has(kind)) return;
+    byKind.set(kind, {
+      kind,
+      label: labels[kind] || "",
+      title: title.replace(/^["「]+|[」"]+$/g, "").slice(0, 48),
+      detail: detail.slice(0, 22),
+    });
+  });
+  return order.map((kind) => byKind.get(kind)).filter(Boolean).slice(0, 3);
+}
+
+function normalizeManifestSentence(raw, vision) {
+  const text = String(
+    typeof raw === "string" ? raw : raw?.sentence || raw?.quote || raw?.line || ""
+  )
+    .replace(/\s+/g, " ")
+    .trim();
+  const fallbackBit = compactLine(vision, 8) || "這件事";
+  const fallback = `我正在一步一步，讓「${fallbackBit}」從心念變成可以靠近的方向。`;
+  if (!text || mysticManifestText(text) || /我一定會|宇宙正在把/.test(text)) return fallback.slice(0, 42);
+  const sentences = text.split(/(?<=[。！？!?])/).map((item) => item.trim()).filter(Boolean);
+  return sentences.slice(0, 2).join("").slice(0, 56) || fallback;
+}
+
+function manifestPromptsUserPrompt(body) {
+  const vision = String(body.vision || body.text || "").trim();
+  return `請只生成 2 道顯化思考題。不要拆待辦，不要給步驟。
+
+我想顯化的事情：${vision || "（未寫）"}`;
+}
+
+function manifestPathsUserPrompt(body) {
   const vision = String(body.vision || body.text || "").trim();
   const ctx = body.context && typeof body.context === "object" ? body.context : {};
-  const bodyTags = Array.isArray(ctx.bodyTags) ? ctx.bodyTags.join("、") : "";
-  const openActions = Array.isArray(ctx.openActions) ? ctx.openActions.filter(Boolean) : [];
-  return `請把這個顯化願景拆成 3 到 5 個明天做得到的執行步驟。
+  const questions = Array.isArray(body.questions) ? body.questions : [];
+  const answers = Array.isArray(body.answers) ? body.answers : [];
+  const labeled = questions.length
+    ? questions
+        .map((question, index) => `${index + 1}. ${question}\n回答：${answers[index] || "（未填）"}`)
+        .join("\n\n")
+    : `思考回答：${answers.filter(Boolean).join("\n") || "（未填）"}`;
+  return `請整理 2 到 3 個「讓願望靠近現實」的方向，以及一句顯化句。不要變成明天幾點的待辦。
 
-明天想顯化的事情：${vision || "（未寫）"}
-今日事件：${ctx.event || "未寫"}
-心情：${ctx.mood || "未選"}
-身體狀態：${bodyTags || "未選"}
-尚未完成的行動：${openActions.slice(0, 6).join("、") || "尚無"}`;
+我想顯化的事情：${vision || "（未寫）"}
+
+${labeled}
+
+今日心情：${ctx.mood || "未選"}
+今日事件：${compactLine(ctx.event, 120) || "未寫"}`;
 }
 
 const CHECKLIST_EXECUTION_SYSTEM = `你是「日精進」的行動整理者。04 負責分析；你只收成「現在／明天做得出來」的下一步。少分析、多行動。
@@ -1470,7 +1649,7 @@ module.exports = async function handler(req, res) {
     } else if (mode === "manifest") {
       const vision = String(body.vision || text || "").trim();
       if (vision.length < 4) {
-        res.status(400).json({ ok: false, error: "請先寫下明天想顯化的事情" });
+        res.status(400).json({ ok: false, error: "請先寫下想顯化的事情" });
         return;
       }
     } else if (!text && mode === "organize" && !Array.isArray(body.messages)) {
@@ -1528,9 +1707,10 @@ module.exports = async function handler(req, res) {
         },
       ];
     } else if (mode === "manifest") {
+      const prompts = isManifestPromptsRequest(body);
       messages = [
-        { role: "system", content: CHECKLIST_MANIFEST_SYSTEM },
-        { role: "user", content: manifestUserPrompt(body) },
+        { role: "system", content: prompts ? MANIFEST_PROMPTS_SYSTEM : MANIFEST_PATHS_SYSTEM },
+        { role: "user", content: prompts ? manifestPromptsUserPrompt(body) : manifestPathsUserPrompt(body) },
       ];
     } else if (mode === "bodycoach") {
       messages = [
@@ -1562,6 +1742,8 @@ module.exports = async function handler(req, res) {
       temperature:
         mode === "bodycoach"
           ? 0.5
+          : mode === "manifest"
+            ? 0.45
           : mode === "prompts" && promptKind === "execution"
             ? 0.35
             : mode === "checklist" && body.kind === "execution"
@@ -1583,6 +1765,10 @@ module.exports = async function handler(req, res) {
               ? 700
               : mode === "prompts" && isCorePromptsRequest(body)
                 ? 1100
+                : mode === "manifest"
+                  ? isManifestPromptsRequest(body)
+                    ? 500
+                    : 800
                 : mode === "checklist"
                   ? 600
                   : 1400,
@@ -1684,12 +1870,23 @@ module.exports = async function handler(req, res) {
       return;
     }
     if (mode === "manifest") {
-      const items = normalizeChecklistItems(data, 3, 5);
-      if (items.length < 3) {
-        res.status(502).json({ ok: false, error: "AI 顯化步驟格式不完整，請再試一次" });
+      const vision = String(body.vision || body.text || "").trim();
+      if (isManifestPromptsRequest(body)) {
+        const questions = normalizeManifestPromptItems(data, vision);
+        if (questions.length < 2) {
+          res.status(502).json({ ok: false, error: "今天的顯化思考題還沒準備好，請再試一次" });
+          return;
+        }
+        res.status(200).json({ ok: true, source: getProvider(), data: { questions, kind: "manifest" } });
         return;
       }
-      res.status(200).json({ ok: true, source: getProvider(), data: { items: items.slice(0, 5), kind: "manifest" } });
+      const items = normalizeManifestPathItems(data);
+      if (items.length < 2) {
+        res.status(502).json({ ok: false, error: "靠近現實的方向還沒整理好，請再試一次" });
+        return;
+      }
+      const sentence = normalizeManifestSentence(data, vision);
+      res.status(200).json({ ok: true, source: getProvider(), data: { items: items.slice(0, 3), sentence, kind: "manifest" } });
       return;
     }
     if (mode === "bodycoach") {
