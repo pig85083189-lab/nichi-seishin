@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=139" />
+    <link rel="stylesheet" href="app.css?v=140" />
     <style>
       .splash {
         position: fixed;
@@ -502,13 +502,13 @@
                 <h2 class="journal-card__title js-quick-only"><span>03</span> 今日覺察</h2>
                 <h2 class="journal-card__title js-deep-only"><span>04</span> 覺察力</h2>
                 <p class="journal-fold__summary js-quick-only">用 3 個簡單的問題，看見今天的自己。</p>
-                <p class="journal-fold__summary js-deep-only">回答 3 個問題，把今天最重要的發現留下來。</p>
+                <p class="journal-fold__summary js-deep-only">透過 3 個問題，看看今天有哪些還沒發現的自己。</p>
               </span>
               <span class="journal-fold__chevron" aria-hidden="true"></span>
             </button>
             <div class="journal-fold__panel" id="awareFoldPanel" inert aria-hidden="true">
               <div class="journal-fold__inner">
-            <p class="journal-guide">今天的經歷裡，也許藏著一些你還沒發現的自己。<br />透過 3 個簡單的問題，陪你看見今天真正值得留下來的覺察。</p>
+            <p class="journal-guide">今天的經歷裡，也許藏著一些你還沒發現的自己。<br />透過 3 個簡單問題，看看今天有哪些值得留下來的覺察。</p>
             <div class="journal-split journal-split--aware">
               <div class="journal-col aware-col aware-col--quiz">
                 <div class="check-loading" id="awarePromptLoading" hidden>
@@ -520,14 +520,14 @@
                 <div id="awareQuestions"></div>
               </div>
               <div class="journal-col aware-col aware-col--quotes js-deep-only">
-                <p class="journal-label">今日核心覺察</p>
-                <p class="journal-guide journal-guide--tight">回答完 3 個問題後，幫你把今天最重要的發現，整理成一句值得留下來的話。</p>
+                <p class="journal-label">今日覺察</p>
+                <p class="journal-guide journal-guide--tight">回答完 3 題後，整理今天看見的自己、可能忽略的地方，以及今晚留給自己的一個問題。</p>
                 <div class="check-loading" id="awareLoading" hidden>
-                  <p class="check-loading__label">正在為你整理今天的核心覺察…</p>
+                  <p class="check-loading__label">正在為你整理今天的覺察…</p>
                   <div class="ai-thinking__bar"><i></i></div>
                 </div>
                 <div class="check-list" id="awareChecks"></div>
-                <button class="ai-check-btn ai-check-btn--label" id="btnAwareAi" type="button" hidden>✦ 看見我的核心覺察</button>
+                <button class="ai-check-btn ai-check-btn--label" id="btnAwareAi" type="button" hidden>✦ 看見今天的覺察</button>
                 <p class="aware-quote-limit" id="awareQuoteLimitHint" hidden></p>
               </div>
             </div>
@@ -708,7 +708,7 @@
         <section class="page" id="page-next" data-page="next" hidden>
           <header class="page__header">
             <h2 class="page__title">覺察力</h2>
-            <p class="page__subtitle">個人歷史覺察總覽。復盤裡收藏的核心金句，會自動收在這裡。</p>
+            <p class="page__subtitle">個人歷史覺察總覽。復盤裡收藏的覺察，會自動收在這裡。</p>
           </header>
 
           <div class="chips" role="tablist" aria-label="覺察篩選" id="insightFilters">
@@ -865,9 +865,9 @@
               <div class="guide-step__body">
                 <p class="guide-step__label">第四步</p>
                 <h3 class="guide-step__title">動態出題與今日煉結</h3>
-                <p class="guide-step__text">覺察力會依照你今天寫下的感謝與事件，準備 3 個簡單的問題。回答完後，把今天最重要的發現整理成一句值得留下來的話；執行力則準備專屬行動卡。快速復盤只要勾選對應模組，就會走同一套今天專屬的陪伴。</p>
+                <p class="guide-step__text">覺察力會依照你今天寫下的感謝、事件、心情與身體，準備 3 個驗證問題。回答完後，整理今天看見的自己、可能忽略的地方，以及今晚留給自己的一個問題；執行力則準備專屬行動卡。快速復盤只要勾選對應模組，就會走同一套今天專屬的陪伴。</p>
                 <div class="guide-pills">
-                  <span class="guide-pill"><strong>覺察力</strong> 3 個問題 → 一句核心覺察</span>
+                  <span class="guide-pill"><strong>覺察力</strong> 3 個問題 → 今日覺察</span>
                   <span class="guide-pill"><strong>執行力</strong> 行動問題 → 行動卡</span>
                 </div>
               </div>
@@ -1022,6 +1022,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="auth/pkce-storage.js?v=1"></script>
-    <script src="app.js?v=162"></script>
+    <script src="app.js?v=163"></script>
   </body>
 </html>

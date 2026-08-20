@@ -4126,6 +4126,8 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   font-size: 15px;
   font-weight: 600;
   line-height: 1.75;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .aware-quiz__q span {
@@ -5285,8 +5287,99 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  overflow: hidden;
-  gap: 0;
+  overflow: visible;
+  gap: 12px;
+}
+
+.aware-result {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.aware-result__heading {
+  margin: 0;
+  color: var(--heading);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+.aware-result__stale {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(156, 136, 121, 0.12);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.aware-result__card {
+  min-width: 0;
+  padding: 16px 16px 14px;
+  border: 1px solid rgba(228, 212, 200, 0.95);
+  border-left: 4px solid var(--header);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fffdf9 0%, #fff 62%, var(--cream) 100%);
+}
+
+.aware-result__card--question {
+  background: linear-gradient(180deg, #fffdf8 0%, var(--cream) 100%);
+}
+
+.aware-result__kicker {
+  margin: 0 0 8px;
+  color: var(--heading);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.aware-result__text {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.aware-result__text--question {
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.7;
+}
+
+.aware-result__echo {
+  margin: 0;
+  color: var(--heading);
+  font-size: 13px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.aware-result__line {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 14px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.aware-result__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding-top: 4px;
 }
 
 .aware-quote--solo {
@@ -5415,6 +5508,14 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
 
   .aware-quote--solo .aware-quote__text {
     font-size: 20px;
+  }
+
+  .aware-result__card {
+    padding: 14px 14px 12px;
+  }
+
+  .aware-result__text--question {
+    font-size: 16px;
   }
 }
 
