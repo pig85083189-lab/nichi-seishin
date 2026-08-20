@@ -18,6 +18,9 @@
     },
     "api/generate-report-month.js": {
       "maxDuration": 30
+    },
+    "api/sync.js": {
+      "maxDuration": 20
     }
   },
   "crons": [

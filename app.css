@@ -676,14 +676,48 @@ body.nav-closed .side-logout {
   letter-spacing: 0.02em;
 }
 
+.sync-panel {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.sync-panel--top {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 0 6px;
+  max-width: min(18rem, 46vw);
+}
+
 .sync-chip {
   display: inline-flex;
   align-items: center;
-  margin: 0 0 0 6px;
-  max-width: 11rem;
+  margin: 0;
+  max-width: 14rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.sync-retry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  padding: 4px 10px;
+  border: 1px solid var(--cream-border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--header);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.sync-retry:hover {
+  background: var(--cream);
 }
 
 .sync-status[data-state="saving"],
@@ -700,7 +734,7 @@ body.nav-closed .side-logout {
 
 .sync-status[data-state="error"],
 .sync-chip[data-state="error"] {
-  color: #a65b4a;
+  color: #8a6a55;
 }
 
 .auth-form {
@@ -819,6 +853,7 @@ body.nav-closed .side-logout {
 
 body.nav-closed .auth-hint,
 body.nav-closed .sync-status,
+body.nav-closed .side-auth .sync-panel,
 body.nav-closed .auth-user__meta,
 body.nav-closed .auth-login span,
 body.nav-closed .auth-logout span,
