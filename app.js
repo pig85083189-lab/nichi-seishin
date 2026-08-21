@@ -6259,31 +6259,40 @@ function localThinkGuideAsk(journal, round, guide) {
   const sad = /難過|失落|傷心|遺憾|失去/.test(blob);
   const anxious = /焦慮|害怕|擔心|不安|恐懼/.test(blob);
   const warm = /幸福|感謝|開心|滿足|溫暖|喜歡|愛|愉快|平靜|感恩|珍惜/.test(blob);
-  const prev = String(guide?.rounds?.[0]?.answer || "").trim().slice(0, 18);
+  const helpValue = /幫忙|幫助|有用|價值|變好|影響|付出/.test(blob);
+  const prevFull = String(guide?.rounds?.filter((item) => item.answer).slice(-1)[0]?.answer || "").trim();
+  const prev = prevFull.slice(0, 18);
+  const shortPrev = prevFull.replace(/\s+/g, "").length > 0 && prevFull.replace(/\s+/g, "").length <= 8;
   if (round <= 1) {
     if (mixed) {
-      return { question: `當「${eventBit}」發生時，你心裡同時出現的，最明顯的那份感受是什麼？`, hint: "先點名當下的感覺，兩種都可以在。" };
+      return { question: `當「${eventBit}」發生時，那一刻你最直接的感受是什麼？`, hint: "先點名感覺，先不用解釋。" };
     }
     if (angry) {
-      return { question: `在「${eventBit}」裡，真正讓你不舒服的，是哪一個瞬間？`, hint: "先回到那個畫面，不必急著評對錯。" };
+      return { question: `在「${eventBit}」裡，真正讓你不舒服的，是哪一個瞬間？`, hint: "先回到那個畫面。" };
     }
     if (sad) {
-      return { question: `面對「${eventBit}」，你此刻最明顯的感受是什麼？`, hint: "用自己的話說那一刻的感覺。" };
+      return { question: `面對「${eventBit}」，你此刻最明顯的感受是什麼？`, hint: "用自己的話說那一刻。" };
     }
     if (anxious && !warm) {
-      return { question: `想到「${eventBit}」時，你身體或心裡最先浮出來的感覺是什麼？`, hint: "先描述感覺，先不用解決。" };
+      return { question: `想到「${eventBit}」時，心裡最先浮出來的感覺是什麼？`, hint: "先描述感覺就好。" };
     }
     return {
       question: thanksBit
-        ? `今天這份付出或感謝裡，真正讓你覺得被觸動的，是哪一個瞬間？`
-        : `當「${eventBit}」發生時，你最明顯的感受是什麼？`,
+        ? "今天真正讓你覺得被觸動的，是哪一個具體瞬間？"
+        : `當「${eventBit}」發生時，那一刻你最直接的感受是什麼？`,
       hint: "先回到那個畫面，不必急著解釋。",
     };
   }
   if (round === 2) {
+    if (shortPrev) {
+      return {
+        question: "把「事情變好了」和「自己真的幫上忙」放在一起，你覺得今天哪一個比較接近？還是其實有其他原因？",
+        hint: "選一個比較近的就好，沒有標準答案。",
+      };
+    }
     const clip = prev || "你剛寫下的那句";
     if (angry) {
-      return { question: `你說「${clip}」，這件事真正碰到你在乎的，是哪一條界線？`, hint: "往「我真正介意的是什麼」走一小步。" };
+      return { question: `你說「${clip}」，這件事真正碰到你在乎的，是哪一條界線？`, hint: "往「我真正介意什麼」走一小步。" };
     }
     if (sad) {
       return { question: `你說「${clip}」，這份難過之所以重要，是因為它碰到了你的什麼？`, hint: "看看為什麼這對你重要。" };
@@ -6292,49 +6301,72 @@ function localThinkGuideAsk(journal, round, guide) {
       return { question: `你說「${clip}」，你最擔心接下來會發生的，其實是哪一件？`, hint: "把擔心說具體一點就好。" };
     }
     return {
-      question: `你說「${clip}」，這件事對你來說，真正重要的是什麼？`,
-      hint: "往「為什麼這對我重要」走一小步。",
+      question: `你說「${clip}」。最讓你有感的，是事情本身變好了，還是你發現自己有產生影響？還是其實有其他原因？`,
+      hint: "讓你自己辨認，不必急著選漂亮的答案。",
+    };
+  }
+  if (shortPrev) {
+    return {
+      question: "那我們換簡單一點：今天比較靠近「被看見」，還是「真的幫上忙」？還是其實有其他原因？",
+      hint: "選一個比較近的方向就好。",
+    };
+  }
+  if (helpValue) {
+    return {
+      question: "如果有一天你很努力幫忙，對方卻沒有因此變好，你還會覺得自己的付出有價值嗎？",
+      hint: "不是否定你，只是把答案再往下一層。",
+    };
+  }
+  if (warm && !angry && !sad) {
+    return {
+      question: `如果今天沒有發生「${eventBit}」，你覺得自己還會這麼有感嗎？`,
+      hint: "看看你真正珍惜的，是不是這一件本身。",
     };
   }
   return {
-    question: "經過前面兩問，你覺得今天這件事讓你重新看見了自己哪一部分？",
-    hint: "把視角從事情，輕輕拉回自己。",
+    question: "經過前面兩問，你有沒有發現：今天這件事其實也碰到了你對自己的某個期待？",
+    hint: "用疑問來看自己，不必下結論。",
   };
 }
 
 function localThinkGuideClose(journal, guide) {
-  const eventBit = String(journal?.event || "").trim().slice(0, 22) || "今天這件事";
+  const eventBit = String(journal?.event || "").trim().slice(0, 18) || "今天這件事";
   const answers = (guide?.rounds || []).map((item) => String(item.answer || "").trim()).filter(Boolean);
   const a1 = answers[0] || "";
   const a2 = answers[1] || "";
   const a3 = answers[2] || "";
   const thanks = thanksTextFrom(journal).trim();
-  const awareness = [
-    `今天真正留下印象的，不只是「${eventBit}」本身，而是你願意把它寫下來，多看自己一眼。`,
-    a1 ? `你說「${a1.slice(0, 36)}」，這已經比事情的表面更靠近你真正的感受。` : "",
-    a2 ? `接著你談到「${a2.slice(0, 36)}」，可以看出這件事重要，是因為它碰到了你在乎的價值。` : "",
-    a3
-      ? `最後你看見「${a3.slice(0, 36)}」，等於把視角從事情拉回自己：今天這些片段，其實在講同一件事。`
-      : "最後這一問，是把視角從事情輕輕拉回自己。",
-  ]
-    .filter(Boolean)
-    .join("\n\n");
+  const p1 = `今天留下印象的是「${eventBit}」。你沒有急著下結論，而是把當下真正有感的地方寫了下來。`;
+  const p2 = a2
+    ? `三輪下來，你從「${(a1 || "當下的感受").slice(0, 16)}」走到「${a2.slice(0, 16)}」${a3 ? `，又看見「${a3.slice(0, 16)}」` : ""}。這幾句比較像同一條線：你在乎的，不只是事情表面。`
+    : `三輪回答指向同一件事：你開始分辨，今天真正碰到你的是什麼。`;
+  const p3 = thanks
+    ? "也許值得繼續觀察的是：你把這份好放在心上時，自己真正珍惜的是哪一點。"
+    : "也許值得繼續觀察的是：若明天再遇到類似的瞬間，你還會不會停下來多看自己一眼。";
+  const awareness = [p1, p2, p3].join("\n\n");
   const selfSeen = a3 && /^我/.test(a3) && a3.length <= 40
     ? a3.replace(/[。！？]+$/, "") + "。"
-    : thanks
-      ? "我喜歡把好的感受放進日常，也正在學習看見別人給我的那一份。"
+    : a2
+      ? `我發現自己很在意，${a2.slice(0, 18).replace(/[。！？]+$/, "")}。`
       : "我開始看見，今天這件事其實在說出我真正在乎的是什麼。";
-  const takeaway = thanks
-    ? "當我願意把日常裡的好放進心上，也比較容易看見，原來這些並不是理所當然。"
-    : "先看清楚我真正有感的那一點，今天就沒有白過。";
+  const takeaway = helpValueFromAnswers(answers, journal)
+    ? "看見別人變好時，也可以看看自己把價值放在哪裡。"
+    : thanks
+      ? "把日常裡的好當真看見，本身就是一種停留。"
+      : "先看清楚我真正有感的那一點，今天就沒有白過。";
   return {
-    title: thanks ? "把日常裡的好，當真看見" : "今天真正有感的那一層",
+    title: thanks ? "把日常裡的好當真看見" : "今天真正有感的那一層",
     summary: awareness,
     awareness,
     selfSeen,
     takeaway,
     actions: [],
   };
+}
+
+function helpValueFromAnswers(answers, journal) {
+  const blob = `${(answers || []).join(" ")}\n${thanksTextFrom(journal)}\n${journal?.event || ""}`;
+  return /幫忙|幫助|有用|價值|變好|影響|付出/.test(blob);
 }
 
 function applyThinkGuideInsight(guide, sig) {
@@ -6500,7 +6532,7 @@ async function submitThinkGuideRound() {
     return;
   }
   const answer = String(thinkGuideBodyEl()?.querySelector(".think-guide-answer")?.value || "").trim();
-  if (answer.length < 2) {
+  if (!answer) {
     showToast("先寫下一點你此刻想到的，再往下一輪。");
     return;
   }
