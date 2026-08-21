@@ -1,6 +1,7 @@
 (function (global) {
   var STORAGE_KEY = "nichi-auth";
   var VERIFIER_KEY = STORAGE_KEY + "-code-verifier";
+  var SESSION_BACKUP_KEY = "nichi-auth-session";
 
   function isVerifierKey(key) {
     return /code-verifier/i.test(String(key || ""));
@@ -144,6 +145,7 @@
       storage.removeItem(key);
     });
     if (keepSession) return;
+    storage.removeItem(SESSION_BACKUP_KEY);
     try {
       var raw = safeGet(localStorage, STORAGE_KEY);
       var parsed = raw ? JSON.parse(raw) : null;
@@ -163,12 +165,34 @@
     }
   }
 
+  function persistSessionBackup(payload) {
+    var text = typeof payload === "string" ? payload : JSON.stringify(payload || {});
+    if (!text) return false;
+    var storage = createAuthStorage();
+    storage.setItem(SESSION_BACKUP_KEY, text);
+    return true;
+  }
+
+  function readSessionBackup() {
+    var storage = createAuthStorage();
+    return storage.getItem(SESSION_BACKUP_KEY) || "";
+  }
+
+  function clearSessionBackup() {
+    var storage = createAuthStorage();
+    storage.removeItem(SESSION_BACKUP_KEY);
+  }
+
   global.NichiAuthStorage = {
     STORAGE_KEY: STORAGE_KEY,
     VERIFIER_KEY: VERIFIER_KEY,
+    SESSION_BACKUP_KEY: SESSION_BACKUP_KEY,
     createAuthStorage: createAuthStorage,
     persistVerifierCopies: persistVerifierCopies,
     readVerifier: readVerifier,
     clearAuthArtifacts: clearAuthArtifacts,
+    persistSessionBackup: persistSessionBackup,
+    readSessionBackup: readSessionBackup,
+    clearSessionBackup: clearSessionBackup,
   };
 })(window);

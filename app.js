@@ -154,6 +154,19 @@ function isCloudStoreKey(key) {
   return CLOUD_STORE_NAMES.some((name) => key === `nichi.${name}` || key.endsWith(`.${name}`) && key.startsWith("nichi.u."));
 }
 
+function storedValueIsMeaningful(raw) {
+  if (!raw) return false;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed == null) return false;
+    if (Array.isArray(parsed)) return parsed.length > 0;
+    if (typeof parsed === "object") return Object.keys(parsed).length > 0;
+    return Boolean(String(parsed).trim());
+  } catch {
+    return Boolean(String(raw).trim());
+  }
+}
+
 function adoptUserScopedStorage(userId) {
   const id = String(userId || "").trim();
   if (!id) return;
@@ -162,7 +175,7 @@ function adoptUserScopedStorage(userId) {
     try {
       if (localStorage.getItem(scoped)) return;
       const shared = localStorage.getItem(`nichi.${name}`);
-      if (shared) localStorage.setItem(scoped, shared);
+      if (storedValueIsMeaningful(shared)) localStorage.setItem(scoped, shared);
     } catch {
       /* 本機搬移失敗不擋雲端同步 */
     }
@@ -1668,8 +1681,8 @@ function friendlySyncError(error) {
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
     return "現在沒有網路。紀錄已先存在這台裝置，連上後再同步即可。";
   }
-  if (code === "auth" || /401|登入狀態|請先登入/i.test(message)) {
-    return "登入狀態剛過期。紀錄已先留在這台裝置，請再點一次重新同步。";
+    if (code === "auth" || /401|登入狀態|請先登入/i.test(message)) {
+    return "登入狀態剛過期。紀錄已先留在這台裝置，連上後會自動補傳到雲端。";
   }
   if (code === "config" || /503|準備中/i.test(message)) {
     return "雲端備份還在準備中。紀錄已先存在這台裝置。";
@@ -1678,20 +1691,39 @@ function friendlySyncError(error) {
     return "這次連不到雲端。紀錄已先存在這台裝置，稍候再同步即可。";
   }
   if (message && /尚有未同步|這次還沒送到|紀錄已先|連不到雲端|登入狀態/.test(message)) return message;
-  return "尚有未同步的紀錄，點擊重試";
+  return "這次還沒送到雲端，紀錄已先存在這台裝置。";
 }
 
 function collectCloudBundle() {
+  const userId = state.user && state.user.id ? String(state.user.id) : "";
+  const reviews = {};
+  Object.entries(getReviews()).forEach(([iso, review]) => {
+    if (!review || typeof review !== "object") return;
+    reviews[iso] = { ...review, date: iso, userId: review.userId || userId };
+  });
+  const tag = (item) => (item && typeof item === "object" ? { ...item, userId: item.userId || userId } : item);
   return {
-    userId: state.user && state.user.id,
-    reviews: getReviews(),
-    tasks: getTasks(),
-    sfm: getSfm(),
-    insights: getInsights(),
-    manifests: getManifests(),
+    userId,
+    reviews,
+    tasks: getTasks().map(tag),
+    sfm: getSfm().map(tag),
+    insights: getInsights().map(tag),
+    manifests: getManifests().map(tag),
     reports: getStoredReports(),
     updatedAt: new Date().toISOString(),
   };
+}
+
+function bundleHasMeaningfulData(bundle) {
+  const data = bundle && typeof bundle === "object" ? bundle : {};
+  const reviews = data.reviews && typeof data.reviews === "object" ? Object.values(data.reviews) : [];
+  if (reviews.some((review) => reviewContentScore(review) >= 10 || (review && review.completedAt))) return true;
+  if (Array.isArray(data.tasks) && data.tasks.length) return true;
+  if (Array.isArray(data.sfm) && data.sfm.length) return true;
+  if (Array.isArray(data.insights) && data.insights.length) return true;
+  if (Array.isArray(data.manifests) && data.manifests.length) return true;
+  const reports = data.reports && typeof data.reports === "object" ? data.reports : {};
+  return Object.keys(reports).some((key) => key && !String(key).startsWith("__"));
 }
 
 async function pushViaApi(bundle) {
@@ -1830,15 +1862,38 @@ function reviewContentScore(review) {
     journal.thanks,
     journal.event,
     journal.feel,
+    journal.mood,
     journal.body,
+    journal.bodyNote,
     journal.aware,
     journal.exec,
+    journal.smallestStep,
     journal.manifest,
-    journal.deep && typeof journal.deep === "object" ? JSON.stringify(journal.deep) : "",
+    journal.manifestSentence,
+    journal.deep ? JSON.stringify(journal.deep) : "",
+    journal.awareness ? JSON.stringify(journal.awareness) : "",
+    journal.execution ? JSON.stringify(journal.execution) : "",
+    journal.manifestThink ? JSON.stringify(journal.manifestThink) : "",
     journal.awarenessResult ? JSON.stringify(journal.awarenessResult) : "",
+    journal.awarenessChecks ? JSON.stringify(journal.awarenessChecks) : "",
+    journal.awarenessCheckItems ? JSON.stringify(journal.awarenessCheckItems) : "",
+    journal.executionChecks ? JSON.stringify(journal.executionChecks) : "",
+    journal.executionCheckItems ? JSON.stringify(journal.executionCheckItems) : "",
+    journal.manifestChecks ? JSON.stringify(journal.manifestChecks) : "",
+    journal.manifestCheckItems ? JSON.stringify(journal.manifestCheckItems) : "",
+    journal.bodyCheck ? JSON.stringify(journal.bodyCheck) : "",
+    journal.bodyCoach ? JSON.stringify(journal.bodyCoach) : "",
+    journal.insight ? JSON.stringify(journal.insight) : "",
     review.organize ? JSON.stringify(review.organize) : "",
+    Array.isArray(review.selectedQuotes) ? review.selectedQuotes.join(" ") : "",
+    Array.isArray(review.selectedSfm) ? JSON.stringify(review.selectedSfm) : "",
+    Array.isArray(review.selectedThinkActions) ? review.selectedThinkActions.join(" ") : "",
+    Array.isArray(review.selectedPractice) ? review.selectedPractice.join(" ") : "",
+    Array.isArray(review.thinkHistory) ? JSON.stringify(review.thinkHistory) : "",
   ];
-  return chunks.reduce((sum, chunk) => sum + String(chunk || "").trim().length, 0);
+  let score = chunks.reduce((sum, chunk) => sum + String(chunk || "").trim().length, 0);
+  if (review.completedAt) score += 80;
+  return score;
 }
 
 function pickReview(left, right) {
@@ -1846,9 +1901,15 @@ function pickReview(left, right) {
   if (!right) return left;
   const scoreL = reviewContentScore(left);
   const scoreR = reviewContentScore(right);
+  const emptyL = scoreL < 10 && !left.completedAt;
+  const emptyR = scoreR < 10 && !right.completedAt;
+  if (emptyL && !emptyR) return right;
+  if (emptyR && !emptyL) return left;
+  if (left.completedAt && !right.completedAt && scoreL + 20 >= scoreR) return left;
+  if (right.completedAt && !left.completedAt && scoreR + 20 >= scoreL) return right;
   if (scoreL > 40 && scoreR < 20) return left;
   if (scoreR > 40 && scoreL < 20) return right;
-  if (Math.abs(scoreL - scoreR) > 80) return scoreL >= scoreR ? left : right;
+  if (Math.abs(scoreL - scoreR) > 40) return scoreL >= scoreR ? left : right;
   return newerStamp(left, right) ? left : right;
 }
 
@@ -1931,11 +1992,12 @@ async function pullCloudData(options = {}) {
   if (!options.quiet) setSyncStatus("pulling");
   await ensureFreshAccessToken();
   let cloud = null;
-  try {
+  const readViaApi = async () => {
     const response = await fetch(`${location.origin}/api/sync`, {
       method: "GET",
       credentials: "include",
-      headers: authHeaders(),
+      cache: "no-store",
+      headers: authHeaders({ "Cache-Control": "no-store" }),
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || payload.ok === false) {
@@ -1945,14 +2007,25 @@ async function pullCloudData(options = {}) {
         error: payload.error,
         reason: payload.reason,
       });
-    } else {
-      cloud = payload.data || {};
+      return null;
     }
+    return payload.data || {};
+  };
+  try {
+    cloud = await readViaApi();
   } catch (error) {
     console.error("[進行式 ING] 讀取 /api/sync 失敗", {
       message: error && error.message ? error.message : error,
       online: typeof navigator !== "undefined" ? navigator.onLine : null,
     });
+  }
+  if (!cloud) {
+    await ensureFreshAccessToken();
+    try {
+      cloud = await readViaApi();
+    } catch (error) {
+      console.error("[進行式 ING] 重試讀取 /api/sync 失敗", error && error.message ? error.message : error);
+    }
   }
   if (!cloud) cloud = await loadSupabaseRecords();
   if (cloud) mergeCloudBundle(cloud);
@@ -2047,13 +2120,14 @@ async function syncAccountCloud() {
     adoptUserScopedStorage(state.user.id);
     startCloudLiveSync();
     await restoreQueueIfLocalEmpty();
-    if (hasUnsynced()) {
-      state.cloudUnsynced = true;
-      setSyncStatus("error", "尚有未同步的紀錄，點擊重試");
-    }
+    const hadUnsynced = hasUnsynced();
+    const localMeaningful = bundleHasMeaningfulData(collectCloudBundle());
+    if (hadUnsynced) state.cloudUnsynced = true;
     await pullCloudData();
     refreshCloudViews();
-    await flushCloudNow({ reason: "login" });
+    if (hadUnsynced || localMeaningful) {
+      await flushCloudNow({ reason: "login" });
+    }
   })();
   try {
     await cloudAccountSync;
@@ -2155,9 +2229,22 @@ async function getSupabase() {
       },
     });
     if (supabaseClient.auth.initialize) await supabaseClient.auth.initialize();
-    supabaseClient.auth.onAuthStateChange((_event, session) => {
+    try {
+      const existing = await supabaseClient.auth.getSession();
+      if (!(existing.data && existing.data.session)) {
+        await restoreAuthSession(supabaseClient);
+      }
+    } catch (error) {
+      console.warn("[進行式 ING] 還原登入工作階段失敗", error && error.message ? error.message : error);
+    }
+    supabaseClient.auth.onAuthStateChange(async (event, session) => {
+      let nextSession = session;
+      if (!nextSession && event !== "SIGNED_OUT") {
+        nextSession = await restoreAuthSession(supabaseClient);
+      }
       const prev = state.user && state.user.id;
-      applySession(session);
+      if (nextSession) applySession(nextSession);
+      else if (event === "SIGNED_OUT") applySession(null);
       const next = state.user && state.user.id;
       if (prev !== next) {
         renderAuth();
@@ -2175,9 +2262,111 @@ async function getSupabase() {
   return client;
 }
 
+const AUTH_SESSION_BACKUP = "nichi-auth-session";
+
+function persistAuthSessionBackup(session) {
+  if (!session || !session.access_token) return;
+  const payload = JSON.stringify({
+    access_token: session.access_token,
+    refresh_token: session.refresh_token || "",
+    expires_at: session.expires_at || 0,
+    expires_in: session.expires_in || 0,
+    token_type: session.token_type || "bearer",
+    user: session.user || null,
+  });
+  try {
+    localStorage.setItem(AUTH_SESSION_BACKUP, payload);
+  } catch {
+    /* ignore */
+  }
+  try {
+    sessionStorage.setItem(AUTH_SESSION_BACKUP, payload);
+  } catch {
+    /* ignore */
+  }
+  if (window.NichiAuthStorage && window.NichiAuthStorage.persistSessionBackup) {
+    window.NichiAuthStorage.persistSessionBackup(payload);
+  }
+}
+
+function clearAuthSessionBackup() {
+  try {
+    localStorage.removeItem(AUTH_SESSION_BACKUP);
+  } catch {
+    /* ignore */
+  }
+  try {
+    sessionStorage.removeItem(AUTH_SESSION_BACKUP);
+  } catch {
+    /* ignore */
+  }
+  if (window.NichiAuthStorage && window.NichiAuthStorage.clearSessionBackup) {
+    window.NichiAuthStorage.clearSessionBackup();
+  }
+}
+
+function readAuthSessionBackup() {
+  const raws = [];
+  if (window.NichiAuthStorage && window.NichiAuthStorage.readSessionBackup) {
+    raws.push(window.NichiAuthStorage.readSessionBackup());
+  }
+  try {
+    raws.push(localStorage.getItem(AUTH_SESSION_BACKUP));
+  } catch {
+    /* ignore */
+  }
+  try {
+    raws.push(sessionStorage.getItem(AUTH_SESSION_BACKUP));
+  } catch {
+    /* ignore */
+  }
+  try {
+    raws.push(localStorage.getItem("nichi-auth"));
+  } catch {
+    /* ignore */
+  }
+  for (const raw of raws) {
+    if (!raw) continue;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.access_token) return parsed;
+      const nested = parsed.currentSession || parsed.session || (parsed.data && parsed.data.session);
+      if (nested && nested.access_token) return nested;
+    } catch {
+      /* ignore */
+    }
+  }
+  return null;
+}
+
+async function restoreAuthSession(client) {
+  const backup = readAuthSessionBackup();
+  if (!backup || !backup.access_token) return null;
+  if (client && backup.refresh_token && client.auth.setSession) {
+    try {
+      const { data, error } = await client.auth.setSession({
+        access_token: backup.access_token,
+        refresh_token: backup.refresh_token,
+      });
+      if (!error && data && data.session) {
+        persistAuthSessionBackup(data.session);
+        return data.session;
+      }
+    } catch (error) {
+      console.warn("[進行式 ING] 還原 Supabase session 失敗", error && error.message ? error.message : error);
+    }
+  }
+  return backup.user ? backup : null;
+}
+
 function applySession(session) {
-  const user = session && session.user;
-  state.accessToken = (session && session.access_token) || "";
+  if (!session) {
+    state.accessToken = "";
+    state.user = null;
+    return;
+  }
+  const user = session.user;
+  state.accessToken = session.access_token || "";
   state.user = user
     ? {
         id: String(user.id),
@@ -2185,26 +2374,28 @@ function applySession(session) {
         name: String((user.user_metadata && (user.user_metadata.name || user.user_metadata.full_name)) || user.email || "").trim(),
         picture: String((user.user_metadata && (user.user_metadata.avatar_url || user.user_metadata.picture)) || "").trim(),
       }
-    : null;
+    : state.user;
+  persistAuthSessionBackup(session);
 }
 
 async function ensureFreshAccessToken() {
   const client = await getSupabase();
-  if (!client) return "";
+  if (!client) return currentAccessToken();
   let session = null;
   try {
     const current = await client.auth.getSession();
     session = current.data && current.data.session;
+    if (!session) session = await restoreAuthSession(client);
     const expiresAt = session && session.expires_at ? Number(session.expires_at) * 1000 : 0;
-    if (!session || (expiresAt && expiresAt < Date.now() + 60 * 1000)) {
+    if (session && expiresAt && expiresAt < Date.now() + 60 * 1000) {
       const refreshed = await client.auth.refreshSession();
       if (refreshed.data && refreshed.data.session) session = refreshed.data.session;
     }
   } catch (error) {
     console.warn("ensureFreshAccessToken failed", error && error.message ? error.message : error);
   }
-  applySession(session);
-  if (!state.accessToken) {
+  if (session) applySession(session);
+  else if (!state.accessToken) {
     const stored = tokenFromLocalStorage();
     if (stored) state.accessToken = stored;
   }
@@ -2298,6 +2489,7 @@ async function signOutUser() {
   stopCloudLiveSync();
   const client = await getSupabase();
   if (client) await client.auth.signOut();
+  clearAuthSessionBackup();
   state.user = null;
   state.accessToken = "";
   state.membership = null;
@@ -4118,6 +4310,9 @@ function journalHasContent(journal) {
   if (String(journal.insight?.conclusion || journal.insight?.psychology || journal.insight?.reflection || journal.insight?.guide?.summary || "").trim()) return true;
   if ((journal.insight?.suggestions || []).length || (journal.insight?.takeaways || []).length || (journal.insight?.guide?.rounds || []).length) return true;
   if ((journal.bodyTags || []).length || (journal.awarenessChecks || []).length || (journal.executionChecks || []).length || (journal.manifestChecks || []).length) return true;
+  const bodyCheck = journal.bodyCheck && typeof journal.bodyCheck === "object" ? journal.bodyCheck : {};
+  if (["mood", "body", "sleep"].some((key) => (bodyCheck[key] && Array.isArray(bodyCheck[key].flags) && bodyCheck[key].flags.length) || (bodyCheck[key] && bodyCheck[key].none))) return true;
+  if (String(journal.bodyCoach?.title || journal.bodyCoach?.analysis || "").trim()) return true;
   return hasAwarenessResult(journal.awarenessResult);
 }
 
@@ -6993,20 +7188,31 @@ function maybeAutoGenerateCorePrompts(journal) {
   syncCorePromptGate();
 }
 
+function captureReviewPatch() {
+  const { journal, rawText } = syncHiddenReviewText();
+  const prev = getReview(currentIso()) || {};
+  const gratitude = document.getElementById("gratitudeInput")?.value.trim() || state.gratitude || prev.gratitude || "";
+  return {
+    rawText: rawText || prev.rawText || "",
+    journal,
+    organize: state.organize || prev.organize || null,
+    gratitude,
+    selectedQuotes: Array.isArray(state.selectedQuotes) ? state.selectedQuotes : prev.selectedQuotes || [],
+    selectedSfm: Array.isArray(state.selectedSfm) ? state.selectedSfm : prev.selectedSfm || [],
+    selectedThinkActions: Array.isArray(state.selectedThinkActions) ? state.selectedThinkActions : prev.selectedThinkActions || [],
+    selectedPractice: Array.isArray(state.selectedPractice) ? state.selectedPractice : prev.selectedPractice || [],
+    thinkHistory: state.think && Array.isArray(state.think.history) ? state.think.history : prev.thinkHistory || [],
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 function persistJournalQuietly() {
   try {
-    const { journal, rawText } = syncHiddenReviewText();
     const prev = getReview(currentIso()) || {};
-    upsertReview(currentIso(), {
-      rawText: rawText || prev.rawText || "",
-      journal,
-      organize: state.organize || prev.organize || null,
-      gratitude: prev.gratitude || state.gratitude || "",
-      selectedQuotes: state.selectedQuotes,
-      selectedSfm: state.selectedSfm,
-      thinkHistory: state.think.history,
-      updatedAt: new Date().toISOString(),
-    });
+    const patch = captureReviewPatch();
+    const incomingEmpty = !journalHasContent(patch.journal) && !String(patch.rawText || "").trim() && !patch.organize;
+    if (incomingEmpty && (reviewContentScore(prev) >= 10 || prev.completedAt)) return;
+    upsertReview(currentIso(), patch);
   } catch (error) {
     console.error("[進行式 ING] 本機暫存復盤失敗", error && error.message ? error.message : error);
   }
@@ -7876,22 +8082,12 @@ function updateJournalDateLabel(iso) {
 }
 
 async function saveJournalDraft() {
-  const { journal, rawText } = syncHiddenReviewText();
-  if (!rawText && !journalHasContent(journal) && !state.organize) {
+  const patch = captureReviewPatch();
+  if (!patch.rawText && !journalHasContent(patch.journal) && !patch.organize) {
     showToast("還沒有內容可以儲存。");
     return;
   }
-  const prev = getReview(currentIso()) || {};
-  upsertReview(currentIso(), {
-    rawText,
-    journal,
-    organize: state.organize || prev.organize || null,
-    gratitude: document.getElementById("gratitudeInput")?.value.trim() || state.gratitude,
-    selectedQuotes: state.selectedQuotes,
-    selectedSfm: state.selectedSfm,
-    thinkHistory: state.think.history,
-    updatedAt: new Date().toISOString(),
-  });
+  upsertReview(currentIso(), patch);
   updateStats();
   flushCloudNow({ reason: "draft" }).catch((error) => {
     console.error("[進行式 ING] 草稿背景同步失敗", error && error.message ? error.message : error);
@@ -7922,6 +8118,8 @@ function loadReviewForDate(iso) {
   state.gratitude = review?.gratitude || "";
   state.selectedQuotes = [...(review?.selectedQuotes || [])];
   state.selectedSfm = [...(review?.selectedSfm || [])];
+  state.selectedThinkActions = [...(review?.selectedThinkActions || [])];
+  state.selectedPractice = [...(review?.selectedPractice || [])];
   if (review?.organize) state.organize = review.organize;
   if (Array.isArray(review?.thinkHistory) && review.thinkHistory.length) {
     state.think.history = review.thinkHistory;
@@ -8952,15 +9150,14 @@ async function finishTodayReview() {
 
   const gratitude = document.getElementById("gratitudeInput")?.value.trim() || state.gratitude;
   const organize = state.organize;
+  const patch = captureReviewPatch();
 
   upsertReview(iso, {
-    rawText,
-    journal: collected.journal || getReview(iso)?.journal || emptyJournal(),
+    ...patch,
+    rawText: rawText || patch.rawText,
+    journal: collected.journal || patch.journal || getReview(iso)?.journal || emptyJournal(),
     organize,
-    gratitude,
-    selectedQuotes: state.selectedQuotes,
-    selectedSfm: state.selectedSfm,
-    thinkHistory: state.think.history,
+    gratitude: gratitude || patch.gratitude,
     completedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });

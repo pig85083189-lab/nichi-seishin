@@ -28,7 +28,7 @@ function publicSyncError(error, status) {
   if (code === 401 || /請先登入|未登入|jwt|token/i.test(message)) {
     return {
       code: "auth",
-      error: "登入狀態剛過期，紀錄已先留在這台裝置。請再點一次重新同步。",
+      error: "登入狀態剛過期，紀錄已先留在這台裝置。連上後會自動補傳到雲端。",
     };
   }
   if (/permission|42501|rls|沒有權限/i.test(message)) {
@@ -101,6 +101,7 @@ module.exports = async function handler(req, res) {
         userId: user.id,
         updatedAt: saved && saved.updatedAt,
         degraded: Boolean(saved && saved.degraded),
+        data: saved || null,
       });
       return;
     }

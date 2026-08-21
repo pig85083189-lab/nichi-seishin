@@ -41,7 +41,7 @@
     <p id="actions" hidden><a id="retry" href="/">回到首頁重新登入</a></p>
     <pre id="debug"></pre>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
-    <script src="pkce-storage.js?v=1"></script>
+    <script src="pkce-storage.js?v=2"></script>
     <script>
       (async function () {
         var home = (location.origin || "https://nichi-seishin.vercel.app") + "/";
@@ -125,10 +125,6 @@
           if (storageApi && storageApi.persistVerifierCopies) {
             storageApi.persistVerifierCopies();
           }
-          if (!storageApi || !storageApi.readVerifier || !storageApi.readVerifier()) {
-            fail("Auth session missing! PKCE verifier not found in storage.");
-            return;
-          }
 
           var cfgRes = await fetch("/api/config");
           var cfg = await cfgRes.json();
@@ -140,17 +136,22 @@
           var createClient =
             window.supabase.createClient ||
             (window.supabase.default && window.supabase.default.createClient);
+          var authStorage = storageApi && storageApi.createAuthStorage ? storageApi.createAuthStorage() : undefined;
           var client = createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
             auth: {
               persistSession: true,
               autoRefreshToken: true,
               detectSessionInUrl: false,
               flowType: "pkce",
-              storageKey: storageApi.STORAGE_KEY,
-              storage: storageApi.createAuthStorage(),
+              storageKey: (storageApi && storageApi.STORAGE_KEY) || "nichi-auth",
+              ...(authStorage ? { storage: authStorage } : {}),
             },
           });
           if (client.auth.initialize) await client.auth.initialize();
+
+          if (!storageApi || !storageApi.readVerifier || !storageApi.readVerifier()) {
+            note("verifier missing before exchange; still trying");
+          }
 
           var exchanged = await client.auth.exchangeCodeForSession(code);
           if (exchanged.error) {
@@ -159,7 +160,19 @@
           }
 
           var sessionRes = await client.auth.getSession();
-          if (sessionRes.data && sessionRes.data.session) {
+          var session = sessionRes.data && sessionRes.data.session;
+          if (!session && exchanged.data && exchanged.data.session) session = exchanged.data.session;
+          if (session) {
+            if (storageApi && storageApi.persistSessionBackup) {
+              storageApi.persistSessionBackup({
+                access_token: session.access_token || "",
+                refresh_token: session.refresh_token || "",
+                expires_at: session.expires_at || 0,
+                expires_in: session.expires_in || 0,
+                token_type: session.token_type || "bearer",
+                user: session.user || null,
+              });
+            }
             location.replace(home + "?auth=ok");
             return;
           }
