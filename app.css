@@ -747,6 +747,32 @@ body.nav-closed .side-logout {
   white-space: nowrap;
 }
 
+.sync-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--header-muted);
+  white-space: nowrap;
+  max-width: 6.8em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+.sync-chip[hidden] {
+  display: none !important;
+}
+
+.sync-chip.is-saving,
+.sync-chip.is-pulling {
+  opacity: 0.88;
+}
+
+.sync-chip.is-error {
+  color: #f4d3c0;
+}
+
 .guide-chip {
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 999px;

@@ -1,6 +1,36 @@
 -- 在 Supabase SQL Editor 執行一次。
 -- 日精進把每位使用者的復盤、下一步、素材庫、週月報存在同一列，並用 RLS 隔離。
 
+create table if not exists public.nichi_profiles (
+  id uuid primary key references auth.users (id) on delete cascade,
+  email text,
+  display_name text,
+  avatar_url text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.nichi_profiles enable row level security;
+
+drop policy if exists "nichi_profiles_select_own" on public.nichi_profiles;
+create policy "nichi_profiles_select_own"
+  on public.nichi_profiles for select
+  using (auth.uid() = id);
+
+drop policy if exists "nichi_profiles_insert_own" on public.nichi_profiles;
+create policy "nichi_profiles_insert_own"
+  on public.nichi_profiles for insert
+  with check (auth.uid() = id);
+
+drop policy if exists "nichi_profiles_update_own" on public.nichi_profiles;
+create policy "nichi_profiles_update_own"
+  on public.nichi_profiles for update
+  using (auth.uid() = id)
+  with check (auth.uid() = id);
+
+grant select, insert, update on public.nichi_profiles to authenticated;
+grant all on public.nichi_profiles to service_role;
+
 create table if not exists public.nichi_user_data (
   user_id uuid primary key references auth.users (id) on delete cascade,
   email text,
@@ -8,6 +38,7 @@ create table if not exists public.nichi_user_data (
   tasks jsonb not null default '[]'::jsonb,
   sfm jsonb not null default '[]'::jsonb,
   reports jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
@@ -32,7 +63,13 @@ create policy "nichi_user_data_update_own"
   with check (auth.uid() = user_id);
 
 grant usage on schema public to anon, authenticated, service_role;
-grant select, insert, update on public.nichi_user_data to authenticated;
+
+drop policy if exists "nichi_user_data_delete_own" on public.nichi_user_data;
+create policy "nichi_user_data_delete_own"
+  on public.nichi_user_data for delete
+  using (auth.uid() = user_id);
+
+grant select, insert, update, delete on public.nichi_user_data to authenticated;
 grant all on public.nichi_user_data to service_role;
 notify pgrst, 'reload schema';
 

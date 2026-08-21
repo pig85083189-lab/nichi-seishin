@@ -84,7 +84,12 @@ module.exports = async function handler(req, res) {
   try {
     if (req.method === "GET") {
       const data = await loadUserData(user.id, extra);
-      res.status(200).json({ ok: true, userId: user.id, data });
+      res.status(200).json({
+        ok: true,
+        userId: user.id,
+        updatedAt: data && data.updatedAt ? data.updatedAt : "",
+        data,
+      });
       return;
     }
 

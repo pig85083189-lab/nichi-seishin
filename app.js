@@ -173,13 +173,48 @@ function adoptUserScopedStorage(userId) {
   CLOUD_STORE_NAMES.forEach((name) => {
     const scoped = `nichi.u.${id}.${name}`;
     try {
-      if (localStorage.getItem(scoped)) return;
+      if (storedValueIsMeaningful(localStorage.getItem(scoped))) return;
       const shared = localStorage.getItem(`nichi.${name}`);
       if (storedValueIsMeaningful(shared)) localStorage.setItem(scoped, shared);
     } catch {
       /* 本機搬移失敗不擋雲端同步 */
     }
   });
+}
+
+function guestDataMayBelongToUser(userId) {
+  const id = String(userId || "").trim();
+  if (!id) return false;
+  try {
+    const reviews = loadJson("nichi.reviews", {});
+    const tagged = Object.values(reviews)
+      .map((review) => (review && review.userId ? String(review.userId) : ""))
+      .filter(Boolean);
+    if (tagged.some((uid) => uid !== id)) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function migrationFlagKey(userId) {
+  return `nichi.u.${String(userId || "").trim()}.cloudMigrationCompleted_v1`;
+}
+
+function readMigrationFlag(userId) {
+  try {
+    return localStorage.getItem(migrationFlagKey(userId)) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function writeMigrationFlag(userId) {
+  try {
+    localStorage.setItem(migrationFlagKey(userId), "true");
+  } catch {
+    /* ignore */
+  }
 }
 
 function loadJson(key, fallback) {
@@ -852,6 +887,19 @@ function currentAccessToken() {
   return String(state.accessToken || tokenFromLocalStorage() || "").trim();
 }
 
+function hasStoredAuthSession() {
+  try {
+    return Boolean(
+      currentAccessToken() ||
+        localStorage.getItem("nichi-auth") ||
+        sessionStorage.getItem("nichi-auth") ||
+        localStorage.getItem("nichi-auth-session")
+    );
+  } catch {
+    return false;
+  }
+}
+
 function authHeaders(headers = {}, token) {
   const next = { ...(headers || {}) };
   const access = String(token || currentAccessToken() || "").trim();
@@ -1461,11 +1509,58 @@ async function fetchArchivedReportList() {
 function setSyncStatus(kind, text) {
   state.syncKind = kind || "";
   state.syncText = text || "";
+  applySyncStatus();
+}
+
+function applySyncStatus() {
+  const el = document.getElementById("syncStatus");
+  if (!el) return;
+  const kind = state.syncKind || "";
+  clearTimeout(applySyncStatus.hideTimer);
+  if (!state.user || !kind) {
+    el.hidden = true;
+    el.textContent = "";
+    el.className = "sync-chip";
+    el.removeAttribute("title");
+    return;
+  }
+  const labels = {
+    saving: "儲存中…",
+    pulling: "同步中…",
+    saved: "已同步",
+    error: "同步失敗",
+  };
+  const label = labels[kind];
+  if (!label) {
+    el.hidden = true;
+    return;
+  }
+  el.hidden = false;
+  el.textContent = label;
+  el.title = state.syncText || label;
+  el.className = `sync-chip is-${kind}`;
+  if (kind === "saved") {
+    applySyncStatus.hideTimer = setTimeout(() => {
+      if (state.syncKind === "saved") {
+        const chip = document.getElementById("syncStatus");
+        if (chip) chip.hidden = true;
+      }
+    }, 2600);
+  }
 }
 
 function journalHasFocus() {
   const el = document.activeElement;
   return Boolean(el && el.closest && el.closest("#page-today") && (el.tagName === "TEXTAREA" || el.tagName === "INPUT" || el.isContentEditable));
+}
+
+function isActivelyEditingJournal() {
+  if (journalHasFocus()) return true;
+  try {
+    return typeof isJournalFoldEditing === "function" && isJournalFoldEditing();
+  } catch {
+    return false;
+  }
 }
 
 function scheduleCloudSync() {
@@ -1479,7 +1574,7 @@ function scheduleCloudSync() {
     pushCloudData().catch((error) => {
       console.error("[進行式 ING] 延遲同步失敗", error && error.message ? error.message : error);
     });
-  }, 900);
+  }, 1100);
 }
 
 async function waitForCloudIdle(timeoutMs = 15000) {
@@ -1761,17 +1856,24 @@ async function pushViaApi(bundle) {
 async function pushViaSupabaseClient(bundle) {
   const client = await getSupabase();
   if (!client || !state.user) return false;
+  let existing = null;
+  try {
+    existing = await loadSupabaseRecords();
+  } catch (error) {
+    console.warn("[進行式 ING] 直連寫入前讀取雲端失敗", error && error.message ? error.message : error);
+  }
+  const merged = existing ? combineCloudBundles(existing, bundle) : bundle;
   const { error } = await client.from("nichi_user_data").upsert(
     {
       user_id: state.user.id,
       email: state.user.email || "",
-      reviews: bundle.reviews,
-      tasks: bundle.tasks,
-      sfm: bundle.sfm,
+      reviews: merged.reviews,
+      tasks: merged.tasks,
+      sfm: merged.sfm,
       reports: {
-        ...(bundle.reports || {}),
-        __insights: bundle.insights || [],
-        __manifests: bundle.manifests || [],
+        ...(merged.reports || {}),
+        __insights: merged.insights || [],
+        __manifests: merged.manifests || [],
       },
       updated_at: new Date().toISOString(),
     },
@@ -1786,6 +1888,7 @@ async function pushViaSupabaseClient(bundle) {
     });
     return false;
   }
+  mergeCloudBundle(merged);
   return true;
 }
 
@@ -1816,6 +1919,12 @@ async function pushCloudData(options = {}) {
       });
       const ok = await pushViaSupabaseClient(bundle);
       if (!ok) throw apiError;
+    }
+    if (payload && payload.degraded) {
+      markUnsynced("degraded");
+      setSyncStatus("error", "這次還沒完整送到雲端。紀錄已先留在這台裝置。");
+      scheduleCloudRetry();
+      return;
     }
     if (payload && payload.data) mergeCloudBundle(payload.data);
     scheduleCloudRetry.fails = 0;
@@ -1896,6 +2005,30 @@ function reviewContentScore(review) {
   return score;
 }
 
+function fieldFilled(value) {
+  if (value == null) return false;
+  if (typeof value === "string") return Boolean(value.trim());
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") return Object.keys(value).length > 0;
+  return true;
+}
+
+function pickFilled(older, newer) {
+  if (fieldFilled(newer)) return newer;
+  if (fieldFilled(older)) return older;
+  return newer === undefined ? older : newer;
+}
+
+function mergeJournalObjects(older, newer) {
+  const a = older && typeof older === "object" ? older : {};
+  const b = newer && typeof newer === "object" ? newer : {};
+  const next = { ...a };
+  Object.keys(b).forEach((key) => {
+    next[key] = pickFilled(a[key], b[key]);
+  });
+  return next;
+}
+
 function pickReview(left, right) {
   if (!left) return right || null;
   if (!right) return left;
@@ -1905,66 +2038,85 @@ function pickReview(left, right) {
   const emptyR = scoreR < 10 && !right.completedAt;
   if (emptyL && !emptyR) return right;
   if (emptyR && !emptyL) return left;
-  if (left.completedAt && !right.completedAt && scoreL + 20 >= scoreR) return left;
-  if (right.completedAt && !left.completedAt && scoreR + 20 >= scoreL) return right;
-  if (scoreL > 40 && scoreR < 20) return left;
-  if (scoreR > 40 && scoreL < 20) return right;
-  if (Math.abs(scoreL - scoreR) > 40) return scoreL >= scoreR ? left : right;
-  return newerStamp(left, right) ? left : right;
+  const leftNewer = newerStamp(left, right);
+  const newer = leftNewer ? left : right;
+  const older = leftNewer ? right : left;
+  return {
+    ...older,
+    ...newer,
+    journal: mergeJournalObjects(older.journal, newer.journal),
+    gratitude: pickFilled(older.gratitude, newer.gratitude),
+    rawText: pickFilled(older.rawText, newer.rawText),
+    organize: pickFilled(older.organize, newer.organize),
+    completedAt: newer.completedAt || older.completedAt || "",
+    selectedQuotes: pickFilled(older.selectedQuotes, newer.selectedQuotes),
+    selectedSfm: pickFilled(older.selectedSfm, newer.selectedSfm),
+    selectedThinkActions: pickFilled(older.selectedThinkActions, newer.selectedThinkActions),
+    selectedPractice: pickFilled(older.selectedPractice, newer.selectedPractice),
+    thinkHistory: pickFilled(older.thinkHistory, newer.thinkHistory),
+    updatedAt: newer.updatedAt || older.updatedAt,
+    userId: newer.userId || older.userId || "",
+    date: newer.date || older.date,
+  };
+}
+
+function mergeItemList(left, right) {
+  const map = new Map();
+  [...(Array.isArray(left) ? left : []), ...(Array.isArray(right) ? right : [])].forEach((item) => {
+    if (!item || !item.id) return;
+    const current = map.get(item.id);
+    if (!current || newerStamp(item, current)) map.set(item.id, item);
+  });
+  return [...map.values()];
+}
+
+function combineCloudBundles(base, incoming) {
+  const left = base && typeof base === "object" ? base : {};
+  const right = incoming && typeof incoming === "object" ? incoming : {};
+  const reviews = { ...(left.reviews && typeof left.reviews === "object" ? left.reviews : {}) };
+  Object.entries(right.reviews && typeof right.reviews === "object" ? right.reviews : {}).forEach(([iso, review]) => {
+    reviews[iso] = pickReview(reviews[iso], review);
+  });
+  const rightInsights = Array.isArray(right.insights)
+    ? right.insights
+    : Array.isArray(right.reports && right.reports.__insights)
+      ? right.reports.__insights
+      : [];
+  const rightManifests = Array.isArray(right.manifests)
+    ? right.manifests
+    : Array.isArray(right.reports && right.reports.__manifests)
+      ? right.reports.__manifests
+      : [];
+  return {
+    reviews,
+    tasks: mergeItemList(left.tasks, right.tasks),
+    sfm: mergeItemList(left.sfm, right.sfm),
+    insights: mergeItemList(left.insights, rightInsights),
+    manifests: mergeItemList(left.manifests, rightManifests),
+    reports: { ...(left.reports && typeof left.reports === "object" ? left.reports : {}), ...(right.reports && typeof right.reports === "object" ? right.reports : {}) },
+    updatedAt: right.updatedAt || left.updatedAt || "",
+  };
 }
 
 function mergeCloudBundle(cloud) {
   if (!cloud || typeof cloud !== "object") return;
-  const localReviews = getReviews();
-  const nextReviews = { ...localReviews };
-  Object.entries(cloud.reviews || {}).forEach(([iso, review]) => {
-    nextReviews[iso] = pickReview(nextReviews[iso], review);
-  });
-  saveJson(cloudStoreKey("reviews"), nextReviews, { silent: true });
-
-  const taskMap = new Map();
-  [...getTasks(), ...(Array.isArray(cloud.tasks) ? cloud.tasks : [])].forEach((task) => {
-    if (!task || !task.id) return;
-    const current = taskMap.get(task.id);
-    if (!current || newerStamp(task, current)) taskMap.set(task.id, task);
-  });
-  saveJson(cloudStoreKey("tasks"), [...taskMap.values()], { silent: true });
-
-  const sfmMap = new Map();
-  [...getSfm(), ...(Array.isArray(cloud.sfm) ? cloud.sfm : [])].forEach((item) => {
-    if (!item || !item.id) return;
-    const current = sfmMap.get(item.id);
-    if (!current || newerStamp(item, current)) sfmMap.set(item.id, item);
-  });
-  saveJson(cloudStoreKey("sfm"), [...sfmMap.values()], { silent: true });
-
-  const rawInsights = Array.isArray(cloud.insights)
-    ? cloud.insights
-    : Array.isArray(cloud.reports && cloud.reports.__insights)
-      ? cloud.reports.__insights
-      : [];
-  const insightMap = new Map();
-  [...getInsights(), ...rawInsights].forEach((item) => {
-    if (!item || !item.id) return;
-    const current = insightMap.get(item.id);
-    if (!current || newerStamp(item, current)) insightMap.set(item.id, item);
-  });
-  saveJson(cloudStoreKey("insights"), [...insightMap.values()], { silent: true });
-
-  const rawManifests = Array.isArray(cloud.manifests)
-    ? cloud.manifests
-    : Array.isArray(cloud.reports && cloud.reports.__manifests)
-      ? cloud.reports.__manifests
-      : [];
-  const manifestMap = new Map();
-  [...getManifests(), ...rawManifests].forEach((item) => {
-    if (!item || !item.id) return;
-    const current = manifestMap.get(item.id);
-    if (!current || newerStamp(item, current)) manifestMap.set(item.id, item);
-  });
-  saveJson(cloudStoreKey("manifests"), [...manifestMap.values()], { silent: true });
-
-  const reports = { ...(cloud.reports || {}) };
+  const combined = combineCloudBundles(
+    {
+      reviews: getReviews(),
+      tasks: getTasks(),
+      sfm: getSfm(),
+      insights: getInsights(),
+      manifests: getManifests(),
+      reports: getStoredReports(),
+    },
+    cloud
+  );
+  saveJson(cloudStoreKey("reviews"), combined.reviews, { silent: true });
+  saveJson(cloudStoreKey("tasks"), combined.tasks, { silent: true });
+  saveJson(cloudStoreKey("sfm"), combined.sfm, { silent: true });
+  saveJson(cloudStoreKey("insights"), combined.insights, { silent: true });
+  saveJson(cloudStoreKey("manifests"), combined.manifests, { silent: true });
+  const reports = { ...(combined.reports || {}) };
   delete reports.__insights;
   delete reports.__manifests;
   saveJson(cloudStoreKey("reports"), { ...getStoredReports(), ...reports }, { silent: true });
@@ -1972,7 +2124,8 @@ function mergeCloudBundle(cloud) {
 
 function refreshCloudViews(options = {}) {
   try {
-    if (!(options.quiet && journalHasFocus())) {
+    const skipForm = options.skipForm || (options.quiet && isActivelyEditingJournal());
+    if (!skipForm) {
       loadReviewForDate(currentIso());
     }
     backfillLibrariesFromReviews();
@@ -1987,10 +2140,23 @@ function refreshCloudViews(options = {}) {
   }
 }
 
+async function waitForAccessToken(timeoutMs = 5000) {
+  const started = Date.now();
+  let token = currentAccessToken();
+  if (token) return token;
+  while (Date.now() - started < timeoutMs) {
+    await ensureFreshAccessToken();
+    token = currentAccessToken();
+    if (token) return token;
+    await new Promise((resolve) => setTimeout(resolve, 160));
+  }
+  return currentAccessToken();
+}
+
 async function pullCloudData(options = {}) {
-  if (!state.user) return;
+  if (!state.user) return null;
   if (!options.quiet) setSyncStatus("pulling");
-  await ensureFreshAccessToken();
+  await waitForAccessToken();
   let cloud = null;
   const readViaApi = async () => {
     const response = await fetch(`${location.origin}/api/sync`, {
@@ -2028,9 +2194,14 @@ async function pullCloudData(options = {}) {
     }
   }
   if (!cloud) cloud = await loadSupabaseRecords();
-  if (cloud) mergeCloudBundle(cloud);
-  refreshCloudViews(options);
-  if (!options.quiet && !hasUnsynced() && state.syncKind !== "error") setSyncStatus("saved");
+  if (cloud) {
+    mergeCloudBundle(cloud);
+    if (!options.skipViews) refreshCloudViews(options);
+    if (!options.quiet && !hasUnsynced() && state.syncKind !== "error") setSyncStatus("saved");
+    return cloud;
+  }
+  if (!options.quiet) setSyncStatus("error", "這次還沒讀到雲端資料。畫面內容已先留在這台裝置。");
+  return null;
 }
 
 function flushUnsyncedCloud() {
@@ -2109,6 +2280,25 @@ function bindCloudLiveSync() {
 
 let cloudAccountSync = null;
 
+async function migrateLocalToCloudIfNeeded({ pulled, cloudHas }) {
+  const id = state.user && state.user.id;
+  if (!id || !pulled) return false;
+  if (readMigrationFlag(id)) return false;
+  if (cloudHas) {
+    writeMigrationFlag(id);
+    return false;
+  }
+  if (guestDataMayBelongToUser(id)) adoptUserScopedStorage(id);
+  await restoreQueueIfLocalEmpty();
+  if (!bundleHasMeaningfulData(collectCloudBundle())) {
+    writeMigrationFlag(id);
+    return false;
+  }
+  const ok = await flushCloudNow({ reason: "migrate" });
+  if (ok) writeMigrationFlag(id);
+  return ok;
+}
+
 async function syncAccountCloud() {
   if (!state.user) {
     stopCloudLiveSync();
@@ -2117,15 +2307,15 @@ async function syncAccountCloud() {
   }
   if (cloudAccountSync) return cloudAccountSync;
   cloudAccountSync = (async () => {
-    adoptUserScopedStorage(state.user.id);
     startCloudLiveSync();
-    await restoreQueueIfLocalEmpty();
-    const hadUnsynced = hasUnsynced();
-    const localMeaningful = bundleHasMeaningfulData(collectCloudBundle());
-    if (hadUnsynced) state.cloudUnsynced = true;
-    await pullCloudData();
-    refreshCloudViews();
-    if (hadUnsynced || localMeaningful) {
+    await waitForAccessToken();
+    const cloud = await pullCloudData({ skipViews: true });
+    const pulled = cloud != null;
+    const cloudHas = pulled && bundleHasMeaningfulData(cloud);
+    if (!pulled) await restoreQueueIfLocalEmpty();
+    await migrateLocalToCloudIfNeeded({ pulled, cloudHas });
+    refreshCloudViews({ skipForm: isActivelyEditingJournal() });
+    if (pulled && hasUnsynced() && !isActivelyEditingJournal()) {
       await flushCloudNow({ reason: "login" });
     }
   })();
@@ -2360,9 +2550,11 @@ async function restoreAuthSession(client) {
 }
 
 function applySession(session) {
+  const prevId = state.user && state.user.id ? String(state.user.id) : "";
   if (!session) {
     state.accessToken = "";
     state.user = null;
+    if (prevId) clearJournalMemory();
     return;
   }
   const user = session.user;
@@ -2376,6 +2568,8 @@ function applySession(session) {
       }
     : state.user;
   persistAuthSessionBackup(session);
+  const nextId = state.user && state.user.id ? String(state.user.id) : "";
+  if (prevId && nextId && prevId !== nextId) clearJournalMemory();
 }
 
 async function ensureFreshAccessToken() {
@@ -2485,16 +2679,60 @@ async function signInWithGoogle() {
   window.location.replace(data.url);
 }
 
+function clearJournalMemory() {
+  state.organize = null;
+  state.rawText = "";
+  state.think = { round: 0, max: 5, history: [], current: null };
+  state.selectedQuotes = [];
+  state.selectedSfm = [];
+  state.selectedThinkActions = [];
+  state.selectedPractice = [];
+  state.gratitude = "";
+  state.journalInsight = null;
+  state.journalBodyCoach = null;
+  state.journalExecFocus = null;
+  state.journalAwarenessResult = null;
+  state.journalManifestSentence = "";
+  state.manifestPrompts = [];
+  state.awarenessPrompts = [];
+  state.executionPrompts = [];
+  state.deepPrompts = [];
+  state.journalMeta = {
+    awarenessAi: false,
+    executionAi: false,
+    awarenessAiSig: "",
+    executionAiSig: "",
+    awarenessQuoteGenCount: 0,
+    manifestAi: false,
+    manifestAiSig: "",
+    manifestPromptsAi: false,
+    manifestPromptsSig: "",
+    insightSig: "",
+    bodyCoachSig: "",
+    promptsSig: "",
+    promptsAi: false,
+    corePromptsSig: "",
+    corePromptsAi: false,
+  };
+}
+
 async function signOutUser() {
   stopCloudLiveSync();
+  try {
+    persistJournalQuietly();
+  } catch {
+    /* ignore */
+  }
   const client = await getSupabase();
   if (client) await client.auth.signOut();
   clearAuthSessionBackup();
   state.user = null;
   state.accessToken = "";
   state.membership = null;
+  clearJournalMemory();
   setSyncStatus("");
   renderAuth();
+  loadReviewForDate(currentIso());
   showToast("已登出。本機草稿仍在這台裝置上。");
 }
 
@@ -7331,10 +7569,9 @@ function captureReviewPatch() {
 
 function persistJournalQuietly() {
   try {
-    const prev = getReview(currentIso()) || {};
     const patch = captureReviewPatch();
     const incomingEmpty = !journalHasContent(patch.journal) && !String(patch.rawText || "").trim() && !patch.organize;
-    if (incomingEmpty && (reviewContentScore(prev) >= 10 || prev.completedAt)) return;
+    if (incomingEmpty) return;
     upsertReview(currentIso(), patch);
   } catch (error) {
     console.error("[進行式 ING] 本機暫存復盤失敗", error && error.message ? error.message : error);
@@ -10549,8 +10786,20 @@ function bindEvents() {
   }
 
   document.getElementById("reviewDate")?.addEventListener("change", () => {
-    loadReviewForDate(currentIso());
+    const iso = currentIso();
+    loadReviewForDate(iso);
     updateStats();
+    if (!state.user) return;
+    pullCloudData({ quiet: true, skipViews: true })
+      .then((cloud) => {
+        if (!cloud) return;
+        if (!isActivelyEditingJournal()) loadReviewForDate(iso);
+        renderHistory();
+        updateStats();
+      })
+      .catch((error) => {
+        console.error("[進行式 ING] 切換日期後同步失敗", error && error.message ? error.message : error);
+      });
   });
 
   document.getElementById("journalDateBtn")?.addEventListener("click", () => {
@@ -11029,7 +11278,8 @@ function init() {
       if (toggle) toggle.setAttribute("aria-expanded", "false");
     }
     renderPromptChips();
-    loadReviewForDate(currentIso());
+    if (!hasStoredAuthSession()) loadReviewForDate(currentIso());
+    else setSyncStatus("pulling");
     backfillLibrariesFromReviews();
     updateStats();
     initReminder();

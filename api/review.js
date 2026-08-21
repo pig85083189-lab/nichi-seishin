@@ -1,4 +1,4 @@
-const { requireUser } = require("../lib/auth");
+const { requireUser, bearerToken } = require("../lib/auth");
 const { ensureTrial, isEntitled, supabaseAdminConfigured } = require("../lib/supabase");
 const { getApiKey, getModel, getProvider, usesClaude, callOpenAI } = require("../lib/openai");
 
@@ -1091,6 +1091,78 @@ function qualifyAwarenessPatterns(recentDays) {
   }).filter((item) => item.count >= 3);
 }
 
+function padDatePart(num) {
+  return String(num).padStart(2, "0");
+}
+
+function toIsoDateValue(date) {
+  return `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}`;
+}
+
+function mapCloudReviewToAwarenessDay(iso, review) {
+  const journal = (review && review.journal) || {};
+  const bodyCheck = journal.bodyCheck && typeof journal.bodyCheck === "object" ? journal.bodyCheck : {};
+  const moodFlags = Array.isArray(bodyCheck.mood && bodyCheck.mood.flags) ? bodyCheck.mood.flags : [];
+  const bodyFlags = Array.isArray(bodyCheck.body && bodyCheck.body.flags) ? bodyCheck.body.flags : [];
+  const sleep = bodyCheck.sleep && typeof bodyCheck.sleep === "object" ? bodyCheck.sleep : {};
+  return {
+    date: iso,
+    mood: journal.mood || "",
+    thanks: String(journal.thanksText || journal.thanks || "").slice(0, 80),
+    event: String(journal.event || (review && review.rawText) || "").slice(0, 120),
+    body: [...moodFlags, ...bodyFlags].filter(Boolean).join("、").slice(0, 60),
+    sleep: [sleep.duration, sleep.quality, sleep.energy].filter(Boolean).join("／"),
+    awarenessAnswers: Array.isArray(journal.awareness) ? journal.awareness.slice(0, 3) : [],
+    awareness: Array.isArray(journal.awarenessChecks) ? journal.awarenessChecks.slice(0, 4) : [],
+    awarenessResult: journal.awarenessResult && typeof journal.awarenessResult === "object"
+      ? {
+          seen: String(journal.awarenessResult.seen || "").slice(0, 80),
+          gap: String(journal.awarenessResult.gap || "").slice(0, 80),
+          line: String(journal.awarenessResult.line || "").slice(0, 28),
+          echo: String(journal.awarenessResult.echo || "").slice(0, 80),
+        }
+      : null,
+    actions: Array.isArray(journal.executionChecks) ? journal.executionChecks.slice(0, 3) : [],
+    insight: String((journal.insight && (journal.insight.title || journal.insight.conclusion)) || "").slice(0, 80),
+  };
+}
+
+async function cloudAwarenessDaysForUser(userId, todayIso, extra) {
+  const { loadUserData, cloudStoreConfigured } = require("../lib/store");
+  if (!cloudStoreConfigured()) return null;
+  const data = await loadUserData(userId, extra);
+  const reviews = data && data.reviews && typeof data.reviews === "object" && !Array.isArray(data.reviews)
+    ? data.reviews
+    : {};
+  const today = String(todayIso || "").trim();
+  const base = /^\d{4}-\d{2}-\d{2}$/.test(today) ? new Date(`${today}T00:00:00`) : new Date();
+  if (Number.isNaN(base.getTime())) return [];
+  const from = new Date(base);
+  from.setDate(from.getDate() - 6);
+  const fromIso = toIsoDateValue(from);
+  const untilIso = /^\d{4}-\d{2}-\d{2}$/.test(today) ? today : toIsoDateValue(base);
+  return Object.entries(reviews)
+    .filter(([iso, review]) => iso >= fromIso && iso <= untilIso && review && typeof review === "object")
+    .sort((left, right) => right[0].localeCompare(left[0]))
+    .slice(0, 7)
+    .map(([iso, review]) => mapCloudReviewToAwarenessDay(iso, review));
+}
+
+async function attachCloudAwarenessHistory(user, body, extra) {
+  if (!user || !user.id || !body || typeof body !== "object") return body;
+  try {
+    const days = await cloudAwarenessDaysForUser(user.id, body.date, extra);
+    if (!Array.isArray(days)) return body;
+    body.progress = {
+      ...(body.progress && typeof body.progress === "object" ? body.progress : {}),
+      recentAwarenessDays: days,
+    };
+  } catch (error) {
+    console.warn("attachCloudAwarenessHistory failed", error && error.message ? error.message : error);
+  }
+  return body;
+}
+
 function recentAwarenessDaysFrom(progressOrDays) {
   if (Array.isArray(progressOrDays)) return progressOrDays;
   if (progressOrDays && typeof progressOrDays === "object") {
@@ -1862,6 +1934,14 @@ module.exports = async function handler(req, res) {
 
   try {
     const body = readJsonBody(req);
+    delete body.user_id;
+    delete body.userId;
+    if (body.mode === "checklist" || body.mode === "prompts") {
+      await attachCloudAwarenessHistory(user, body, {
+        userToken: bearerToken(req, body),
+        email: user.email || "",
+      });
+    }
     const mode =
       body.mode === "think"
         ? "think"
