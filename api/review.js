@@ -933,67 +933,164 @@ ${groupLine("今日身體檢核", check.body)}
 ${sleepLine}`;
 }
 
-const BODY_COACH_SYSTEM = `你是「日精進」的身心觀察者。使用者剛填完今天的心情、身體、睡眠、感謝與事件。你的工作不是安慰、不是摘要，而是幫他看見自己可能沒注意到的關聯。
+const BODY_COACH_SYSTEM = `你是「日精進」的身心觀察者。你不是醫療診斷工具，也不是健康教科書。
 
-讀完資料後，他最理想的感受是：「原來我今天是這個狀態」或「原來這兩件事有關係」。最差的結果是把剛才填過的內容再講一次。
+你的工作是：真的看過這個人今天寫下的心情、身體、睡眠、感謝與事件之後，幫他整理「只屬於今天」的觀察。
+最理想的感受是：「有人看過我今天寫的東西，再幫我整理一次。」
+最差的結果是：通用健康知識、把填過的資料再講一次、或替他下診斷。
 
-【必須綜合，不得漏看】
-今日心情、身體狀況、睡眠時間、睡眠品質、起床精神、今日感謝、今日事件。
+【事實 vs 推測】
+明確寫出的才是事實（心情、睡眠時數、身體勾選、感謝、事件）。
+其餘一律當可能性，必須使用：可能、也許、值得留意、看起來、即使現在沒有明顯感覺、身體可能仍需要、今天的紀錄讓人注意到。
+禁止沒有充分依據就寫：代表你、說明你、你的身體正在、你其實已經、你是在硬撐、身體正在透支、身體已經超負荷、睡眠債、長期消耗、身體警訊。
+單日睡眠偏短 ≠ 硬撐。例如只睡 5–6 小時但精神普通／不錯，應寫：「今天雖然感覺有精神，但昨晚只有 5–6 小時睡眠。身體的疲累，可能還沒有完全被你感覺到。」
 
-【核心任務】
-找出今天最明顯的「身心落差、共同訊號、或值得注意的地方」，濃縮成一句核心結論。
-例如：心安定但睡眠只有 5–6 小時 → 「今天的心是安定的，但身體正在提醒你：休息還需要再多一點。」
-禁止把感謝清單、事件細節、勾選項目逐條複述。感謝與事件只用來理解今天的氛圍與負荷，不要寫成「今天被愛包圍、baby 的傘、清水、陪伴」。
+【三個區塊角色必須不同，禁止換句話重複三次】
+- title 核心結論：今天最值得注意的一個身心落差／訊號／狀態。35-70 字。不要塞進所有資料。
+- analysis 今天的身心訊號：把兩個以上的紀錄連起來，指出關係。100-180 字。不要只重述「你很開心、你睡 5 小時」。
+- notice 今天值得留意的地方：一個他原本可能沒注意到的角度，讓人有「喔，對耶」的感覺。80-150 字。不要再把核心結論講一遍。
+若今天整體都很好：直接說狀態大致穩定，不要為了有洞察而製造問題。
 
-【語氣：70% 客觀觀察 + 20% 個人化連結 + 10% 溫度】
-像把資料放在一起看的人，不是療癒師。禁止每次都用：溫柔地、慢慢地、被愛包圍、讓自己鬆一口氣、給自己一段療癒時光、身體知道夜晚來了。這些詞偶爾一句可以，不可當固定腔。
-禁止診斷、醫療判斷、把推測寫成事實。不要寫「你的神經系統正在緊繃」「自律神經失調」。改成溫和推測：「如果今天同時感到疲憊與難以放鬆，可能代表身體還需要一些時間慢下來。」
+【③ 今晚照顧自己：固定 2 條，角色不同】
+01 身體／休息層面的具體行動。
+02 心理／節奏／環境層面的具體行動。
+不要兩條都是睡眠。不要重複他今天已經做過的事：
+已寫感謝 → 禁止再叫他寫感謝／小確幸／感恩日記
+已寫事件 → 禁止再叫他寫日記
+已做身體覺察 → 禁止再叫他重新掃描身體
+紀錄已提到運動／冥想 → 不要再預設叫他做同一件事
+建議要具體到今晚能做：時間（10 分鐘、睡前）、行動（提早上床、關燈、放下手機、伸展、熱敷、把工作停下）、情境（洗澡後、上床前）。
+禁止空泛：好好休息、多照顧自己、放鬆身心、保持正向、多注意睡眠、適度休息、多喝水。
+禁止宣稱療效：改善睡眠品質、調節自律神經、降低壓力荷爾蒙、改善焦慮、幫助身體修復。
+改成：幫助自己慢慢進入休息狀態、讓今晚的節奏放慢、給身體更多休息空間。
 
-【① 今天的身心訊號】
-分析資料之間的關係，不要重述填寫內容。
-壞例子：「今天心情很好，身體也很平穩，睡眠 5–6 小時。」
-好例子：「今天情緒整體平穩，生活中也感受到不少幸福；但昨晚只有 5–6 小時睡眠，代表心理狀態雖然穩定，身體的休息可能還沒有完全跟上。」
-
-【② 今天值得留意的地方】
-指出可能被忽略的訊號。若沒有明顯問題，就直接說今天整體狀態穩定，不要硬找問題。
-
-【③ 今晚可以這樣照顧自己】
-依當天真正出現的訊號，動態給 1～3 個建議：
-- 沒有明顯問題 → 1 個
-- 一個主要訊號 → 1～2 個
-- 多個值得注意的訊號 → 最多 3 個
-禁止為了湊滿 3 個而給無關建議。
-每一條都必須能回答「為什麼今天特別建議我做這件事？」並對應今天的資料。
-禁止通用建議：多喝水、深呼吸、放下手機、早點休息——除非今天的資料明確支持。
-禁止沒有根據的飲食與健康建議：喝溫牛奶、某種茶、補充營養、改善自律神經、幫助某種身體功能。
-建議以低風險日常行動為主：調整睡眠時間、減少今晚安排、短暫休息、簡單伸展、放慢節奏、記錄情緒、或與當日狀態直接相關的小行動。
+語氣：溫柔但不要療癒文；有洞察但不要像心理醫師；白話、有陪伴感。不要 emoji。
 
 規則：
 - 只輸出 JSON，繁體中文
-- title 1～2 句，不列舉使用者填過的內容
-- analysis 2～4 句，寫關聯，不寫清單
-- notice 1～3 句
-- suggestions 1 到 3 條，禁止固定 3 條
-- 每條 title 8-16 字（動作名），detail 說明今晚為什麼特別適合，20-48 字
 {
-  "title": "今天的心是安定的，但身體正在提醒你：休息還需要再多一點。",
-  "analysis": "今天情緒整體平穩，生活中也感受到不少幸福；但昨晚只有5–6小時睡眠，代表心理狀態雖然穩定，身體的休息可能還沒有完全跟上。",
-  "notice": "幸福與短睡眠同時出現時，人很容易只看見心情好的那一面，而略過身體其實還沒補回來。",
+  "title": "35-70字核心結論",
+  "analysis": "100-180字，寫關聯",
+  "notice": "80-150字，新角度",
   "suggestions": [
-    { "title": "今晚提早30分鐘準備睡覺", "detail": "昨晚睡眠時間偏短，今晚不用增加太多任務，先替自己多留30分鐘的休息空間。" }
+    { "title": "12-25字動作", "detail": "50-100字，說明今晚為什麼適合" },
+    { "title": "12-25字動作", "detail": "50-100字" }
   ]
 }`;
 
+function bodyCoachCompletedNotes(ctx) {
+  const thanks = formatThanksForPrompt(ctx);
+  const event = String((ctx && ctx.event) || "").trim();
+  const awareness = Array.isArray(ctx && ctx.awareness) ? ctx.awareness.filter((item) => String(item || "").trim()) : [];
+  const execution = Array.isArray(ctx && ctx.execution) ? ctx.execution.filter((item) => String(item || "").trim()) : [];
+  const blob = `${thanks}\n${event}\n${(ctx && ctx.bodyNote) || ""}`;
+  const notes = [];
+  if (thanks) notes.push("已寫今日感謝 → 禁止再建議寫感謝／小確幸／感恩日記");
+  if (event) notes.push("已寫今日事件 → 禁止再建議寫日記");
+  notes.push("已勾選心情／身體／睡眠 → 禁止再建議重新掃描身體");
+  if (awareness.length) notes.push("已寫覺察力回答");
+  if (execution.length || String((ctx && ctx.smallestStep) || "").trim()) notes.push("已寫執行力／下一步");
+  if (/運動|跑步|瑜珈|瑜伽|健身|重訓|散步/.test(blob)) notes.push("紀錄已提到運動 → 不要再預設建議運動");
+  if (/冥想|正念靜坐/.test(blob)) notes.push("紀錄已提到冥想 → 不要再建議冥想");
+  return notes;
+}
+
 function bodyCoachUserPrompt(body) {
   const ctx = body.context && typeof body.context === "object" ? body.context : {};
-  return `請綜合下面全部資料，寫出「今日身心小結」。重點是找出關聯與落差，不要摘要複述。
+  const done = bodyCoachCompletedNotes(ctx);
+  return `請只根據下面「今天這個人真正寫過的內容」寫出身心小結。少一點通用健康知識，多一點只屬於今天的觀察。單日睡眠偏短不要寫成硬撐、透支或睡眠債。title / analysis / notice 三層不要重複。照顧建議固定 2 條，且不要重複他今天已做過的事。
 
 今日心情：${ctx.mood || "未選"}
 今日感謝：${formatThanksForPrompt(ctx) || "（未寫）"}
 今日事件：${ctx.event || body.text || "（未寫）"}
 ${formatBodyCheckPrompt(ctx)}
+覺察力回答：${Array.isArray(ctx.awareness) ? ctx.awareness.filter(Boolean).join("／") || "未寫" : "未寫"}
+執行力／最小一步：${[...(Array.isArray(ctx.execution) ? ctx.execution : []), ctx.smallestStep].filter(Boolean).join("／") || "未寫"}
 
-請輸出 title、analysis、notice，以及 1 到 3 條對應今天資料的 suggestions。`;
+今天已完成：
+${done.map((item) => `- ${item}`).join("\n")}
+
+請輸出 title、analysis、notice，以及剛好 2 條 suggestions。`;
+}
+
+function softenBodyCoachText(text) {
+  return String(text || "")
+    .replace(/代表你用(?:一個相對)?疲憊的身體[，,]?撐起了[^。！？]*/g, "今天雖然感覺有精神，但身體的疲累可能還沒有完全被你感覺到")
+    .replace(/用(?:一個相對)?疲憊的身體[，,]?撐起了[^。！？]*/g, "心情上的能量和身體的恢復程度可能還沒完全對上")
+    .replace(/撐起了今天的熱情(?:與專注)?/g, "今天的熱情與身體恢復程度可能不同步")
+    .replace(/代表你/g, "看起來")
+    .replace(/說明你/g, "看起來")
+    .replace(/你其實已經/g, "也許")
+    .replace(/你是在硬撐/g, "即使現在沒有明顯感覺，身體可能仍需要休息")
+    .replace(/身體正在透支/g, "身體可能仍需要更多休息")
+    .replace(/身體已經超負荷/g, "今晚或許適合把負荷放低一點")
+    .replace(/睡眠債/g, "睡眠時間偏短")
+    .replace(/長期消耗/g, "今天休息偏少")
+    .replace(/身體警訊/g, "值得留意的訊號")
+    .replace(/可以改善睡眠品質|能調節自律神經|可以降低壓力荷爾蒙|可以改善焦慮|能幫助身體修復/g, "幫助自己慢慢進入休息狀態");
+}
+
+function keepSentencesWithin(text, max, overflow = 12) {
+  const raw = String(text || "").replace(/\s+/g, " ").trim();
+  if (!raw) return "";
+  if (zhCharCount(raw) <= max) return raw;
+  const parts = [];
+  let buf = "";
+  Array.from(raw).forEach((ch) => {
+    buf += ch;
+    if (/[。！？]/.test(ch)) {
+      parts.push(buf.trim());
+      buf = "";
+    }
+  });
+  if (buf.trim()) parts.push(buf.trim());
+  const kept = [];
+  let used = 0;
+  parts.forEach((part) => {
+    const add = zhCharCount(part);
+    if (used && used + add > max) return;
+    if (!used && add > max) {
+      if (add <= max + overflow) kept.push(part);
+      return;
+    }
+    kept.push(part);
+    used += add;
+  });
+  return kept.join("") || raw;
+}
+
+function isRepeatCareSuggestion(text, ctx) {
+  const t = String(text || "");
+  const thanks = Boolean(formatThanksForPrompt(ctx));
+  const event = String((ctx && ctx.event) || "").trim();
+  const blob = `${formatThanksForPrompt(ctx)}\n${event}\n${(ctx && ctx.bodyNote) || ""}`;
+  if (thanks && /感謝|感恩|小確幸|寫下今天.{0,6}開心/.test(t)) return true;
+  if (event && /寫日記|寫下今天發生/.test(t)) return true;
+  if (/掃描身體|重新覺察身體|身體掃描/.test(t)) return true;
+  if (/運動|跑步|瑜珈|瑜伽|健身/.test(blob) && /去運動|再運動|跑一次|做瑜伽/.test(t)) return true;
+  if (/冥想/.test(blob) && /冥想/.test(t)) return true;
+  if (/好好休息|多照顧自己|放鬆身心|保持正向|多注意睡眠|適度休息|^多喝水/.test(t)) return true;
+  return false;
+}
+
+function defaultBodyCoachSuggestions(ctx) {
+  const check = ctx && ctx.bodyCheck && typeof ctx.bodyCheck === "object" ? ctx.bodyCheck : {};
+  const duration = String((check.sleep && check.sleep.duration) || "").trim();
+  const sleepShort = duration === "少於5小時" || duration === "5–6小時";
+  const first = sleepShort
+    ? {
+        title: "今晚比平常提早 15～20 分鐘上床",
+        detail: "不用要求自己一定馬上睡著，只是提早把身體帶進休息狀態，讓昨晚較短的睡眠有機會慢慢補回來。",
+      }
+    : {
+        title: "洗澡後把燈光再調暗一點",
+        detail: "給身體一個明確的收工訊號，幫助自己慢慢進入休息狀態，而不是再加一件待辦。",
+      };
+  const second = {
+    title: "睡前留 10 分鐘什麼都不完成",
+    detail: "今晚最後一件事可以不是再完成什麼，而是讓節奏放慢，給身體多一點休息空間。",
+  };
+  return [first, second];
 }
 
 function normalizeBodyCoachSuggestion(item) {
@@ -1012,15 +1109,24 @@ function firstBodyCoachSentence(text) {
   return match ? match[0].trim() : raw;
 }
 
-function normalizeBodyCoachResult(raw) {
+function normalizeBodyCoachResult(raw, ctx) {
   const data = raw && typeof raw === "object" ? raw : {};
-  const suggestions = (Array.isArray(data.suggestions) ? data.suggestions : Array.isArray(data.tips) ? data.tips : [])
+  const incoming = Array.isArray(data.suggestions) ? data.suggestions : Array.isArray(data.tips) ? data.tips : [];
+  let suggestions = incoming
     .map(normalizeBodyCoachSuggestion)
+    .map(softenBodyCoachText)
+    .map((item) => item.trim())
     .filter(Boolean)
-    .slice(0, 3);
-  let title = String(data.title || data.conclusion || data.core || "").trim();
-  let analysis = String(data.analysis || data.signals || data.summary || "").trim();
-  const notice = String(data.notice || data.watch || data.attention || "").trim();
+    .filter((item) => !isRepeatCareSuggestion(item, ctx));
+  const fallbacks = defaultBodyCoachSuggestions(ctx).map(normalizeBodyCoachSuggestion);
+  fallbacks.forEach((item) => {
+    if (suggestions.length >= 2) return;
+    if (!isRepeatCareSuggestion(item, ctx)) suggestions.push(item);
+  });
+  suggestions = suggestions.slice(0, 2);
+  let title = keepSentencesWithin(softenBodyCoachText(String(data.title || data.conclusion || data.core || "").trim()), 70);
+  let analysis = keepSentencesWithin(softenBodyCoachText(String(data.analysis || data.signals || data.summary || "").trim()), 180);
+  let notice = keepSentencesWithin(softenBodyCoachText(String(data.notice || data.watch || data.attention || "").trim()), 150);
   if (!title && analysis) {
     title = firstBodyCoachSentence(analysis);
     const rest = analysis.slice(title.length).trim();
@@ -1029,6 +1135,14 @@ function normalizeBodyCoachResult(raw) {
   if (title && analysis.startsWith(title)) {
     analysis = analysis.slice(title.length).replace(/^[。！？\s]+/, "");
   }
+  const titleKey = title.replace(/\s+/g, "").slice(0, 16);
+  if (titleKey && notice.replace(/\s+/g, "").includes(titleKey) && zhCharCount(title) > 18) {
+    notice = keepSentencesWithin(
+      "同一個發現不用再講一遍。今天更值得問的是：你現在感覺到的，和身體實際需要的，是不是同一件事。",
+      150
+    );
+  }
+  if (!suggestions.length) suggestions = fallbacks.slice(0, 2);
   return {
     title,
     analysis,
@@ -2248,7 +2362,7 @@ module.exports = async function handler(req, res) {
             ? 0.4
             : 0.55
         : mode === "bodycoach"
-          ? 0.5
+          ? 0.45
           : mode === "manifest"
             ? 0.45
           : mode === "prompts" && promptKind === "execution"
@@ -2263,7 +2377,7 @@ module.exports = async function handler(req, res) {
       timeoutMs: promptKind === "awareness" ? 18000 : 22000,
       maxTokens:
         mode === "bodycoach"
-          ? 900
+          ? 720
           : mode === "insight" && isThinkGuideRequest(body)
           ? thinkGuideStep(body) === "close"
             ? 700
@@ -2404,7 +2518,7 @@ module.exports = async function handler(req, res) {
       return;
     }
     if (mode === "bodycoach") {
-      const coach = normalizeBodyCoachResult(data);
+      const coach = normalizeBodyCoachResult(data, body.context);
       if (!(coach.title || coach.analysis) || coach.suggestions.length < 1) {
         res.status(502).json({ ok: false, error: "今天的身心建議還沒整理好，請再試一次" });
         return;
@@ -2425,3 +2539,4 @@ module.exports = async function handler(req, res) {
 module.exports.normalizeAwarenessResult = normalizeAwarenessResult;
 module.exports.awarenessPromptFallbacks = awarenessPromptFallbacks;
 module.exports.formatRecentAwarenessDays = formatRecentAwarenessDays;
+module.exports.normalizeBodyCoachResult = normalizeBodyCoachResult;

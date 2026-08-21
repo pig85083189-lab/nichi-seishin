@@ -4836,6 +4836,28 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   margin: 0 0 12px;
 }
 
+.body-coach .insight-card__result {
+  gap: 16px;
+}
+
+.body-coach .conclusion-callout {
+  margin: 0 0 2px;
+  padding: 14px 16px 14px 18px;
+}
+
+.body-coach .insight-block {
+  padding: 16px 16px 18px;
+}
+
+.body-coach .insight-block__label {
+  margin: 0 0 8px;
+}
+
+.body-coach .insight-block__text {
+  font-size: 15px;
+  line-height: 1.75;
+}
+
 .body-coach__body.is-loading {
   opacity: 0.38;
 }
