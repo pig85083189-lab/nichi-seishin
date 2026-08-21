@@ -4432,18 +4432,110 @@ function compactAwarenessText(value, max) {
     .slice(0, max || 220);
 }
 
+function compactAwarenessBlock(value, max) {
+  return String(value || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim()
+    .slice(0, max || 220);
+}
+
 function softenAwarenessClaim(text) {
-  return compactAwarenessText(text, 400)
+  return String(text || "")
     .replace(/你就是/g, "你今天好像")
+    .replace(/你一直都/g, "你今天可能")
     .replace(/你其實一直/g, "你今天可能")
+    .replace(/這代表你/g, "今天看起來你")
     .replace(/代表你/g, "今天看起來你")
+    .replace(/你其實只是/g, "你今天好像")
+    .replace(/你一定是/g, "你今天可能")
     .replace(/你一直都在透支自己/g, "今天看起來你可能把力氣用得比較滿")
     .replace(/你其實只是渴望被看見/g, "你今天好像特別在意有沒有被放在心上")
     .replace(/宇宙正在提醒你[。.]?/g, "")
     .replace(/你值得被愛[。.]?/g, "")
     .replace(/你需要好好愛自己[。.]?/g, "")
-    .replace(/\s{2,}/g, " ")
+    .replace(/[ \t]{2,}/g, " ")
     .trim();
+}
+
+function isGenericAwarenessQuestion(text) {
+  return /今天你學到了什麼|你愛自己嗎|你現在有什麼感覺|你真正的感受是什麼|你有什麼感覺/.test(String(text || ""));
+}
+
+function awarenessDayBlob(day) {
+  if (!day || typeof day !== "object") return "";
+  const result = day.awarenessResult && typeof day.awarenessResult === "object" ? day.awarenessResult : {};
+  return [
+    day.thanks,
+    day.event,
+    day.mood,
+    day.body,
+    day.sleep,
+    Array.isArray(day.awarenessAnswers) ? day.awarenessAnswers.join(" ") : "",
+    Array.isArray(day.awareness) ? day.awareness.join(" ") : "",
+    result.seen,
+    result.gap,
+  ]
+    .map((item) => String(item || ""))
+    .join(" ");
+}
+
+function awarenessDayHasContent(day) {
+  return compactAwarenessText(awarenessDayBlob(day), 400).length >= 8 || Boolean(day && (day.thanks || day.event || day.mood));
+}
+
+const AWARENESS_PATTERN_GROUPS = [
+  {
+    id: "cared",
+    label: "被照顧／被放在心上／關係支持",
+    all: [/陪伴|陪著|照顧|想到你|想到我|放在心上|撐傘|關心|有人陪|被愛|被看見|有人在|放在心/],
+  },
+  {
+    id: "tired-plan",
+    label: "身體能量不足，但仍持續安排任務",
+    all: [/累|疲|睡不飽|睡眠不足|精神普通|精神不足|少於5|5–6|5-6/, /待辦|計畫|還沒做|列很多|想完成|安排下一|下一步|明天要/],
+  },
+  {
+    id: "self-last",
+    label: "比較晚才注意到自己的需要",
+    all: [/自己的需要|沒顧自己|忽略自己|比較慢.*自己|先顧(別|他|她|孩子|工作)|還沒休息/],
+  },
+];
+
+function matchAwarenessPattern(blob, group) {
+  const text = String(blob || "");
+  if (!text.trim()) return false;
+  const rules = Array.isArray(group.all) ? group.all : [];
+  return rules.length > 0 && rules.every((re) => re.test(text));
+}
+
+function qualifyAwarenessPatterns(recentDays) {
+  const days = (Array.isArray(recentDays) ? recentDays : []).filter(awarenessDayHasContent);
+  return AWARENESS_PATTERN_GROUPS.map((group) => {
+    const hits = days.filter((day) => matchAwarenessPattern(awarenessDayBlob(day), group));
+    return {
+      id: group.id,
+      label: group.label,
+      count: hits.length,
+      dates: hits.map((day) => String(day.date || "")).filter(Boolean),
+    };
+  }).filter((item) => item.count >= 3);
+}
+
+function sanitizeAwarenessEcho(echo, recentDays) {
+  const days = (Array.isArray(recentDays) ? recentDays : []).filter(awarenessDayHasContent);
+  const text = compactAwarenessBlock(softenAwarenessClaim(echo), 120);
+  if (!text || days.length < 3) return "";
+  const qualified = qualifyAwarenessPatterns(days);
+  if (!qualified.length) return "";
+  const countMatch = text.match(/(\d+)\s*次/);
+  if (countMatch && Number(countMatch[1]) < 3) return "";
+  if (countMatch && Number(countMatch[1]) > days.length) return "";
+  const invented = (text.match(/\d{4}-\d{2}-\d{2}/g) || []).some((iso) => !days.some((day) => day.date === iso));
+  if (invented) return "";
+  return text;
 }
 
 function emptyAwarenessResult() {
@@ -4453,20 +4545,23 @@ function emptyAwarenessResult() {
 function normalizeAwarenessResult(raw) {
   const src = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   const nested = src.result && typeof src.result === "object" ? src.result : src;
-  let seen = softenAwarenessClaim(compactAwarenessText(nested.seen || nested.selfSeen || nested.todaySeen || nested.iSee, 240));
-  const gap = softenAwarenessClaim(compactAwarenessText(nested.gap || nested.overlooked || nested.missed, 320));
-  let question = compactAwarenessText(nested.question || nested.tonight || nested.prompt || nested.eveningQuestion, 80);
+  let seen = softenAwarenessClaim(compactAwarenessBlock(nested.seen || nested.selfSeen || nested.todaySeen || nested.iSee, 100));
+  const gap = softenAwarenessClaim(compactAwarenessBlock(nested.gap || nested.overlooked || nested.missed, 150));
+  let question = compactAwarenessText(nested.question || nested.tonight || nested.prompt || nested.eveningQuestion, 72);
+  if (isGenericAwarenessQuestion(question)) question = "";
   if (question && !/[？?]$/.test(question)) question = `${question.replace(/[。.!！]+$/g, "")}？`;
   let line = compactAwarenessText(nested.line || nested.quote || nested.oneLine, 22);
   if (!line && Array.isArray(src.quotes) && src.quotes[0]) line = cleanAwarenessQuote(src.quotes[0]).slice(0, 22);
   if (!seen && line) seen = line;
-  const echo = compactAwarenessText(nested.echo || nested.weekly || nested.crossDay, 140);
+  const echo = sanitizeAwarenessEcho(nested.echo || nested.weekly || nested.crossDay || nested.pattern, collectRecentAwarenessDays());
   if (!seen) return emptyAwarenessResult();
   return { seen, gap, question, line, echo };
 }
 
 function hasAwarenessResult(raw) {
-  return Boolean(normalizeAwarenessResult(raw).seen);
+  const src = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  const nested = src.result && typeof src.result === "object" ? src.result : src;
+  return Boolean(String(nested.seen || nested.selfSeen || nested.todaySeen || nested.iSee || "").trim());
 }
 
 function awarenessResultKeepText(result) {
@@ -4481,8 +4576,8 @@ function formatAwarenessResultText(result) {
   const parts = [];
   if (data.seen) parts.push(`今天，我看見了自己\n${data.seen}`);
   if (data.gap) parts.push(`我可能忽略的地方\n${data.gap}`);
+  if (data.echo) parts.push(`最近反覆出現的模式\n${data.echo}`);
   if (data.question) parts.push(`今晚留給自己的一個問題\n${data.question}`);
-  if (data.echo) parts.push(data.echo);
   if (data.line) parts.push(data.line);
   return parts.join("\n\n");
 }
@@ -4574,8 +4669,8 @@ function collectAwareQuote() {
 }
 
 function awarenessPromptFallbacks(journal) {
-  const eventBit = String(journal?.event || "").replace(/\s+/g, " ").trim().slice(0, 10) || "今天這件事";
-  const thanksBit = thanksTextFrom(journal).replace(/\s+/g, " ").trim().slice(0, 10);
+  const eventBit = String(journal?.event || "").replace(/\s+/g, " ").trim().slice(0, 8) || "今天這件事";
+  const thanksBit = thanksTextFrom(journal).replace(/\s+/g, " ").trim().slice(0, 8);
   const check = normalizeBodyCheck(journal?.bodyCheck, journal?.bodyTags, journal?.bodyNote);
   const tired =
     (check.body?.flags || []).some((flag) => /疲|累|痠|緊/.test(flag)) ||
@@ -4586,18 +4681,18 @@ function awarenessPromptFallbacks(journal) {
   return [
     {
       question: thanksBit
-        ? `今天你寫下「${thanksBit}」時心裡有溫度。對你來說，比起事情本身，「有人有想到我」是不是更容易讓你覺得被放在心上？`
-        : `在「${eventBit}」裡，你特別有感覺的，是不是事情本身以外、有人把你放在心上的那一下？`,
+        ? `今天寫下「${thanksBit}」時心裡有溫度。對你來說，「有人把你放在心上」是不是很能影響這一天的心情？`
+        : `在「${eventBit}」裡，你特別有感覺的，是不是「有人陪著／想到你」這件事？`,
     },
     {
       question: tired
-        ? "今天身體已經有疲累或睡眠的訊號，但腦中可能還是會冒出還沒做完的事。你是不是常常身體已經累了，才開始想到自己需要休息？"
-        : "今天如果狀態已經不太滿，你腦中是不是還是會先出現明天想完成的事情？",
+        ? "今天身體已經有累的訊號，腦中卻還在排下一件事。你是不是常常累了，才想到自己需要休息？"
+        : "今天如果狀態已經不太滿，你腦中是不是還是會先出現明天想完成的事？",
     },
     {
       question: mood
-        ? `今天的心情是「${mood}」。這份感覺裡，你是不是比較快注意到別人，而比較慢才注意到自己的需要？`
-        : "今天發生的事情裡，你是不是比較快看見別人，而比較慢才看見自己真正需要什麼？",
+        ? `今天的心情是「${mood}」。這份感覺裡，你是不是比較快注意到別人，比較慢才注意到自己？`
+        : "今天發生的事情裡，你是不是比較快看見別人，比較慢才看見自己需要什麼？",
     },
   ];
 }
@@ -4615,35 +4710,43 @@ function buildAwarenessResult(journal) {
     check.sleep?.duration === "少於5小時" ||
     check.sleep?.duration === "5–6小時";
   const sparse = !thanks && !event;
+  const days = collectRecentAwarenessDays();
+  const qualified = qualifyAwarenessPatterns(days);
   let seen = "";
   let gap = "";
   let question = "";
   let line = "";
+  let echo = "";
+  if (qualified[0]) {
+    echo = `近 7 天裡，有 ${qualified[0].count} 次出現「${qualified[0].label}」的線索。\n\n看起來這可能是最近值得注意的一個模式，但還只是把這幾天真實寫下的內容放在一起看。`;
+  }
   if (noCount >= 3 && yesCount === 0) {
     seen = "今天你對那三個假設都沒有點頭。看起來那些解讀，還不是你現在認得的自己。";
     gap = thanks || event
-      ? `今天還是留下了${thanks ? "感謝" : ""}${thanks && event ? "與" : ""}${event ? "事件" : ""}。也許真正的發現還沒被這三題問到，而不是那些被你否定的推論。`
-      : "今天看起來，你比較想先把那些推論放一邊，而不是急著替自己下結論。";
-    question = "如果先不問對不對，今晚你自己最想承認的一件小事是什麼？";
+      ? `你今天留下了${thanks ? "感謝" : ""}${thanks && event ? "與" : ""}${event ? "事件" : ""}。\n\n如果把這些和你選的「否」放在一起看，也許真正的發現還沒被這三題問到。\n\n那可能不是被否定的推論，而是今天實際寫下的那一件小事。`
+      : "今天看起來，你比較想先把那些推論放一邊。\n\n這三題的假設你都沒有接受。\n\n也許今晚更適合留一個較小、較安全的觀察，而不是急著替自己下結論。";
+    question = thanks || event
+      ? "如果先不問對不對，今晚你自己最想承認的一件小事是什麼？"
+      : "今晚你最想先放過、不必急著解釋的，是哪一件事？";
     line = "今天你沒有接受那些現成的解讀。";
   } else if (yesCount >= 3) {
     seen = sparse
       ? "今天你點了三次「是」。你自己也覺得，這些反應裡確實有你還沒說出口的部分。"
       : "今天你承認了好幾件自己平常可能會略過的反應。";
     gap = tired
-      ? "有趣的是，你很容易看見自己的情緒與需求，但身體若已經有疲累的訊號，今天看起來你可能還是比較晚才想到要休息。"
-      : "今天你已經看見自己了。也許還可以再問一句：這些被你點頭的地方，今晚要怎麼對待？";
+      ? "你今天很容易看見自己的情緒與需求。\n\n但身體同時也有疲累的訊號。\n\n如果把這兩件事放在一起看，你可能還是比較晚才想到要休息。"
+      : "今天你已經看見自己了。\n\n那些你點頭的地方，和今晚要怎麼對待自己，中間可能還有一小段距離。\n\n也許真正被略過的，不是發現，而是下一步要不要真的照顧它。";
     question = tired
-      ? "如果今晚不用先證明自己有沒有把事情做好，你現在最需要的是什麼？"
-      : "今晚你願意用什麼方式，對待剛才點頭承認的那一面？";
+      ? "如果今晚也把自己放在心上一次，你最想替自己做什麼？"
+      : "如果明天只能留下一件你剛點頭承認的事，你會留下哪一件？";
     line = "今天你看見了，平常可能會略過的自己。";
   } else {
     seen = "今天你願意承認的，比較接近你點頭的那一題；那些你說「否」的部分，今天先不當成你的結論。";
-    gap = "你選了「否」的那一題，今天看起來還不能當成你的模式。也許更值得看的，是你願意點頭的地方，以及今天實際寫下的內容之間有沒有落差。";
+    gap = "你選了「否」的那一題，今天看起來還不能當成你的模式。\n\n更值得看的，也許是你願意點頭的地方，以及今天實際寫下的內容。\n\n如果把這兩件事放在一起看，落差可能比被否定的假設更接近你。";
     question = "今晚你更想留下來的，是剛才點頭的那一面，還是你不想被說成那樣的那一面？";
     line = "今天你留下的，是自己點頭的那一面。";
   }
-  return normalizeAwarenessResult({ seen, gap, question, line, echo: "" });
+  return normalizeAwarenessResult({ seen, gap, question, line, echo });
 }
 
 function buildAwarenessCheckItems(journal) {
@@ -4668,8 +4771,20 @@ function renderLegacyAwareQuote(quote, checked) {
         </div>`;
 }
 
-function renderAwarenessResultCard(result, checked) {
+function awarenessResultSections(result) {
   const data = normalizeAwarenessResult(result);
+  const sections = [];
+  let n = 1;
+  const mark = () => `${String(n++).padStart(2, "0")}｜`;
+  if (data.seen) sections.push({ kind: "seen", kicker: `${mark()}今天，我看見了自己`, text: data.seen });
+  if (data.gap) sections.push({ kind: "gap", kicker: `${mark()}我可能忽略的地方`, text: data.gap });
+  if (data.echo) sections.push({ kind: "echo", kicker: `${mark()}最近反覆出現的模式`, text: data.echo });
+  if (data.question) sections.push({ kind: "question", kicker: `${mark()}今晚留給自己的一個問題`, text: data.question });
+  return { data, sections };
+}
+
+function renderAwarenessResultCard(result, checked) {
+  const { data, sections } = awarenessResultSections(result);
   const keep = awarenessResultKeepText(data);
   const kept = (checked || []).map((item) => String(item || "").trim()).includes(keep);
   const stale = awarenessResultStale();
@@ -4677,28 +4792,14 @@ function renderAwarenessResultCard(result, checked) {
   return `<div class="aware-result${stale ? " is-stale" : ""}" data-quote="${escapeHtml(keep)}" data-copy="${escapeHtml(copyText)}">
       <p class="aware-result__heading">今日覺察</p>
       ${stale ? `<p class="aware-result__stale">你改了是／否。這份覺察還是依先前的答案寫的，可以再整理一次。</p>` : ""}
-      <article class="aware-result__card">
-        <p class="aware-result__kicker">01 今天，我看見了自己</p>
-        <p class="aware-result__text">${escapeHtml(data.seen)}</p>
-      </article>
-      ${
-        data.gap
-          ? `<article class="aware-result__card">
-        <p class="aware-result__kicker">02 我可能忽略的地方</p>
-        <p class="aware-result__text">${escapeHtml(data.gap)}</p>
+      ${sections
+        .map(
+          (item) => `<article class="aware-result__card${item.kind === "question" ? " aware-result__card--question" : ""}${item.kind === "echo" ? " aware-result__card--echo" : ""}">
+        <p class="aware-result__kicker">${escapeHtml(item.kicker)}</p>
+        <p class="aware-result__text${item.kind === "question" ? " aware-result__text--question" : ""}">${escapeHtml(item.text)}</p>
       </article>`
-          : ""
-      }
-      ${
-        data.question
-          ? `<article class="aware-result__card aware-result__card--question">
-        <p class="aware-result__kicker">03 今晚留給自己的一個問題</p>
-        <p class="aware-result__text aware-result__text--question">${escapeHtml(data.question)}</p>
-      </article>`
-          : ""
-      }
-      ${data.echo ? `<p class="aware-result__echo">${escapeHtml(data.echo)}</p>` : ""}
-      ${data.line ? `<p class="aware-result__line">${escapeHtml(data.line)}</p>` : ""}
+        )
+        .join("")}
       <div class="aware-result__actions">
         <label class="aware-quote__keep">
           <input type="checkbox" value="${escapeHtml(keep)}" ${kept ? "checked" : ""} />
@@ -4707,6 +4808,7 @@ function renderAwarenessResultCard(result, checked) {
         </label>
         <button class="btn btn--ghost btn--tiny" type="button" data-copy-aware-quote>複製</button>
       </div>
+      ${data.line ? `<p class="aware-result__line">${escapeHtml(data.line)}</p>` : ""}
     </div>`;
 }
 
@@ -5124,6 +5226,7 @@ async function generateJournalChecklist(kind, options = {}) {
         ? {
             streak: progress.streak,
             recentReviews: (progress.recentReviews || []).slice(0, 7),
+            recentAwarenessDays: (progress.recentAwarenessDays || collectRecentAwarenessDays()).slice(0, 7),
           }
         : undefined,
       text: answers.join("\n"),
@@ -5134,6 +5237,8 @@ async function generateJournalChecklist(kind, options = {}) {
         ? normalizeAwarenessResult(remote.result || remote)
         : fallback;
       if (!result.seen) throw new Error("雲端回傳格式不完整");
+      if (!result.question) result.question = fallback.question || "";
+      if (!result.gap) result.gap = fallback.gap || "";
       state.journalAwarenessResult = result;
       applyGeneratedChecklist(kind, [awarenessResultKeepText(result)], sig);
       showToast("今天的覺察，已經整理好了。");
@@ -6440,7 +6545,10 @@ function normalizePromptQuestionList(list, max) {
 }
 
 function normalizeAwarenessPrompts(list) {
-  return normalizePromptQuestionList(list, AWARENESS_QUIZ_COUNT);
+  return normalizePromptQuestionList(list, AWARENESS_QUIZ_COUNT).map((item) => ({
+    ...item,
+    question: String(item.question || "").slice(0, 72),
+  }));
 }
 
 function normalizeExecutionPrompts(list) {
@@ -6579,6 +6687,48 @@ function localExecutionPrompts() {
   return executionQuestionFallbacks().slice(0, EXECUTION_PROMPT_MAX);
 }
 
+function mapReviewToAwarenessDay(iso, review) {
+  const journal = (review && review.journal) || {};
+  const check = normalizeBodyCheck(journal.bodyCheck, journal.bodyTags, journal.bodyNote);
+  const bodyFlags = [...(check.mood.flags || []), ...(check.body.flags || [])]
+    .filter((flag) => flag && flag !== "其他")
+    .join("、");
+  const sleep = [check.sleep.duration, check.sleep.quality, check.sleep.energy].filter(Boolean).join("／");
+  const awarenessResult = hasAwarenessResult(journal.awarenessResult)
+    ? {
+        seen: String(journal.awarenessResult.seen || "").slice(0, 80),
+        gap: String(journal.awarenessResult.gap || "").slice(0, 80),
+        line: String(journal.awarenessResult.line || "").slice(0, 28),
+        echo: String(journal.awarenessResult.echo || "").slice(0, 80),
+      }
+    : null;
+  return {
+    date: iso,
+    mood: journal.mood || "",
+    thanks: thanksTextFrom(journal).slice(0, 80),
+    event: String(journal.event || review.rawText || "").slice(0, 120),
+    body: bodyFlags.slice(0, 60),
+    sleep,
+    awarenessAnswers: (journal.awareness || []).slice(0, 3),
+    awareness: (journal.awarenessChecks || []).slice(0, 4),
+    awarenessResult,
+    actions: (journal.executionChecks || []).slice(0, 3),
+    insight: String(journal.insight?.title || journal.insight?.conclusion || "").slice(0, 80),
+  };
+}
+
+function collectRecentAwarenessDays() {
+  const todayIso = currentIso();
+  const fromDate = parseIsoDate(todayIso) || new Date();
+  const fromIso = toInputDate(addDays(fromDate, -6));
+  const reviews = getReviews();
+  return Object.entries(reviews)
+    .filter(([iso, review]) => iso >= fromIso && iso <= todayIso && (journalHasContent(review?.journal) || reviewIsComplete(review)))
+    .sort((left, right) => right[0].localeCompare(left[0]))
+    .slice(0, 7)
+    .map(([iso, review]) => mapReviewToAwarenessDay(iso, review));
+}
+
 function collectGrowthProgress() {
   const todayIso = currentIso();
   const dates = getCompletedDates();
@@ -6587,35 +6737,7 @@ function collectGrowthProgress() {
     .filter(([iso, review]) => iso !== todayIso && reviewIsComplete(review))
     .sort((a, b) => b[0].localeCompare(a[0]))
     .slice(0, 7)
-    .map(([iso, review]) => {
-      const journal = review.journal || {};
-      const check = normalizeBodyCheck(journal.bodyCheck, journal.bodyTags, journal.bodyNote);
-      const bodyFlags = [...(check.mood.flags || []), ...(check.body.flags || [])]
-        .filter((flag) => flag && flag !== "其他")
-        .join("、");
-      const sleep = [check.sleep.duration, check.sleep.quality, check.sleep.energy].filter(Boolean).join("／");
-      const awarenessResult = hasAwarenessResult(journal.awarenessResult)
-        ? {
-            seen: String(journal.awarenessResult.seen || "").slice(0, 80),
-            gap: String(journal.awarenessResult.gap || "").slice(0, 80),
-            line: String(journal.awarenessResult.line || "").slice(0, 28),
-            echo: String(journal.awarenessResult.echo || "").slice(0, 80),
-          }
-        : null;
-      return {
-        date: iso,
-        mood: journal.mood || "",
-        thanks: thanksTextFrom(journal).slice(0, 80),
-        event: String(journal.event || review.rawText || "").slice(0, 120),
-        body: bodyFlags.slice(0, 60),
-        sleep,
-        awarenessAnswers: (journal.awareness || []).slice(0, 3),
-        awareness: (journal.awarenessChecks || []).slice(0, 4),
-        awarenessResult,
-        actions: (journal.executionChecks || []).slice(0, 3),
-        insight: String(journal.insight?.title || journal.insight?.conclusion || "").slice(0, 80),
-      };
-    });
+    .map(([iso, review]) => mapReviewToAwarenessDay(iso, review));
   const avoidQuestions = [];
   Object.entries(reviews)
     .sort((a, b) => b[0].localeCompare(a[0]))
@@ -6631,6 +6753,7 @@ function collectGrowthProgress() {
   return {
     streak: calcStreak(dates, todayIso),
     recentReviews,
+    recentAwarenessDays: collectRecentAwarenessDays(),
     recentInsights: getInsights()
       .slice(0, 8)
       .map((item) => ({ date: item.date || "", title: item.title || "" })),

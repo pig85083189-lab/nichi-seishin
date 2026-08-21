@@ -5296,6 +5296,7 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   flex-direction: column;
   gap: 12px;
   min-width: 0;
+  max-width: 100%;
 }
 
 .aware-result__heading {
@@ -5320,6 +5321,7 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
 
 .aware-result__card {
   min-width: 0;
+  max-width: 100%;
   padding: 16px 16px 14px;
   border: 1px solid rgba(228, 212, 200, 0.95);
   border-left: 4px solid var(--header);
@@ -5344,6 +5346,7 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   color: var(--text);
   font-size: 15px;
   line-height: 1.8;
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
@@ -5355,11 +5358,16 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   line-height: 1.7;
 }
 
+.aware-result__card--echo {
+  background: linear-gradient(180deg, #faf6f1 0%, #fff 62%, var(--cream) 100%);
+}
+
 .aware-result__echo {
   margin: 0;
   color: var(--heading);
   font-size: 13px;
   line-height: 1.75;
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
