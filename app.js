@@ -1445,37 +1445,9 @@ async function fetchArchivedReportList() {
   }
 }
 
-function syncStatusLabel(kind, text) {
-  if (text) return text;
-  if (kind === "saving") return "正在把紀錄送到雲端…";
-  if (kind === "pulling") return "正在讀取你在其他裝置的紀錄…";
-  if (kind === "saved") return "已安心同步到雲端";
-  if (kind === "error") return "尚有未同步的紀錄，點擊重試";
-  return "";
-}
-
-function applySyncStatus() {
-  const pending = Boolean(state.user && (state.syncKind === "error" || state.cloudUnsynced || hasUnsynced()));
-  const label = syncStatusLabel(state.syncKind, state.syncText);
-  const show = Boolean(state.user && (label || pending));
-  const canRetry = pending && state.syncKind !== "saving" && state.syncKind !== "pulling";
-  document.querySelectorAll("[data-sync-panel]").forEach((el) => {
-    el.hidden = !show;
-  });
-  document.querySelectorAll("[data-sync-status]").forEach((el) => {
-    el.hidden = !show;
-    el.dataset.state = state.syncKind || (pending ? "error" : "idle");
-    el.textContent = show ? (label || "尚有未同步的紀錄，點擊重試") : "";
-  });
-  document.querySelectorAll("[data-sync-retry]").forEach((el) => {
-    el.hidden = !canRetry;
-  });
-}
-
 function setSyncStatus(kind, text) {
   state.syncKind = kind || "";
   state.syncText = text || "";
-  applySyncStatus();
 }
 
 function journalHasFocus() {
@@ -1838,23 +1810,6 @@ async function pushCloudData(options = {}) {
   }
 }
 
-async function retryCloudSync() {
-  if (!state.user) return;
-  persistLocalBackup("retry");
-  markUnsynced("retry");
-  try {
-    await pushCloudData();
-    if (state.syncKind === "saved") showToast("已重新同步到雲端。");
-  } catch (error) {
-    console.error("[進行式 ING] 手動重試仍未送到雲端", {
-      message: error && error.message ? error.message : error,
-      code: error && error.code,
-      reason: error && error.reason,
-    });
-    showToast("尚有未同步的紀錄，點擊重試");
-  }
-}
-
 function stampMs(value) {
   const raw = value && typeof value === "object" ? value.updatedAt || value.generatedAt || value.createdAt || "" : "";
   const parsed = Date.parse(raw);
@@ -2119,7 +2074,6 @@ function renderAuth() {
   }
   if (!side) {
     applyAccessLock();
-    applySyncStatus();
     return;
   }
   if (!user) {
@@ -2138,7 +2092,6 @@ function renderAuth() {
     `;
     if (lastAuthError) setAuthError(lastAuthError);
     applyAccessLock();
-    applySyncStatus();
     return;
   }
   const initial = escapeHtml((user.name || user.email || "我").slice(0, 1));
@@ -2168,15 +2121,10 @@ function renderAuth() {
     </div>
     ${payBtn}
     <button class="auth-logout" id="btnSignOut" type="button"><span>登出</span></button>
-    <div class="sync-panel" data-sync-panel hidden>
-      <p class="sync-status" data-sync-status role="status"></p>
-      <button class="sync-retry" data-sync-retry type="button" hidden>重新同步</button>
-    </div>
     ${trialHint}
   `;
   bindSubscribeButton();
   applyAccessLock();
-  applySyncStatus();
 }
 
 let supabaseClient = null;
@@ -2290,12 +2238,10 @@ function translateAuthError(error) {
 
 async function afterAuthSuccess() {
   renderAuth();
-  showToast("已登入，正在讀取你的紀錄…");
   try {
     await syncAccountCloud();
-    showToast("已載入你的個人紀錄。");
   } catch (error) {
-    showToast(`紀錄讀取失敗：${error.message || error}`);
+    console.error("[進行式 ING] 登入後讀取雲端紀錄失敗", error && error.message ? error.message : error);
   }
 }
 
@@ -7947,8 +7893,10 @@ async function saveJournalDraft() {
     updatedAt: new Date().toISOString(),
   });
   updateStats();
-  const synced = await flushCloudNow({ reason: "draft" });
-  showToast(synced ? "草稿已存到雲端，其他裝置登入後即可看到。" : "草稿已先存在這台裝置。連上後會自動同步到雲端。");
+  flushCloudNow({ reason: "draft" }).catch((error) => {
+    console.error("[進行式 ING] 草稿背景同步失敗", error && error.message ? error.message : error);
+  });
+  showToast("草稿已儲存。");
 }
 
 function resetAiSession() {
@@ -9058,13 +9006,13 @@ async function finishTodayReview() {
   } catch (error) {
     console.error("[進行式 ING] 完成復盤後畫面更新失敗", error && error.message ? error.message : error);
   }
-  const synced = await flushCloudNow({ reason: "complete" });
+  flushCloudNow({ reason: "complete" }).catch((error) => {
+    console.error("[進行式 ING] 完成復盤背景同步失敗", error && error.message ? error.message : error);
+  });
   showToast(
-    synced
-      ? state.journalMode === "quick"
-        ? "快速復盤已完成，並同步到你的 Google 帳號。"
-        : "今日復盤已完成，並同步到你的 Google 帳號。"
-      : "今日復盤已先存在這台裝置。連上後會自動同步到雲端。"
+    state.journalMode === "quick"
+      ? "快速復盤已完成，今日洞察已存入歷史紀錄。"
+      : "今日復盤已完成，勾選項目與明天最小一步已同步到側邊欄。"
   );
 }
 
@@ -10208,11 +10156,6 @@ function bindEvents() {
         signInWithGoogle();
         return;
       }
-      if (target.closest("[data-sync-retry]")) {
-        event.preventDefault();
-        retryCloudSync();
-        return;
-      }
       if (target.closest("#btnSignOut") || target.closest("#btnGoogleLogout")) {
         event.preventDefault();
         signOutUser();
@@ -10304,10 +10247,10 @@ function bindEvents() {
     organizeBtn.addEventListener("click", runOrganize);
   }
   document.getElementById("btnCompleteToday")?.addEventListener("click", () => {
-    catchAsync(() => completeToday(), "完成今日復盤時同步失敗");
+    catchAsync(() => completeToday(), "完成今日復盤時發生問題");
   });
   document.getElementById("btnSaveDraft")?.addEventListener("click", () => {
-    catchAsync(() => saveJournalDraft(), "儲存草稿時同步失敗");
+    catchAsync(() => saveJournalDraft(), "儲存草稿時發生問題");
   });
   document.querySelector(".journal-mode-block")?.addEventListener("click", (event) => {
     const fold = event.target.closest("[data-mode-guide-toggle]");
@@ -10446,7 +10389,7 @@ function bindEvents() {
     }
     if (event.target.closest("#btnComplete")) {
       event.preventDefault();
-      catchAsync(() => completeToday(), "完成今日復盤時同步失敗");
+      catchAsync(() => completeToday(), "完成今日復盤時發生問題");
     }
   });
 
