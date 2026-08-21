@@ -1,4 +1,6 @@
--- 在 Supabase SQL Editor 執行一次。
+-- 完整 schema 參考。雲端同步請優先執行：
+--   supabase/migrations/20260821_cloud_sync_profiles.sql
+-- 該檔可在全新專案建立 nichi_profiles 與 nichi_user_data。
 -- 日精進把每位使用者的復盤、下一步、素材庫、週月報存在同一列，並用 RLS 隔離。
 
 create table if not exists public.nichi_profiles (
