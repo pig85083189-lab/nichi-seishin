@@ -585,6 +585,14 @@ function syncJournalLibraries(iso, journal) {
       source: "今日復盤",
     });
   });
+  normalizeAwarenessQuotes(data.awarenessCheckItems).forEach((quote, index) => {
+    addInsight({
+      key: `insight-quote:${iso}:${index}:${quote}`,
+      title: quote,
+      date: iso,
+      source: "今日復盤",
+    });
+  });
   const execItems = normalizeExecCheckItems(data.executionCheckItems);
   (data.executionChecks || []).forEach((label) => {
     const title = String(label || "").trim();
@@ -594,6 +602,17 @@ function syncJournalLibraries(iso, journal) {
       key: `exec:${iso}:${title}`,
       label: title,
       detail: item?.detail || "",
+      source: "今日復盤",
+      date: iso,
+    });
+  });
+  execItems.forEach((item) => {
+    const title = String(item && item.title ? item.title : "").trim();
+    if (!title) return;
+    addTaskFromGuide({
+      key: `exec:${iso}:${title}`,
+      label: title,
+      detail: item.detail || "",
       source: "今日復盤",
       date: iso,
     });
@@ -613,6 +632,16 @@ function syncJournalLibraries(iso, journal) {
     addManifest({
       key: `manifest:${iso}:${label}`,
       title: label,
+      vision,
+      date: iso,
+    });
+  });
+  normalizeManifestPathItems(data.manifestCheckItems).forEach((item) => {
+    const title = String(item && item.title ? item.title : "").trim();
+    if (!title) return;
+    addManifest({
+      key: `manifest:${iso}:${title}`,
+      title,
       vision,
       date: iso,
     });
@@ -1462,8 +1491,45 @@ function scheduleCloudSync() {
   }
   clearTimeout(scheduleCloudSync.timer);
   scheduleCloudSync.timer = setTimeout(() => {
-    pushCloudData().catch(() => {});
+    pushCloudData().catch((error) => {
+      console.error("[進行式 ING] 延遲同步失敗", error && error.message ? error.message : error);
+    });
   }, 900);
+}
+
+async function waitForCloudIdle(timeoutMs = 15000) {
+  const started = Date.now();
+  while (state.syncing && Date.now() - started < timeoutMs) {
+    await new Promise((resolve) => setTimeout(resolve, 80));
+  }
+}
+
+async function flushCloudNow(options = {}) {
+  try {
+    persistJournalQuietly();
+  } catch (error) {
+    console.error("[進行式 ING] 寫入本機暫存失敗", error);
+  }
+  persistLocalBackup(options.reason || "flush");
+  if (!state.user) return false;
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    markUnsynced("offline");
+    setSyncStatus("error", "現在沒有網路。紀錄已先存在這台裝置，連上後會自動同步。");
+    return false;
+  }
+  clearTimeout(scheduleCloudSync.timer);
+  await waitForCloudIdle();
+  try {
+    await pushCloudData({ urgent: true });
+    return state.syncKind === "saved" && !hasUnsynced();
+  } catch (error) {
+    console.error("[進行式 ING] 立即上傳雲端失敗", {
+      reason: options.reason || "flush",
+      message: error && error.message ? error.message : error,
+      code: error && error.code,
+    });
+    return false;
+  }
 }
 
 function scheduleCloudRetry() {
@@ -1719,11 +1785,13 @@ async function pushViaSupabaseClient(bundle) {
   return true;
 }
 
-async function pushCloudData() {
+async function pushCloudData(options = {}) {
   if (!state.user || typeof location === "undefined" || location.protocol === "file:") return;
   if (state.syncing) {
     state.cloudDirty = true;
-    return;
+    if (!options.urgent) return;
+    await waitForCloudIdle();
+    if (state.syncing) return;
   }
   state.syncing = true;
   persistLocalBackup("sync");
@@ -1891,14 +1959,15 @@ function refreshCloudViews(options = {}) {
     if (!(options.quiet && journalHasFocus())) {
       loadReviewForDate(currentIso());
     }
+    backfillLibrariesFromReviews();
     updateStats();
-    if (state.page === "next") renderInsights();
-    if (state.page === "sfm") renderTasks();
-    if (state.page === "manifest") renderManifests();
-    if (state.page === "history") renderHistory();
+    renderInsights();
+    renderTasks();
+    renderManifests();
+    renderHistory();
     if (state.page === "report") renderReport();
-  } catch {
-    /* 畫面重整失敗也不擋同步 */
+  } catch (error) {
+    console.error("[進行式 ING] 雲端資料畫面重整失敗", error && error.message ? error.message : error);
   }
 }
 
@@ -1971,15 +2040,42 @@ function bindCloudLiveSync() {
   bindCloudLiveSync.bound = true;
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && state.user) flushUnsyncedCloud();
+    if (document.visibilityState === "hidden" && state.user) {
+      try {
+        persistJournalQuietly();
+      } catch {
+        /* ignore */
+      }
+      if (hasUnsynced()) flushCloudNow({ reason: "hidden" }).catch(() => {});
+    }
   });
   window.addEventListener("online", () => {
     if (!state.user) return;
-    pushCloudData().catch((error) => {
+    flushCloudNow({ reason: "online" }).catch((error) => {
       console.error("[進行式 ING] 網路恢復後補傳失敗", {
         message: error && error.message ? error.message : error,
         code: error && error.code,
       });
     });
+  });
+  window.addEventListener("pagehide", () => {
+    try {
+      persistJournalQuietly();
+    } catch {
+      /* ignore */
+    }
+    if (!state.user || !hasUnsynced() || typeof navigator === "undefined" || !navigator.sendBeacon) return;
+    try {
+      const bundle = collectCloudBundle();
+      const body = JSON.stringify({
+        ...bundle,
+        email: state.user.email || "",
+        access_token: currentAccessToken(),
+      });
+      navigator.sendBeacon(`${location.origin}/api/sync`, new Blob([body], { type: "application/json" }));
+    } catch (error) {
+      console.error("[進行式 ING] 離開頁面時補傳失敗", error && error.message ? error.message : error);
+    }
   });
 }
 
@@ -2001,13 +2097,8 @@ async function syncAccountCloud() {
       setSyncStatus("error", "尚有未同步的紀錄，點擊重試");
     }
     await pullCloudData();
-    await pushCloudData().catch((error) => {
-      console.error("[進行式 ING] 登入後上傳失敗", {
-        message: error && error.message ? error.message : error,
-        code: error && error.code,
-        reason: error && error.reason,
-      });
-    });
+    refreshCloudViews();
+    await flushCloudNow({ reason: "login" });
   })();
   try {
     await cloudAccountSync;
@@ -6970,8 +7061,8 @@ function persistJournalQuietly() {
       thinkHistory: state.think.history,
       updatedAt: new Date().toISOString(),
     });
-  } catch {
-    /* 出題後的安靜儲存失敗不擋畫面 */
+  } catch (error) {
+    console.error("[進行式 ING] 本機暫存復盤失敗", error && error.message ? error.message : error);
   }
 }
 
@@ -7838,7 +7929,7 @@ function updateJournalDateLabel(iso) {
   if (label) label.textContent = formatHeaderDate(date);
 }
 
-function saveJournalDraft() {
+async function saveJournalDraft() {
   const { journal, rawText } = syncHiddenReviewText();
   if (!rawText && !journalHasContent(journal) && !state.organize) {
     showToast("還沒有內容可以儲存。");
@@ -7856,8 +7947,8 @@ function saveJournalDraft() {
     updatedAt: new Date().toISOString(),
   });
   updateStats();
-  syncReviewsToCloud();
-  showToast("草稿已儲存。");
+  const synced = await flushCloudNow({ reason: "draft" });
+  showToast(synced ? "草稿已存到雲端，其他裝置登入後即可看到。" : "草稿已先存在這台裝置。連上後會自動同步到雲端。");
 }
 
 function resetAiSession() {
@@ -7879,17 +7970,15 @@ function loadReviewForDate(iso) {
   const textarea = document.getElementById("reviewText");
   if (textarea) textarea.value = review?.rawText || composeJournalRawText(review?.journal || emptyJournal());
   resetAiSession();
-  if (review?.organize) {
-    state.organize = review.organize;
-    state.rawText = review.rawText || "";
-    state.gratitude = review.gratitude || "";
-    state.selectedQuotes = [...(review.selectedQuotes || [])];
-    state.selectedSfm = [...(review.selectedSfm || [])];
-    if (Array.isArray(review.thinkHistory) && review.thinkHistory.length) {
-      state.think.history = review.thinkHistory;
-      state.think.round = review.thinkHistory.length;
-      state.think.current = review.thinkHistory[review.thinkHistory.length - 1];
-    }
+  state.rawText = review?.rawText || "";
+  state.gratitude = review?.gratitude || "";
+  state.selectedQuotes = [...(review?.selectedQuotes || [])];
+  state.selectedSfm = [...(review?.selectedSfm || [])];
+  if (review?.organize) state.organize = review.organize;
+  if (Array.isArray(review?.thinkHistory) && review.thinkHistory.length) {
+    state.think.history = review.thinkHistory;
+    state.think.round = review.thinkHistory.length;
+    state.think.current = review.thinkHistory[review.thinkHistory.length - 1];
   }
   renderAiStage();
   maybeAutoGenerateInsight(review?.journal || collectJournal());
@@ -8865,8 +8954,8 @@ async function enhanceThinkWithApi(nextRound, selected, reply, token) {
   }
 }
 
-function completeToday() {
-  finishTodayReview();
+async function completeToday() {
+  await finishTodayReview();
 }
 
 function waitForInsightIdle(timeoutMs = 25000) {
@@ -8961,11 +9050,21 @@ async function finishTodayReview() {
   });
 
   updateStats();
-  syncReviewsToCloud();
+  try {
+    renderInsights();
+    renderTasks();
+    renderManifests();
+    renderHistory();
+  } catch (error) {
+    console.error("[進行式 ING] 完成復盤後畫面更新失敗", error && error.message ? error.message : error);
+  }
+  const synced = await flushCloudNow({ reason: "complete" });
   showToast(
-    state.journalMode === "quick"
-      ? "快速復盤已完成，今日洞察已存入歷史紀錄。"
-      : "今日復盤已完成，勾選項目與明天最小一步已同步到側邊欄。"
+    synced
+      ? state.journalMode === "quick"
+        ? "快速復盤已完成，並同步到你的 Google 帳號。"
+        : "今日復盤已完成，並同步到你的 Google 帳號。"
+      : "今日復盤已先存在這台裝置。連上後會自動同步到雲端。"
   );
 }
 
@@ -10204,8 +10303,12 @@ function bindEvents() {
     organizeBtn.disabled = false;
     organizeBtn.addEventListener("click", runOrganize);
   }
-  document.getElementById("btnCompleteToday")?.addEventListener("click", completeToday);
-  document.getElementById("btnSaveDraft")?.addEventListener("click", saveJournalDraft);
+  document.getElementById("btnCompleteToday")?.addEventListener("click", () => {
+    catchAsync(() => completeToday(), "完成今日復盤時同步失敗");
+  });
+  document.getElementById("btnSaveDraft")?.addEventListener("click", () => {
+    catchAsync(() => saveJournalDraft(), "儲存草稿時同步失敗");
+  });
   document.querySelector(".journal-mode-block")?.addEventListener("click", (event) => {
     const fold = event.target.closest("[data-mode-guide-toggle]");
     if (fold) {
@@ -10343,7 +10446,7 @@ function bindEvents() {
     }
     if (event.target.closest("#btnComplete")) {
       event.preventDefault();
-      completeToday();
+      catchAsync(() => completeToday(), "完成今日復盤時同步失敗");
     }
   });
 
