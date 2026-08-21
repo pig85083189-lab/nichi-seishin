@@ -5198,13 +5198,18 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   word-break: break-word;
 }
 
-.exec-focus__why {
+.exec-focus__hint {
   margin: 8px 0 0;
   color: var(--muted);
-  font-size: 14px;
-  line-height: 1.7;
+  font-size: 13px;
+  line-height: 1.65;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+#btnExecFollow {
+  width: 100%;
+  margin: 8px 0 0;
 }
 
 @media (max-width: 720px) {
