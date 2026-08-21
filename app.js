@@ -136,6 +136,7 @@ const state = {
   authReady: false,
   syncing: false,
   cloudDirty: false,
+  cloudUnsynced: false,
   syncKind: "",
   syncText: "",
 };
@@ -189,6 +190,7 @@ function saveJson(key, value, options = {}) {
     }
   }
   if (!options.silent && isCloudStoreKey(key)) {
+    markUnsynced("edit");
     scheduleCloudSync();
   }
 }
@@ -1419,24 +1421,25 @@ function syncStatusLabel(kind, text) {
   if (kind === "saving") return "正在把紀錄送到雲端…";
   if (kind === "pulling") return "正在讀取你在其他裝置的紀錄…";
   if (kind === "saved") return "已安心同步到雲端";
-  if (kind === "error") return "這次還沒送到雲端。紀錄已先存在這台裝置。";
+  if (kind === "error") return "尚有未同步的紀錄，點擊重試";
   return "";
 }
 
 function applySyncStatus() {
+  const pending = Boolean(state.user && (state.syncKind === "error" || state.cloudUnsynced || hasUnsynced()));
   const label = syncStatusLabel(state.syncKind, state.syncText);
-  const show = Boolean(state.user && label);
-  const canRetry = state.syncKind === "error";
+  const show = Boolean(state.user && (label || pending));
+  const canRetry = pending && state.syncKind !== "saving" && state.syncKind !== "pulling";
   document.querySelectorAll("[data-sync-panel]").forEach((el) => {
     el.hidden = !show;
   });
   document.querySelectorAll("[data-sync-status]").forEach((el) => {
     el.hidden = !show;
-    el.dataset.state = state.syncKind || "idle";
-    el.textContent = show ? label : "";
+    el.dataset.state = state.syncKind || (pending ? "error" : "idle");
+    el.textContent = show ? (label || "尚有未同步的紀錄，點擊重試") : "";
   });
   document.querySelectorAll("[data-sync-retry]").forEach((el) => {
-    el.hidden = !(show && canRetry);
+    el.hidden = !canRetry;
   });
 }
 
@@ -1466,18 +1469,122 @@ function scheduleCloudSync() {
 function scheduleCloudRetry() {
   clearTimeout(scheduleCloudRetry.timer);
   const attempt = (scheduleCloudRetry.fails || 0) + 1;
-  if (attempt > 3) return;
+  if (attempt > 8) return;
   scheduleCloudRetry.fails = attempt;
   scheduleCloudRetry.timer = setTimeout(() => {
-    pushCloudData().catch(() => {});
-  }, attempt * 2500);
+    pushCloudData().catch((error) => {
+      console.error("[進行式 ING] 自動重試仍未送到雲端", {
+        attempt,
+        message: error && error.message ? error.message : error,
+        code: error && error.code,
+        online: typeof navigator !== "undefined" ? navigator.onLine : null,
+      });
+    });
+  }, Math.min(attempt * 2500, 20000));
+}
+
+function unsyncedStorageKey() {
+  return cloudStoreKey("unsynced");
+}
+
+function hasUnsynced() {
+  if (state.cloudUnsynced) return true;
+  try {
+    return Boolean(localStorage.getItem(unsyncedStorageKey()));
+  } catch {
+    return false;
+  }
+}
+
+function markUnsynced(reason) {
+  if (!state.user) return;
+  state.cloudUnsynced = true;
+  try {
+    localStorage.setItem(
+      unsyncedStorageKey(),
+      JSON.stringify({ at: new Date().toISOString(), reason: reason || "edit" })
+    );
+  } catch (error) {
+    console.warn("[進行式 ING] 無法標記未同步狀態", error);
+  }
+}
+
+function clearUnsynced() {
+  state.cloudUnsynced = false;
+  try {
+    localStorage.removeItem(unsyncedStorageKey());
+  } catch {
+    /* ignore */
+  }
+  if (state.user) idbDelete(`pending:${state.user.id}`).catch(() => {});
+}
+
+function openSyncDb() {
+  return new Promise((resolve) => {
+    if (typeof indexedDB === "undefined") {
+      resolve(null);
+      return;
+    }
+    const req = indexedDB.open("nichi-ing-sync", 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains("queue")) db.createObjectStore("queue");
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(null);
+  });
+}
+
+async function idbSet(key, value) {
+  const db = await openSyncDb();
+  if (!db) return false;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction("queue", "readwrite");
+      tx.objectStore("queue").put(value, key);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    } catch {
+      resolve(false);
+    }
+  });
+}
+
+async function idbGet(key) {
+  const db = await openSyncDb();
+  if (!db) return null;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction("queue", "readonly");
+      const req = tx.objectStore("queue").get(key);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+async function idbDelete(key) {
+  const db = await openSyncDb();
+  if (!db) return false;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction("queue", "readwrite");
+      tx.objectStore("queue").delete(key);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    } catch {
+      resolve(false);
+    }
+  });
 }
 
 function persistLocalBackup(reason) {
   if (!state.user) return false;
   try {
     const bundle = collectCloudBundle();
-    const payload = JSON.stringify({
+    const payload = {
       savedAt: new Date().toISOString(),
       reason: reason || "save",
       userId: state.user.id,
@@ -1488,14 +1595,33 @@ function persistLocalBackup(reason) {
       insights: bundle.insights,
       manifests: bundle.manifests,
       reports: bundle.reports,
-    });
-    localStorage.setItem(cloudStoreKey("backup"), payload);
-    localStorage.setItem("nichi.backup.last", payload);
+    };
+    const text = JSON.stringify(payload);
+    localStorage.setItem(cloudStoreKey("backup"), text);
+    localStorage.setItem("nichi.backup.last", text);
+    idbSet(`pending:${state.user.id}`, payload).catch(() => {});
     return true;
   } catch (error) {
     console.warn("[進行式 ING] 本機備份失敗", error);
+    try {
+      const bundle = collectCloudBundle();
+      idbSet(`pending:${state.user.id}`, bundle).catch(() => {});
+    } catch {
+      /* ignore */
+    }
     return false;
   }
+}
+
+async function restoreQueueIfLocalEmpty() {
+  if (!state.user) return;
+  const local = getReviews();
+  if (local && Object.keys(local).length) return;
+  const pending = await idbGet(`pending:${state.user.id}`);
+  if (!pending || typeof pending !== "object") return;
+  console.warn("[進行式 ING] 從本機佇列還原尚未同步的紀錄");
+  mergeCloudBundle(pending);
+  markUnsynced("restore");
 }
 
 function friendlySyncError(error) {
@@ -1513,8 +1639,8 @@ function friendlySyncError(error) {
   if (/Failed to fetch|NetworkError|fetch 失敗|逾時|timeout/i.test(message)) {
     return "這次連不到雲端。紀錄已先存在這台裝置，稍候再同步即可。";
   }
-  if (message && /這次還沒送到|紀錄已先|連不到雲端|登入狀態/.test(message)) return message;
-  return "這次還沒送到雲端。紀錄已先存在這台裝置，可再點一次重新同步。";
+  if (message && /尚有未同步|這次還沒送到|紀錄已先|連不到雲端|登入狀態/.test(message)) return message;
+  return "尚有未同步的紀錄，點擊重試";
 }
 
 function collectCloudBundle() {
@@ -1547,8 +1673,16 @@ async function pushViaApi(bundle) {
   );
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.ok === false) {
+    console.error("[進行式 ING] /api/sync 寫入失敗", {
+      status: response.status,
+      code: payload.code,
+      error: payload.error,
+      reason: payload.reason,
+      online: typeof navigator !== "undefined" ? navigator.onLine : null,
+    });
     const error = new Error(payload.error || `HTTP ${response.status}`);
     error.code = payload.code || String(response.status);
+    error.reason = payload.reason || "";
     throw error;
   }
   return payload;
@@ -1574,7 +1708,12 @@ async function pushViaSupabaseClient(bundle) {
     { onConflict: "user_id" }
   );
   if (error) {
-    console.warn("[進行式 ING] 瀏覽器直連雲端失敗", error.message);
+    console.error("[進行式 ING] Supabase upsert 失敗", {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
     return false;
   }
   return true;
@@ -1588,6 +1727,7 @@ async function pushCloudData() {
   }
   state.syncing = true;
   persistLocalBackup("sync");
+  markUnsynced("sync");
   setSyncStatus("saving");
   try {
     await ensureFreshAccessToken();
@@ -1597,15 +1737,27 @@ async function pushCloudData() {
     try {
       payload = await pushViaApi(bundle);
     } catch (apiError) {
+      console.error("[進行式 ING] API 上傳失敗，改試瀏覽器直連", {
+        message: apiError && apiError.message ? apiError.message : apiError,
+        code: apiError && apiError.code,
+        reason: apiError && apiError.reason,
+      });
       const ok = await pushViaSupabaseClient(bundle);
       if (!ok) throw apiError;
     }
     if (payload && payload.data) mergeCloudBundle(payload.data);
     scheduleCloudRetry.fails = 0;
+    clearUnsynced();
     setSyncStatus("saved");
   } catch (error) {
     persistLocalBackup("error");
-    console.warn("[進行式 ING] 雲端同步尚未完成", error && error.message ? error.message : error);
+    markUnsynced("error");
+    console.error("[進行式 ING] 雲端同步尚未完成", {
+      message: error && error.message ? error.message : error,
+      code: error && error.code,
+      reason: error && error.reason,
+      online: typeof navigator !== "undefined" ? navigator.onLine : null,
+    });
     setSyncStatus("error", friendlySyncError(error));
     scheduleCloudRetry();
     throw error;
@@ -1621,11 +1773,17 @@ async function pushCloudData() {
 async function retryCloudSync() {
   if (!state.user) return;
   persistLocalBackup("retry");
+  markUnsynced("retry");
   try {
     await pushCloudData();
     if (state.syncKind === "saved") showToast("已重新同步到雲端。");
-  } catch {
-    showToast("這次還沒送到雲端。紀錄仍在這台裝置，稍候再試即可。");
+  } catch (error) {
+    console.error("[進行式 ING] 手動重試仍未送到雲端", {
+      message: error && error.message ? error.message : error,
+      code: error && error.code,
+      reason: error && error.reason,
+    });
+    showToast("尚有未同步的紀錄，點擊重試");
   }
 }
 
@@ -1756,14 +1914,42 @@ async function pullCloudData(options = {}) {
       headers: authHeaders(),
     });
     const payload = await response.json().catch(() => ({}));
-    if (response.ok && payload.ok !== false) cloud = payload.data || {};
+    if (!response.ok || payload.ok === false) {
+      console.error("[進行式 ING] /api/sync 讀取失敗", {
+        status: response.status,
+        code: payload.code,
+        error: payload.error,
+        reason: payload.reason,
+      });
+    } else {
+      cloud = payload.data || {};
+    }
   } catch (error) {
-    console.warn("[進行式 ING] 讀取 /api/sync 失敗", error && error.message ? error.message : error);
+    console.error("[進行式 ING] 讀取 /api/sync 失敗", {
+      message: error && error.message ? error.message : error,
+      online: typeof navigator !== "undefined" ? navigator.onLine : null,
+    });
   }
   if (!cloud) cloud = await loadSupabaseRecords();
   if (cloud) mergeCloudBundle(cloud);
   refreshCloudViews(options);
-  if (!options.quiet && state.syncKind !== "error") setSyncStatus("saved");
+  if (!options.quiet && !hasUnsynced() && state.syncKind !== "error") setSyncStatus("saved");
+}
+
+function flushUnsyncedCloud() {
+  if (!state.user || state.syncing) return;
+  if (hasUnsynced()) {
+    pushCloudData().catch((error) => {
+      console.error("[進行式 ING] 背景補傳失敗", {
+        message: error && error.message ? error.message : error,
+        code: error && error.code,
+      });
+    });
+    return;
+  }
+  pullCloudData({ quiet: true }).catch((error) => {
+    console.error("[進行式 ING] 背景讀取失敗", error && error.message ? error.message : error);
+  });
 }
 
 function startCloudLiveSync() {
@@ -1771,8 +1957,8 @@ function startCloudLiveSync() {
   if (!state.user) return;
   startCloudLiveSync.timer = setInterval(() => {
     if (document.visibilityState !== "visible" || !state.user || state.syncing) return;
-    pullCloudData({ quiet: true }).catch(() => {});
-  }, 45000);
+    flushUnsyncedCloud();
+  }, 30000);
 }
 
 function stopCloudLiveSync() {
@@ -1784,14 +1970,16 @@ function bindCloudLiveSync() {
   if (bindCloudLiveSync.bound) return;
   bindCloudLiveSync.bound = true;
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible" && state.user) {
-      pullCloudData({ quiet: true }).catch(() => {});
-    }
+    if (document.visibilityState === "visible" && state.user) flushUnsyncedCloud();
   });
   window.addEventListener("online", () => {
     if (!state.user) return;
-    pushCloudData().catch(() => {});
-    pullCloudData({ quiet: true }).catch(() => {});
+    pushCloudData().catch((error) => {
+      console.error("[進行式 ING] 網路恢復後補傳失敗", {
+        message: error && error.message ? error.message : error,
+        code: error && error.code,
+      });
+    });
   });
 }
 
@@ -1807,8 +1995,19 @@ async function syncAccountCloud() {
   cloudAccountSync = (async () => {
     adoptUserScopedStorage(state.user.id);
     startCloudLiveSync();
+    await restoreQueueIfLocalEmpty();
+    if (hasUnsynced()) {
+      state.cloudUnsynced = true;
+      setSyncStatus("error", "尚有未同步的紀錄，點擊重試");
+    }
     await pullCloudData();
-    await pushCloudData().catch(() => {});
+    await pushCloudData().catch((error) => {
+      console.error("[進行式 ING] 登入後上傳失敗", {
+        message: error && error.message ? error.message : error,
+        code: error && error.code,
+        reason: error && error.reason,
+      });
+    });
   })();
   try {
     await cloudAccountSync;

@@ -90,11 +90,17 @@ module.exports = async function handler(req, res) {
 
     if (req.method === "PUT" || req.method === "POST") {
       const saved = await saveUserData(user.id, { ...body, email: extra.email }, extra);
+      console.log("api/sync saved", {
+        userId: user.id,
+        updatedAt: saved && saved.updatedAt,
+        degraded: Boolean(saved && saved.degraded),
+        reviewDays: saved && saved.reviews ? Object.keys(saved.reviews).length : 0,
+      });
       res.status(200).json({
         ok: true,
         userId: user.id,
         updatedAt: saved && saved.updatedAt,
-        data: saved,
+        degraded: Boolean(saved && saved.degraded),
       });
       return;
     }
@@ -105,8 +111,13 @@ module.exports = async function handler(req, res) {
       userId: user.id,
       method: req.method,
       message: error && error.message ? error.message : error,
+      stack: error && error.stack ? String(error.stack).slice(0, 800) : "",
     });
     const mapped = publicSyncError(error, 500);
-    res.status(500).json({ ok: false, ...mapped });
+    res.status(500).json({
+      ok: false,
+      ...mapped,
+      reason: String((error && error.message) || error || "").slice(0, 300),
+    });
   }
 };

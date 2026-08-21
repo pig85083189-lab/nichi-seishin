@@ -34,6 +34,7 @@ create policy "nichi_user_data_update_own"
 grant usage on schema public to anon, authenticated, service_role;
 grant select, insert, update on public.nichi_user_data to authenticated;
 grant all on public.nichi_user_data to service_role;
+notify pgrst, 'reload schema';
 
 -- 訂閱與試用。計費欄位只由 service role 寫入，使用者不可自行改試用截止日。
 create table if not exists public.nichi_subscriptions (
