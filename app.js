@@ -141,6 +141,52 @@ const state = {
   syncText: "",
 };
 
+function trackProduct(eventName, metadata) {
+  try {
+    if (window.NichiAnalytics && typeof window.NichiAnalytics.trackEvent === "function") {
+      window.NichiAnalytics.trackEvent(eventName, metadata);
+    }
+  } catch {
+    /* analytics 不可影響主功能 */
+  }
+}
+
+function bindAnalytics() {
+  if (!window.NichiAnalytics || !window.NichiAnalytics.bind) return;
+  window.NichiAnalytics.bind({
+    getClient: getSupabase,
+    getUser: () => state.user,
+  });
+}
+
+function trackMembershipSignals(membership) {
+  if (!membership) return;
+  if (membership.trialStartedAt) trackProduct("trial_started", { source: "membership" });
+  if ((membership.status === "expired" || membership.status === "cancelled") && !membership.paid && !membership.isPaid) {
+    trackProduct("trial_expired", { source: "membership" });
+  }
+  if (membership.paid || membership.isPaid || membership.status === "active") {
+    trackProduct("subscription_started", { source: "membership" });
+  }
+}
+
+async function probeAdminAnalyticsLink() {
+  const link = document.getElementById("adminAnalyticsLink");
+  if (!link || !state.user) {
+    if (link) link.hidden = true;
+    return;
+  }
+  try {
+    const response = await fetch(`${location.origin}/api/admin/analytics?probe=1`, {
+      credentials: "include",
+      headers: authHeaders(),
+    });
+    link.hidden = response.status !== 200;
+  } catch {
+    link.hidden = true;
+  }
+}
+
 /* =============================================================================
  * 工具
  * =========================================================================== */
@@ -433,6 +479,7 @@ function addTaskFromGuide({ key, label, detail, source, date }) {
     updatedAt: new Date().toISOString(),
   });
   saveTasks(tasks);
+  trackProduct("action_card_created", { source: "guide" });
   try {
     renderTasks();
   } catch {
@@ -2444,11 +2491,24 @@ async function getSupabase() {
           setSyncStatus("");
         }
       }
+      if (next && (event === "SIGNED_IN" || event === "INITIAL_SESSION")) {
+        bindAnalytics();
+        if (event === "SIGNED_IN") {
+          const created = Date.parse(nextSession && nextSession.user && nextSession.user.created_at ? nextSession.user.created_at : "");
+          if (Number.isFinite(created) && Date.now() - created < 15 * 60 * 1000) {
+            trackProduct("auth_signup_completed", { source: "google" });
+          } else {
+            trackProduct("login_completed", { source: "google" });
+          }
+        }
+        trackProduct("app_open", { source: "session" });
+      }
     });
     return supabaseClient;
   })();
   const client = await supabaseInit;
   supabaseInit = null;
+  bindAnalytics();
   return client;
 }
 
@@ -2879,6 +2939,7 @@ function openPricingModal() {
   } else {
     modal.setAttribute("open", "");
   }
+  if (window.NichiAnalytics) window.NichiAnalytics.trackOnceSession("subscription_page_viewed", { source: "pricing" }, "pricing");
 }
 
 function closePricingModal() {
@@ -3030,6 +3091,9 @@ async function refreshAuth(options = {}) {
     state.authReady = true;
     renderAuth();
     applyAccessLock();
+    trackMembershipSignals(state.membership);
+    if (state.user) trackProduct("app_open", { source: "auth" });
+    probeAdminAnalyticsLink();
     if (state.user && !options.skipCloud) await syncAccountCloud();
     else if (state.user) startCloudLiveSync();
     else stopCloudLiveSync();
@@ -3576,11 +3640,23 @@ function switchPage(page, options = {}) {
     section.hidden = !active;
   });
   if (isMobile() && !options.keepSidebar) setSidebarOpen(false);
-  if (page === "report") renderReport();
+  if (page === "report") {
+    renderReport();
+    if (window.NichiAnalytics) {
+      window.NichiAnalytics.trackOnceSession(
+        state.reportType === "month" ? "monthly_report_viewed" : "weekly_report_viewed",
+        { type: state.reportType === "month" ? "month" : "week", source: "nav" },
+        `report:${state.reportType}`
+      );
+    }
+  }
   if (page === "next") renderInsights();
   if (page === "sfm") renderTasks();
   if (page === "manifest") renderManifests();
-  if (page === "history") renderHistory();
+  if (page === "history") {
+    renderHistory();
+    if (window.NichiAnalytics) window.NichiAnalytics.trackOnceSession("history_viewed", { source: "nav" }, "history");
+  }
 }
 
 function driverFactory() {
@@ -5451,6 +5527,8 @@ function applyGeneratedChecklist(kind, items, sig) {
     }
   }
   persistJournalQuietly();
+  if (kind === "execution") trackProduct("action_card_created", { source: "checklist", mode: state.journalMode === "quick" ? "quick" : "deep" });
+  if (kind === "manifest") trackProduct("manifestation_created", { source: "checklist" });
 }
 
 async function generateJournalChecklist(kind, options = {}) {
@@ -6611,6 +6689,7 @@ async function generateThinkGuideAsk(options = {}) {
   if (thinkGuideDone(guide)) return true;
   const nextRound = (guide.rounds || []).length + 1;
   if (nextRound > 3) return generateThinkGuideClose(options);
+  trackProduct("deep_thinking_started", { source: "guide", round: nextRound });
   const sig = insightSignature(journal);
   if (options.auto && guide.rounds.length && current.sig === sig) return false;
   const token = (state.insightToken || 0) + 1;
@@ -6708,12 +6787,14 @@ async function generateThinkGuideClose(options = {}) {
     if (!closed.summary && !closed.awareness) throw new Error("雲端回傳格式不完整");
     applyThinkGuideInsight({ ...guide, round: 4, ...closed }, sig);
     if (!options.fromComplete) showToast("今日覺察總結已生成。");
+    trackProduct("deep_thinking_completed", { source: "guide" });
     return true;
   } catch (error) {
     if (state.insightToken !== token) return false;
     const fallback = localThinkGuideClose(journal, guide);
     applyThinkGuideInsight({ ...guide, round: 4, ...fallback }, sig);
     if (!options.fromComplete) showToast(`雲端總結失敗：${formatApiError(error)}，先留下本地思考。`);
+    trackProduct("deep_thinking_completed", { source: "local" });
     return true;
   } finally {
     clearTimeout(watchdog);
@@ -6936,6 +7017,7 @@ async function generateBodyCoach(options = {}) {
     renderBodyCoachCard(coach);
     persistJournalQuietly();
     showToast("今天的身心建議，已經為你整理好了。");
+    trackProduct("body_awareness_completed", { source: "coach", mode: state.journalMode === "quick" ? "quick" : "deep" });
   } catch (error) {
     if (state.bodyCoachToken !== token) return;
     const fallback = localBodyCoachFallback(journal);
@@ -6944,6 +7026,7 @@ async function generateBodyCoach(options = {}) {
     renderBodyCoachCard(fallback);
     persistJournalQuietly();
     showToast(`雲端建議還沒整理好：${formatApiError(error)}，先留下本地身心小結。`);
+    trackProduct("body_awareness_completed", { source: "local", mode: state.journalMode === "quick" ? "quick" : "deep" });
   } finally {
     if (state.bodyCoachToken === token) setBodyCoachLoading(false);
   }
@@ -7805,6 +7888,9 @@ function persistJournalQuietly() {
     const incomingEmpty = !journalHasContent(patch.journal) && !String(patch.rawText || "").trim() && !patch.organize;
     if (incomingEmpty) return;
     upsertReview(currentIso(), patch);
+    if (journalHasContent(patch.journal) && window.NichiAnalytics) {
+      window.NichiAnalytics.trackOnceSession("review_started", { mode: state.journalMode === "quick" ? "quick" : "deep", source: "autosave" }, `review-start:${currentIso()}`);
+    }
   } catch (error) {
     console.error("[進行式 ING] 本機暫存復盤失敗", error && error.message ? error.message : error);
   }
@@ -9803,6 +9889,21 @@ async function finishTodayReview() {
       ? "快速復盤已完成，今日洞察已存入歷史紀錄。"
       : "今日復盤已完成，勾選項目與明天最小一步已同步到側邊欄。"
   );
+  const mode = state.journalMode === "quick" ? "quick" : "deep";
+  trackProduct("review_completed", { mode, source: "complete" });
+  trackProduct(mode === "quick" ? "quick_review_completed" : "deep_review_completed", { mode, source: "complete" });
+  const journal = collected.journal || getReview(iso)?.journal || {};
+  const check = journal.bodyCheck || {};
+  if (
+    (check.mood && (check.mood.flags || []).length) ||
+    (check.body && (check.body.flags || []).length) ||
+    (check.sleep && check.sleep.duration)
+  ) {
+    trackProduct("body_awareness_completed", { mode, source: "complete" });
+  }
+  if (String(journal.manifest || "").trim().length >= 4) {
+    trackProduct("manifestation_created", { source: "complete" });
+  }
 }
 
 function inferSfmType(text) {
@@ -10108,6 +10209,7 @@ function setTaskStatus(id, status) {
   );
   setTaskFilter(next);
   renderTasks();
+  if (next === "done") trackProduct("action_card_completed", { source: "sidebar" });
 }
 
 function setTaskDone(id, done) {
@@ -10130,6 +10232,7 @@ function addTask(event) {
     updatedAt: new Date().toISOString(),
   });
   saveTasks(tasks);
+  trackProduct("action_card_created", { source: "manual" });
   document.getElementById("taskTitle").value = "";
   const detailInput = document.getElementById("taskDetail");
   if (detailInput) detailInput.value = "";
@@ -11247,6 +11350,13 @@ function bindEvents() {
         tab.setAttribute("aria-selected", String(active));
       });
       renderReport();
+      if (window.NichiAnalytics) {
+        window.NichiAnalytics.trackOnceSession(
+          state.reportType === "month" ? "monthly_report_viewed" : "weekly_report_viewed",
+          { type: state.reportType === "month" ? "month" : "week", source: "tab" },
+          `report:${state.reportType}`
+        );
+      }
     });
   });
 

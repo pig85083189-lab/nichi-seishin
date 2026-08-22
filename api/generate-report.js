@@ -345,6 +345,16 @@ async function handler(req, res, forced = {}) {
           archived,
         });
         await archiveUserReport(account.id, report);
+        try {
+          const { insertAnalyticsEvent } = require("../lib/analytics");
+          await insertAnalyticsEvent({
+            userId: account.id,
+            eventName: kind === "month" ? "monthly_report_generated" : "weekly_report_generated",
+            metadata: { type: kind === "month" ? "month" : "week", source: "cron" },
+          });
+        } catch {
+          /* ignore */
+        }
         results.push({ userId: account.id, ok: true, period, days: entries.length, archived });
       }
       res.status(200).json({ ok: true, cron: true, results, kv: kvConfigured() });
@@ -428,6 +438,16 @@ async function handler(req, res, forced = {}) {
       archived,
     });
     await archiveUserReport(user.id, report);
+    try {
+      const { insertAnalyticsEvent } = require("../lib/analytics");
+      await insertAnalyticsEvent({
+        userId: user.id,
+        eventName: kind === "month" ? "monthly_report_generated" : "weekly_report_generated",
+        metadata: { type: kind === "month" ? "month" : "week", source: "api" },
+      });
+    } catch {
+      /* ignore */
+    }
     res.status(200).json({ ok: true, data: report, kv: kvConfigured(), userId: user.id });
   } catch (error) {
     const aborted = error?.name === "AbortError" || /aborted/i.test(String(error?.message || ""));

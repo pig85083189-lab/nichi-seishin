@@ -92,6 +92,17 @@ async function applyNotify(payload) {
     const next = nextChargeDate(result);
     if (next) patch.next_charge_at = next;
     await markPaid(row.user_id, patch);
+    try {
+      const { insertAnalyticsEvent } = require("../../lib/analytics");
+      await insertAnalyticsEvent({
+        userId: row.user_id,
+        eventName: "subscription_started",
+        metadata: { source: "newebpay" },
+        uniqueOnce: true,
+      });
+    } catch {
+      /* analytics 不可擋住付款 */
+    }
     console.log("NewebPay notify applied:", eventType, orderNo, periodNo, row.user_id);
     return;
   } else if (row.status === "active" || debit) {

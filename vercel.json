@@ -21,8 +21,14 @@
     },
     "api/sync.js": {
       "maxDuration": 20
+    },
+    "api/admin/analytics.js": {
+      "maxDuration": 20
     }
   },
+  "rewrites": [
+    { "source": "/admin/analytics", "destination": "/admin/analytics.html" }
+  ],
   "crons": [
     {
       "path": "/api/generate-report-week",

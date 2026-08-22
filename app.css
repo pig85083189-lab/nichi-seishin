@@ -1160,6 +1160,14 @@ body.nav-closed .auth-pay {
   color: var(--text);
 }
 
+.guide-privacy {
+  margin: 8px auto 0;
+  max-width: 36em;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
 .guide-cta .btn--outline {
   min-width: 240px;
 }

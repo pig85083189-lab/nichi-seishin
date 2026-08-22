@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>使用分析 · 進行式 ING</title>
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="../app.css?v=149" />
+    <link rel="stylesheet" href="analytics.css?v=1" />
+  </head>
+  <body class="admin-analytics">
+    <header class="admin-head">
+      <a class="admin-back" href="../">← 回到 ING</a>
+      <div>
+        <p class="admin-kicker">進行式 ING</p>
+        <h1>使用分析</h1>
+        <p class="admin-lead">看的是有沒有持續使用，不是使用者寫了什麼。</p>
+      </div>
+      <label class="admin-cohort">
+        <span>觀察範圍</span>
+        <select id="cohortSelect">
+          <option value="all">全部使用者</option>
+        </select>
+      </label>
+    </header>
+
+    <main class="admin-main">
+      <p class="admin-status" id="adminStatus">正在確認權限…</p>
+      <div id="adminBody" hidden>
+        <section class="admin-section">
+          <h2>核心數據</h2>
+          <div class="admin-kpis" id="kpiGrid"></div>
+        </section>
+
+        <section class="admin-section">
+          <h2>近 30 日活躍</h2>
+          <div class="admin-chart-wrap"><canvas id="dauChart"></canvas></div>
+        </section>
+
+        <section class="admin-grid">
+          <section class="admin-section">
+            <h2>使用漏斗</h2>
+            <ol class="admin-funnel" id="funnelList"></ol>
+          </section>
+          <section class="admin-section">
+            <h2>Retention（當天有 Meaningful Active）</h2>
+            <div class="admin-chart-wrap admin-chart-wrap--short"><canvas id="retentionChart"></canvas></div>
+            <ul class="admin-windows" id="windowList"></ul>
+          </section>
+        </section>
+
+        <section class="admin-section">
+          <h2>功能使用率</h2>
+          <div class="admin-chart-wrap admin-chart-wrap--short"><canvas id="featureChart"></canvas></div>
+          <div class="admin-features" id="featureList"></div>
+        </section>
+
+        <section class="admin-section">
+          <h2>建立 Founder Cohort</h2>
+          <form class="admin-form" id="cohortForm">
+            <label>名稱 <input name="name" placeholder="Founder Batch 01" required /></label>
+            <label>Slug <input name="slug" placeholder="founder-batch-01" required /></label>
+            <label>開始日 <input name="startDate" type="date" /></label>
+            <label>結束日 <input name="endDate" type="date" /></label>
+            <label class="admin-form__wide">User IDs（每行一個 UUID）<textarea name="userIds" rows="4" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"></textarea></label>
+            <button class="btn" type="submit">儲存 Cohort</button>
+          </form>
+        </section>
+
+        <section class="admin-section">
+          <h2>個別使用者</h2>
+          <p class="admin-note">只顯示遮罩 Email 與行為，不含日記或私人文字。</p>
+          <div class="admin-table-wrap">
+            <table class="admin-table" id="userTable">
+              <thead>
+                <tr>
+                  <th>Email</th>
+                  <th>註冊</th>
+                  <th>體驗開始</th>
+                  <th>Active Days</th>
+                  <th>最後使用</th>
+                  <th>復盤</th>
+                  <th>功能</th>
+                  <th>D3</th>
+                  <th>D7</th>
+                  <th>D14</th>
+                  <th>D30</th>
+                  <th>狀態</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
+    <script src="../auth/pkce-storage.js?v=2"></script>
+    <script src="analytics.js?v=1"></script>
+  </body>
+</html>
