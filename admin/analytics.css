@@ -1,6 +1,20 @@
-.admin-analytics {
-  margin: 0;
+/* 覆寫 app.css 的 html/body 鎖高與 overflow:hidden，只影響本頁。 */
+html.admin-analytics-page {
+  height: auto;
+  max-height: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+html.admin-analytics-page body.admin-analytics {
+  display: block;
+  position: static;
+  height: auto;
+  max-height: none;
   min-height: 100vh;
+  overflow: visible;
+  margin: 0;
   background: var(--bg);
   color: var(--text);
   font-family: var(--sans);
