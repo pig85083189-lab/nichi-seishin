@@ -901,10 +901,10 @@ function formatApiError(error) {
   }
   if (/file:|本機 HTML/.test(message)) return message;
   if (/401|請先使用 Google|未登入|未授權/i.test(message)) {
-    return "請先使用 Google 登入，即可解鎖 7 天完整免費試用";
+    return "請先使用 Google 登入，即可解鎖 30 天完整免費試用";
   }
   if (/402|試用已結束|免費體驗已結束|paywall/i.test(message)) {
-    return "您的 7 天免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限";
+    return "您的免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限";
   }
   if (/404|Failed to fetch|fetch 失敗|NetworkError/i.test(message)) {
     return "找不到後端 API。請用本機 http://localhost:3000（npm run dev）或 Vercel 網址開啟。";
@@ -2399,7 +2399,7 @@ function renderAuth() {
         <span>使用 Google 帳號登入</span>
       </button>
       <p class="auth-form__error" id="authError" hidden></p>
-      <p class="auth-hint">Google 登入後享有 7 天完整功能免費試用。</p>
+      <p class="auth-hint">Google 登入後享有 30 天完整功能免費試用。</p>
     `;
     if (lastAuthError) setAuthError(lastAuthError);
     applyAccessLock();
@@ -2416,12 +2416,12 @@ function renderAuth() {
     ? `<button class="auth-pay is-paid" type="button" disabled><span>已解鎖無限暢用</span></button>`
     : `<button class="auth-pay" id="btnNewebPay" type="button" data-open-pricing><span>${status === "trialing" || status === "pending" ? "選擇方案升級" : "選擇方案解鎖"}</span></button>`;
   const trialHint = membership.trialEndsAt && (status === "trialing" || entitled && !membership.paid && !membership.isPaid)
-    ? `<p class="auth-hint">7 天免費試用至 ${escapeHtml(formatTrialDate(membership.trialEndsAt))}${membership.daysLeft != null ? `，還有 ${membership.daysLeft} 天` : ""}。</p>`
+    ? `<p class="auth-hint">免費試用至 ${escapeHtml(formatTrialDate(membership.trialEndsAt))}${membership.daysLeft != null ? `，還有 ${membership.daysLeft} 天` : ""}。</p>`
     : entitled && (status === "active" || membership.paid || membership.isPaid)
       ? `<p class="auth-hint">一次付清已完成，功能已全部解鎖。</p>`
       : status === "expired" || status === "cancelled" || status === "past_due" || (!entitled && status)
-        ? `<p class="auth-hint">7 天免費體驗已結束，可選月繳 $599 或季繳 $1,197 解鎖暢用。</p>`
-        : `<p class="auth-hint">登入後享有 7 天完整功能免費試用。</p>`;
+        ? `<p class="auth-hint">免費體驗已結束，可選月繳 $599 或季繳 $1,197 解鎖暢用。</p>`
+        : `<p class="auth-hint">登入後享有 30 天完整功能免費試用。</p>`;
   side.innerHTML = `
     <div class="auth-user">
       ${avatar}
@@ -2856,8 +2856,8 @@ function isAccessLocked() {
 
 function accessLockMessage() {
   return accessLockMode() === "expired"
-    ? "您的 7 天免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限"
-    : "請先使用 Google 登入，即可解鎖 7 天完整免費試用";
+    ? "您的免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限"
+    : "請先使用 Google 登入，即可解鎖 30 天完整免費試用";
 }
 
 function applyPaywallFromPayload(response, payload) {
@@ -2921,7 +2921,7 @@ function onSubscribeClick(event) {
 function startNewebPay(planId) {
   if (!state.user) {
     closePricingModal();
-    showToast("請先用 Google 登入，即可享有 7 天完整試用。");
+    showToast("請先用 Google 登入，即可享有 30 天完整試用。");
     signInWithGoogle();
     return;
   }
@@ -3131,7 +3131,7 @@ function handleAuthQuery() {
       storedAuthError = "";
     }
     if (!auth && !pay && !oauthError && !storedAuthError) return;
-    if (auth === "ok") showToast("已登入，7 天完整免費試用已開始。");
+    if (auth === "ok") showToast("已登入，30 天完整免費試用已開始。");
     if (auth === "out") showToast("已登出。本機草稿仍在這台裝置上。");
     if (auth === "error" || oauthError || storedAuthError) {
       const raw = storedAuthError || oauthError || params.get("reason") || "請再試一次";
