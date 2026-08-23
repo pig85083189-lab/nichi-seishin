@@ -11323,9 +11323,11 @@ function renderHistory() {
       return `
         <article class="history-card ${open ? "is-open" : ""}" data-history-iso="${escapeHtml(iso)}" data-history-debug-guide="${historyHasGuideRounds(historyReview) ? "1" : "0"}" data-history-debug-insight="${hasInsightSection ? "1" : "0"}">
           <button class="history-card__summary" data-history-toggle="${iso}" type="button" aria-expanded="${open ? "true" : "false"}">
-            <span class="history-card__title">${escapeHtml(summary.title)}</span>
-            <span class="history-card__date">${escapeHtml(formatHistoryListDate(iso))}</span>
-            ${tags ? `<span class="history-card__tags">${tags}</span>` : ""}
+            <span class="history-card__content">
+              <span class="history-card__title">${escapeHtml(summary.title)}</span>
+              <span class="history-card__date">${escapeHtml(formatHistoryListDate(iso))}</span>
+              ${tags ? `<span class="history-card__tags">${tags}</span>` : ""}
+            </span>
             <span class="history-card__chevron" aria-hidden="true"></span>
           </button>
           <div class="history-card__panel">

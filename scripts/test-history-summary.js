@@ -1,4 +1,4 @@
-const { getHistoryDailySummary, FALLBACK_TITLE } = require("../lib/history-summary");
+const { getHistoryDailySummary, buildHistoryDisplayTitle, FALLBACK_TITLE } = require("../lib/history-summary");
 const { historyDeepThinkingSource, hasMeaningfulGuide } = require("../lib/review-merge");
 
 function assert(cond, message) {
@@ -106,5 +106,46 @@ assert(Array.isArray(case10.tags), "CASE 10：沒有 Tags 也不消失");
 const a = getHistoryDailySummary(case1);
 const b = getHistoryDailySummary(case1);
 assert(a.title === b.title && a.tags.join() === b.tags.join(), "同一份 review 必須得到穩定 summary");
+
+const shortTitle = buildHistoryDisplayTitle({
+  journal: { insight: { guide: { takeaway: "我開始看見自己的節奏" } } },
+});
+assert(shortTitle === "我開始看見自己的節奏", "CASE 1：短標題完整一行");
+assert(!shortTitle.includes("…"), "短標題不可加省略號");
+
+const midTitle = buildHistoryDisplayTitle({
+  journal: {
+    insight: {
+      guide: { takeaway: "在陪伴與距離之間，找到自己的平衡" },
+    },
+  },
+});
+assert(midTitle === "在陪伴與距離之間，找到自己的平衡", "CASE 2：約 20 字標題必須完整");
+
+const longTitle = buildHistoryDisplayTitle({
+  journal: {
+    insight: {
+      guide: {
+        takeaway: "從慌張到接納：今天你在陪伴與距離之間找到了平衡，也開始理解自己真正需要的是什麼",
+      },
+    },
+  },
+});
+assert(!/平$/.test(longTitle.replace(/\s+/g, "")), "CASE 3／4：不可在「平衡」中間硬切");
+assert(!longTitle.includes("…"), "不可用省略號硬切半句");
+assert(longTitle.includes("平衡") || longTitle.includes("接納"), "長標題要留下完整子句");
+assert(longTitle.length <= 40, "顯示標題不可整段貼上");
+
+const longConclusion = buildHistoryDisplayTitle({
+  journal: {
+    insight: {
+      conclusion: "從慌張到接納：今天你在陪伴與距離之間找到了平衡，也開始理解自己真正需要的是什麼。後面還有很多補充說明，這一段非常長。",
+    },
+  },
+});
+assert(longConclusion.includes("平衡"), "CASE 4：長 conclusion 要停在完整子句");
+assert(!/平$/.test(longConclusion.replace(/\s+/g, "")), "CASE 4：長 conclusion 不可切成半句");
+
+assert(buildHistoryDisplayTitle({ journal: { mood: "平靜" } }) === FALLBACK_TITLE, "CASE 5：沒有可用 summary 用 fallback");
 
 console.log("history summary tests passed");
