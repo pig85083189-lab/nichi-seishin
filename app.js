@@ -67,6 +67,7 @@ const state = {
   historyQuery: "",
   historyTag: "all",
   historyOpen: "",
+  historyOpenSections: {},
   journalMode: "deep",
   quickModules: { body: false, aware: false, exec: false, manifest: false },
   deepExpanded: false,
@@ -10773,8 +10774,8 @@ function historyJournalIcon(name) {
   return icons[name] || icons.note;
 }
 
-function historySectionMarkup(title, icon, body, open) {
-  return `<section class="history-subcard${open ? " is-open" : ""}">
+function historySectionMarkup(title, icon, body, open, iso = "") {
+  return `<section class="history-subcard${open ? " is-open" : ""}" data-history-section-id="${escapeHtml(icon)}" data-history-section-date="${escapeHtml(iso)}">
     <button class="history-subcard__toggle" type="button" data-history-section aria-expanded="${open ? "true" : "false"}">
       <span class="history-subcard__icon" aria-hidden="true">${historyJournalIcon(icon)}</span>
       <h3 class="history-subcard__title">${escapeHtml(title)}</h3>
@@ -10786,20 +10787,76 @@ function historySectionMarkup(title, icon, body, open) {
   </section>`;
 }
 
-function historySection(title, icon, blocks, open = false) {
-  const body = (Array.isArray(blocks) ? blocks : [blocks]).filter(Boolean).join("");
-  if (!body.trim()) return "";
-  return historySectionMarkup(title, icon, body, open);
+function historySectionStore(iso) {
+  const key = String(iso || "");
+  if (!key) return {};
+  if (!state.historyOpenSections[key] || typeof state.historyOpenSections[key] !== "object") {
+    state.historyOpenSections[key] = {};
+  }
+  return state.historyOpenSections[key];
 }
 
-function historySectionsHtml(items) {
+function historySectionIsOpen(iso, sectionId, fallback) {
+  const store = iso ? state.historyOpenSections[iso] : null;
+  if (store && Object.prototype.hasOwnProperty.call(store, sectionId)) return Boolean(store[sectionId]);
+  return Boolean(fallback);
+}
+
+function setHistorySectionOpen(iso, sectionId, open) {
+  if (!iso || !sectionId) return;
+  historySectionStore(iso)[sectionId] = Boolean(open);
+}
+
+function ensureHistorySectionDefaults(iso, sectionIds) {
+  if (!iso || !Array.isArray(sectionIds) || !sectionIds.length) return;
+  const store = state.historyOpenSections[iso];
+  if (store && Object.keys(store).length) return;
+  const next = {};
+  sectionIds.forEach((id, index) => {
+    next[id] = index === 0;
+  });
+  state.historyOpenSections[iso] = next;
+}
+
+function historySection(title, icon, blocks, open = false, iso = "") {
+  const body = (Array.isArray(blocks) ? blocks : [blocks]).filter(Boolean).join("");
+  if (!body.trim()) return "";
+  if (iso) ensureHistorySectionDefaults(iso, [icon]);
+  return historySectionMarkup(title, icon, body, historySectionIsOpen(iso, icon, open), iso);
+}
+
+function historySectionsHtml(items, iso = "") {
   const sections = items
     .map(([title, icon, blocks]) => {
       const body = (Array.isArray(blocks) ? blocks : [blocks]).filter(Boolean).join("");
       return body.trim() ? { title, icon, body } : null;
     })
     .filter(Boolean);
-  return sections.map((item, index) => historySectionMarkup(item.title, item.icon, item.body, index === 0)).join("");
+  if (iso) ensureHistorySectionDefaults(iso, sections.map((item) => item.icon));
+  return sections
+    .map((item, index) =>
+      historySectionMarkup(item.title, item.icon, item.body, historySectionIsOpen(iso, item.icon, index === 0), iso)
+    )
+    .join("");
+}
+
+function captureHistoryScroll() {
+  const view = document.getElementById("view");
+  return {
+    viewY: view ? view.scrollTop : 0,
+    windowY: window.scrollY || document.documentElement.scrollTop || 0,
+  };
+}
+
+function restoreHistoryScroll(prev) {
+  if (!prev) return;
+  const apply = () => {
+    const view = document.getElementById("view");
+    if (view) view.scrollTop = prev.viewY;
+    if (typeof window.scrollTo === "function") window.scrollTo(0, prev.windowY);
+  };
+  apply();
+  requestAnimationFrame(apply);
 }
 
 function historyBlock(label, bodyHtml) {
@@ -11160,6 +11217,7 @@ function renderHistoryJournal(review) {
       htmlLength: String(insightHtml || "").length,
     });
   }
+  const historyIso = String((review && review.date) || "");
   const parts = historySectionsHtml([
     ["① 今日感謝", "thanks", historyBlock("", thanks)],
     [
@@ -11204,13 +11262,13 @@ function renderHistoryJournal(review) {
         journal.manifestSentence ? historyTextBlock("我的顯化句", journal.manifestSentence) : "",
       ],
     ],
-  ]);
+  ], historyIso);
 
   if (!parts) {
     const fallback = String(review?.rawText || "").trim();
     const organize = review?.organize;
-    if (organize) return `<div class="history-journal">${historySection("當天紀錄", "note", renderHistoryReport(review), true)}</div>`;
-    if (fallback) return `<div class="history-journal">${historySection("當天紀錄", "note", historyTextBlock("", fallback), true)}</div>`;
+    if (organize) return `<div class="history-journal">${historySection("當天紀錄", "note", renderHistoryReport(review), true, historyIso)}</div>`;
+    if (fallback) return `<div class="history-journal">${historySection("當天紀錄", "note", historyTextBlock("", fallback), true, historyIso)}</div>`;
     return `<div class="history-journal"><p class="history-journal__empty">這天還沒有留下完整復盤內容。</p></div>`;
   }
 
@@ -11219,6 +11277,9 @@ function renderHistoryJournal(review) {
 
 function renderHistory() {
   const list = document.getElementById("historyList");
+  if (!list) return;
+  if (state.page && state.page !== "history") return;
+  const scroll = captureHistoryScroll();
   const query = state.historyQuery.trim().toLowerCase();
   const entries = Object.entries(getReviews())
     .filter(([, review]) => reviewIsComplete(review))
@@ -11235,10 +11296,12 @@ function renderHistory() {
 
   if (!Object.values(getReviews()).some(reviewIsComplete)) {
     list.innerHTML = `<div class="empty"><p class="empty__title">還沒有歷史復盤</p>今天寫下第一篇，就會出現在這裡。</div>`;
+    restoreHistoryScroll(scroll);
     return;
   }
   if (!entries.length) {
     list.innerHTML = `<div class="empty">沒有符合搜尋或標籤的紀錄。</div>`;
+    restoreHistoryScroll(scroll);
     return;
   }
 
@@ -11291,6 +11354,7 @@ function renderHistory() {
       `;
     })
     .join("");
+  restoreHistoryScroll(scroll);
 }
 
 function renderHistoryReport(review) {
@@ -12003,6 +12067,9 @@ function bindEvents() {
         panel.inert = !next;
         panel.setAttribute("aria-hidden", next ? "false" : "true");
       }
+      const iso = card.dataset.historySectionDate || state.historyOpen;
+      const sectionId = card.dataset.historySectionId;
+      setHistorySectionOpen(iso, sectionId, next);
       return;
     }
     const toggle = event.target.closest("[data-history-toggle]");
