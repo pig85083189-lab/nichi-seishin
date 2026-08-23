@@ -148,4 +148,61 @@ assert(!/平$/.test(longConclusion.replace(/\s+/g, "")), "CASE 4：長 conclusio
 
 assert(buildHistoryDisplayTitle({ journal: { mood: "平靜" } }) === FALLBACK_TITLE, "CASE 5：沒有可用 summary 用 fallback");
 
+const eventOnly = buildHistoryDisplayTitle({
+  date: "2026-08-22",
+  journal: {
+    event:
+      "今天去陪爸爸媽媽吃飯，因為很久沒有看到他們，突然覺得他們其實有時候也滿孤單的。以前可能覺得陪伴就是常常待在一起，但現在也慢慢理解每個人需要自己的空間。",
+    thanksText: "謝謝爸媽還願意等我回家吃飯",
+  },
+});
+assert(!eventOnly.includes("偶爾抽空"), "CASE 1：事件描述不可直接當標題");
+assert(!eventOnly.includes("陪爸爸媽媽吃飯"), "CASE 1：標題應提升成覺察，而不是複製事件");
+assert(/陪伴|空間|家人|愛/.test(eventOnly), "CASE 1：應提煉陪伴／空間相關金句");
+
+const takeawayQuote = buildHistoryDisplayTitle({
+  journal: {
+    insight: {
+      guide: {
+        takeaway: "看見別人變好，也讓我看見自己的價值",
+        awareness: "身邊的人慢慢變好讓我很開心",
+      },
+    },
+  },
+});
+assert(takeawayQuote === "看見別人變好，也讓我看見自己的價值", "CASE 2：完整 takeaway 應提煉成金句");
+
+const sharedTheme = buildHistoryDisplayTitle({
+  date: "2026-08-21",
+  journal: {
+    thanksText: "謝謝客人臉變亮，也謝謝男友開始寫感恩日記",
+    event: "看到身邊的人慢慢變好讓我很開心",
+    awarenessResult: { seen: "我在乎自己有沒有被看見，也在乎自己有沒有帶來影響" },
+  },
+});
+assert(/價值|影響力|看見/.test(sharedTheme), "CASE 3：感謝＋事件＋覺察要抓共同核心");
+
+const bodyAndDone = buildHistoryDisplayTitle({
+  date: "2026-08-20",
+  journal: {
+    event: "今天完成很多事情很有成就感，但昨天其實只睡五六個小時。",
+    bodyCoach: { title: "睡眠不足還是硬把事情做完" },
+    smallestStep: "明天只做一件事",
+  },
+});
+assert(/身體|照顧|休息|完成/.test(bodyAndDone), "CASE 4：行動 × 身體照顧");
+assert(!bodyAndDone.includes("只睡五六個小時"), "CASE 4：不要複製疲累事件原句");
+assert(bodyAndDone !== "睡眠不足還是硬把事情做完", "CASE 4：身體教練標題若只是事件描述，不可直接當金句");
+
+const longSource = buildHistoryDisplayTitle({
+  journal: {
+    insight: {
+      conclusion:
+        "從慌張到接納：今天你在陪伴與距離之間找到了平衡，也開始理解自己真正需要的是什麼。後面還有很多補充說明，這一段非常長。",
+    },
+  },
+});
+assert(!/平$/.test(longSource.replace(/\s+/g, "")), "CASE 7：長文不可切成半句");
+assert(!longSource.includes("…"), "CASE 7：不可用省略號硬切");
+
 console.log("history summary tests passed");
