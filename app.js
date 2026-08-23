@@ -2176,6 +2176,12 @@ function combineCloudBundles(base, incoming) {
 
 function mergeCloudBundle(cloud) {
   if (!cloud || typeof cloud !== "object") return;
+  const incomingReviews = cloud.reviews && typeof cloud.reviews === "object" ? cloud.reviews : {};
+  const incomingGuideDates = Object.entries(incomingReviews)
+    .filter(([, review]) => historyHasGuideRounds(review))
+    .map(([iso, review]) => `${iso}:${historyGuideFromReview(review).rounds.length}`);
+  console.log("[history-debug] hydrate incoming dates", Object.keys(incomingReviews));
+  console.log("[history-debug] hydrate incoming guide dates", incomingGuideDates);
   const combined = combineCloudBundles(
     {
       reviews: getReviews(),
@@ -2188,6 +2194,11 @@ function mergeCloudBundle(cloud) {
     cloud
   );
   saveJson(cloudStoreKey("reviews"), combined.reviews, { silent: true });
+  const storedGuideDates = Object.entries(combined.reviews || {})
+    .filter(([, review]) => historyHasGuideRounds(review))
+    .map(([iso, review]) => `${iso}:${historyGuideFromReview(review).rounds.length}`);
+  console.log("[history-debug] hydrate stored dates", Object.keys(combined.reviews || {}));
+  console.log("[history-debug] hydrate stored guide dates", storedGuideDates);
   saveJson(cloudStoreKey("tasks"), combined.tasks, { silent: true });
   saveJson(cloudStoreKey("sfm"), combined.sfm, { silent: true });
   saveJson(cloudStoreKey("insights"), combined.insights, { silent: true });
@@ -10879,12 +10890,41 @@ function historyBodyCheckHtml(journal) {
   return historyItemsHtml(lines);
 }
 
+function historyTextMeaningful(value) {
+  return String(value == null ? "" : value).trim().length > 0;
+}
+
+function historyGuideFromReview(review) {
+  const insight = review && review.journal && typeof review.journal === "object" ? review.journal.insight : null;
+  const guide = insight && typeof insight === "object" ? insight.guide : null;
+  const raw = guide && typeof guide === "object" ? guide.rounds : null;
+  if (Array.isArray(raw)) return { insight: insight || {}, guide: guide || {}, rounds: raw };
+  if (raw && typeof raw === "object") {
+    const rounds = Object.keys(raw)
+      .sort((a, b) => Number(a) - Number(b))
+      .map((key) => raw[key])
+      .filter((item) => item && typeof item === "object");
+    return { insight: insight || {}, guide: guide || {}, rounds };
+  }
+  return { insight: insight || {}, guide: guide || {}, rounds: [] };
+}
+
+function historyRoundHasContent(round) {
+  if (!round || typeof round !== "object") return false;
+  return (
+    historyTextMeaningful(round.question) ||
+    historyTextMeaningful(round.answer) ||
+    historyTextMeaningful(round.hint)
+  );
+}
+
+function historyHasGuideRounds(review) {
+  return historyGuideFromReview(review).rounds.some(historyRoundHasContent);
+}
+
 function renderHistoryGuideHtml(insight, guide) {
-  const api = reviewMergeApi();
-  const rounds =
-    typeof api.visibleGuideRounds === "function"
-      ? api.visibleGuideRounds(guide)
-      : (Array.isArray(guide?.rounds) ? guide.rounds : []).filter((item) => hasMeaningfulValue(item));
+  const parsed = historyGuideFromReview({ journal: { insight: { ...(insight || {}), guide } } });
+  const rounds = parsed.rounds.filter(historyRoundHasContent);
   const roundBlocks = rounds
     .map((item, index) => {
       const question = String(item.question || "").trim();
@@ -11008,19 +11048,65 @@ function renderHistoryDeepJournalHtml(deep, deepPrompts) {
 }
 
 function renderHistoryDeepThinking(review) {
+  const parsed = historyGuideFromReview(review);
   const api = reviewMergeApi();
-  const source =
+  const helperSource =
     typeof api.historyDeepThinkingSource === "function"
       ? api.historyDeepThinkingSource(review)
       : { kind: "none" };
-  if (source.kind === "guide") return renderHistoryGuideHtml(source.insight || {}, source.guide || {});
-  if (source.kind === "blocks") return renderHistoryInsightBlocksHtml(source.insight || {});
-  if (source.kind === "thinkHistory") return renderHistoryThinkHistoryHtml(source.thinkHistory, review);
-  if (source.kind === "deep") return renderHistoryDeepJournalHtml(source.deep, source.deepPrompts);
-  return "";
+  let selected = "none";
+  let html = "";
+  if (historyHasGuideRounds(review) || historyTextMeaningful(parsed.guide.summary) || historyTextMeaningful(parsed.guide.awareness)) {
+    selected = "guide";
+    html = renderHistoryGuideHtml(parsed.insight, parsed.guide);
+  } else if (helperSource.kind === "blocks" || helperSource.kind === "thinkHistory" || helperSource.kind === "deep") {
+    selected = helperSource.kind;
+    if (helperSource.kind === "blocks") html = renderHistoryInsightBlocksHtml(helperSource.insight || {});
+    else if (helperSource.kind === "thinkHistory") html = renderHistoryThinkHistoryHtml(helperSource.thinkHistory, review);
+    else html = renderHistoryDeepJournalHtml(helperSource.deep, helperSource.deepPrompts);
+  } else if (parsed.insight && (historyTextMeaningful(parsed.insight.psychology) || historyTextMeaningful(parsed.insight.analysis) || historyTextMeaningful(parsed.insight.conclusion) || historyTextMeaningful(parsed.insight.summary) || historyTextMeaningful(parsed.insight.reflection))) {
+    selected = "blocks";
+    html = renderHistoryInsightBlocksHtml(parsed.insight);
+  } else if (Array.isArray(review && review.thinkHistory) && review.thinkHistory.some((item) => historyTextMeaningful(item && (item.question || item.reply || item.insight || item.title)))) {
+    selected = "thinkHistory";
+    html = renderHistoryThinkHistoryHtml(review.thinkHistory, review);
+  } else if (review && review.journal && (historyTextMeaningful(review.journal.deep) || historyTextMeaningful(review.journal.deepPrompts))) {
+    selected = "deep";
+    html = renderHistoryDeepJournalHtml(review.journal.deep, review.journal.deepPrompts);
+  }
+  if (parsed.rounds.some(historyRoundHasContent) && !String(html || "").trim()) {
+    console.error("[history-debug] GUIDE EXISTS BUT RENDER EMPTY", {
+      date: review && (review.date || review.iso),
+      roundsLength: parsed.rounds.length,
+      selectedFormat: selected,
+      helperKind: helperSource.kind,
+      htmlLength: String(html || "").length,
+    });
+  }
+  if (!window.__NICHI_HISTORY_DEBUG) window.__NICHI_HISTORY_DEBUG = [];
+  window.__NICHI_HISTORY_DEBUG.push({
+    date: review && review.date,
+    selected,
+    helperKind: helperSource.kind,
+    roundsLength: parsed.rounds.length,
+    htmlLength: String(html || "").length,
+  });
+  console.log("[history-debug] selected format", selected);
+  console.log("[history-debug] rendered html length", String(html || "").length);
+  return html;
 }
 
 function renderHistoryJournal(review) {
+  const parsedGuide = historyGuideFromReview(review);
+  console.log("[history-debug] date", review && review.date);
+  console.log("[history-debug] review keys", review && Object.keys(review));
+  console.log("[history-debug] review", review);
+  console.log("[history-debug] journal", review && review.journal);
+  console.log("[history-debug] insight", review && review.journal && review.journal.insight);
+  console.log("[history-debug] guide", review && review.journal && review.journal.insight && review.journal.insight.guide);
+  console.log("[history-debug] rounds", parsedGuide.rounds);
+  console.log("[history-debug] thinkHistory", review && review.thinkHistory);
+  console.log("[history-debug] deep", review && review.journal && review.journal.deep);
   const journal = review?.journal && typeof review.journal === "object" ? review.journal : emptyJournal();
   const thanks = historyItemsHtml(thanksItemsFrom(journal.thanksText || journal.thanks));
   const awareFields = (
@@ -11066,6 +11152,14 @@ function renderHistoryJournal(review) {
     }).filter(Boolean);
   })();
   const insightHtml = renderHistoryDeepThinking(review);
+  console.log("[history-debug] rendered html length", String(insightHtml || "").length);
+  if (parsedGuide.rounds.some(historyRoundHasContent) && !String(insightHtml || "").trim()) {
+    console.error("[history-debug] GUIDE EXISTS BUT RENDER EMPTY", {
+      date: review && review.date,
+      roundsLength: parsedGuide.rounds.length,
+      htmlLength: String(insightHtml || "").length,
+    });
+  }
   const parts = historySectionsHtml([
     ["① 今日感謝", "thanks", historyBlock("", thanks)],
     [
@@ -11148,16 +11242,37 @@ function renderHistory() {
     return;
   }
 
+  console.log(
+    "[history-debug] history list keys",
+    entries.map(([iso, review]) => ({
+      iso,
+      reviewDate: review && review.date,
+      sameKey: Boolean(review && review.date ? review.date === iso : true),
+      hasGuideRounds: historyHasGuideRounds(review),
+      rounds: historyGuideFromReview(review).rounds.length,
+    }))
+  );
   list.innerHTML = entries
     .map(([iso, review]) => {
-      const ai = review.organize;
+      const historyReview = { ...review, date: (review && review.date) || iso };
+      if (iso !== historyReview.date) {
+        console.warn("[history-debug] date key mismatch", { iso, reviewDate: review && review.date });
+      }
+      const ai = historyReview.organize;
       const open = state.historyOpen === iso;
       const tags = (ai?.tags || (ai?.themeCategory ? [ai.themeCategory] : []))
         .map((tag) => `<span class="tag tag--ai">${escapeHtml(tag)}</span>`)
         .join("");
-      const highlight = historyHighlight(review);
+      const highlight = historyHighlight(historyReview);
+      const journalHtml = renderHistoryJournal(historyReview);
+      const hasInsightSection = /history-subcard__title">深度思考</.test(journalHtml);
+      console.log("[history-debug] card", iso, {
+        hasInsightSection,
+        journalHtmlLength: journalHtml.length,
+        accordionClosedByDefault: !open,
+      });
       return `
-        <article class="history-card ${open ? "is-open" : ""}" data-history-iso="${escapeHtml(iso)}">
+        <article class="history-card ${open ? "is-open" : ""}" data-history-iso="${escapeHtml(iso)}" data-history-debug-guide="${historyHasGuideRounds(historyReview) ? "1" : "0"}" data-history-debug-insight="${hasInsightSection ? "1" : "0"}">
           <button class="history-card__summary" data-history-toggle="${iso}" type="button" aria-expanded="${open ? "true" : "false"}">
             <span class="history-card__date">${formatDisplayDate(iso)}</span>
             <span class="history-card__chevron" aria-hidden="true"></span>
@@ -11166,7 +11281,7 @@ function renderHistory() {
           </button>
           <div class="history-card__panel">
             <div class="history-card__panel-inner">
-              ${renderHistoryJournal(review)}
+              ${journalHtml}
               <div class="history-card__actions">
                 <button class="btn btn--ghost btn--tiny" data-open="${iso}" type="button">打開這天</button>
               </div>
