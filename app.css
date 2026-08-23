@@ -2182,23 +2182,24 @@ body.nav-closed .auth-pay {
 
 .history-card__date {
   margin: 0;
-  color: var(--header);
-  font-weight: 600;
+  color: var(--muted);
+  font-weight: 500;
   font-family: var(--serif);
-  font-size: 14px;
-  letter-spacing: 0.02em;
+  font-size: 13px;
+  letter-spacing: 0.04em;
 }
 
 .history-card__summary {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) 28px;
   grid-template-areas:
+    "title chevron"
     "date chevron"
-    "excerpt chevron"
     "tags chevron";
-  gap: 6px 14px;
+  gap: 6px 16px;
+  align-items: center;
   width: 100%;
-  padding: 16px 18px;
+  padding: 18px 20px;
   border: 0;
   appearance: none;
   background: transparent;
@@ -2212,18 +2213,27 @@ body.nav-closed .auth-pay {
   background: var(--cream);
 }
 
+.history-card__title {
+  grid-area: title;
+  margin: 0;
+  color: var(--heading);
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .history-card__date {
   grid-area: date;
 }
 
 .history-card__excerpt {
-  grid-area: excerpt;
-  margin: 0;
-  color: var(--ink-soft);
-  font-size: 15px;
-  font-weight: 500;
-  line-height: 1.75;
-  overflow-wrap: anywhere;
+  display: none;
 }
 
 .history-card__tags {
@@ -2242,6 +2252,7 @@ body.nav-closed .auth-pay {
   border-radius: 999px;
   background: var(--accent-soft);
   position: relative;
+  transform: rotate(-90deg);
   transition: transform 0.28s ease, background 0.28s ease;
 }
 
@@ -2263,8 +2274,20 @@ body.nav-closed .auth-pay {
 }
 
 .history-card.is-open .history-card__chevron {
-  transform: rotate(180deg);
+  transform: rotate(0deg);
   background: #efe8dc;
+}
+
+@media (min-width: 720px) {
+  .history-card__summary {
+    padding: 18px 22px;
+    gap: 8px 18px;
+  }
+
+  .history-card__title {
+    -webkit-line-clamp: 1;
+    font-size: 19px;
+  }
 }
 
 .history-card__panel {

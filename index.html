@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=150" />
+    <link rel="stylesheet" href="app.css?v=151" />
     <style>
       .splash {
         position: fixed;
@@ -782,7 +782,7 @@
         <section class="page" id="page-history" data-page="history" hidden>
           <header class="page__header">
             <h2 class="page__title">歷史紀錄</h2>
-            <p class="page__subtitle">先看當天最關鍵的一句，點開再展開完整復盤。</p>
+            <p class="page__subtitle">先看這一天真正看見了什麼，點開再讀完整復盤。</p>
           </header>
 
           <div class="history-toolbar">
@@ -796,10 +796,11 @@
             </label>
             <div class="chips" id="historyTags" aria-label="標籤篩選">
               <button class="chip is-active" data-tag="all" type="button">全部</button>
-              <button class="chip" data-tag="事業經營" type="button">事業經營</button>
-              <button class="chip" data-tag="人間關係" type="button">人間關係</button>
+              <button class="chip" data-tag="自我覺察" type="button">自我覺察</button>
               <button class="chip" data-tag="身心狀態" type="button">身心狀態</button>
-              <button class="chip" data-tag="覺察" type="button">覺察</button>
+              <button class="chip" data-tag="人際關係" type="button">人際關係</button>
+              <button class="chip" data-tag="感恩" type="button">感恩</button>
+              <button class="chip" data-tag="行動力" type="button">行動力</button>
             </div>
           </div>
 
@@ -1033,6 +1034,7 @@
     <script src="auth/pkce-storage.js?v=2"></script>
     <script src="analytics.js?v=1"></script>
     <script src="lib/review-merge.js?v=2"></script>
-    <script src="app.js?v=181"></script>
+    <script src="lib/history-summary.js?v=1"></script>
+    <script src="app.js?v=182"></script>
   </body>
 </html>

@@ -10726,39 +10726,24 @@ function firstHighlightSentence(text, max = 84) {
   return excerptText(sentence, max);
 }
 
+function historySummaryApi() {
+  return (typeof window !== "undefined" && window.NichiHistorySummary) || {};
+}
+
+function getHistoryDailySummary(review) {
+  const api = historySummaryApi();
+  if (typeof api.getHistoryDailySummary === "function") return api.getHistoryDailySummary(review);
+  return { title: "看看這一天留下的紀錄", tags: [] };
+}
+
+function formatHistoryListDate(iso) {
+  const [y, m, d] = String(iso || "").split("-");
+  if (!y || !m || !d) return String(iso || "");
+  return `${y} / ${m} / ${d}`;
+}
+
 function historyHighlight(review) {
-  const journal = review?.journal && typeof review.journal === "object" ? review.journal : {};
-  const insight = journal.insight && typeof journal.insight === "object" ? journal.insight : {};
-  const guide = insight.guide && typeof insight.guide === "object" ? insight.guide : {};
-  const organize = review?.organize && typeof review.organize === "object" ? review.organize : {};
-  const thinkHistory = Array.isArray(review?.thinkHistory) ? review.thinkHistory : [];
-  const deepSlots = Array.isArray(journal.deep) ? journal.deep : [];
-  const candidates = [
-    insight.psychology,
-    insight.analysis,
-    insight.reflection,
-    insight.conclusion,
-    insight.summary,
-    insight.title,
-    guide.summary,
-    guide.awareness,
-    ...(Array.isArray(guide.rounds) ? guide.rounds.map((item) => item && (item.answer || item.question)) : []),
-    ...(insight.takeaways || []),
-    ...thinkHistory.map((item) => item && (item.insight || item.reply || item.question || item.title)),
-    ...deepSlots.map((item) => item && (item.deep || item.plain)),
-    organize.themeInsight,
-    organize.conclusion,
-    organize.themeTitle,
-    organize.reflection,
-    joinJournalAnswers(journal.awareness),
-    journal.event,
-    review?.rawText,
-  ];
-  for (const item of candidates) {
-    const sentence = firstHighlightSentence(item, 84);
-    if (sentence.replace(/[。！？!?…\s]/g, "").length >= 6) return sentence;
-  }
-  return "這天留下了一筆復盤。";
+  return getHistoryDailySummary(review).title;
 }
 
 function historyJournalIcon(name) {
@@ -11286,11 +11271,13 @@ function renderHistory() {
     .sort((a, b) => b[0].localeCompare(a[0]))
     .filter(([iso, review]) => {
       if (state.historyTag !== "all") {
-        const tags = review.organize?.tags || (review.organize?.themeCategory ? [review.organize.themeCategory] : []);
-        if (!tags.includes(state.historyTag)) return false;
+        const summaryTags = getHistoryDailySummary(review).tags;
+        const organizeTags = review.organize?.tags || (review.organize?.themeCategory ? [review.organize.themeCategory] : []);
+        if (![...summaryTags, ...organizeTags].includes(state.historyTag)) return false;
       }
       if (!query) return true;
-      const hay = `${iso} ${formatDisplayDate(iso)} ${reviewSearchText(review)} ${historyHighlight(review)}`.toLowerCase();
+      const summary = getHistoryDailySummary(review);
+      const hay = `${iso} ${formatDisplayDate(iso)} ${formatHistoryListDate(iso)} ${reviewSearchText(review)} ${summary.title} ${(summary.tags || []).join(" ")}`.toLowerCase();
       return hay.includes(query);
     });
 
@@ -11321,12 +11308,11 @@ function renderHistory() {
       if (iso !== historyReview.date) {
         console.warn("[history-debug] date key mismatch", { iso, reviewDate: review && review.date });
       }
-      const ai = historyReview.organize;
       const open = state.historyOpen === iso;
-      const tags = (ai?.tags || (ai?.themeCategory ? [ai.themeCategory] : []))
+      const summary = getHistoryDailySummary(historyReview);
+      const tags = (summary.tags || [])
         .map((tag) => `<span class="tag tag--ai">${escapeHtml(tag)}</span>`)
         .join("");
-      const highlight = historyHighlight(historyReview);
       const journalHtml = renderHistoryJournal(historyReview);
       const hasInsightSection = /history-subcard__title">深度思考</.test(journalHtml);
       console.log("[history-debug] card", iso, {
@@ -11337,10 +11323,10 @@ function renderHistory() {
       return `
         <article class="history-card ${open ? "is-open" : ""}" data-history-iso="${escapeHtml(iso)}" data-history-debug-guide="${historyHasGuideRounds(historyReview) ? "1" : "0"}" data-history-debug-insight="${hasInsightSection ? "1" : "0"}">
           <button class="history-card__summary" data-history-toggle="${iso}" type="button" aria-expanded="${open ? "true" : "false"}">
-            <span class="history-card__date">${formatDisplayDate(iso)}</span>
-            <span class="history-card__chevron" aria-hidden="true"></span>
-            <span class="history-card__excerpt">${escapeHtml(highlight)}</span>
+            <span class="history-card__title">${escapeHtml(summary.title)}</span>
+            <span class="history-card__date">${escapeHtml(formatHistoryListDate(iso))}</span>
             ${tags ? `<span class="history-card__tags">${tags}</span>` : ""}
+            <span class="history-card__chevron" aria-hidden="true"></span>
           </button>
           <div class="history-card__panel">
             <div class="history-card__panel-inner">
