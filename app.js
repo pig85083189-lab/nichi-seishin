@@ -407,13 +407,14 @@ function getReview(iso) {
 function upsertReview(iso, patch) {
   const reviews = getReviews();
   const prev = reviews[iso] && typeof reviews[iso] === "object" ? reviews[iso] : {};
-  reviews[iso] = {
+  const incoming = {
     ...prev,
     ...patch,
     date: iso,
-    userId: (state.user && state.user.id) || prev.userId || "",
+    userId: (state.user && state.user.id) || patch.userId || prev.userId || "",
     updatedAt: patch.updatedAt || new Date().toISOString(),
   };
+  reviews[iso] = pickReview(prev, incoming) || incoming;
   saveReviews(reviews);
   return reviews[iso];
 }
@@ -827,7 +828,8 @@ function reviewIsComplete(review) {
       (review.completedAt ||
         review.organize ||
         String(review.rawText || "").trim() ||
-        journalHasContent(review.journal))
+        journalHasContent(review.journal) ||
+        hasMeaningfulThinkHistory(review.thinkHistory))
   );
 }
 
@@ -838,6 +840,7 @@ function reviewSearchText(review) {
     review.rawText,
     review.gratitude,
     review.journal && JSON.stringify(review.journal),
+    Array.isArray(review.thinkHistory) ? JSON.stringify(review.thinkHistory) : "",
     ai.themeCategory,
     ai.themeTitle,
     ai.themeInsight,
@@ -2058,21 +2061,45 @@ function reviewContentScore(review) {
   return score;
 }
 
-function fieldFilled(value) {
+function reviewMergeApi() {
+  return (typeof window !== "undefined" && window.NichiReviewMerge) || {};
+}
+
+function hasMeaningfulValue(value) {
+  const api = reviewMergeApi();
+  if (typeof api.hasMeaningfulValue === "function") return api.hasMeaningfulValue(value);
   if (value == null) return false;
-  if (typeof value === "string") return Boolean(value.trim());
-  if (Array.isArray(value)) return value.length > 0;
-  if (typeof value === "object") return Object.keys(value).length > 0;
-  return true;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (typeof value === "number") return Number.isFinite(value);
+  if (typeof value === "boolean") return true;
+  if (Array.isArray(value)) return value.some((item) => hasMeaningfulValue(item));
+  if (typeof value === "object") return Object.keys(value).some((key) => hasMeaningfulValue(value[key]));
+  return false;
+}
+
+function hasMeaningfulInsight(insight) {
+  const api = reviewMergeApi();
+  if (typeof api.hasMeaningfulInsight === "function") return api.hasMeaningfulInsight(insight);
+  return hasMeaningfulValue(insight);
+}
+
+function hasMeaningfulThinkHistory(thinkHistory) {
+  const api = reviewMergeApi();
+  if (typeof api.hasMeaningfulThinkHistory === "function") return api.hasMeaningfulThinkHistory(thinkHistory);
+  return Array.isArray(thinkHistory) && thinkHistory.some((item) => hasMeaningfulValue(item));
 }
 
 function pickFilled(older, newer) {
-  if (fieldFilled(newer)) return newer;
-  if (fieldFilled(older)) return older;
+  const api = reviewMergeApi();
+  if (typeof api.pickFilled === "function") return api.pickFilled(older, newer);
+  if (hasMeaningfulValue(newer)) return newer;
+  if (hasMeaningfulValue(older)) return older;
   return newer === undefined ? older : newer;
 }
 
 function mergeJournalObjects(older, newer) {
+  const api = reviewMergeApi();
+  if (typeof api.mergeJournalObjects === "function") return api.mergeJournalObjects(older, newer);
   const a = older && typeof older === "object" ? older : {};
   const b = newer && typeof newer === "object" ? newer : {};
   const next = { ...a };
@@ -2083,14 +2110,10 @@ function mergeJournalObjects(older, newer) {
 }
 
 function pickReview(left, right) {
+  const api = reviewMergeApi();
+  if (typeof api.pickReview === "function") return api.pickReview(left, right);
   if (!left) return right || null;
   if (!right) return left;
-  const scoreL = reviewContentScore(left);
-  const scoreR = reviewContentScore(right);
-  const emptyL = scoreL < 10 && !left.completedAt;
-  const emptyR = scoreR < 10 && !right.completedAt;
-  if (emptyL && !emptyR) return right;
-  if (emptyR && !emptyL) return left;
   const leftNewer = newerStamp(left, right);
   const newer = leftNewer ? left : right;
   const older = leftNewer ? right : left;
@@ -4593,18 +4616,27 @@ function normalizeInsightList(raw, max = 4) {
 function normalizeThinkGuide(raw) {
   const data = raw && typeof raw === "object" ? raw : {};
   const rounds = (Array.isArray(data.rounds) ? data.rounds : [])
-    .map((item) => ({
-      question: String(item?.question || "").trim(),
-      hint: String(item?.hint || "").trim(),
-      answer: String(item?.answer || "").trim(),
-    }))
-    .filter((item) => item.question)
+    .map((item) => {
+      const row = item && typeof item === "object" ? item : {};
+      const question = String(row.question || "").trim();
+      const hint = String(row.hint || "").trim();
+      const answer = String(row.answer || "").trim();
+      if (!question && !hint && !answer) return null;
+      return {
+        ...row,
+        question,
+        hint,
+        answer,
+      };
+    })
+    .filter(Boolean)
     .slice(0, 3);
   const roundNum = Number(data.round);
   const round = Number.isFinite(roundNum) ? Math.max(0, Math.min(4, Math.floor(roundNum))) : 0;
   const awareness = String(data.awareness || "").trim();
   const summary = String(data.summary || awareness || "").trim();
   return {
+    ...data,
     round: round || (summary ? 4 : rounds.length),
     rounds,
     summary,
@@ -4629,6 +4661,7 @@ function normalizeInsight(insight) {
   const conclusion = String(data.conclusion || data.summary || "").trim();
   const guide = normalizeThinkGuide(data.guide);
   return {
+    ...data,
     title: String(data.title || guide.title || "").trim(),
     conclusion: conclusion || psychology || guide.summary,
     psychology: psychology || conclusion || guide.summary,
@@ -4638,6 +4671,8 @@ function normalizeInsight(insight) {
     suggestions: normalizeInsightList(data.suggestions || data.actions || guide.actions, 3),
     takeaways: normalizeInsightList(data.takeaways || data.keyPoints, 4),
     guide,
+    analysis: data.analysis,
+    summary: data.summary,
     sig: String(data.sig || "").trim(),
   };
 }
@@ -4686,9 +4721,8 @@ function journalHasContent(journal) {
     journal.manifestSentence,
   ];
   if (textBits.some((item) => String(item || "").trim())) return true;
-  if (deepHasContent(journal.deep)) return true;
-  if (String(journal.insight?.conclusion || journal.insight?.psychology || journal.insight?.reflection || journal.insight?.guide?.summary || "").trim()) return true;
-  if ((journal.insight?.suggestions || []).length || (journal.insight?.takeaways || []).length || (journal.insight?.guide?.rounds || []).length) return true;
+  if (deepHasContent(journal.deep) || hasMeaningfulValue(journal.deepPrompts)) return true;
+  if (hasMeaningfulInsight(journal.insight)) return true;
   if ((journal.bodyTags || []).length || (journal.awarenessChecks || []).length || (journal.executionChecks || []).length || (journal.manifestChecks || []).length) return true;
   const bodyCheck = journal.bodyCheck && typeof journal.bodyCheck === "object" ? journal.bodyCheck : {};
   if (["mood", "body", "sleep"].some((key) => (bodyCheck[key] && Array.isArray(bodyCheck[key].flags) && bodyCheck[key].flags.length) || (bodyCheck[key] && bodyCheck[key].none))) return true;
@@ -10682,16 +10716,24 @@ function firstHighlightSentence(text, max = 84) {
 
 function historyHighlight(review) {
   const journal = review?.journal && typeof review.journal === "object" ? review.journal : {};
-  const insight = normalizeInsight(journal.insight);
+  const insight = journal.insight && typeof journal.insight === "object" ? journal.insight : {};
+  const guide = insight.guide && typeof insight.guide === "object" ? insight.guide : {};
   const organize = review?.organize && typeof review.organize === "object" ? review.organize : {};
+  const thinkHistory = Array.isArray(review?.thinkHistory) ? review.thinkHistory : [];
+  const deepSlots = Array.isArray(journal.deep) ? journal.deep : [];
   const candidates = [
     insight.psychology,
+    insight.analysis,
     insight.reflection,
     insight.conclusion,
+    insight.summary,
     insight.title,
-    insight.guide?.summary,
-    ...(insight.guide?.rounds || []).map((item) => item.answer),
+    guide.summary,
+    guide.awareness,
+    ...(Array.isArray(guide.rounds) ? guide.rounds.map((item) => item && (item.answer || item.question)) : []),
     ...(insight.takeaways || []),
+    ...thinkHistory.map((item) => item && (item.insight || item.reply || item.question || item.title)),
+    ...deepSlots.map((item) => item && (item.deep || item.plain)),
     organize.themeInsight,
     organize.conclusion,
     organize.themeTitle,
@@ -10837,9 +10879,149 @@ function historyBodyCheckHtml(journal) {
   return historyItemsHtml(lines);
 }
 
+function renderHistoryGuideHtml(insight, guide) {
+  const api = reviewMergeApi();
+  const rounds =
+    typeof api.visibleGuideRounds === "function"
+      ? api.visibleGuideRounds(guide)
+      : (Array.isArray(guide?.rounds) ? guide.rounds : []).filter((item) => hasMeaningfulValue(item));
+  const roundBlocks = rounds
+    .map((item, index) => {
+      const question = String(item.question || "").trim();
+      const hint = String(item.hint || "").trim();
+      const answer = String(item.answer || "").trim();
+      return historyBlock(
+        `第 ${String(index + 1).padStart(2, "0")} 輪`,
+        `${question ? `<p class="history-journal__text">${escapeHtml(question)}</p>` : ""}${
+          hint ? `<p class="history-journal__note">${escapeHtml(hint)}</p>` : ""
+        }${
+          answer
+            ? `<p class="history-journal__note">${escapeHtml(answer)}</p>`
+            : `<p class="history-journal__note">未回答</p>`
+        }`
+      );
+    })
+    .join("");
+  const closeBlocks = [
+    guide.title || insight.title
+      ? historyBlock("", `<p class="history-journal__headline">${escapeHtml(guide.title || insight.title)}</p>`)
+      : "",
+    guide.awareness || guide.summary
+      ? historyBlock("今日覺察", `<p class="history-journal__text">${escapeHtml(guide.awareness || guide.summary)}</p>`)
+      : "",
+    guide.selfSeen
+      ? historyBlock("今天我看見的自己", `<p class="history-journal__text">${escapeHtml(guide.selfSeen)}</p>`)
+      : "",
+    guide.takeaway
+      ? historyBlock("今日帶走的一句話", `<p class="history-journal__headline">${escapeHtml(guide.takeaway)}</p>`)
+      : "",
+    Array.isArray(guide.actions) && guide.actions.length
+      ? historyBlock(
+          "兩件具體下一步",
+          `<ul class="history-journal__list">${guide.actions
+            .map((item) => String(item || "").trim())
+            .filter(Boolean)
+            .map((item) => `<li>${escapeHtml(item)}</li>`)
+            .join("")}</ul>`
+        )
+      : "",
+  ].join("");
+  return `${roundBlocks}${closeBlocks}`;
+}
+
+function renderHistoryInsightBlocksHtml(insight) {
+  const psychology = String(insight.psychology || insight.analysis || insight.logic || "").trim();
+  const conclusion = String(insight.conclusion || insight.summary || "").trim();
+  const reflection = String(insight.reflection || "").trim();
+  const suggestions = Array.isArray(insight.suggestions) ? insight.suggestions : [];
+  const takeaways = Array.isArray(insight.takeaways) ? insight.takeaways : [];
+  return `${insight.title ? historyBlock("", `<p class="history-journal__headline">${escapeHtml(insight.title)}</p>`) : ""}${
+    psychology || conclusion
+      ? historyBlock("① 今天的身心訊號", `<p class="history-journal__text">${escapeHtml(psychology || conclusion)}</p>`)
+      : ""
+  }${insight.bodyLink ? historyBlock("", `<p class="history-journal__note">${escapeHtml(insight.bodyLink)}</p>`) : ""}${
+    reflection
+      ? historyBlock("② 客觀檢討與反思", `<p class="history-journal__text">${escapeHtml(reflection)}</p>`)
+      : ""
+  }${
+    suggestions.length
+      ? historyBlock(
+          "③ 具體突破建議（怎麼做會更好）",
+          `<ul class="history-journal__list">${suggestions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+        )
+      : ""
+  }${
+    takeaways.length
+      ? historyBlock(
+          "今日核心重點整理",
+          `<ul class="history-journal__list">${takeaways.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+        )
+      : ""
+  }`;
+}
+
+function renderHistoryThinkHistoryHtml(thinkHistory, review) {
+  const list = Array.isArray(thinkHistory) ? thinkHistory : [];
+  return list
+    .map((round, index) =>
+      renderThoughtUnit(round, index, list.length || 5, {
+        history: list,
+        rawText: review?.rawText || "",
+      })
+    )
+    .join("");
+}
+
+function renderHistoryDeepJournalHtml(deep, deepPrompts) {
+  const slots = Array.isArray(deep) ? deep : deep && typeof deep === "object" ? [deep] : [];
+  const prompts = Array.isArray(deepPrompts) ? deepPrompts : [];
+  const slotHtml = slots
+    .map((slot, index) => {
+      const prompt = prompts[index] && typeof prompts[index] === "object" ? prompts[index] : {};
+      const title = String(prompt.title || prompt.question || `深度思考 ${String(index + 1).padStart(2, "0")}`).trim();
+      const lines = [];
+      if (slot && typeof slot === "object") {
+        if (String(slot.plain || "").trim()) lines.push(String(slot.plain).trim());
+        if (String(slot.deep || "").trim()) lines.push(String(slot.deep).trim());
+        (Array.isArray(slot.followups) ? slot.followups : []).forEach((item) => {
+          if (String(item || "").trim()) lines.push(String(item).trim());
+        });
+        (Array.isArray(slot.notes) ? slot.notes : []).forEach((item) => {
+          if (String(item || "").trim()) lines.push(String(item).trim());
+        });
+      } else if (String(slot || "").trim()) {
+        lines.push(String(slot).trim());
+      }
+      if (!lines.length) return "";
+      return historyBlock(title, lines.map((line) => `<p class="history-journal__text">${escapeHtml(line)}</p>`).join(""));
+    })
+    .join("");
+  if (slotHtml) return slotHtml;
+  return prompts
+    .map((item, index) => {
+      const title = String((item && (item.title || item.question)) || `深度思考 ${String(index + 1).padStart(2, "0")}`).trim();
+      const body = String((item && (item.body || item.prompt || item.note)) || "").trim();
+      if (!title && !body) return "";
+      return historyTextBlock(title, body || title);
+    })
+    .join("");
+}
+
+function renderHistoryDeepThinking(review) {
+  const api = reviewMergeApi();
+  const source =
+    typeof api.historyDeepThinkingSource === "function"
+      ? api.historyDeepThinkingSource(review)
+      : { kind: "none" };
+  if (source.kind === "guide") return renderHistoryGuideHtml(source.insight || {}, source.guide || {});
+  if (source.kind === "blocks") return renderHistoryInsightBlocksHtml(source.insight || {});
+  if (source.kind === "thinkHistory") return renderHistoryThinkHistoryHtml(source.thinkHistory, review);
+  if (source.kind === "deep") return renderHistoryDeepJournalHtml(source.deep, source.deepPrompts);
+  return "";
+}
+
 function renderHistoryJournal(review) {
   const journal = review?.journal && typeof review.journal === "object" ? review.journal : emptyJournal();
-  const insight = normalizeInsight(journal.insight);
   const thanks = historyItemsHtml(thanksItemsFrom(journal.thanksText || journal.thanks));
   const awareFields = (
     journal.awarenessPrompts && journal.awarenessPrompts.length ? journal.awarenessPrompts : AWARENESS_QUESTIONS
@@ -10883,68 +11065,7 @@ function renderHistoryJournal(review) {
       return "";
     }).filter(Boolean);
   })();
-  const insightHtml = (() => {
-    const guide = insight.guide || emptyThinkGuide();
-    if (guide.rounds.length || guide.summary) {
-      const roundBlocks = guide.rounds
-        .map((item, index) =>
-          historyBlock(
-            `第 ${String(index + 1).padStart(2, "0")} 輪`,
-            `<p class="history-journal__text">${escapeHtml(item.question)}</p>${
-              item.answer ? `<p class="history-journal__note">${escapeHtml(item.answer)}</p>` : ""
-            }`
-          )
-        )
-        .join("");
-      const closeBlocks = [
-        guide.title || insight.title
-          ? historyBlock("", `<p class="history-journal__headline">${escapeHtml(guide.title || insight.title)}</p>`)
-          : "",
-        guide.awareness || guide.summary
-          ? historyBlock("今日覺察", `<p class="history-journal__text">${escapeHtml(guide.awareness || guide.summary)}</p>`)
-          : "",
-        guide.selfSeen
-          ? historyBlock("今天我看見的自己", `<p class="history-journal__text">${escapeHtml(guide.selfSeen)}</p>`)
-          : "",
-        guide.takeaway
-          ? historyBlock("今日帶走的一句話", `<p class="history-journal__headline">${escapeHtml(guide.takeaway)}</p>`)
-          : "",
-        guide.actions.length
-          ? historyBlock(
-              "兩件具體下一步",
-              `<ul class="history-journal__list">${guide.actions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
-            )
-          : "",
-      ].join("");
-      return `${roundBlocks}${closeBlocks}`;
-    }
-    if (!(insight.conclusion || insight.psychology || insight.reflection || insight.suggestions.length || insight.takeaways.length)) {
-      return "";
-    }
-    return `${insight.title ? historyBlock("", `<p class="history-journal__headline">${escapeHtml(insight.title)}</p>`) : ""}${
-      insight.psychology || insight.conclusion
-        ? historyBlock("① 今天的身心訊號", `<p class="history-journal__text">${escapeHtml(insight.psychology || insight.conclusion)}</p>`)
-        : ""
-    }${insight.bodyLink ? historyBlock("", `<p class="history-journal__note">${escapeHtml(insight.bodyLink)}</p>`) : ""}${
-      insight.reflection
-        ? historyBlock("② 客觀檢討與反思", `<p class="history-journal__text">${escapeHtml(insight.reflection)}</p>`)
-        : ""
-    }${
-      insight.suggestions.length
-        ? historyBlock(
-            "③ 具體突破建議（怎麼做會更好）",
-            `<ul class="history-journal__list">${insight.suggestions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
-          )
-        : ""
-    }${
-      insight.takeaways.length
-        ? historyBlock(
-            "今日核心重點整理",
-            `<ul class="history-journal__list">${insight.takeaways.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
-          )
-        : ""
-    }`;
-  })();
+  const insightHtml = renderHistoryDeepThinking(review);
   const parts = historySectionsHtml([
     ["① 今日感謝", "thanks", historyBlock("", thanks)],
     [
