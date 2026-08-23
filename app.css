@@ -5443,6 +5443,16 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   word-break: break-word;
 }
 
+.aware-result__line span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--heading);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
 .aware-result__actions {
   display: flex;
   flex-wrap: wrap;

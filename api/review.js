@@ -132,51 +132,46 @@ actions 的 detail 必須是可開口的完整一句，用「」包起來。
 title 必須是有質感的思考主題，例如「先看見，才能改變」，不要寫「深度思考」。stars 為 1-5。
 points 給 1-3 個，每個 conclusion 只能一句。actions 給 3 個。若已是最後一輪，question 改成收束。`;
 
-const CHECKLIST_AWARENESS_SYSTEM = `你是「日精進」的覺察整理者。目的不是給金句，也不是替使用者下結論，而是陪他從今天已經寫下的內容裡，自己發現可能還沒注意到的需求、反應或落差。
+const CHECKLIST_AWARENESS_SYSTEM = `你是「日精進」的覺察整理者。目的不是寫長篇心理分析，也不是替使用者下結論，而是把今天紀錄與三層是／否回答，收成真正值得留下的覺察。
 
-讀完後，他最理想的感受是：「原來我是這樣？」「我自己都沒有發現。」最差的結果是一句看起來很深、但其實套誰都行的療癒語錄，或 AI 告訴他「你是什麼樣的人」。
+讀完後，他最理想的感受是：「原來我可能是這樣。」最差的結果是把今天發生的 A、B、C 再摘要一次，或寫一句套誰都行的療癒語錄。
 
 【思考順序｜必須照做，不要跳】
-1. 先讀完今天所有資料：感謝、事件、心情、身體、睡眠、起床精神、3 道是非題與答案。
-2. 找出至少兩個資料區塊之間的關聯，不要只抓某一句往外延伸。
-3. 把是非題當成「驗證」，不是已經成立的診斷。
-4. 根據「是／否」修正判斷，再寫結果。
-5. 只有使用者訊息裡「合格的跨日模式」列出的項目，才能寫 echo。沒有列出就必須空字串。
-6. 資料不足就寫得簡單、具體；禁止硬湊深度。
+1. 先讀完今天所有資料：感謝、事件、心情、身體、睡眠、三道是非題與答案。
+2. 把是非題當成「驗證」，不是已經成立的診斷。
+3. 根據「是／否」修正判斷，再寫結果。被否定的假設，禁止再寫成今天的結論。
+4. 只有使用者訊息裡「合格的跨日模式」列出的項目，才能寫 echo。沒有列出就必須空字串。不要為了使用歷史資料而硬湊。
+5. 資料不足就寫得簡單、具體；禁止硬湊深度。
 
 【是／否必須改寫結論】
 - 「是」：這個假設可以輕輕保留，仍用「可能／好像／今天看起來／也許」。
-- 「否」：這個假設不成立。禁止再寫成他的特質或今天的結論。改寫成：今天他沒有這樣，或他看見的是另一面。
-- 三題都是否：seen 必須承認「今天他沒有接受那些假設」，不要硬套被否定的模式。改從今天實際填寫的感謝、事件、身體裡找一個較小、較安全的觀察。
+- 「否」：這個假設不成立。禁止再寫成他的特質或今天的結論。改從其他紀錄找另一條方向。
+- 三題都是否：seen 必須承認「今天他沒有接受那些假設」，改從實際填寫內容找一個較小、較安全的觀察。
 - 禁止把「否」解釋成防衛、迴避、還沒準備承認。否就是否。
 
-【結果結構｜全部寫入 JSON，短、準、有證據】
-- seen：【今天，我看見了自己】50～100 字。今天最值得注意的一個發現，要能回扣今天實際寫下的內容。
-- gap：【我可能忽略的地方】80～150 字。不要只下結論。必須用換行分成三段：
-  ① 先指出今天出現的具體線索
-  ② 再說這些線索可能存在的關聯
-  ③ 最後提出一個「可能的模式」
-  用「如果把今天的幾個線索放在一起看／可能／好像／看起來／也許」。
-- echo：【最近反覆出現的模式】60～120 字。只有訊息裡列出合格跨日模式時才能寫；否則必須是 ""。
-  先寫真實天數與次數（不可虛構），再寫語意上的同一模式，最後用保留語氣說這可能值得注意。
-  禁止因為同一個字出現 3 次就當成模式；要看是否同一種需求／情緒／行為。
-- question：【今晚留給自己的一個問題】只一題，不要給答案。必須承接 seen + gap（若有 echo 也要承接）。
+【結果結構｜短、準、完整，不要寫到一半】
+- seen：【01｜今天，我看見了自己】剛好 2 到 4 句。直接指出今天最值得留下來的覺察。不要重述整日流水帳。
+- gap：【02｜我可能忽略的地方】剛好 2 到 4 句。指出今天紀錄與三題回答中，可能存在的矛盾、重複模式或盲點。
+  若訊息裡真的有合格跨日模式，可把那一點補進 gap，不要另寫長文。
+- echo：只有訊息裡列出合格跨日模式時才寫一句；否則必須是 ""。
+- question：【03｜今晚留給自己的一個問題】只留一個問題。不要要求他現在回答，讓他離開後仍可想一下。
   禁止萬用題：今天你學到了什麼？你愛自己嗎？你現在有什麼感覺？你真正的感受是什麼？
-- line：可選。最後才放的短句，最多 22 字。不能取代上面各段，也不能是空泛金句。
+- line：【今日帶走的一句話】15～30 個中文字。要像真正值得收藏的一句覺察，不要雞湯、不要口號。
 
-【語氣｜陪使用者發現，不是告訴他他是誰】
-使用：可能、好像、看起來、也許、如果把今天的幾個線索放在一起看。
+【語氣】
+使用：可能、好像、看起來、也許。
 禁止：你就是、你一直都、這代表你、你其實只是、你一定是、你其實一直、代表你、你值得被愛、你需要好好愛自己、宇宙正在提醒你。
 禁止心理診斷、人格標籤、虛構次數／日期／歷史事件。
+每一段都必須寫完整，最後一字不能停在「的／和／一個／以及／還包括」。
 
 規則：
 - 只輸出 JSON，繁體中文
 - 每個結論都必須可以回扣今天實際填寫的內容，或使用者訊息裡真正列出的歷史天
 {
-  "seen": "50～100字",
-  "gap": "80～150字，用換行分成線索／關聯／可能的模式",
-  "question": "承接前面發現的一題？",
-  "line": "可選，最多22字",
+  "seen": "2到4句完整覺察",
+  "gap": "2到4句完整觀察",
+  "question": "今晚留給自己的一個問題？",
+  "line": "15到30個中文字",
   "echo": ""
 }`;
 
@@ -1252,6 +1247,45 @@ function compactAwarenessBlock(value, max) {
     .slice(0, max || 220);
 }
 
+function looksIncompleteAwarenessText(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return true;
+  if (/[，、；：:\-—–…]$/.test(raw)) return true;
+  if (/(的|和|與|以及|還包括|還有|一個|一種|不是|而是|因為|所以|包括)$/.test(raw)) return true;
+  return false;
+}
+
+function finishAwarenessBlock(value, max) {
+  const cleaned = compactAwarenessBlock(value, 4000);
+  if (!cleaned) return "";
+  const limit = max || 280;
+  const source = cleaned.length <= limit ? cleaned : cleaned.slice(0, limit);
+  const cut = cleaned.length > limit
+    ? (() => {
+        const lastStop = Math.max(source.lastIndexOf("。"), source.lastIndexOf("！"), source.lastIndexOf("？"), source.lastIndexOf("\n"));
+        if (lastStop >= Math.min(24, Math.floor(limit * 0.35))) return source.slice(0, lastStop + 1).trim();
+        return "";
+      })()
+    : cleaned;
+  if (!cut || looksIncompleteAwarenessText(cut)) return "";
+  return cut;
+}
+
+function normalizeAwarenessLine(text) {
+  let line = compactAwarenessText(text, 40).replace(/^["「『]+|[」』"]+$/g, "");
+  if (!line || looksIncompleteAwarenessText(line)) return "";
+  let count = zhCharCount(line);
+  if (count > 30) {
+    const clipped = line.slice(0, 36);
+    const stop = Math.max(clipped.lastIndexOf("。"), clipped.lastIndexOf("，"), clipped.lastIndexOf(" "));
+    line = (stop >= 12 ? clipped.slice(0, stop) : clipped).replace(/[，、。；\s]+$/g, "");
+    if (zhCharCount(line) > 30) line = line.slice(0, 30);
+  }
+  count = zhCharCount(line);
+  if (count < 15 || count > 30 || looksIncompleteAwarenessText(line)) return "";
+  return line;
+}
+
 function softenAwarenessClaim(text) {
   return String(text || "")
     .replace(/你就是/g, "你今天好像")
@@ -1436,23 +1470,33 @@ function sanitizeAwarenessEcho(echo, progressOrDays) {
 }
 
 function emptyAwarenessResult() {
-  return { seen: "", gap: "", question: "", line: "", echo: "" };
+  return { seen: "", gap: "", question: "", line: "", echo: "", generatedAt: "", updatedAt: "" };
 }
 
 function normalizeAwarenessResult(raw, recentDays) {
   const src = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   const nested = src.result && typeof src.result === "object" ? src.result : src;
-  let seen = softenAwarenessClaim(compactAwarenessBlock(nested.seen || nested.selfSeen || nested.todaySeen || nested.iSee, 100));
-  const gap = softenAwarenessClaim(compactAwarenessBlock(nested.gap || nested.overlooked || nested.missed, 150));
-  let question = compactAwarenessText(nested.question || nested.tonight || nested.prompt || nested.eveningQuestion, 72);
-  if (isGenericAwarenessQuestion(question)) question = "";
+  let seen = softenAwarenessClaim(finishAwarenessBlock(nested.seen || nested.selfSeen || nested.todaySeen || nested.iSee, 280));
+  let gap = softenAwarenessClaim(finishAwarenessBlock(nested.gap || nested.overlooked || nested.missed, 320));
+  let question = compactAwarenessText(nested.question || nested.tonight || nested.prompt || nested.eveningQuestion, 90);
+  if (isGenericAwarenessQuestion(question) || looksIncompleteAwarenessText(question)) question = "";
   if (question && !/[？?]$/.test(question)) question = `${question.replace(/[。.!！]+$/g, "")}？`;
-  let line = compactAwarenessText(nested.line || nested.quote || nested.oneLine, 22);
-  if (!line && Array.isArray(src.quotes) && src.quotes[0]) line = cleanAwarenessQuote(src.quotes[0]).slice(0, 22);
-  if (!seen && line) seen = line;
+  let line = normalizeAwarenessLine(nested.line || nested.quote || nested.oneLine);
+  if (!line && Array.isArray(src.quotes) && src.quotes[0]) line = normalizeAwarenessLine(src.quotes[0]);
   const echo = sanitizeAwarenessEcho(nested.echo || nested.weekly || nested.crossDay || nested.pattern, recentDays);
-  if (!seen) return emptyAwarenessResult();
-  return { seen, gap, question, line, echo };
+  if (echo && gap && !gap.includes(echo)) gap = `${gap}\n\n${echo}`;
+  if (!seen || looksIncompleteAwarenessText(seen) || (gap && looksIncompleteAwarenessText(gap))) {
+    return emptyAwarenessResult();
+  }
+  return {
+    seen,
+    gap,
+    question,
+    line,
+    echo,
+    generatedAt: String(nested.generatedAt || src.generatedAt || "").trim(),
+    updatedAt: String(nested.updatedAt || src.updatedAt || "").trim(),
+  };
 }
 
 function normalizeAwarenessQuotes(raw) {
@@ -1836,33 +1880,48 @@ ${avoid.length ? avoid.slice(0, 16).map((item) => `- ${compactLine(item, 60)}`).
 請讓今天的深度思考主題承接他的進度：看見重複模式就換新視角，看見新突破就往下挖一層。`;
 }
 
-const AWARENESS_PROMPTS_SYSTEM = `你是「日精進」的覺察引導者。先從今天的感謝、事件、心情、身體、睡眠裡找出 3 個「可能的假設」，再寫成短的驗證型是非題，讓使用者自己確認。
+const AWARENESS_PROMPTS_SYSTEM = `你是「日精進」的覺察引導者。每次只生成 1 道是／否題，讓使用者自己確認。
 
-真正目的：少一點分析，多一點讓使用者自己確認。
-不是：先替他下結論、診斷人格、或把今天所有資訊塞進同一題。
+這不是一次出完的心理測驗。Q2 必須承接 Q1 的是／否；Q3 必須承接 Q1、Q2 的是／否。
+「是」與「否」都是有效路徑。不可以預設「是」才是正確答案。
+若上一題是「否」，下一題禁止繼續把被否定的假設當成事實，必須改從今天其他紀錄另找一條方向。
 
-【出題方式】
-一題只驗證一個覺察假設。看完應該可以很直覺地選「是／否」。
+【三層深度】
+Q1｜看見感受背後的原因
+從今天真實發生的事件切入，但不要只重述事件。
+要讓他第一次產生：「原來我在意的是這個。」
+合格：「當別人記得你的喜好、主動關心你時，你會特別開心，是不是因為『被放在心上』對你來說，比事情本身更重要？」
+不合格：「別人關心你是不是讓你很開心？」
+
+Q2｜看見重複的內在模式
+必須參考今天完整紀錄、Q1、Q1 的是／否。
+找出他今天可能沒注意到的行為模式、情緒模式、自我要求、被看見的需求、完成感、休息與努力的拉扯、對自己的期待、或與他人互動的模式。
+必須用「是不是／會不會／是否可能」，不要直接判定他就是這樣。
+合格：「當你睡眠不足，卻還是想把安排好的事情完成，你是不是很容易把『我有做到』放在『我現在累不累』前面？」
+
+Q3｜碰到更底層的自己
+這是三題裡最重要的一題。必須根據今日完整紀錄 + Q1答案 + Q2答案，往更深一層。
+可探索：自我價值、被需要、被看見、安全感、外在肯定、完成感、控制感、對自己的要求、是否允許自己休息、真正重視的事情、自己與他人的關係。
+希望他看到時會停頓幾秒。
+合格：「如果今天什麼都沒有完成，也沒有人特別肯定你，你還能一樣覺得今天的自己值得喜歡嗎？」
+
+【生成前自我檢查｜不合格就重寫】
+1. 是不是只在重述他已經知道的事情？是 → 重寫
+2. 是不是任何人都可以套用？是 → 重寫
+3. 有沒有使用今天真實紀錄的具體線索？沒有 → 重寫
+4. 能不能帶出「原來我可能是這樣」的感覺？沒有 → 再深入一層
+5. 是否過度心理分析或替他下結論？是 → 改成探索式的是／否問題
+
+禁止假深度、文青空話，例如：「在今天的光影裡，你是否看見內心真正的自己？」
+禁止：「你其實在期待…」「你真正的防衛…」「你一直都…」「你就是…」
+問題一定要引用今天紀錄中的線索，具體、白話、準確、有心理深度。
+整題必須寫完整，最後一字不能停在「的／和／一個／以及／還包括」。
 
 規則：
-- 只輸出 JSON：{"awareness":[{"question":"..."},{"question":"..."},{"question":"..."}]}
-- 剛好 3 題。一題一事，優先 1～2 句，約 28-68 字
-- 最多使用兩個今日線索建立關聯，最後只能問一件事
-- 禁止把睡眠、心情、事件、陪伴、身體一次塞進同一題
-- 必須有今日資料依據，貼近原文用詞，語氣白話、自然
-- 不要預設答案，不要診斷人格，不要過度心理分析
-- 禁止：「你其實在期待…」「你真正的防衛…」「你一直都…」「你就是…」
-- 資料少就問得更短、更具體，不要硬湊深度
-- 繁體中文
-
-第1題：感謝或被對待的小事 × 心情（只問這一件）
-合格：「昨天睡得普通，但今天有人陪伴時，你的心情明顯變好。對你來說，『有人陪著』是不是很能影響一天的心情？」
-不合格：「昨天睡眠普通、今天起床精神普通，但因為 baby 陪伴、撐傘以及喝水讓你感到幸福，你是不是很容易因為關係中的陪伴而影響今天整體的情緒狀態？」
-
-第2題：身體／睡眠 × 行動或腦中待辦（只問這一件）
-合格：「今天身體已經有疲累的訊號，腦中卻還在排下一件事。你是不是常常累了，才想到自己需要休息？」
-
-第3題：事件或情緒 × 另一個今日線索（只問這一件）`;
+- 只輸出 JSON：{"awareness":[{"question":"..."}]}
+- 只出 1 題，1～3 句，40-160 字，一個問號
+- 必須能用「是／否」回答
+- 繁體中文`;
 
 const EXECUTION_PROMPTS_SYSTEM = `你是「日精進」的行動教練。先幫他找到卡點與阻力，再把想做的事問到夠具體。不要分析人格，不要列待辦。
 
@@ -1909,7 +1968,7 @@ const EXECUTION_FOLLOW_SYSTEM = `你是「日精進」的行動教練。使用�
 const CORE_PROMPTS_SYSTEM = `你是「日精進」溫柔的覺察與行動教練。請精準讀取使用者今天寫下的感謝、事件、心情與身體覺察，動態生成「只屬於今天」的覺察力與執行力題目。
 
 【任務】
-- awareness：剛好 3 道短的驗證型是非題。一題只驗證一個假設，優先 1～2 句（28-68字）。最多用兩個今日線索，最後只問一件事。不要把睡眠、心情、事件、身體一次塞進同一題。不要預設動機、不要診斷、不要替他下結論。
+- awareness：只出目前這一層的 1 道是／否題。Q1 看感受背後的原因，Q2 看重複模式，Q3 碰到更底層的自己。下一題必須承接上一題的是／否；若上一題是「否」，禁止繼續把被否定的假設當成事實。
 - execution：只出 1 道行動問題，問明天真正想做的那一件，或事情太多時準備先放下什麼。不要一次出完 2～3 題。不要用真正卡住、真因、自我修復。不要診斷腔。
 
 【必須遵守】
@@ -1926,11 +1985,39 @@ const CORE_PROMPTS_SYSTEM = `你是「日精進」溫柔的覺察與行動教練
     { "question": "完整問句，24-72字", "placeholder": "例如：具體做法…" }
   ]
 }
-awareness 必須剛好 3 題。execution 這次只出 1 題。`;
+awareness 這次只出 1 題。execution 這次只出 1 題。`;
 
 function isExecutionFollowupRequest(body) {
   const ctx = body && body.context && typeof body.context === "object" ? body.context : {};
   return Boolean(body?.followup || body?.step === "follow" || ctx.followup || ctx.step === "follow");
+}
+
+function labeledAwarenessTurns(body) {
+  const questions = Array.isArray(body?.questions) ? body.questions.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  const answers = Array.isArray(body?.answers) ? body.answers.map((item) => String(item || "").trim()) : [];
+  return questions
+    .map((question, index) => {
+      const answer = answers[index] === "否" ? "否" : answers[index] === "是" ? "是" : "（未答）";
+      return `Q${index + 1}：${question}\n回答：${answer}`;
+    })
+    .join("\n\n");
+}
+
+function awarenessPromptStep(body) {
+  const ctx = body && body.context && typeof body.context === "object" ? body.context : {};
+  const requested = Number(body?.step || ctx.step || 0);
+  if (requested >= 1 && requested <= 3) return requested;
+  const answered = (Array.isArray(body?.answers) ? body.answers : [])
+    .map((item) => String(item || "").trim())
+    .filter((item) => item === "是" || item === "否").length;
+  return Math.min(3, Math.max(1, answered + 1));
+}
+
+function isAwarenessFollowupRequest(body) {
+  const ctx = body && body.context && typeof body.context === "object" ? body.context : {};
+  if (body?.followup || ctx.followup) return true;
+  const step = awarenessPromptStep(body);
+  return step >= 2;
 }
 
 function executionFollowUserPrompt(body) {
@@ -1991,13 +2078,33 @@ ${avoid.length ? avoid.slice(0, 12).map((item) => `- ${compactLine(item, 60)}`).
   const today = `【今天的輸入｜必須據此出題】
 ${story}`;
   if (kind === "awareness") {
-    return `請只生成 3 道短的驗證型覺察是非題。不要寫執行題，不要總結，不要替他下結論。
+    const step = awarenessPromptStep(body);
+    const turns = labeledAwarenessTurns(body);
+    const lastAnswer = (Array.isArray(body.answers) ? body.answers : []).filter((item) => item === "是" || item === "否").slice(-1)[0] || "";
+    const layer =
+      step === 1
+        ? "現在只出 Q1：看見感受背後的原因。從今天真實事件切入，不要只重述事件。讓他第一次覺得「原來我在意的是這個」。"
+        : step === 2
+          ? "現在只出 Q2：看見重複的內在模式。必須承接 Q1 與 Q1 的是／否。用「是不是／會不會／是否可能」，不要判定他就是這樣。"
+          : "現在只出 Q3：碰到更底層的自己。必須承接 Q1、Q2 與兩次是／否。這一題要讓他停頓幾秒。";
+    const branch =
+      lastAnswer === "否"
+        ? "上一題使用者選了「否」。被否定的假設已經不成立。禁止寫「既然……」「因為你剛才承認……」。必須重新理解：那真正發生的可能是什麼？再從今天其他紀錄另找一條方向。"
+        : lastAnswer === "是"
+          ? "上一題使用者選了「是」。可以沿著這條覺察路徑再往下一層，但仍用探索語氣，不要把它寫成已經證實的人格結論。"
+          : "還沒有上一題答案。只根據今天紀錄出 Q1。";
+    return `請只生成目前這一層的 1 道覺察是非題。不要一次出 Q1、Q2、Q3。不要寫執行題，不要總結，不要替他下結論。
 
-一題只驗證一個假設。優先 1～2 句，約 28-68 字。最多用兩個今日線索，最後只問一件事。
-不要把睡眠、心情、事件、陪伴、身體一次塞進同一題。資料少就問得更短。
+這一層：Q${step}
+${layer}
 
-合格：昨天睡得普通，但今天有人陪伴時，你的心情明顯變好。對你來說，「有人陪著」是不是很能影響一天的心情？
-不合格：昨天睡眠普通、今天起床精神普通，但因為 baby 陪伴、撐傘以及喝水讓你感到幸福，你是不是很容易因為關係中的陪伴而影響今天整體的情緒狀態？
+【已完成的題與答案｜必須影響這一題】
+${turns || "（尚未作答，這是 Q1）"}
+
+【是／否分支】
+${branch}
+
+題目必須引用今天真實紀錄的具體線索。禁止任何人都能套用的假深度。生成前先做自我檢查：重述、萬用、沒線索、沒「原來我可能是這樣」、過度下結論，全部重寫。
 
 ${today}`;
   }
@@ -2014,11 +2121,11 @@ ${story}
 
 placeholder 用具體做法，例如：午餐多加一份青菜／下班後走路10分鐘。`;
   }
-  return `請精準讀取以下「今天的原文」，生成只屬於這一天的覺察力 3 題驗證型是非題、執行力 2 到 3 題。
+  return `請精準讀取以下「今天的原文」，生成只屬於這一天的覺察力目前這一層 1 題、執行力 1 題。
 
 ${today}
 
-覺察是非題：剛好 3 題。一題一事、1～2 句、最多兩個線索。用是／否驗證，不要替他下結論。
+覺察是非題：只出 1 題。必須引用今天線索，並依已有是／否調整方向。
 執行題：只出 1 題，問明天真正想做的那一件。不要二選一，不要分析用語。`;
 }
 
@@ -2090,24 +2197,11 @@ function uniquePromptList(list) {
 function awarenessPromptFallbacks(ctx) {
   const eventBit = compactLine(ctx && (ctx.event || ctx.text), 8) || "今天這件事";
   const thanksBit = compactLine(formatThanksForPrompt(ctx), 8);
-  const bodyText = `${JSON.stringify((ctx && ctx.bodyCheck) || {})}${ctx && ctx.bodyNote ? ctx.bodyNote : ""}${(Array.isArray(ctx && ctx.bodyTags) ? ctx.bodyTags : []).join("")}`;
-  const tired = /疲|累|少於5|5–6|精神不足|痠|緊/.test(bodyText);
-  const mood = compactLine(ctx && ctx.mood, 6);
   return [
     {
       question: thanksBit
-        ? `今天寫下「${thanksBit}」時心裡有溫度。對你來說，「有人把你放在心上」是不是很能影響這一天的心情？`
-        : `在「${eventBit}」裡，你特別有感覺的，是不是「有人陪著／想到你」這件事？`,
-    },
-    {
-      question: tired
-        ? "今天身體已經有累的訊號，腦中卻還在排下一件事。你是不是常常累了，才想到自己需要休息？"
-        : "今天如果狀態已經不太滿，你腦中是不是還是會先出現明天想完成的事？",
-    },
-    {
-      question: mood
-        ? `今天的心情是「${mood}」。這份感覺裡，你是不是比較快注意到別人，比較慢才注意到自己？`
-        : "今天發生的事情裡，你是不是比較快看見別人，比較慢才看見自己需要什麼？",
+        ? `當你寫下「${thanksBit}」時，你特別有感覺，是不是因為『被放在心上』對你來說，比事情本身更重要？`
+        : `在「${eventBit}」裡，你特別有感覺的，是不是『被放在心上』這件事，比事情本身更重要？`,
     },
   ];
 }
@@ -2115,28 +2209,24 @@ function awarenessPromptFallbacks(ctx) {
 function isBloatedAwarenessQuestion(question) {
   const text = String(question || "").trim();
   if (!text) return true;
-  if (text.length > 78) return true;
-  const topics = ["睡眠", "心情", "事件", "陪伴", "身體", "精神", "感謝"].filter((key) => text.includes(key));
-  if (topics.length >= 3) return true;
-  if ((text.match(/、/g) || []).length >= 3) return true;
+  if (text.length > 200) return true;
+  if (looksIncompleteAwarenessText(text.replace(/[？?]+$/, ""))) return true;
+  if ((text.match(/、/g) || []).length >= 5) return true;
   return false;
 }
 
-function padAwarenessPrompts(list, ctx) {
+function padAwarenessPrompts(list, ctx, max = 1) {
   const extras = awarenessPromptFallbacks(ctx);
   const next = uniquePromptList(
     (list || [])
       .map((item) => {
-        const question = String(item?.question || "").trim().slice(0, 72);
+        const question = String(item?.question || "").trim().slice(0, 180);
         return question && !isBloatedAwarenessQuestion(question) ? { question } : null;
       })
       .filter(Boolean)
   );
-  extras.forEach((item) => {
-    if (next.length >= 3) return;
-    next.push(item);
-  });
-  return next.slice(0, 3);
+  if (!next.length && extras[0] && Number(ctx && ctx.step) <= 1) next.push(extras[0]);
+  return next.slice(0, Math.max(1, max));
 }
 
 function isBloatedExecQuestion(question) {
@@ -2442,7 +2532,8 @@ module.exports = async function handler(req, res) {
     }
 
     const promptKind = isCorePromptsRequest(body) ? corePromptKind(body) : "";
-    const data = await callOpenAI(messages, {
+    const awareMode = (mode === "prompts" && promptKind === "awareness") || (mode === "checklist" && body.kind !== "execution");
+    const aiOpts = {
       temperature:
         mode === "insight" && isThinkGuideRequest(body)
           ? thinkGuideStep(body) === "close"
@@ -2461,7 +2552,8 @@ module.exports = async function handler(req, res) {
               : mode === "prompts"
                 ? 0.7
                 : 0.75,
-      timeoutMs: promptKind === "awareness" ? 18000 : 22000,
+      timeoutMs: promptKind === "awareness" ? 20000 : 22000,
+      rejectPartial: awareMode,
       maxTokens:
         mode === "bodycoach"
           ? 720
@@ -2470,11 +2562,11 @@ module.exports = async function handler(req, res) {
             ? 700
             : 360
           : mode === "prompts" && promptKind === "awareness"
-            ? 700
+            ? 500
           : mode === "prompts" && promptKind === "execution"
               ? 700
               : mode === "prompts" && isCorePromptsRequest(body)
-                ? 1100
+                ? 900
                 : mode === "manifest"
                   ? isManifestPromptsRequest(body)
                     ? 500
@@ -2482,15 +2574,26 @@ module.exports = async function handler(req, res) {
                 : mode === "checklist"
                   ? body.kind === "execution"
                     ? 800
-                    : 1100
+                    : 1600
                   : 1400,
-    });
+    };
+    let data;
+    try {
+      data = await callOpenAI(messages, aiOpts);
+    } catch (error) {
+      if (!awareMode) throw error;
+      data = await callOpenAI(messages, { ...aiOpts, _retried: true });
+    }
     if (mode === "checklist") {
       const kind = body.kind === "execution" ? "execution" : "awareness";
       if (kind === "awareness") {
-        const result = normalizeAwarenessResult(data, body.progress);
-        if (!result.seen) {
-          res.status(502).json({ ok: false, error: "今天的覺察還沒整理好，請再試一次" });
+        let result = normalizeAwarenessResult(data, body.progress);
+        if (!result.seen || looksIncompleteAwarenessText(result.seen)) {
+          data = await callOpenAI(messages, { ...aiOpts, _retried: true });
+          result = normalizeAwarenessResult(data, body.progress);
+        }
+        if (!result.seen || looksIncompleteAwarenessText(result.seen)) {
+          res.status(502).json({ ok: false, error: "這次覺察沒有完整生成，請再試一次。" });
           return;
         }
         const quotes = result.line
@@ -2553,12 +2656,17 @@ module.exports = async function handler(req, res) {
       const ctx = body.context && typeof body.context === "object" ? body.context : {};
       const prompts = normalizePromptsResult(data, kind || "core");
       if (kind === "awareness") {
-        const awareness = padAwarenessPrompts(prompts.awareness, { ...ctx, text: body.text });
-        if (prompts.awareness.length < 1) {
-          res.status(502).json({ ok: false, error: "今天的覺察題還沒準備好，請再試一次" });
+        let awareness = padAwarenessPrompts(prompts.awareness, { ...ctx, text: body.text, step: awarenessPromptStep(body) }, 1);
+        if (!awareness[0]?.question || looksIncompleteAwarenessText(String(awareness[0].question).replace(/[？?]+$/, ""))) {
+          data = await callOpenAI(messages, { ...aiOpts, _retried: true });
+          const retried = normalizePromptsResult(data, "awareness");
+          awareness = padAwarenessPrompts(retried.awareness, { ...ctx, text: body.text, step: awarenessPromptStep(body) }, 1);
+        }
+        if (!awareness[0]?.question || looksIncompleteAwarenessText(String(awareness[0].question).replace(/[？?]+$/, ""))) {
+          res.status(502).json({ ok: false, error: "這次覺察沒有完整生成，請再試一次。" });
           return;
         }
-        res.status(200).json({ ok: true, source: getProvider(), data: { awareness, execution: [] } });
+        res.status(200).json({ ok: true, source: getProvider(), data: { awareness: awareness.slice(0, 1), execution: [] } });
         return;
       }
       if (isCorePromptsRequest(body)) {
@@ -2575,7 +2683,7 @@ module.exports = async function handler(req, res) {
           res.status(502).json({ ok: false, error: "今天的覺察題還沒準備好，請再試一次" });
           return;
         }
-        prompts.awareness = padAwarenessPrompts(prompts.awareness, { ...ctx, text: body.text });
+        prompts.awareness = padAwarenessPrompts(prompts.awareness, { ...ctx, text: body.text, step: awarenessPromptStep(body) }, 1);
         prompts.execution = padExecutionPrompts(prompts.execution);
       } else if (prompts.deep.length < 4) {
         res.status(502).json({ ok: false, error: "AI 題目格式不完整，請再試一次" });
@@ -2629,3 +2737,9 @@ module.exports.formatRecentAwarenessDays = formatRecentAwarenessDays;
 module.exports.normalizeBodyCoachResult = normalizeBodyCoachResult;
 module.exports.rewriteExecFocus = rewriteExecFocus;
 module.exports.normalizeExecutionChecklistItems = normalizeExecutionChecklistItems;
+module.exports.looksIncompleteAwarenessText = looksIncompleteAwarenessText;
+module.exports.finishAwarenessBlock = finishAwarenessBlock;
+module.exports.normalizeAwarenessLine = normalizeAwarenessLine;
+module.exports.padAwarenessPrompts = padAwarenessPrompts;
+module.exports.awarenessPromptStep = awarenessPromptStep;
+module.exports.labeledAwarenessTurns = labeledAwarenessTurns;

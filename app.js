@@ -120,6 +120,7 @@ const state = {
   corePromptsBusy: false,
   corePromptsToken: 0,
   corePromptsFailedSig: "",
+  awareFoldPinned: false,
   awarenessPrompts: [],
   executionPrompts: [],
   execQuestionTab: "open",
@@ -1603,6 +1604,11 @@ function journalHasFocus() {
 
 function isActivelyEditingJournal() {
   if (journalHasFocus()) return true;
+  if (state.awareFoldPinned) return true;
+  if (state.checklistBusy.awareness) return true;
+  if (state.corePromptsBusy && (state.corePromptsScope === "awareness" || state.corePromptsScope === "awareness-follow")) {
+    return true;
+  }
   try {
     return typeof isJournalFoldEditing === "function" && isJournalFoldEditing();
   } catch {
@@ -2754,6 +2760,7 @@ function clearJournalMemory() {
   state.journalAwarenessResult = null;
   state.journalManifestSentence = "";
   state.manifestPrompts = [];
+  state.awareFoldPinned = false;
   state.awarenessPrompts = [];
   state.executionPrompts = [];
   state.deepPrompts = [];
@@ -4216,6 +4223,7 @@ function toggleQuickModule(key) {
     const sectionId = { body: "section-body", aware: "section-aware", exec: "section-exec", manifest: "section-manifest" }[key];
     setJournalFoldOpen(sectionId, true, { manual: true });
   } else {
+    if (key === "aware") state.awareFoldPinned = false;
     applyJournalFolds();
   }
   if (next.aware || next.exec) maybeAutoGenerateCorePrompts(journal);
@@ -4814,6 +4822,48 @@ function compactAwarenessBlock(value, max) {
     .slice(0, max || 220);
 }
 
+function looksIncompleteAwarenessText(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return true;
+  if (/[，、；：:\-—–…]$/.test(raw)) return true;
+  if (/(的|和|與|以及|還包括|還有|一個|一種|不是|而是|因為|所以|包括)$/.test(raw)) return true;
+  return false;
+}
+
+function finishAwarenessBlock(value, max) {
+  const cleaned = compactAwarenessBlock(value, 4000);
+  if (!cleaned) return "";
+  const limit = max || 280;
+  const source = cleaned.length <= limit ? cleaned : cleaned.slice(0, limit);
+  const cut = cleaned.length > limit
+    ? (() => {
+        const lastStop = Math.max(source.lastIndexOf("。"), source.lastIndexOf("！"), source.lastIndexOf("？"), source.lastIndexOf("\n"));
+        if (lastStop >= Math.min(24, Math.floor(limit * 0.35))) return source.slice(0, lastStop + 1).trim();
+        return "";
+      })()
+    : cleaned;
+  if (!cut || looksIncompleteAwarenessText(cut)) return "";
+  return cut;
+}
+
+function zhAwarenessCount(text) {
+  return String(text || "").replace(/\s+/g, "").length;
+}
+
+function normalizeAwarenessLine(text) {
+  let line = compactAwarenessText(text, 40).replace(/^["「『]+|[」』"]+$/g, "");
+  if (!line || looksIncompleteAwarenessText(line)) return "";
+  if (zhAwarenessCount(line) > 30) {
+    const clipped = line.slice(0, 36);
+    const stop = Math.max(clipped.lastIndexOf("。"), clipped.lastIndexOf("，"), clipped.lastIndexOf(" "));
+    line = (stop >= 12 ? clipped.slice(0, stop) : clipped).replace(/[，、。；\s]+$/g, "");
+    if (zhAwarenessCount(line) > 30) line = line.slice(0, 30);
+  }
+  const count = zhAwarenessCount(line);
+  if (count < 15 || count > 30 || looksIncompleteAwarenessText(line)) return "";
+  return line;
+}
+
 function softenAwarenessClaim(text) {
   return String(text || "")
     .replace(/你就是/g, "你今天好像")
@@ -4911,23 +4961,42 @@ function sanitizeAwarenessEcho(echo, recentDays) {
 }
 
 function emptyAwarenessResult() {
-  return { seen: "", gap: "", question: "", line: "", echo: "" };
+  return { seen: "", gap: "", question: "", line: "", echo: "", generatedAt: "", updatedAt: "" };
 }
 
 function normalizeAwarenessResult(raw) {
   const src = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   const nested = src.result && typeof src.result === "object" ? src.result : src;
-  let seen = softenAwarenessClaim(compactAwarenessBlock(nested.seen || nested.selfSeen || nested.todaySeen || nested.iSee, 100));
-  const gap = softenAwarenessClaim(compactAwarenessBlock(nested.gap || nested.overlooked || nested.missed, 150));
-  let question = compactAwarenessText(nested.question || nested.tonight || nested.prompt || nested.eveningQuestion, 72);
-  if (isGenericAwarenessQuestion(question)) question = "";
+  let seen = softenAwarenessClaim(finishAwarenessBlock(nested.seen || nested.selfSeen || nested.todaySeen || nested.iSee, 280));
+  let gap = softenAwarenessClaim(finishAwarenessBlock(nested.gap || nested.overlooked || nested.missed, 320));
+  let question = compactAwarenessText(nested.question || nested.tonight || nested.prompt || nested.eveningQuestion, 90);
+  if (isGenericAwarenessQuestion(question) || looksIncompleteAwarenessText(question)) question = "";
   if (question && !/[？?]$/.test(question)) question = `${question.replace(/[。.!！]+$/g, "")}？`;
-  let line = compactAwarenessText(nested.line || nested.quote || nested.oneLine, 22);
-  if (!line && Array.isArray(src.quotes) && src.quotes[0]) line = cleanAwarenessQuote(src.quotes[0]).slice(0, 22);
-  if (!seen && line) seen = line;
+  let line = normalizeAwarenessLine(nested.line || nested.quote || nested.oneLine);
+  if (!line && Array.isArray(src.quotes) && src.quotes[0]) line = normalizeAwarenessLine(src.quotes[0]);
   const echo = sanitizeAwarenessEcho(nested.echo || nested.weekly || nested.crossDay || nested.pattern, collectRecentAwarenessDays());
-  if (!seen) return emptyAwarenessResult();
-  return { seen, gap, question, line, echo };
+  if (echo && gap && !gap.includes(echo)) gap = `${gap}\n\n${echo}`;
+  if (!seen || looksIncompleteAwarenessText(seen)) return emptyAwarenessResult();
+  return {
+    seen,
+    gap,
+    question,
+    line,
+    echo,
+    generatedAt: String(nested.generatedAt || src.generatedAt || "").trim(),
+    updatedAt: String(nested.updatedAt || src.updatedAt || "").trim(),
+  };
+}
+
+function stampAwarenessResult(result, prev) {
+  const now = new Date().toISOString();
+  const current = normalizeAwarenessResult(result);
+  const before = prev && typeof prev === "object" ? prev : {};
+  return {
+    ...current,
+    generatedAt: String(before.generatedAt || current.generatedAt || now).trim() || now,
+    updatedAt: now,
+  };
 }
 
 function hasAwarenessResult(raw) {
@@ -4948,9 +5017,8 @@ function formatAwarenessResultText(result) {
   const parts = [];
   if (data.seen) parts.push(`今天，我看見了自己\n${data.seen}`);
   if (data.gap) parts.push(`我可能忽略的地方\n${data.gap}`);
-  if (data.echo) parts.push(`最近反覆出現的模式\n${data.echo}`);
   if (data.question) parts.push(`今晚留給自己的一個問題\n${data.question}`);
-  if (data.line) parts.push(data.line);
+  if (data.line) parts.push(`今日帶走的一句話\n${data.line}`);
   return parts.join("\n\n");
 }
 
@@ -5150,7 +5218,6 @@ function awarenessResultSections(result) {
   const mark = () => `${String(n++).padStart(2, "0")}｜`;
   if (data.seen) sections.push({ kind: "seen", kicker: `${mark()}今天，我看見了自己`, text: data.seen });
   if (data.gap) sections.push({ kind: "gap", kicker: `${mark()}我可能忽略的地方`, text: data.gap });
-  if (data.echo) sections.push({ kind: "echo", kicker: `${mark()}最近反覆出現的模式`, text: data.echo });
   if (data.question) sections.push({ kind: "question", kicker: `${mark()}今晚留給自己的一個問題`, text: data.question });
   return { data, sections };
 }
@@ -5180,7 +5247,7 @@ function renderAwarenessResultCard(result, checked) {
         </label>
         <button class="btn btn--ghost btn--tiny" type="button" data-copy-aware-quote>複製</button>
       </div>
-      ${data.line ? `<p class="aware-result__line">${escapeHtml(data.line)}</p>` : ""}
+      ${data.line ? `<p class="aware-result__line"><span>今日帶走的一句話</span>${escapeHtml(data.line)}</p>` : ""}
     </div>`;
 }
 
@@ -5533,7 +5600,7 @@ function applyGeneratedChecklist(kind, items, sig) {
 
 async function generateJournalChecklist(kind, options = {}) {
   if (kind === "execution") setJournalFoldOpen("section-exec", true, { manual: true });
-  if (kind === "awareness") setJournalFoldOpen("section-aware", true, { manual: true });
+  if (kind === "awareness") pinAwareFold();
   if (kind === "manifest") {
     await generateManifestChecklist(options);
     return;
@@ -5591,7 +5658,7 @@ async function generateJournalChecklist(kind, options = {}) {
       throw new Error("請先登入，才能使用雲端分析。");
     }
     const progress = collectGrowthProgress();
-    const remote = await postReview({
+    const reviewPayload = {
       mode: "checklist",
       kind,
       date: currentIso(),
@@ -5629,17 +5696,31 @@ async function generateJournalChecklist(kind, options = {}) {
           }
         : undefined,
       text: answers.join("\n"),
-    });
+    };
+    let remote;
+    let lastAwareError;
+    for (let attempt = 0; attempt < (isAware ? 2 : 1); attempt += 1) {
+      try {
+        remote = await postReview(reviewPayload);
+        lastAwareError = null;
+        break;
+      } catch (error) {
+        lastAwareError = error;
+        if (!isAware || attempt === 1) throw error;
+      }
+    }
+    if (!remote && lastAwareError) throw lastAwareError;
     if (state.checklistToken[kind] !== token) return;
     if (isAware) {
       const result = hasAwarenessResult(remote.result || remote)
         ? normalizeAwarenessResult(remote.result || remote)
-        : fallback;
-      if (!result.seen) throw new Error("雲端回傳格式不完整");
-      if (!result.question) result.question = fallback.question || "";
-      if (!result.gap) result.gap = fallback.gap || "";
-      state.journalAwarenessResult = result;
-      applyGeneratedChecklist(kind, [awarenessResultKeepText(result)], sig);
+        : emptyAwarenessResult();
+      if (!result.seen || looksIncompleteAwarenessText(result.seen)) {
+        throw new Error("這次覺察沒有完整生成，請再試一次。");
+      }
+      state.journalAwarenessResult = stampAwarenessResult(result, state.journalAwarenessResult);
+      applyGeneratedChecklist(kind, [awarenessResultKeepText(state.journalAwarenessResult)], sig);
+      pinAwareFold();
       showToast("今天的覺察，已經整理好了。");
       return;
     }
@@ -5652,13 +5733,18 @@ async function generateJournalChecklist(kind, options = {}) {
   } catch (error) {
     if (state.checklistToken[kind] !== token) return;
     if (isAware) {
-      state.journalAwarenessResult = fallback;
-      applyGeneratedChecklist(kind, [awarenessResultKeepText(fallback)], sig);
-    } else {
-      state.journalExecFocus = rewriteGeneratedExecFocus(fallback[0], fallback, journal.smallestStep);
-      renderExecFocus(state.journalExecFocus, fallback);
-      applyGeneratedChecklist(kind, fallback.slice(0, max), sig);
+      const previous = hasAwarenessResult(state.journalAwarenessResult)
+        ? normalizeAwarenessResult(state.journalAwarenessResult)
+        : emptyAwarenessResult();
+      if (previous.seen && !looksIncompleteAwarenessText(previous.seen)) {
+        renderAwareQuote([awarenessResultKeepText(previous)], journal.awarenessChecks);
+      }
+      showToast("這次覺察沒有完整生成，請再試一次。");
+      return;
     }
+    state.journalExecFocus = rewriteGeneratedExecFocus(fallback[0], fallback, journal.smallestStep);
+    renderExecFocus(state.journalExecFocus, fallback);
+    applyGeneratedChecklist(kind, fallback.slice(0, max), sig);
     showToast(`雲端分析失敗：${formatApiError(error)}，先用本地整理。`);
   } finally {
     clearTimeout(watchdog);
@@ -7080,12 +7166,12 @@ function normalizePromptQuestionList(list, max) {
     .map((item) => {
       if (typeof item === "string") {
         const question = item.trim();
-        return question ? { question, placeholder: "寫下那個時刻…" } : null;
+        return question ? { question: question.slice(0, 180), placeholder: "寫下那個時刻…" } : null;
       }
       const question = String(item?.question || item?.title || "").trim();
       if (!question) return null;
       return {
-        question: question.slice(0, 120),
+        question: question.slice(0, 180),
         placeholder: String(item?.placeholder || "寫下那個時刻…").trim().slice(0, 48) || "寫下那個時刻…",
       };
     })
@@ -7096,7 +7182,7 @@ function normalizePromptQuestionList(list, max) {
 function normalizeAwarenessPrompts(list) {
   return normalizePromptQuestionList(list, AWARENESS_QUIZ_COUNT).map((item) => ({
     ...item,
-    question: String(item.question || "").slice(0, 72),
+    question: String(item.question || "").slice(0, 180),
   }));
 }
 
@@ -7378,7 +7464,7 @@ function keepHydratedCorePrompts(prompts, hasAnswers, fromAi, min = 3) {
 function hydrateAwarenessPrompts(data) {
   const prompts = normalizeAwarenessPrompts(data?.awarenessPrompts);
   const hasAnswers = (data?.awareness || []).some((item) => normalizeYesNo(item) || String(item || "").trim());
-  if (keepHydratedCorePrompts(prompts, hasAnswers, data?.corePromptsAi, AWARENESS_QUIZ_COUNT)) {
+  if (keepHydratedCorePrompts(prompts, hasAnswers, data?.corePromptsAi, 1)) {
     return prompts.slice(0, AWARENESS_QUIZ_COUNT);
   }
   return [];
@@ -7396,7 +7482,7 @@ function hydrateExecutionPrompts(data) {
 
 function hasCorePromptSet() {
   return (
-    normalizeAwarenessPrompts(state.awarenessPrompts).length >= AWARENESS_QUIZ_COUNT &&
+    normalizeAwarenessPrompts(state.awarenessPrompts).length >= 1 &&
     normalizeExecutionPrompts(state.executionPrompts).length >= EXECUTION_PROMPT_MIN
   );
 }
@@ -7408,7 +7494,7 @@ function collectPromptAnswers(prefix, count = 3) {
 function syncCorePromptGate() {
   const ready = coreStoryReady();
   const loading = Boolean(state.corePromptsBusy);
-  const hasAware = normalizeAwarenessPrompts(state.awarenessPrompts).length >= AWARENESS_QUIZ_COUNT;
+  const hasAware = normalizeAwarenessPrompts(state.awarenessPrompts).length >= 1;
   const hasExec = normalizeExecutionPrompts(state.executionPrompts).length >= EXECUTION_PROMPT_MIN;
   const staleExec = executionPromptsAreStale(state.executionPrompts);
   const awareEmpty = document.getElementById("awareEmpty");
@@ -7695,9 +7781,11 @@ function applyGeneratedCorePrompts(awareness, execution, sig, fromAi, options = 
   const awareList = normalizeAwarenessPrompts(awareness);
   const execList =
     execution == null ? [] : sanitizeGeneratedExecutionPrompts(normalizeExecutionPrompts(execution));
-  if (awareList.length >= AWARENESS_QUIZ_COUNT) {
-    state.awarenessPrompts = awareList;
-    renderAwarenessQuestions(state.awarenessPrompts, { answers: ["", "", ""] });
+  if (awareList.length >= 1) {
+    state.awarenessPrompts = awareList.slice(0, AWARENESS_QUIZ_COUNT);
+    renderAwarenessQuestions(state.awarenessPrompts, {
+      answers: options.resetAwarenessAnswers === false ? journal.awareness : ["", "", ""],
+    });
   }
   if (execList.length >= EXECUTION_PROMPT_MIN) {
     state.executionPrompts = execList;
@@ -7719,7 +7807,10 @@ function setCorePromptsLoading(loading, scope = "core") {
   const awareLoader = document.getElementById("awarePromptLoading");
   const execLoader = document.getElementById("execPromptLoading");
   const awareLabel = awareLoader?.querySelector(".check-loading__label");
-  if (awareLabel) awareLabel.textContent = "正在生成覺察題…";
+  if (awareLabel) {
+    awareLabel.textContent =
+      scope === "awareness-follow" ? "正在根據你的回答，準備下一題…" : "正在生成覺察題…";
+  }
   if (awareLoader) awareLoader.hidden = !(loading && (scope === "core" || scope === "awareness"));
   if (execLoader) execLoader.hidden = !(loading && (scope === "core" || scope === "execution"));
   syncCorePromptGate();
@@ -7730,6 +7821,126 @@ function localCorePrompts(journal) {
     awareness: awarenessPromptFallbacks(journal),
     execution: executionQuestionFallbacks().slice(0, 1),
   };
+}
+
+function pinAwareFold() {
+  state.awareFoldPinned = true;
+  setJournalFoldOpen("section-aware", true, { manual: true });
+}
+
+function revealAwareQuestion(index) {
+  const item = document.querySelector(`#awareQuestions .aware-quiz__item[data-index="${index}"]`);
+  if (!item || typeof item.scrollIntoView !== "function") return;
+  requestAnimationFrame(() => {
+    item.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+  });
+}
+
+function awarenessQuestionContext(journal, step, prompts, answers) {
+  return {
+    journalMode: state.journalMode,
+    mode: state.journalMode,
+    promptKind: "awareness",
+    scope: "awareness",
+    step,
+    followup: step > 1,
+    thanks: thanksTextFrom(journal),
+    thanksText: thanksTextFrom(journal),
+    event: journal.event,
+    mood: journal.mood,
+    bodyTags: journal.bodyTags,
+    bodyNote: journal.bodyNote,
+    bodyCheck: journal.bodyCheck,
+    awareness: answers,
+    smallestStep: journal.smallestStep,
+  };
+}
+
+async function requestAwarenessQuestion(journal, step, prompts, answers) {
+  const progress = collectGrowthProgress();
+  const payload = {
+    mode: "prompts",
+    variant: "core",
+    scope: "awareness",
+    step,
+    followup: step > 1,
+    date: currentIso(),
+    text: journal.event,
+    questions: (prompts || []).map((item) => item.question),
+    answers,
+    context: awarenessQuestionContext(journal, step, prompts, answers),
+    progress: {
+      streak: progress.streak,
+      avoidQuestions: (progress.avoidQuestions || []).slice(0, 8),
+      openActions: progress.openActions || [],
+      recentReviews: (progress.recentReviews || []).slice(0, 7),
+    },
+  };
+  let lastError = new Error("這次覺察沒有完整生成，請再試一次。");
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const remote = await postReview(payload, 22000);
+      const next = normalizeAwarenessPrompts(remote.awareness)[0];
+      if (!next?.question || looksIncompleteAwarenessText(String(next.question).replace(/[？?]+$/, ""))) {
+        throw new Error("這次覺察沒有完整生成，請再試一次。");
+      }
+      return next;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
+async function generateAwarenessFollowup(options = {}) {
+  pinAwareFold();
+  if (recoverStaleBusy(state.corePromptsBusy, state.corePromptsBusyAt, () => setCorePromptsLoading(false))) {
+    if (!options.auto) showToast("還在為你準備下一題，請稍候。");
+    return;
+  }
+  const journal = collectJournal();
+  if (!coreStoryReady(journal)) {
+    if (!options.auto) showToast("請先寫下今日感謝、事件，並選擇心情。");
+    return;
+  }
+  const current = normalizeAwarenessPrompts(state.awarenessPrompts);
+  const answers = (journal.awareness || []).map(normalizeYesNo);
+  const answered = awarenessQuizAnsweredCount(answers);
+  if (!current.length) {
+    await generateCorePrompts({ scope: "awareness", force: true });
+    return;
+  }
+  if (current.length >= AWARENESS_QUIZ_COUNT) return;
+  if (answered < current.length) {
+    if (!options.auto) showToast("先回答這一題，再繼續下一層。");
+    return;
+  }
+  const token = (state.corePromptsToken || 0) + 1;
+  state.corePromptsToken = token;
+  setCorePromptsLoading(true, "awareness-follow");
+  const watchdog = setTimeout(() => {
+    if (state.corePromptsToken === token && state.corePromptsBusy) {
+      setCorePromptsLoading(false);
+      if (!options.auto) showToast("這次覺察沒有完整生成，請再試一次。");
+    }
+  }, 32000);
+  try {
+    if (!state.user) throw new Error("請先登入，才能使用雲端出題。");
+    const next = await requestAwarenessQuestion(journal, current.length + 1, current, answers);
+    if (state.corePromptsToken !== token) return;
+    state.awarenessPrompts = [...current, next].slice(0, AWARENESS_QUIZ_COUNT);
+    state.journalMeta.corePromptsAi = true;
+    renderAwarenessQuestions(state.awarenessPrompts, { answers });
+    persistJournalQuietly();
+    syncCorePromptGate();
+    revealAwareQuestion(state.awarenessPrompts.length - 1);
+  } catch (error) {
+    if (state.corePromptsToken !== token) return;
+    if (!options.auto) showToast("這次覺察沒有完整生成，請再試一次。");
+  } finally {
+    clearTimeout(watchdog);
+    if (state.corePromptsToken === token) setCorePromptsLoading(false);
+  }
 }
 
 async function generateCorePrompts(options = {}) {
@@ -7747,11 +7958,19 @@ async function generateCorePrompts(options = {}) {
     syncCorePromptGate();
     return;
   }
+  if (scope === "awareness") pinAwareFold();
   const sig = corePromptsSignature(journal);
-  const hasAware = normalizeAwarenessPrompts(state.awarenessPrompts).length >= AWARENESS_QUIZ_COUNT;
+  const existingAware = normalizeAwarenessPrompts(state.awarenessPrompts);
+  const hasAware = existingAware.length >= 1;
+  const answeredAware = awarenessQuizAnsweredCount(journal.awareness);
   const hasExec = normalizeExecutionPrompts(state.executionPrompts).length >= EXECUTION_PROMPT_MIN;
   if (!options.force) {
-    if (scope === "awareness" && hasAware && awarenessQuizAnsweredCount(journal.awareness) > 0) return;
+    if (scope === "awareness" && hasAware) {
+      if (answeredAware < existingAware.length) return;
+      if (existingAware.length >= AWARENESS_QUIZ_COUNT) return;
+      await generateAwarenessFollowup({ ...options, auto: Boolean(options.auto) });
+      return;
+    }
     if (scope === "execution" && hasExec && corePromptsHaveAnswers(journal)) return;
     if (scope === "core" && hasAware && hasExec && corePromptsHaveAnswers(journal)) return;
   }
@@ -7784,6 +8003,15 @@ async function generateCorePrompts(options = {}) {
 
   try {
     if (!state.user) throw new Error("請先登入，才能使用雲端出題。");
+    if (scope === "awareness") {
+      const next = await requestAwarenessQuestion(journal, 1, [], []);
+      if (state.corePromptsToken !== token) return;
+      pinAwareFold();
+      applyGeneratedCorePrompts([next], null, sig, true, { resetAwarenessAnswers: true });
+      revealAwareQuestion(0);
+      if (!options.auto) showToast("今天的第一題覺察已經準備好了。");
+      return;
+    }
     const progress = collectGrowthProgress();
     const remote = await postReview(
       {
@@ -7817,13 +8045,6 @@ async function generateCorePrompts(options = {}) {
       22000
     );
     if (state.corePromptsToken !== token) return;
-    if (scope === "awareness") {
-      const awareness = mergePrompts(remote.awareness, fallback.awareness, normalizeAwarenessPrompts, AWARENESS_QUIZ_COUNT);
-      if (awareness.length < AWARENESS_QUIZ_COUNT) throw new Error("雲端回傳格式不完整");
-      applyGeneratedCorePrompts(awareness, null, sig, true);
-      if (!options.auto) showToast("今天的覺察題已經準備好了。");
-      return;
-    }
     if (scope === "execution") {
       const execution = sanitizeGeneratedExecutionPrompts(
         mergePrompts(remote.execution, fallback.execution, normalizeExecutionPrompts, 1)
@@ -7833,24 +8054,25 @@ async function generateCorePrompts(options = {}) {
       if (!options.auto) showToast("今天的行動問題已經準備好了。");
       return;
     }
-    const awareness = mergePrompts(remote.awareness, fallback.awareness, normalizeAwarenessPrompts, AWARENESS_QUIZ_COUNT);
+    const awareness = normalizeAwarenessPrompts(remote.awareness).slice(0, 1);
     const execution = sanitizeGeneratedExecutionPrompts(
       mergePrompts(remote.execution, fallback.execution, normalizeExecutionPrompts, 1)
     ).slice(0, 1);
-    if (awareness.length < AWARENESS_QUIZ_COUNT) throw new Error("雲端回傳格式不完整");
-    applyGeneratedCorePrompts(awareness, execution, sig, true);
-    if (!options.auto) showToast("今天的覺察題已經準備好了。");
+    if (!awareness[0]?.question) throw new Error("這次覺察沒有完整生成，請再試一次。");
+    pinAwareFold();
+    applyGeneratedCorePrompts(awareness, execution, sig, true, { resetAwarenessAnswers: true });
+    revealAwareQuestion(0);
+    if (!options.auto) showToast("今天的第一題覺察已經準備好了。");
   } catch (error) {
     if (state.corePromptsToken !== token) return;
-    if (scope === "awareness") applyGeneratedCorePrompts(fallback.awareness, null, sig, true);
-    else if (scope === "execution") applyGeneratedCorePrompts(null, fallback.execution, sig, true, { resetExecutionAnswers: Boolean(options.force) });
-    else applyGeneratedCorePrompts(fallback.awareness, fallback.execution, sig, true);
+    if (scope === "execution") applyGeneratedCorePrompts(null, fallback.execution, sig, true, { resetExecutionAnswers: Boolean(options.force) });
+    else if (scope === "core") applyGeneratedCorePrompts(null, fallback.execution, sig, true);
     if (options.auto) state.corePromptsFailedSig = sig;
     if (!options.auto) {
       showToast(
         scope === "execution"
           ? `雲端執行題還沒好：${formatApiError(error)}，先用本地題目。`
-          : `覺察題生成失敗：${formatApiError(error)}。已先放下 3 道本地覺察題，請再試一次。`
+          : "這次覺察沒有完整生成，請再試一次。"
       );
     }
   } finally {
@@ -7862,6 +8084,13 @@ async function generateCorePrompts(options = {}) {
 function maybeAutoGenerateCorePrompts(journal) {
   if (state.journalHydrating) return;
   syncCorePromptGate();
+  const data = journal || collectJournal();
+  if (!coreStoryReady(data) || !state.user) return;
+  const prompts = normalizeAwarenessPrompts(state.awarenessPrompts);
+  const answered = awarenessQuizAnsweredCount(data.awareness);
+  if (prompts.length && answered >= prompts.length && prompts.length < AWARENESS_QUIZ_COUNT && state.journalMeta.corePromptsAi) {
+    catchAsync(() => generateAwarenessFollowup({ auto: true }), "下一題覺察還沒好");
+  }
 }
 
 function captureReviewPatch() {
@@ -8524,6 +8753,7 @@ function isJournalFoldEditing(foldId) {
 
 function canAutoCollapseJournalFold(id) {
   if (!id) return true;
+  if (id === "section-aware" && state.awareFoldPinned) return false;
   return !isJournalFoldEditing(id);
 }
 
@@ -8657,7 +8887,10 @@ function setJournalFoldOpen(id, open, options = {}) {
 function toggleJournalFold(id) {
   const root = document.getElementById(id);
   if (!root) return;
-  setJournalFoldOpen(id, !root.classList.contains("is-open"), { manual: true });
+  const nextOpen = !root.classList.contains("is-open");
+  if (id === "section-aware") state.awareFoldPinned = nextOpen;
+  else if (nextOpen) state.awareFoldPinned = false;
+  setJournalFoldOpen(id, nextOpen, { manual: true });
 }
 
 function applyJournalFolds() {
@@ -8666,6 +8899,7 @@ function applyJournalFolds() {
   const editingId = editingJournalFoldId();
   let openId = visible.includes(prefs.open) ? prefs.open : "";
   if (editingId && visible.includes(editingId)) openId = editingId;
+  if (state.awareFoldPinned && visible.includes("section-aware")) openId = "section-aware";
   JOURNAL_FOLD_IDS.forEach((id) => {
     const wantOpen = id === openId;
     if (!wantOpen && !canAutoCollapseJournalFold(id)) return;
@@ -8675,6 +8909,7 @@ function applyJournalFolds() {
 
 function fillJournal(journal) {
   const data = { ...emptyJournal(), ...(journal && typeof journal === "object" ? journal : {}) };
+  state.awareFoldPinned = false;
   state.journalHydrating = true;
   state.checklistToken.awareness += 1;
   state.checklistToken.execution += 1;
@@ -10948,7 +11183,7 @@ function handleTodayPointerClick(event) {
 
   if (node.closest("#btnAwarePrompts")) {
     handled();
-    setJournalFoldOpen("section-aware", true, { manual: true });
+    pinAwareFold();
     catchAsync(() => generateCorePrompts({ scope: "awareness" }), "覺察題生成失敗");
     return true;
   }
@@ -11019,14 +11254,31 @@ function handleTodayPointerClick(event) {
     handled();
     const item = answerBtn.closest(".aware-quiz__item");
     if (!item) return true;
+    const index = Number(item.dataset.index || 0);
+    const prev = normalizeYesNo(item.dataset.answer);
     const value = normalizeYesNo(answerBtn.dataset.awareAnswer);
     item.dataset.answer = value;
     item.querySelectorAll(".aware-quiz__opt").forEach((btn) => {
       btn.classList.toggle("is-on", btn === answerBtn);
     });
+    pinAwareFold();
+    const prompts = normalizeAwarenessPrompts(state.awarenessPrompts);
+    if (value && value !== prev && index < prompts.length - 1) {
+      state.awarenessPrompts = prompts.slice(0, index + 1);
+      const kept = collectAwarenessQuizAnswers().slice(0, index + 1);
+      renderAwarenessQuestions(state.awarenessPrompts, { answers: kept });
+      state.journalAwarenessResult = emptyAwarenessResult();
+      state.journalMeta.awarenessAi = false;
+      state.journalMeta.awarenessAiSig = "";
+    }
     persistJournalQuietly();
     const journal = collectJournal();
     renderAwareQuote(journal.awarenessCheckItems, journal.awarenessChecks);
+    const nextPrompts = normalizeAwarenessPrompts(state.awarenessPrompts);
+    const answered = awarenessQuizAnsweredCount(journal.awareness);
+    if (value && answered >= nextPrompts.length && nextPrompts.length < AWARENESS_QUIZ_COUNT) {
+      catchAsync(() => generateAwarenessFollowup(), "下一題覺察還沒好");
+    }
     return true;
   }
   const copyBtn = node.closest("[data-copy-aware-quote]");
