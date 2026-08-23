@@ -367,10 +367,24 @@ function starsText(n) {
   return `${"★".repeat(count)}${"☆".repeat(5 - count)}`;
 }
 
+function textIntegrityApi() {
+  return (typeof window !== "undefined" && window.NichiTextIntegrity) || {};
+}
+
 function excerptText(text, max = 140) {
   const cleaned = String(text || "").replace(/\s+/g, " ").trim();
+  if (!cleaned) return "";
   if (cleaned.length <= max) return cleaned;
-  return `${cleaned.slice(0, max)}…`;
+  const api = textIntegrityApi();
+  if (typeof api.pickCompleteSentence === "function") {
+    const picked = api.pickCompleteSentence(cleaned, max);
+    if (picked) return picked;
+    if (typeof api.splitSentences === "function" && typeof api.isCompleteSentence === "function") {
+      const first = api.splitSentences(cleaned)[0] || "";
+      if (first && api.isCompleteSentence(first)) return first;
+    }
+  }
+  return cleaned;
 }
 
 function showToast(message) {
@@ -4040,7 +4054,7 @@ function sanitizeGeneratedExecutionPrompts(list) {
     if (!isBloatedExecQuestion(item.question)) {
       return {
         ...item,
-        question: String(item.question || "").slice(0, 80),
+        question: String(item.question || "").trim(),
         parked: false,
       };
     }
@@ -4070,8 +4084,11 @@ function looksLikeAnalysisExecTitle(title) {
 
 function firstExecSentence(text, max) {
   const raw = String(text || "").replace(/\s+/g, " ").trim();
-  const match = raw.match(/^[^。！？!?]+[。！？!?]?/);
-  return (match ? match[0] : raw).trim().slice(0, max || 80);
+  if (!raw) return "";
+  const limit = max || 80;
+  const api = textIntegrityApi();
+  if (raw.replace(/\s+/g, "").length <= limit && !looksIncompleteAwarenessText(raw)) return raw;
+  return typeof api.pickCompleteSentence === "function" ? api.pickCompleteSentence(raw, limit) : "";
 }
 
 function softenExecCoachText(text) {
@@ -4138,10 +4155,16 @@ function isAbstractExecAnswer(text) {
 
 function rewriteGeneratedExecTitle(title, smallestStep) {
   const cleaned = softenExecCoachText(String(title || "").replace(/^[\d.、｜|\-\s]+/, "")).trim();
-  if (cleaned && !looksLikeAnalysisExecTitle(cleaned)) return cleaned.slice(0, 32);
+  const api = textIntegrityApi();
+  const pickTitle = (value) => {
+    if (!value) return "";
+    if (value.replace(/\s+/g, "").length <= 32 && !looksIncompleteAwarenessText(value)) return value;
+    return typeof api.pickCompleteSentence === "function" ? api.pickCompleteSentence(value, 32) || (value.replace(/\s+/g, "").length <= 32 ? value : "") : value;
+  };
+  if (cleaned && !looksLikeAnalysisExecTitle(cleaned)) return pickTitle(cleaned);
   const step = String(smallestStep || "").trim().replace(/[。！？.]+$/g, "");
-  if (step && !looksLikeAnalysisExecTitle(step)) return step.slice(0, 32);
-  return cleaned.slice(0, 32);
+  if (step && !looksLikeAnalysisExecTitle(step)) return pickTitle(step);
+  return pickTitle(cleaned);
 }
 
 function pickExecItemByTitle(items, title) {
@@ -4175,7 +4198,7 @@ function rewriteGeneratedExecFocus(focus, items, smallestStep) {
     ? source.when
     : execFocusWhenFromText(picked.title, picked.detail);
   return {
-    title: String(picked.title || "").slice(0, 32),
+    title: rewriteGeneratedExecTitle(picked.title, smallestStep),
     detail: shortenExecWhy(source.detail || picked.detail),
     when,
     hint: String(source.hint || "").trim().slice(0, 28) || execFocusHintForWhen(when),
@@ -4852,42 +4875,53 @@ function firstAwarenessSentence(text) {
 }
 
 function compactAwarenessText(value, max) {
-  return String(value || "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, max || 220);
+  const cleaned = String(value || "").replace(/\s+/g, " ").trim();
+  if (!cleaned) return "";
+  const limit = max || 220;
+  if (cleaned.replace(/\s+/g, "").length <= limit) return cleaned;
+  const api = textIntegrityApi();
+  if (typeof api.pickCompleteSentence === "function") return api.pickCompleteSentence(cleaned, limit) || "";
+  return "";
 }
 
-function compactAwarenessBlock(value, max) {
+function compactAwarenessBlock(value) {
   return String(value || "")
     .replace(/\r\n/g, "\n")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/[ \t]{2,}/g, " ")
-    .trim()
-    .slice(0, max || 220);
+    .trim();
 }
 
 function looksIncompleteAwarenessText(text) {
+  const api = textIntegrityApi();
+  if (typeof api.isCompleteSentence === "function") return !api.isCompleteSentence(text);
   const raw = String(text || "").trim();
   if (!raw) return true;
   if (/[，、；：:\-—–…]$/.test(raw)) return true;
-  if (/(的|和|與|以及|還包括|還有|一個|一種|不是|而是|因為|所以|包括)$/.test(raw)) return true;
+  if (/(的|和|與|以及|還包括|還有|一個|一種|不是|而是|因為|所以|包括|當成了|變成了|開始)$/.test(raw)) return true;
   return false;
 }
 
 function finishAwarenessBlock(value, max) {
-  const cleaned = compactAwarenessBlock(value, 4000);
+  const cleaned = compactAwarenessBlock(value);
   if (!cleaned) return "";
   const limit = max || 280;
-  const source = cleaned.length <= limit ? cleaned : cleaned.slice(0, limit);
-  const cut = cleaned.length > limit
-    ? (() => {
-        const lastStop = Math.max(source.lastIndexOf("。"), source.lastIndexOf("！"), source.lastIndexOf("？"), source.lastIndexOf("\n"));
-        if (lastStop >= Math.min(24, Math.floor(limit * 0.35))) return source.slice(0, lastStop + 1).trim();
-        return "";
-      })()
-    : cleaned;
+  const count = cleaned.replace(/\s+/g, "").length;
+  if (count <= limit) return looksIncompleteAwarenessText(cleaned) ? "" : cleaned;
+  const api = textIntegrityApi();
+  if (typeof api.splitSentences !== "function") return "";
+  const kept = [];
+  let used = 0;
+  api.splitSentences(cleaned).forEach((part) => {
+    if (typeof api.isCompleteSentence === "function" && !api.isCompleteSentence(part)) return;
+    const add = String(part || "").replace(/\s+/g, "").length;
+    if (used && used + add > limit) return;
+    if (!used && add > limit) return;
+    kept.push(part);
+    used += add;
+  });
+  const cut = kept.join("");
   if (!cut || looksIncompleteAwarenessText(cut)) return "";
   return cut;
 }
@@ -4897,13 +4931,16 @@ function zhAwarenessCount(text) {
 }
 
 function normalizeAwarenessLine(text) {
-  let line = compactAwarenessText(text, 40).replace(/^["「『]+|[」』"]+$/g, "");
+  let line = String(text || "").replace(/\s+/g, " ").trim().replace(/^["「『]+|[」』"]+$/g, "");
   if (!line || looksIncompleteAwarenessText(line)) return "";
   if (zhAwarenessCount(line) > 30) {
-    const clipped = line.slice(0, 36);
-    const stop = Math.max(clipped.lastIndexOf("。"), clipped.lastIndexOf("，"), clipped.lastIndexOf(" "));
-    line = (stop >= 12 ? clipped.slice(0, stop) : clipped).replace(/[，、。；\s]+$/g, "");
-    if (zhAwarenessCount(line) > 30) line = line.slice(0, 30);
+    const api = textIntegrityApi();
+    const picked = typeof api.pickCompleteSentence === "function" ? api.pickCompleteSentence(line, 30) : "";
+    if (!picked) {
+      if (typeof api.warnIncomplete === "function") api.warnIncomplete("app.normalizeAwarenessLine", "line", line);
+      return "";
+    }
+    line = picked.replace(/[。！？]+$/g, "");
   }
   const count = zhAwarenessCount(line);
   if (count < 15 || count > 30 || looksIncompleteAwarenessText(line)) return "";
@@ -5015,9 +5052,14 @@ function normalizeAwarenessResult(raw) {
   const nested = src.result && typeof src.result === "object" ? src.result : src;
   let seen = softenAwarenessClaim(finishAwarenessBlock(nested.seen || nested.selfSeen || nested.todaySeen || nested.iSee, 280));
   let gap = softenAwarenessClaim(finishAwarenessBlock(nested.gap || nested.overlooked || nested.missed, 320));
-  let question = compactAwarenessText(nested.question || nested.tonight || nested.prompt || nested.eveningQuestion, 90);
+  const integrity = textIntegrityApi();
+  let question = typeof integrity.finalizeGeneratedQuestion === "function"
+    ? integrity.finalizeGeneratedQuestion(
+        nested.question || nested.tonight || nested.prompt || nested.eveningQuestion,
+        { source: "app.normalizeAwarenessResult", field: "question", max: 160 }
+      )
+    : compactAwarenessText(nested.question || nested.tonight || nested.prompt || nested.eveningQuestion, 90);
   if (isGenericAwarenessQuestion(question) || looksIncompleteAwarenessText(question)) question = "";
-  if (question && !/[？?]$/.test(question)) question = `${question.replace(/[。.!！]+$/g, "")}？`;
   let line = normalizeAwarenessLine(nested.line || nested.quote || nested.oneLine);
   if (!line && Array.isArray(src.quotes) && src.quotes[0]) line = normalizeAwarenessLine(src.quotes[0]);
   const echo = sanitizeAwarenessEcho(nested.echo || nested.weekly || nested.crossDay || nested.pattern, collectRecentAwarenessDays());
@@ -5055,7 +5097,10 @@ function awarenessResultKeepText(result) {
   const data = normalizeAwarenessResult(result);
   if (data.line && data.line.length >= 8) return data.line;
   const quote = cleanAwarenessQuote(data.seen);
-  return quote.length >= 8 ? quote : data.seen.slice(0, 28);
+  if (quote.length >= 8) return quote;
+  const api = textIntegrityApi();
+  if (typeof api.pickCompleteSentence === "function") return api.pickCompleteSentence(data.seen, 28);
+  return "";
 }
 
 function formatAwarenessResultText(result) {
@@ -5069,11 +5114,14 @@ function formatAwarenessResultText(result) {
 }
 
 function cleanAwarenessQuote(text) {
-  return firstAwarenessSentence(text)
+  const cleaned = firstAwarenessSentence(text)
     .replace(/^["「『]+|[」』"]+$/g, "")
     .replace(/^[\d.、｜|\-\s]+/, "")
-    .trim()
-    .slice(0, 28);
+    .trim();
+  if (!cleaned) return "";
+  if (zhAwarenessCount(cleaned) <= 28 && !looksIncompleteAwarenessText(cleaned)) return cleaned;
+  const api = textIntegrityApi();
+  return typeof api.pickCompleteSentence === "function" ? api.pickCompleteSentence(cleaned, 28) : "";
 }
 
 function normalizeAwarenessQuotes(raw, fallback) {
@@ -5371,11 +5419,17 @@ function buildExecutionCheckItems(journal) {
     pushUniqueExec(items, "明天下班回家換完衣服後走路10分鐘", "換完衣服就出門走10分鐘，走完就算完成。", EXECUTION_CARD_MAX);
   }
   if (!items.length && step) {
-    const short = step.length > 32 ? `${step.slice(0, 32)}` : step.replace(/[。！？.]+$/g, "");
+    const api = textIntegrityApi();
+    const short = step.replace(/\s+/g, "").length > 32 && typeof api.pickCompleteSentence === "function"
+      ? api.pickCompleteSentence(step, 32) || step.replace(/[。！？.]+$/g, "")
+      : step.replace(/[。！？.]+$/g, "");
     pushUniqueExec(items, short, "先做到這個最小程度，做完就勾起來。", EXECUTION_CARD_MAX);
   }
   if (!items.length && answers[0]) {
-    const short = answers[0].length > 32 ? answers[0].slice(0, 32) : answers[0].replace(/[。！？.]+$/g, "");
+    const api = textIntegrityApi();
+    const short = answers[0].replace(/\s+/g, "").length > 32 && typeof api.pickCompleteSentence === "function"
+      ? api.pickCompleteSentence(answers[0], 32) || answers[0].replace(/[。！？.]+$/g, "")
+      : answers[0].replace(/[。！？.]+$/g, "");
     pushUniqueExec(items, short, "先把這件事縮成可以開始的一小步，做完就勾起來。", EXECUTION_CARD_MAX);
   }
   return items.slice(0, tired ? 1 : EXECUTION_CARD_MAX);
@@ -7208,17 +7262,17 @@ const LEGACY_DEEP_PROMPTS = [
 ];
 
 function normalizePromptQuestionList(list, max) {
+  const api = textIntegrityApi();
   return (Array.isArray(list) ? list : [])
     .map((item) => {
-      if (typeof item === "string") {
-        const question = item.trim();
-        return question ? { question: question.slice(0, 180), placeholder: "寫下那個時刻…" } : null;
-      }
-      const question = String(item?.question || item?.title || "").trim();
-      if (!question) return null;
+      const raw = typeof item === "string" ? item.trim() : String(item?.question || item?.title || "").trim();
+      const question = typeof api.finalizeGeneratedQuestion === "function"
+        ? api.finalizeGeneratedQuestion(raw, { source: "app.normalizePromptQuestionList", field: "question", max: 200 })
+        : raw;
+      if (!question || looksIncompleteAwarenessText(question)) return null;
       return {
-        question: question.slice(0, 180),
-        placeholder: String(item?.placeholder || "寫下那個時刻…").trim().slice(0, 48) || "寫下那個時刻…",
+        question,
+        placeholder: String((item && item.placeholder) || "寫下那個時刻…").trim().slice(0, 48) || "寫下那個時刻…",
       };
     })
     .filter(Boolean)
@@ -7226,10 +7280,7 @@ function normalizePromptQuestionList(list, max) {
 }
 
 function normalizeAwarenessPrompts(list) {
-  return normalizePromptQuestionList(list, AWARENESS_QUIZ_COUNT).map((item) => ({
-    ...item,
-    question: String(item.question || "").slice(0, 180),
-  }));
+  return normalizePromptQuestionList(list, AWARENESS_QUIZ_COUNT);
 }
 
 function normalizeExecutionPrompts(list) {
@@ -7238,13 +7289,13 @@ function normalizeExecutionPrompts(list) {
       if (typeof item === "string") {
         const question = item.trim();
         return question
-          ? { question: question.slice(0, 120), placeholder: "寫下你準備做的一小步…", parked: false }
+          ? { question, placeholder: "寫下你準備做的一小步…", parked: false }
           : null;
       }
       const question = String(item?.question || item?.title || "").trim();
       if (!question) return null;
       return {
-        question: question.slice(0, 120),
+        question,
         placeholder:
           String(item?.placeholder || "寫下你準備做的一小步…").trim().slice(0, 48) || "寫下你準備做的一小步…",
         parked: Boolean(item?.parked),
@@ -7275,9 +7326,9 @@ function normalizeDeepPrompts(list) {
       const title = String(item?.title || item?.question || "").trim();
       if (!title) return null;
       return {
-        title: title.slice(0, 90),
-        plainGuide: String(item?.plainGuide || "白話想一想：先把場面講清楚。").trim().slice(0, 90),
-        deepGuide: String(item?.deepGuide || "深挖一點點：真正被碰到的是哪一層？").trim().slice(0, 90),
+        title,
+        plainGuide: String(item?.plainGuide || "白話想一想：先把場面講清楚。").trim(),
+        deepGuide: String(item?.deepGuide || "深挖一點點：真正被碰到的是哪一層？").trim(),
         placeholderPlain: String(item?.placeholderPlain || "那一刻發生了什麼…").trim().slice(0, 36),
         placeholderDeep: String(item?.placeholderDeep || "真正觸發我的是…").trim().slice(0, 36),
       };

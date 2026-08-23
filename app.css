@@ -3620,6 +3620,9 @@ body.nav-closed .auth-pay {
   font-weight: 700;
   line-height: 1.45;
   color: var(--text);
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .check-row {
@@ -4960,6 +4963,8 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   position: relative;
   font-size: 14px;
   line-height: 1.55;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
 .journal-qs p::before {

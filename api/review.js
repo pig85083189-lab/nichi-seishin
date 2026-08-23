@@ -1,6 +1,11 @@
 const { requireUser, bearerToken } = require("../lib/auth");
 const { ensureTrial, isEntitled, supabaseAdminConfigured } = require("../lib/supabase");
 const { getApiKey, getModel, getProvider, usesClaude, callOpenAI } = require("../lib/openai");
+const textIntegrity = require("../lib/text-integrity");
+
+function withCompleteRule(system) {
+  return `${system}\n\n【文字完整性】\n${textIntegrity.COMPLETE_TEXT_RULE}`;
+}
 
 function readJsonBody(req) {
   const raw = req.body;
@@ -745,10 +750,15 @@ function softenLoadedThinkQuestion(question, ctx) {
 function clampThinkQuestion(question, ctx) {
   let next = softenLoadedThinkQuestion(question, ctx).replace(/\s+/g, " ").trim();
   if (!next) return "";
-  if (zhCharCount(next) > 58) {
-    next = `${next.replace(/[？?]+$/, "").slice(0, 54).replace(/[，、。；\s]+$/, "")}？`;
+  if (!/[？?]$/.test(next)) next = `${next.replace(/[。.!！]+$/g, "")}？`;
+  if (textIntegrity.isCompleteSentence(next, { requireQuestion: true })) return next;
+  const picked = textIntegrity.pickCompleteSentence(next, 80);
+  if (picked) {
+    const questionText = /[？?]$/.test(picked) ? picked : `${picked.replace(/[。.!！]+$/g, "")}？`;
+    if (textIntegrity.isCompleteSentence(questionText, { requireQuestion: true })) return questionText;
   }
-  return next;
+  textIntegrity.warnIncomplete("api/review.clampThinkQuestion", "question", next);
+  return "";
 }
 
 function normalizeThinkGuideAsk(raw, ctx) {
@@ -757,7 +767,12 @@ function normalizeThinkGuideAsk(raw, ctx) {
   return {
     step: "ask",
     question,
-    hint: String(data.hint || data.guide || "").trim().slice(0, 28),
+    hint: (() => {
+      const raw = String(data.hint || data.guide || "").trim();
+      if (!raw) return "";
+      if (zhCharCount(raw) <= 36 && textIntegrity.isCompleteSentence(raw)) return raw;
+      return textIntegrity.pickCompleteSentence(raw, 36);
+    })(),
   };
 }
 
@@ -776,7 +791,8 @@ function clampAwarenessSummary(text) {
   parts.forEach((part) => {
     if (used >= 250) return;
     const room = 250 - used;
-    const piece = zhCharCount(part) <= room ? part : `${part.slice(0, Math.max(12, room - 1)).replace(/[，、。；\s]+$/, "")}。`;
+    const piece = zhCharCount(part) <= room ? part : textIntegrity.pickCompleteSentence(part, room);
+    if (!piece) return;
     clipped.push(piece);
     used += zhCharCount(piece);
   });
@@ -790,7 +806,14 @@ function normalizeThinkSelfSeen(text) {
   if (/^你開始看見/.test(next)) next = next.replace(/^你開始看見/, "我開始看見");
   if (/^你是一個/.test(next)) next = "";
   if (next && !/^我/.test(next)) next = /^發現|^開始看見/.test(next) ? `我${next}` : `我發現${next}`;
-  if (zhCharCount(next) > 48) next = next.slice(0, 48).replace(/[，、；\s]+$/, "");
+  if (zhCharCount(next) > 48) {
+    const picked = textIntegrity.pickCompleteSentence(`${next}。`, 48);
+    next = picked ? picked.replace(/[。]+$/, "") : "";
+  }
+  if (next && !textIntegrity.isCompleteSentence(`${next}。`)) {
+    textIntegrity.warnIncomplete("api/review.normalizeThinkSelfSeen", "selfSeen", next);
+    return "";
+  }
   return next ? `${next.replace(/[。]+$/, "")}。` : "";
 }
 
@@ -798,7 +821,16 @@ function normalizeThinkTakeaway(text) {
   let next = String(text || "").replace(/\s+/g, " ").trim().split(/[。！？]/)[0] || "";
   next = next.replace(/[。！？「」]+/g, "").trim();
   if (/相信自己|比想像中更|你很有力量|成為更好的自己|你比想像/.test(next)) next = "";
-  if (zhCharCount(next) > 35) next = next.slice(0, 35).replace(/[，、；\s]+$/, "");
+  if (zhCharCount(next) > 35) {
+    const picked = textIntegrity.pickCompleteSentence(next, 35);
+    if (picked) return picked.replace(/[。！？「」]+/g, "").trim();
+    textIntegrity.warnIncomplete("api/review.normalizeThinkTakeaway", "takeaway", next);
+    return "";
+  }
+  if (next && !textIntegrity.isCompleteSentence(next) && !textIntegrity.isCompleteSentence(`${next}。`)) {
+    textIntegrity.warnIncomplete("api/review.normalizeThinkTakeaway", "takeaway", next);
+    return "";
+  }
   return next;
 }
 
@@ -811,7 +843,11 @@ function normalizeThinkGuideClose(raw) {
   const takeaway = normalizeThinkTakeaway(data.takeaway || data.line || data.quote || "");
   return {
     step: "close",
-    title: String(data.title || data.headline || "").trim().slice(0, 18) || "今天真正有感的那一層",
+    title: (() => {
+      const raw = String(data.title || data.headline || "").trim();
+      if (raw && zhCharCount(raw) <= 26 && textIntegrity.isCompleteSentence(raw)) return raw;
+      return textIntegrity.pickCompleteSentence(raw, 26) || "今天真正有感的那一層";
+    })(),
     summary: awareness,
     awareness,
     selfSeen,
@@ -1193,7 +1229,13 @@ function normalizeDeepenQuestions(raw) {
     const text = typeof item === "string"
       ? item.trim()
       : String(item?.question || item?.text || item?.title || "").trim();
-    if (text && !questions.includes(text)) questions.push(text.replace(/^[\d.、\-\s]+/, "").slice(0, 80));
+    if (text) {
+      const cleaned = text.replace(/^[\d.、\-\s]+/, "").trim();
+      const next = textIntegrity.isCompleteSentence(cleaned)
+        ? cleaned
+        : textIntegrity.pickCompleteSentence(cleaned, 80);
+      if (next && !questions.includes(next)) questions.push(next);
+    }
   });
   return questions.slice(0, 4);
 }
@@ -1223,65 +1265,70 @@ function firstAwarenessSentence(text) {
 }
 
 function cleanAwarenessQuote(text) {
-  return firstAwarenessSentence(text)
+  const cleaned = firstAwarenessSentence(text)
     .replace(/^["「『]+|[」』"]+$/g, "")
     .replace(/^[\d.、｜|\-\s]+/, "")
-    .trim()
-    .slice(0, 28);
+    .trim();
+  if (!cleaned) return "";
+  if (zhCharCount(cleaned) <= 28 && textIntegrity.isCompleteSentence(cleaned)) return cleaned;
+  return textIntegrity.pickCompleteSentence(cleaned, 28);
 }
 
 function compactAwarenessText(value, max) {
-  return String(value || "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, max || 220);
+  const cleaned = String(value || "").replace(/\s+/g, " ").trim();
+  if (!cleaned) return "";
+  if (!max || zhCharCount(cleaned) <= max) return cleaned;
+  return textIntegrity.pickCompleteSentence(cleaned, max) || "";
 }
 
-function compactAwarenessBlock(value, max) {
+function compactAwarenessBlock(value) {
   return String(value || "")
     .replace(/\r\n/g, "\n")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/[ \t]{2,}/g, " ")
-    .trim()
-    .slice(0, max || 220);
+    .trim();
 }
 
 function looksIncompleteAwarenessText(text) {
-  const raw = String(text || "").trim();
-  if (!raw) return true;
-  if (/[，、；：:\-—–…]$/.test(raw)) return true;
-  if (/(的|和|與|以及|還包括|還有|一個|一種|不是|而是|因為|所以|包括)$/.test(raw)) return true;
-  return false;
+  return !textIntegrity.isCompleteSentence(text);
 }
 
 function finishAwarenessBlock(value, max) {
-  const cleaned = compactAwarenessBlock(value, 4000);
+  const cleaned = compactAwarenessBlock(value);
   if (!cleaned) return "";
   const limit = max || 280;
-  const source = cleaned.length <= limit ? cleaned : cleaned.slice(0, limit);
-  const cut = cleaned.length > limit
-    ? (() => {
-        const lastStop = Math.max(source.lastIndexOf("。"), source.lastIndexOf("！"), source.lastIndexOf("？"), source.lastIndexOf("\n"));
-        if (lastStop >= Math.min(24, Math.floor(limit * 0.35))) return source.slice(0, lastStop + 1).trim();
-        return "";
-      })()
-    : cleaned;
+  if (zhCharCount(cleaned) <= limit) {
+    return looksIncompleteAwarenessText(cleaned) ? "" : cleaned;
+  }
+  const sentences = textIntegrity.splitSentences(cleaned);
+  const kept = [];
+  let used = 0;
+  sentences.forEach((part) => {
+    if (!textIntegrity.isCompleteSentence(part)) return;
+    const add = zhCharCount(part);
+    if (used && used + add > limit) return;
+    if (!used && add > limit) return;
+    kept.push(part);
+    used += add;
+  });
+  const cut = kept.join("");
   if (!cut || looksIncompleteAwarenessText(cut)) return "";
   return cut;
 }
 
 function normalizeAwarenessLine(text) {
-  let line = compactAwarenessText(text, 40).replace(/^["「『]+|[」』"]+$/g, "");
+  let line = String(text || "").replace(/\s+/g, " ").trim().replace(/^["「『]+|[」』"]+$/g, "");
   if (!line || looksIncompleteAwarenessText(line)) return "";
-  let count = zhCharCount(line);
-  if (count > 30) {
-    const clipped = line.slice(0, 36);
-    const stop = Math.max(clipped.lastIndexOf("。"), clipped.lastIndexOf("，"), clipped.lastIndexOf(" "));
-    line = (stop >= 12 ? clipped.slice(0, stop) : clipped).replace(/[，、。；\s]+$/g, "");
-    if (zhCharCount(line) > 30) line = line.slice(0, 30);
+  if (zhCharCount(line) > 30) {
+    const picked = textIntegrity.pickCompleteSentence(line, 30);
+    if (!picked) {
+      textIntegrity.warnIncomplete("api/review.normalizeAwarenessLine", "line", line);
+      return "";
+    }
+    line = picked.replace(/[。！？]+$/g, "");
   }
-  count = zhCharCount(line);
+  const count = zhCharCount(line);
   if (count < 15 || count > 30 || looksIncompleteAwarenessText(line)) return "";
   return line;
 }
@@ -1478,9 +1525,11 @@ function normalizeAwarenessResult(raw, recentDays) {
   const nested = src.result && typeof src.result === "object" ? src.result : src;
   let seen = softenAwarenessClaim(finishAwarenessBlock(nested.seen || nested.selfSeen || nested.todaySeen || nested.iSee, 280));
   let gap = softenAwarenessClaim(finishAwarenessBlock(nested.gap || nested.overlooked || nested.missed, 320));
-  let question = compactAwarenessText(nested.question || nested.tonight || nested.prompt || nested.eveningQuestion, 90);
-  if (isGenericAwarenessQuestion(question) || looksIncompleteAwarenessText(question)) question = "";
-  if (question && !/[？?]$/.test(question)) question = `${question.replace(/[。.!！]+$/g, "")}？`;
+  let question = textIntegrity.finalizeGeneratedQuestion(
+    nested.question || nested.tonight || nested.prompt || nested.eveningQuestion,
+    { source: "api/review.normalizeAwarenessResult", field: "question", max: 160 }
+  );
+  if (isGenericAwarenessQuestion(question)) question = "";
   let line = normalizeAwarenessLine(nested.line || nested.quote || nested.oneLine);
   if (!line && Array.isArray(src.quotes) && src.quotes[0]) line = normalizeAwarenessLine(src.quotes[0]);
   const echo = sanitizeAwarenessEcho(nested.echo || nested.weekly || nested.crossDay || nested.pattern, recentDays);
@@ -1548,8 +1597,10 @@ function looksLikeAnalysisExecTitle(title) {
 
 function firstExecSentence(text, max) {
   const raw = String(text || "").replace(/\s+/g, " ").trim();
-  const match = raw.match(/^[^。！？!?]+[。！？!?]?/);
-  return (match ? match[0] : raw).trim().slice(0, max || 80);
+  if (!raw) return "";
+  const limit = max || 80;
+  if (zhCharCount(raw) <= limit && textIntegrity.isCompleteSentence(raw)) return raw;
+  return textIntegrity.pickCompleteSentence(raw, limit);
 }
 
 function softenExecCoachText(text) {
@@ -1596,10 +1647,15 @@ function execFocusHintForWhen(when) {
 
 function rewriteExecActionTitle(title, detail, smallestStep) {
   const cleaned = softenExecCoachText(String(title || "").replace(/^[\d.、｜|\-\s]+/, "")).trim();
-  if (cleaned && !looksLikeAnalysisExecTitle(cleaned)) return cleaned.slice(0, 32);
+  const pickTitle = (value) => {
+    if (!value) return "";
+    if (zhCharCount(value) <= 32 && textIntegrity.isCompleteSentence(value)) return value;
+    return textIntegrity.pickCompleteSentence(value, 32) || (zhCharCount(value) <= 32 ? value : "");
+  };
+  if (cleaned && !looksLikeAnalysisExecTitle(cleaned)) return pickTitle(cleaned);
   const step = String(smallestStep || "").trim().replace(/[。！？.]+$/g, "");
-  if (step && !looksLikeAnalysisExecTitle(step)) return step.slice(0, 32);
-  return cleaned.slice(0, 32);
+  if (step && !looksLikeAnalysisExecTitle(step)) return pickTitle(step);
+  return pickTitle(cleaned);
 }
 
 function pickExecItemByTitle(items, title) {
@@ -1620,7 +1676,7 @@ function rewriteExecFocus(focus, items, smallestStep, ctx) {
   const picked = pickExecItemByTitle(list, source.title) || list[0] || null;
   if (!picked) {
     const step = String(smallestStep || "").trim().replace(/[。！？.]+$/g, "");
-    const title = step.slice(0, 32);
+    const title = rewriteExecActionTitle(step, "", smallestStep);
     const when = execFocusWhenFromText(title, "");
     return {
       title,
@@ -1633,7 +1689,7 @@ function rewriteExecFocus(focus, items, smallestStep, ctx) {
     ? source.when
     : execFocusWhenFromText(picked.title, picked.detail);
   return {
-    title: String(picked.title || "").slice(0, 32),
+    title: rewriteExecActionTitle(picked.title, picked.detail, smallestStep),
     detail: shortenExecWhy(source.detail || picked.detail),
     when,
     hint: String(source.hint || "").trim().slice(0, 28) || execFocusHintForWhen(when),
@@ -1915,7 +1971,9 @@ Q3｜碰到更底層的自己
 禁止假深度、文青空話，例如：「在今天的光影裡，你是否看見內心真正的自己？」
 禁止：「你其實在期待…」「你真正的防衛…」「你一直都…」「你就是…」
 問題一定要引用今天紀錄中的線索，具體、白話、準確、有心理深度。
-整題必須寫完整，最後一字不能停在「的／和／一個／以及／還包括」。
+整題必須寫完整，最後一字不能停在「的／和／一個／以及／還包括／當成了」。
+問題必須可以單獨閱讀，最後必須有「？」，並且是一個清楚的是／否判斷。
+所有輸出欄位都必須是語意完整的句子。禁止輸出講到一半的句子。不得為了符合字數限制直接截斷句子。若內容過長，請重新濃縮成較短但完整的一句話。
 
 規則：
 - 只輸出 JSON：{"awareness":[{"question":"..."}]}
@@ -2155,16 +2213,21 @@ function asPromptList(raw) {
 
 function normalizePromptItem(item) {
   if (typeof item === "string") {
-    const question = item.trim();
-    return question ? { question: question.slice(0, 96), placeholder: "寫下那個時刻…" } : null;
+    const question = textIntegrity.finalizeGeneratedQuestion(item, {
+      source: "api/review.normalizePromptItem",
+      field: "question",
+      max: 200,
+    });
+    return question ? { question, placeholder: "寫下那個時刻…" } : null;
   }
   if (!item || typeof item !== "object") return null;
-  const question = String(
-    item.question || item.title || item.text || item.prompt || item.statement || item.label || ""
-  ).trim();
+  const question = textIntegrity.finalizeGeneratedQuestion(
+    item.question || item.title || item.text || item.prompt || item.statement || item.label || "",
+    { source: "api/review.normalizePromptItem", field: "question", max: 200 }
+  );
   if (!question) return null;
   return {
-    question: question.slice(0, 96),
+    question,
     placeholder: String(item.placeholder || "寫下那個時刻…").trim().slice(0, 48) || "寫下那個時刻…",
   };
 }
@@ -2173,10 +2236,17 @@ function normalizeDeepPromptItem(item) {
   const base = normalizePromptItem(item);
   if (!base) return null;
   const data = item && typeof item === "object" ? item : {};
+  const title = textIntegrity.isCompleteSentence(base.question)
+    ? base.question
+    : textIntegrity.finalizeGeneratedQuestion(base.question, {
+        source: "api/review.normalizeDeepPromptItem",
+        field: "title",
+      });
+  if (!title) return null;
   return {
-    title: base.question.slice(0, 90),
-    plainGuide: String(data.plainGuide || data.plain || "白話想一想：先把場面講清楚。").trim().slice(0, 80),
-    deepGuide: String(data.deepGuide || data.deep || "深挖一點點：真正被碰到的是哪一層？").trim().slice(0, 80),
+    title,
+    plainGuide: String(data.plainGuide || data.plain || "白話想一想：先把場面講清楚。").trim(),
+    deepGuide: String(data.deepGuide || data.deep || "深挖一點點：真正被碰到的是哪一層？").trim(),
     placeholderPlain: String(data.placeholderPlain || "那一刻發生了什麼…").trim().slice(0, 36),
     placeholderDeep: String(data.placeholderDeep || "真正觸發我的是…").trim().slice(0, 36),
   };
@@ -2220,12 +2290,23 @@ function padAwarenessPrompts(list, ctx, max = 1) {
   const next = uniquePromptList(
     (list || [])
       .map((item) => {
-        const question = String(item?.question || "").trim().slice(0, 180);
+        const question = textIntegrity.finalizeGeneratedQuestion(item?.question, {
+          source: "api/review.padAwarenessPrompts",
+          field: "question",
+          max: 200,
+        });
         return question && !isBloatedAwarenessQuestion(question) ? { question } : null;
       })
       .filter(Boolean)
   );
-  if (!next.length && extras[0] && Number(ctx && ctx.step) <= 1) next.push(extras[0]);
+  if (!next.length) {
+    if (extras[0] && Number(ctx && ctx.step) <= 1) next.push(extras[0]);
+    else {
+      next.push({
+        question: "當你回頭看今天的選擇時，你是不是更能看見自己真正在意的是什麼？",
+      });
+    }
+  }
   return next.slice(0, Math.max(1, max));
 }
 
@@ -2258,9 +2339,9 @@ function padExecutionPrompts(list) {
   const fallbacks = executionQuestionFallbacks();
   const cleaned = uniquePromptList(list).map((item, index) => {
     const question = String(item?.question || "").trim();
-    if (!isBloatedExecQuestion(question)) {
+    if (!isBloatedExecQuestion(question) && textIntegrity.isCompleteSentence(question, { requireQuestion: true })) {
       return {
-        question: question.slice(0, 80),
+        question,
         placeholder: String(item?.placeholder || fallbacks[index]?.placeholder || "寫下你準備做的一小步…").slice(0, 48),
       };
     }
@@ -2455,25 +2536,25 @@ module.exports = async function handler(req, res) {
     } else if (mode === "checklist") {
       const kind = body.kind === "execution" ? "execution" : "awareness";
       messages = [
-        { role: "system", content: kind === "execution" ? CHECKLIST_EXECUTION_SYSTEM : CHECKLIST_AWARENESS_SYSTEM },
+        { role: "system", content: withCompleteRule(kind === "execution" ? CHECKLIST_EXECUTION_SYSTEM : CHECKLIST_AWARENESS_SYSTEM) },
         { role: "user", content: checklistUserPrompt(kind, body) },
       ];
     } else if (mode === "insight") {
       if (isThinkGuideRequest(body)) {
         const close = thinkGuideStep(body) === "close";
         messages = [
-          { role: "system", content: close ? THINK_GUIDE_CLOSE_SYSTEM : THINK_GUIDE_ASK_SYSTEM },
+          { role: "system", content: withCompleteRule(close ? THINK_GUIDE_CLOSE_SYSTEM : THINK_GUIDE_ASK_SYSTEM) },
           { role: "user", content: thinkGuideUserPrompt(body) },
         ];
       } else {
         messages = [
-          { role: "system", content: isQuickInsightRequest(body) ? QUICK_INSIGHT_SYSTEM : INSIGHT_SYSTEM },
+          { role: "system", content: withCompleteRule(isQuickInsightRequest(body) ? QUICK_INSIGHT_SYSTEM : INSIGHT_SYSTEM) },
           { role: "user", content: insightUserPrompt(body) },
         ];
       }
     } else if (mode === "deepen") {
       messages = [
-        { role: "system", content: DEEPEN_SYSTEM },
+        { role: "system", content: withCompleteRule(DEEPEN_SYSTEM) },
         { role: "user", content: deepenUserPrompt(body) },
       ];
     } else if (mode === "prompts") {
@@ -2481,15 +2562,17 @@ module.exports = async function handler(req, res) {
       messages = [
         {
           role: "system",
-          content: promptKind === "awareness"
-            ? AWARENESS_PROMPTS_SYSTEM
-            : promptKind === "execution"
-              ? isExecutionFollowupRequest(body)
-                ? EXECUTION_FOLLOW_SYSTEM
-                : EXECUTION_PROMPTS_SYSTEM
-              : isCorePromptsRequest(body)
-                ? CORE_PROMPTS_SYSTEM
-                : PROMPTS_SYSTEM,
+          content: withCompleteRule(
+            promptKind === "awareness"
+              ? AWARENESS_PROMPTS_SYSTEM
+              : promptKind === "execution"
+                ? isExecutionFollowupRequest(body)
+                  ? EXECUTION_FOLLOW_SYSTEM
+                  : EXECUTION_PROMPTS_SYSTEM
+                : isCorePromptsRequest(body)
+                  ? CORE_PROMPTS_SYSTEM
+                  : PROMPTS_SYSTEM
+          ),
         },
         {
           role: "user",
@@ -2503,12 +2586,12 @@ module.exports = async function handler(req, res) {
     } else if (mode === "manifest") {
       const prompts = isManifestPromptsRequest(body);
       messages = [
-        { role: "system", content: prompts ? MANIFEST_PROMPTS_SYSTEM : MANIFEST_PATHS_SYSTEM },
+        { role: "system", content: withCompleteRule(prompts ? MANIFEST_PROMPTS_SYSTEM : MANIFEST_PATHS_SYSTEM) },
         { role: "user", content: prompts ? manifestPromptsUserPrompt(body) : manifestPathsUserPrompt(body) },
       ];
     } else if (mode === "bodycoach") {
       messages = [
-        { role: "system", content: BODY_COACH_SYSTEM },
+        { role: "system", content: withCompleteRule(BODY_COACH_SYSTEM) },
         { role: "user", content: bodyCoachUserPrompt(body) },
       ];
     } else if (mode === "think") {
@@ -2518,7 +2601,7 @@ module.exports = async function handler(req, res) {
       const reply = String(body.reply || "").trim() || "（沒有額外補充）";
       const organize = body.organize ? JSON.stringify(body.organize) : "";
       messages = [
-        { role: "system", content: THINK_SYSTEM },
+        { role: "system", content: withCompleteRule(THINK_SYSTEM) },
         {
           role: "user",
           content: `這是第 ${round}/${max} 輪。\n先前整理：\n${organize}\n\n勾選的下一步：\n${actions.length ? actions.map((item) => `- ${item.label}：${item.detail}`).join("\n") : "（尚未勾選）"}\n\n使用者補充：\n${reply}\n\n原始口語：\n${text}`,
@@ -2526,7 +2609,7 @@ module.exports = async function handler(req, res) {
       ];
     } else {
       messages = [
-        { role: "system", content: ORGANIZE_SYSTEM },
+        { role: "system", content: withCompleteRule(ORGANIZE_SYSTEM) },
         { role: "user", content: `復盤日期：${body.date || ""}\n\n口語原文：\n${text}` },
       ];
     }
@@ -2556,26 +2639,26 @@ module.exports = async function handler(req, res) {
       rejectPartial: awareMode,
       maxTokens:
         mode === "bodycoach"
-          ? 720
+          ? 900
           : mode === "insight" && isThinkGuideRequest(body)
           ? thinkGuideStep(body) === "close"
-            ? 700
-            : 360
+            ? 900
+            : 640
           : mode === "prompts" && promptKind === "awareness"
-            ? 500
+            ? 700
           : mode === "prompts" && promptKind === "execution"
-              ? 700
+              ? 800
               : mode === "prompts" && isCorePromptsRequest(body)
-                ? 900
+                ? 1000
                 : mode === "manifest"
                   ? isManifestPromptsRequest(body)
-                    ? 500
-                    : 800
+                    ? 640
+                    : 900
                 : mode === "checklist"
                   ? body.kind === "execution"
-                    ? 800
-                    : 1600
-                  : 1400,
+                    ? 900
+                    : 1800
+                  : 1600,
     };
     let data;
     try {
