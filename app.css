@@ -5872,10 +5872,10 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   padding: 0 0.04em;
   border-radius: 0;
   background: linear-gradient(
-    transparent 38%,
-    rgba(216, 196, 180, 0.46) 38%,
-    rgba(216, 196, 180, 0.46) 86%,
-    transparent 86%
+    transparent 25%,
+    rgba(214, 187, 164, 0.7) 25%,
+    rgba(214, 187, 164, 0.7) 92%,
+    transparent 92%
   );
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
@@ -5890,10 +5890,10 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   color: inherit;
   font-weight: 700;
   background: linear-gradient(
-    transparent 34%,
-    rgba(190, 158, 134, 0.56) 34%,
-    rgba(190, 158, 134, 0.56) 90%,
-    transparent 90%
+    transparent 20%,
+    rgba(190, 151, 120, 0.78) 20%,
+    rgba(190, 151, 120, 0.78) 94%,
+    transparent 94%
   );
 }
 
