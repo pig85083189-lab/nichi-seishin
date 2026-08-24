@@ -3,6 +3,13 @@ const { ensureTrial, isEntitled, supabaseAdminConfigured } = require("../lib/sup
 const { getApiKey, getModel, getProvider, usesClaude, callOpenAI } = require("../lib/openai");
 const textIntegrity = require("../lib/text-integrity");
 const bodyCoachInsight = require("../lib/body-coach-insight");
+const insightHighlight = require("../lib/insight-highlight");
+
+const HIGHLIGHT_RULE = `【重點反白 highlights】
+請從你實際生成的原文中，挑選最值得使用者停下來看的關鍵短句。
+highlight.text 必須 100% 原樣存在於對應欄位原文中，不可改寫、不可摘要、不可自行補字。
+每個主要區塊最多 1～2 個 highlight。strong 最多 1 個。每個 highlight 約 4～18 個中文字。
+不要整段或整句上色。若沒有真正重要的句子，該欄位回傳 []。`;
 
 function withCompleteRule(system) {
   return `${system}\n\n【文字完整性】\n${textIntegrity.COMPLETE_TEXT_RULE}`;
@@ -178,8 +185,15 @@ const CHECKLIST_AWARENESS_SYSTEM = `你是「日精進」的覺察整理者。�
   "gap": "2到4句完整觀察",
   "question": "今晚留給自己的一個問題？",
   "line": "15到30個中文字",
-  "echo": ""
-}`;
+  "echo": "",
+  "highlights": {
+    "seen": [{ "text": "必須原樣出現在 seen 裡的短句", "level": "strong" }],
+    "gap": [],
+    "question": [],
+    "line": []
+  }
+}
+${HIGHLIGHT_RULE}`;
 
 const MANIFEST_PROMPTS_SYSTEM = `你是「日精進」的顯化引導者。04 看見自己，05 把事情做出來；你幫他看見自己想去哪裡，開始成為那個人。
 
@@ -419,15 +433,18 @@ hint：一句降低負擔，18-28 字，例如「明天不用全部做到，先�
 只輸出 JSON：
 {
   "items": [
-    { "title": "明天其中一餐多一份青菜", "detail": "午餐或晚餐任選一餐，多加一道青菜，不需要同時改變其他飲食。" }
+    { "title": "明天其中一餐多一份青菜", "detail": "午餐或晚餐任選一餐，多加一道青菜，不需要同時改變其他飲食。", "highlights": [] }
   ],
   "focus": {
     "title": "明天其中一餐多一份青菜",
     "detail": "先把「多吃菜」縮成一餐就能完成的一小步。",
     "when": "tomorrow",
-    "hint": "明天不用全部做到，先完成這一步就好。"
+    "hint": "明天不用全部做到，先完成這一步就好。",
+    "highlights": []
   }
-}`;
+}
+每張卡與 focus 可帶 highlights，text 必須原樣出現在該卡 title 或 detail。
+${HIGHLIGHT_RULE}`;
 
 const INSIGHT_JSON_SHAPE = `{
   "title": "一句有質感的洞察標題，12-22字",
@@ -641,8 +658,14 @@ const THINK_GUIDE_CLOSE_SYSTEM = `你不是心理醫師，也不是裁判。你�
   "title": "8-16字，具體，不要雞湯",
   "awareness": "今日覺察總結。剛好 2 到 3 個短段落，用\\n\\n分開。全文 180-250 個中文字。內容只含：1) 今天發生了什麼 2) 三輪回答共同指向什麼 3) 今天可能值得繼續觀察什麼",
   "selfSeen": "今天我看見的自己：只能一句，第一人稱，必須像他自己說的",
-  "takeaway": "今日帶走的一句話：只能一句，15-35字，從今天長出來，不要空泛名言"
+  "takeaway": "今日帶走的一句話：只能一句，15-35字，從今天長出來，不要空泛名言",
+  "highlights": {
+    "awareness": [{ "text": "必須原樣出現在 awareness 裡的短句", "level": "strong" }],
+    "selfSeen": [],
+    "takeaway": []
+  }
 }
+${HIGHLIGHT_RULE}
 - 不要再提問，不要列行動清單
 - 繁體中文`;
 
@@ -854,6 +877,12 @@ function normalizeThinkGuideClose(raw) {
     selfSeen,
     takeaway,
     actions: [],
+    highlights: {
+      title: insightHighlight.fieldHighlights(data.highlights, "title"),
+      awareness: insightHighlight.fieldHighlights(data.highlights, "awareness"),
+      selfSeen: insightHighlight.fieldHighlights(data.highlights, "selfSeen"),
+      takeaway: insightHighlight.fieldHighlights(data.highlights, "takeaway"),
+    },
   };
 }
 
@@ -1018,8 +1047,15 @@ STEP 5 提煉今天最值得留下的一個發現，再開始寫。
   "suggestions": [
     { "title": "12-25字動作", "detail": "40-90字，說明為何跟今天的發現有關" },
     { "title": "12-25字動作", "detail": "40-90字" }
-  ]
-}`;
+  ],
+  "highlights": {
+    "title": [{ "text": "必須原樣出現在 title 裡的短句", "level": "strong" }],
+    "analysis": [],
+    "notice": [],
+    "suggestions": []
+  }
+}
+${HIGHLIGHT_RULE}`;
 
 function bodyCoachCompletedNotes(ctx) {
   const thanks = formatThanksForPrompt(ctx);
@@ -1204,6 +1240,12 @@ function normalizeBodyCoachResult(raw, ctx) {
     analysis,
     notice,
     suggestions,
+    highlights: {
+      title: insightHighlight.fieldHighlights(data.highlights, "title"),
+      analysis: insightHighlight.fieldHighlights(data.highlights, "analysis"),
+      notice: insightHighlight.fieldHighlights(data.highlights, "notice"),
+      suggestions: insightHighlight.fieldHighlights(data.highlights, "suggestions"),
+    },
   };
 }
 
@@ -1562,6 +1604,12 @@ function normalizeAwarenessResult(raw, recentDays) {
     echo,
     generatedAt: String(nested.generatedAt || src.generatedAt || "").trim(),
     updatedAt: String(nested.updatedAt || src.updatedAt || "").trim(),
+    highlights: {
+      seen: insightHighlight.fieldHighlights(nested.highlights || src.highlights, "seen"),
+      gap: insightHighlight.fieldHighlights(nested.highlights || src.highlights, "gap"),
+      question: insightHighlight.fieldHighlights(nested.highlights || src.highlights, "question"),
+      line: insightHighlight.fieldHighlights(nested.highlights || src.highlights, "line"),
+    },
   };
 }
 
@@ -1700,6 +1748,7 @@ function rewriteExecFocus(focus, items, smallestStep, ctx) {
       detail: shortenExecWhy(source.detail),
       when,
       hint: String(source.hint || "").trim().slice(0, 28) || execFocusHintForWhen(when),
+      highlights: source.highlights,
     };
   }
   const when = source.when === "tomorrow" || source.when === "today"
@@ -1710,6 +1759,7 @@ function rewriteExecFocus(focus, items, smallestStep, ctx) {
     detail: shortenExecWhy(source.detail || picked.detail),
     when,
     hint: String(source.hint || "").trim().slice(0, 28) || execFocusHintForWhen(when),
+    highlights: source.highlights || picked.highlights,
   };
 }
 
@@ -1741,7 +1791,11 @@ function normalizeExecutionChecklistItems(raw, min, max, smallestStep) {
     detail = shortenExecHow(detail);
     if (!title || seen.has(title)) return;
     seen.add(title);
-    items.push({ title, detail });
+    items.push({
+      title,
+      detail,
+      highlights: item && typeof item === "object" ? item.highlights : undefined,
+    });
   });
   return items.slice(0, max);
 }

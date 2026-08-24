@@ -5474,7 +5474,7 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   word-break: break-word;
 }
 
-.aware-result__line span {
+.aware-result__line > span {
   display: block;
   margin-bottom: 6px;
   color: var(--heading);
@@ -5864,6 +5864,27 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
 .insight-emph {
   color: var(--text);
   font-weight: 700;
+}
+
+.insight-highlight {
+  display: inline;
+  background: #ede2d7;
+  color: #725f52;
+  padding: 0.08em 0.28em;
+  border-radius: 0.3em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  font-weight: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  vertical-align: baseline;
+}
+
+.insight-highlight--strong {
+  background: #9d8878;
+  color: #fff9f3;
+  padding: 0.08em 0.3em;
 }
 
 .insight-card__kicker {

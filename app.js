@@ -353,6 +353,55 @@ function daysInMonth(date) {
   return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
 }
 
+function insightHighlightApi() {
+  return (typeof window !== "undefined" && window.NichiInsightHighlight) || {};
+}
+
+function highlightedHtml(text, highlights) {
+  const api = insightHighlightApi();
+  if (typeof api.renderHighlightedText === "function") return api.renderHighlightedText(text, highlights);
+  return escapeHtml(text);
+}
+
+function fieldHighlightsOf(bag, field) {
+  const api = insightHighlightApi();
+  if (typeof api.fieldHighlights === "function") return api.fieldHighlights(bag, field);
+  return [];
+}
+
+function insightHasMarks(text, highlights) {
+  const api = insightHighlightApi();
+  if (typeof api.normalizeHighlights !== "function") return false;
+  return api.normalizeHighlights(highlights, text).length > 0;
+}
+
+function insightFieldHtml(text, highlights, className = "insight-block__text") {
+  const raw = String(text || "").trim();
+  if (!raw) return "";
+  if (insightHasMarks(raw, highlights)) {
+    return `<p class="${className}">${highlightedHtml(raw, highlights)}</p>`;
+  }
+  return emphasizeLeadHtml(raw, className);
+}
+
+function highlightsAttr(value) {
+  if (value == null || value === "") return "";
+  try {
+    return encodeURIComponent(JSON.stringify(value));
+  } catch {
+    return "";
+  }
+}
+
+function highlightsFromAttr(value) {
+  if (!value) return undefined;
+  try {
+    return JSON.parse(decodeURIComponent(value));
+  } catch {
+    return undefined;
+  }
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -4192,6 +4241,7 @@ function rewriteGeneratedExecFocus(focus, items, smallestStep) {
       detail: shortenExecWhy(source.detail),
       when,
       hint: String(source.hint || "").trim().slice(0, 28) || execFocusHintForWhen(when),
+      highlights: source.highlights,
     };
   }
   const when = source.when === "tomorrow" || source.when === "today"
@@ -4202,6 +4252,7 @@ function rewriteGeneratedExecFocus(focus, items, smallestStep) {
     detail: shortenExecWhy(source.detail || picked.detail),
     when,
     hint: String(source.hint || "").trim().slice(0, 28) || execFocusHintForWhen(when),
+    highlights: source.highlights || picked.highlights,
   };
 }
 
@@ -4350,7 +4401,7 @@ function emptyDeep() {
 }
 
 function emptyThinkGuide() {
-  return { round: 0, rounds: [], summary: "", awareness: "", selfSeen: "", takeaway: "", actions: [], title: "" };
+  return { round: 0, rounds: [], summary: "", awareness: "", selfSeen: "", takeaway: "", actions: [], title: "", highlights: {} };
 }
 
 function emptyInsight() {
@@ -4381,7 +4432,7 @@ function emptyBodyCheck() {
 }
 
 function emptyBodyCoach() {
-  return { title: "", analysis: "", notice: "", suggestions: [], sig: "" };
+  return { title: "", analysis: "", notice: "", suggestions: [], sig: "", highlights: {} };
 }
 
 function normalizeBodyGroup(group) {
@@ -4638,6 +4689,7 @@ function normalizeBodyCoach(raw) {
     notice,
     suggestions,
     sig: String(data.sig || "").trim(),
+    highlights: data.highlights && typeof data.highlights === "object" ? data.highlights : {},
   };
 }
 
@@ -4680,6 +4732,7 @@ function normalizeThinkGuide(raw) {
     takeaway: String(data.takeaway || data.line || "").trim(),
     actions: normalizeInsightList(data.actions, 2),
     title: String(data.title || "").trim(),
+    highlights: data.highlights && typeof data.highlights === "object" ? data.highlights : {},
   };
 }
 
@@ -5044,7 +5097,7 @@ function sanitizeAwarenessEcho(echo, recentDays) {
 }
 
 function emptyAwarenessResult() {
-  return { seen: "", gap: "", question: "", line: "", echo: "", generatedAt: "", updatedAt: "" };
+  return { seen: "", gap: "", question: "", line: "", echo: "", generatedAt: "", updatedAt: "", highlights: {} };
 }
 
 function normalizeAwarenessResult(raw) {
@@ -5073,6 +5126,7 @@ function normalizeAwarenessResult(raw) {
     echo,
     generatedAt: String(nested.generatedAt || src.generatedAt || "").trim(),
     updatedAt: String(nested.updatedAt || src.updatedAt || "").trim(),
+    highlights: nested.highlights && typeof nested.highlights === "object" ? nested.highlights : src.highlights && typeof src.highlights === "object" ? src.highlights : {},
   };
 }
 
@@ -5329,7 +5383,7 @@ function renderAwarenessResultCard(result, checked) {
         .map(
           (item) => `<article class="aware-result__card${item.kind === "question" ? " aware-result__card--question" : ""}${item.kind === "echo" ? " aware-result__card--echo" : ""}">
         <p class="aware-result__kicker">${escapeHtml(item.kicker)}</p>
-        <p class="aware-result__text${item.kind === "question" ? " aware-result__text--question" : ""}">${escapeHtml(item.text)}</p>
+        <p class="aware-result__text${item.kind === "question" ? " aware-result__text--question" : ""}">${highlightedHtml(item.text, fieldHighlightsOf(data.highlights, item.kind))}</p>
       </article>`
         )
         .join("")}
@@ -5341,7 +5395,7 @@ function renderAwarenessResultCard(result, checked) {
         </label>
         <button class="btn btn--ghost btn--tiny" type="button" data-copy-aware-quote>複製</button>
       </div>
-      ${data.line ? `<p class="aware-result__line"><span>今日帶走的一句話</span>${escapeHtml(data.line)}</p>` : ""}
+      ${data.line ? `<p class="aware-result__line"><span>今日帶走的一句話</span>${highlightedHtml(data.line, fieldHighlightsOf(data.highlights, "line"))}</p>` : ""}
     </div>`;
 }
 
@@ -5438,13 +5492,14 @@ function buildExecutionCheckItems(journal) {
 function renderExecCheckCard(item, index, done) {
   const heading = done ? item.title : `${String(index + 1).padStart(2, "0")}｜${item.title}`;
   const lead = flattenExecSentence(item.detail, item);
+  const marks = item.highlights;
   return `
-    <label class="check-line exec-check${done ? " is-done" : ""}" data-title="${escapeHtml(item.title)}" data-detail="${escapeHtml(lead)}">
+    <label class="check-line exec-check${done ? " is-done" : ""}" data-title="${escapeHtml(item.title)}" data-detail="${escapeHtml(lead)}" data-highlights="${escapeHtml(highlightsAttr(marks))}">
       <input type="checkbox" value="${escapeHtml(item.title)}" ${done ? "checked" : ""} />
       <span class="exec-check__box" aria-hidden="true"></span>
       <span class="exec-check__body">
-        <span class="exec-check__title">${escapeHtml(heading)}</span>
-        ${lead ? `<span class="exec-check__lead">${escapeHtml(lead)}</span>` : ""}
+        <span class="exec-check__title">${highlightedHtml(heading, marks)}</span>
+        ${lead ? `<span class="exec-check__lead">${highlightedHtml(lead, marks)}</span>` : ""}
       </span>
     </label>
   `;
@@ -5457,7 +5512,7 @@ function normalizeExecFocus(raw, items) {
     const picked = pickExecItemByTitle(list, parts.title) || (parts.title ? { title: parts.title, detail: flattenExecSentence(parts.detail) } : null);
     if (!picked || !picked.title) return emptyExecFocus();
     const when = execFocusWhenFromText(picked.title, picked.detail);
-    return { title: picked.title, detail: flattenExecSentence(picked.detail), when, hint: execFocusHintForWhen(when) };
+    return { title: picked.title, detail: flattenExecSentence(picked.detail), when, hint: execFocusHintForWhen(when), highlights: picked.highlights };
   }
   const data = raw && typeof raw === "object" ? raw : {};
   const picked = pickExecItemByTitle(list, data.title);
@@ -5470,6 +5525,7 @@ function normalizeExecFocus(raw, items) {
     detail,
     when,
     hint: String(data.hint || "").trim() || execFocusHintForWhen(when),
+    highlights: data.highlights || (picked && picked.highlights),
   };
 }
 
@@ -5489,8 +5545,8 @@ function renderExecFocus(focus, items) {
   root.hidden = false;
   root.innerHTML = `
     <p class="exec-focus__kicker">${escapeHtml(kicker)}</p>
-    <p class="exec-focus__title">「${escapeHtml(titleText)}」</p>
-    ${data.detail ? `<p class="exec-focus__why">${escapeHtml(data.detail)}</p>` : ""}
+    <p class="exec-focus__title">「${highlightedHtml(titleText, data.highlights)}」</p>
+    ${data.detail ? `<p class="exec-focus__why">${highlightedHtml(data.detail, data.highlights)}</p>` : ""}
     <p class="exec-focus__hint">${escapeHtml(hint)}</p>
   `;
 }
@@ -6414,7 +6470,7 @@ function splitActionLine(text) {
   return { title: raw.slice(0, 10), body: raw };
 }
 
-function actionStepsHtml(items) {
+function actionStepsHtml(items, highlights) {
   const list = Array.isArray(items) ? items.map((item) => String(item || "").trim()).filter(Boolean) : [];
   if (!list.length) return "";
   return `<ol class="action-steps">${list
@@ -6423,8 +6479,8 @@ function actionStepsHtml(items) {
       const num = String(index + 1).padStart(2, "0");
       return `<li class="action-steps__item">
         <div class="action-steps__copy">
-          <p class="action-steps__title">${num}｜${escapeHtml(title)}</p>
-          ${body ? `<p class="action-steps__body">${escapeHtml(body)}</p>` : ""}
+          <p class="action-steps__title">${num}｜${highlightedHtml(title, highlights)}</p>
+          ${body ? `<p class="action-steps__body">${highlightedHtml(body, highlights)}</p>` : ""}
         </div>
       </li>`;
     })
@@ -6446,23 +6502,24 @@ function renderThinkGuideCloseHtml(guide, data) {
   const selfSeen = String(guide.selfSeen || "").trim();
   const takeaway = String(guide.takeaway || "").trim();
   const actions = Array.isArray(guide.actions) ? guide.actions.filter(Boolean) : [];
+  const bag = guide.highlights || data.highlights || {};
   const awarenessHtml = awareness
     ? awareness
         .split(/\n{2,}/)
         .map((part) => part.trim())
         .filter(Boolean)
-        .map((part) => `<p class="think-guide__close-text">${escapeHtml(part)}</p>`)
+        .map((part) => `<p class="think-guide__close-text">${highlightedHtml(part, fieldHighlightsOf(bag, "awareness"))}</p>`)
         .join("")
     : "";
   return `<article class="think-guide__close">
         <p class="think-guide__kicker">今日覺察總結</p>
-        ${title ? `<p class="think-guide__close-title">${escapeHtml(title)}</p>` : ""}
+        ${title ? `<p class="think-guide__close-title">${highlightedHtml(title, fieldHighlightsOf(bag, "title"))}</p>` : ""}
         ${awarenessHtml}
         ${
           selfSeen
             ? `<div class="think-guide__close-block">
           <p class="think-guide__kicker">今天我看見的自己</p>
-          <p class="think-guide__self">${escapeHtml(selfSeen)}</p>
+          <p class="think-guide__self">${highlightedHtml(selfSeen, fieldHighlightsOf(bag, "selfSeen"))}</p>
         </div>`
             : ""
         }
@@ -6470,7 +6527,7 @@ function renderThinkGuideCloseHtml(guide, data) {
           takeaway
             ? `<div class="think-guide__close-block">
           <p class="think-guide__kicker">今日帶走的一句話</p>
-          <p class="think-guide__takeaway">${escapeHtml(takeaway)}</p>
+          <p class="think-guide__takeaway">${highlightedHtml(takeaway, fieldHighlightsOf(bag, "takeaway"))}</p>
         </div>`
             : ""
         }
@@ -7034,16 +7091,16 @@ function renderBodyCoachCard(coach) {
     root.innerHTML = `<p class="insight-card__empty">先把左邊的心情、身體與睡眠看過，再點看看今天適合怎麼照顧自己。</p>`;
     return;
   }
-  const tips = actionStepsHtml(data.suggestions);
+  const tips = actionStepsHtml(data.suggestions, fieldHighlightsOf(data.highlights, "suggestions"));
   const core = String(data.title || "").trim();
   root.innerHTML = `
     <article class="insight-card__result">
-      ${core ? renderConclusionCallout(/[。！？]$/.test(core) ? core : `${core}。`) : ""}
+      ${core ? renderConclusionCallout(/[。！？]$/.test(core) ? core : `${core}。`, fieldHighlightsOf(data.highlights, "title")) : ""}
       ${
         data.analysis
           ? `<section class="insight-block">
         <p class="insight-block__label">① 今天的身心訊號</p>
-        ${emphasizeLeadHtml(data.analysis)}
+        ${insightFieldHtml(data.analysis, fieldHighlightsOf(data.highlights, "analysis"))}
       </section>`
           : ""
       }
@@ -7051,7 +7108,7 @@ function renderBodyCoachCard(coach) {
         data.notice
           ? `<section class="insight-block insight-block--review">
         <p class="insight-block__label">② 今天值得留意的地方</p>
-        ${emphasizeLeadHtml(data.notice)}
+        ${insightFieldHtml(data.notice, fieldHighlightsOf(data.highlights, "notice"))}
       </section>`
           : ""
       }
@@ -8398,6 +8455,7 @@ function collectExecCheckItems() {
     .map((el) => ({
       title: String(el.dataset.title || "").trim(),
       detail: flattenExecSentence(String(el.dataset.detail || "").trim()),
+      highlights: highlightsFromAttr(el.dataset.highlights),
     }))
     .filter((item) => item.title);
 }
@@ -8412,11 +8470,12 @@ function normalizeExecCheckItem(item) {
   if (typeof item !== "object") return null;
   const title = String(item.title || item.label || item.text || "").trim();
   const detail = flattenExecSentence(item.detail || item.lead || item.note || "", item);
+  const highlights = item.highlights;
   if (!title && !detail) return null;
-  if (!title) return splitTaskText(detail);
-  if (detail && detail !== title) return { title, detail };
+  if (!title) return { ...splitTaskText(detail), highlights };
+  if (detail && detail !== title) return { title, detail, highlights };
   const parts = splitTaskText(title);
-  return { title: parts.title, detail: flattenExecSentence(parts.detail || detail) };
+  return { title: parts.title, detail: flattenExecSentence(parts.detail || detail), highlights };
 }
 
 function normalizeExecCheckItems(list) {
@@ -9082,13 +9141,13 @@ function loadReviewForDate(iso) {
   maybeAutoGenerateCorePrompts(review?.journal || collectJournal());
 }
 
-function renderConclusionCallout(text) {
+function renderConclusionCallout(text, highlights) {
   const line = String(text || "").trim();
   if (!line) return "";
   return `
     <aside class="conclusion-callout">
       <p class="conclusion-callout__label">核心結論</p>
-      <p class="conclusion-callout__text">${escapeHtml(line)}</p>
+      <p class="conclusion-callout__text">${highlightedHtml(line, highlights)}</p>
     </aside>
   `;
 }
@@ -10857,14 +10916,29 @@ function historyItemsHtml(items) {
   return `<ul class="history-journal__list">${list.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
 }
 
+function historyMarkedItemsHtml(items) {
+  const list = (Array.isArray(items) ? items : [items])
+    .map((item) => {
+      if (item && typeof item === "object" && item.text != null) {
+        return { text: String(item.text || "").trim(), highlights: item.highlights };
+      }
+      return { text: String(item || "").trim(), highlights: [] };
+    })
+    .filter((item) => item.text);
+  if (!list.length) return "";
+  const cell = (item) => highlightedHtml(item.text, item.highlights);
+  if (list.length === 1) return `<p class="history-journal__text">${cell(list[0])}</p>`;
+  return `<ul class="history-journal__list">${list.map((item) => `<li>${cell(item)}</li>`).join("")}</ul>`;
+}
+
 function historyExecChecksHtml(journal) {
   const items = normalizeExecCheckItems(journal && journal.executionCheckItems);
   if (items.length) {
     return `<div class="history-exec-cards">${items
       .map(
         (item) => `<article class="history-exec-card">
-        <p class="history-exec-card__title">${escapeHtml(item.title)}</p>
-        ${item.detail ? `<p class="history-exec-card__lead">${escapeHtml(item.detail)}</p>` : ""}
+        <p class="history-exec-card__title">${highlightedHtml(item.title, item.highlights)}</p>
+        ${item.detail ? `<p class="history-exec-card__lead">${highlightedHtml(item.detail, item.highlights)}</p>` : ""}
       </article>`
       )
       .join("")}</div>`;
@@ -10916,11 +10990,14 @@ function historyBodyCheckHtml(journal) {
     );
   }
   const coach = normalizeBodyCoach(journal.bodyCoach);
-  if (coach.title) lines.push(`核心結論：${coach.title}`);
-  if (coach.analysis) lines.push(coach.analysis);
-  if (coach.notice) lines.push(`值得留意：${coach.notice}`);
-  (coach.suggestions || []).forEach((item, index) => lines.push(`今晚照顧 ${index + 1}：${item}`));
-  return historyItemsHtml(lines);
+  const marked = lines.map((text) => ({ text }));
+  if (coach.title) marked.push({ text: `核心結論：${coach.title}`, highlights: fieldHighlightsOf(coach.highlights, "title") });
+  if (coach.analysis) marked.push({ text: coach.analysis, highlights: fieldHighlightsOf(coach.highlights, "analysis") });
+  if (coach.notice) marked.push({ text: `值得留意：${coach.notice}`, highlights: fieldHighlightsOf(coach.highlights, "notice") });
+  (coach.suggestions || []).forEach((item, index) =>
+    marked.push({ text: `今晚照顧 ${index + 1}：${item}`, highlights: fieldHighlightsOf(coach.highlights, "suggestions") })
+  );
+  return historyMarkedItemsHtml(marked);
 }
 
 function historyTextMeaningful(value) {
@@ -10975,18 +11052,19 @@ function renderHistoryGuideHtml(insight, guide) {
       );
     })
     .join("");
+  const closeBag = guide.highlights || insight.highlights || {};
   const closeBlocks = [
     guide.title || insight.title
-      ? historyBlock("", `<p class="history-journal__headline">${escapeHtml(guide.title || insight.title)}</p>`)
+      ? historyBlock("", `<p class="history-journal__headline">${highlightedHtml(guide.title || insight.title, fieldHighlightsOf(closeBag, "title"))}</p>`)
       : "",
     guide.awareness || guide.summary
-      ? historyBlock("今日覺察", `<p class="history-journal__text">${escapeHtml(guide.awareness || guide.summary)}</p>`)
+      ? historyBlock("今日覺察", `<p class="history-journal__text">${highlightedHtml(guide.awareness || guide.summary, fieldHighlightsOf(closeBag, "awareness"))}</p>`)
       : "",
     guide.selfSeen
-      ? historyBlock("今天我看見的自己", `<p class="history-journal__text">${escapeHtml(guide.selfSeen)}</p>`)
+      ? historyBlock("今天我看見的自己", `<p class="history-journal__text">${highlightedHtml(guide.selfSeen, fieldHighlightsOf(closeBag, "selfSeen"))}</p>`)
       : "",
     guide.takeaway
-      ? historyBlock("今日帶走的一句話", `<p class="history-journal__headline">${escapeHtml(guide.takeaway)}</p>`)
+      ? historyBlock("今日帶走的一句話", `<p class="history-journal__headline">${highlightedHtml(guide.takeaway, fieldHighlightsOf(closeBag, "takeaway"))}</p>`)
       : "",
     Array.isArray(guide.actions) && guide.actions.length
       ? historyBlock(
@@ -11158,17 +11236,18 @@ function renderHistoryJournal(review) {
       : journal.awarenessChecks
   );
   const awareResult = normalizeAwarenessResult(journal.awarenessResult);
+  const awareBag = awareResult.highlights || {};
   const awareResultHtml = awareResult.seen
     ? [
-        historyBlock("今天，我看見了自己", `<p class="history-journal__text">${escapeHtml(awareResult.seen)}</p>`),
+        historyBlock("今天，我看見了自己", `<p class="history-journal__text">${highlightedHtml(awareResult.seen, fieldHighlightsOf(awareBag, "seen"))}</p>`),
         awareResult.gap
-          ? historyBlock("我可能忽略的地方", `<p class="history-journal__text">${escapeHtml(awareResult.gap)}</p>`)
+          ? historyBlock("我可能忽略的地方", `<p class="history-journal__text">${highlightedHtml(awareResult.gap, fieldHighlightsOf(awareBag, "gap"))}</p>`)
           : "",
         awareResult.question
-          ? historyBlock("今晚留給自己的一個問題", `<p class="history-journal__text">${escapeHtml(awareResult.question)}</p>`)
+          ? historyBlock("今晚留給自己的一個問題", `<p class="history-journal__text">${highlightedHtml(awareResult.question, fieldHighlightsOf(awareBag, "question"))}</p>`)
           : "",
         awareResult.echo ? historyBlock("跨日覺察", `<p class="history-journal__note">${escapeHtml(awareResult.echo)}</p>`) : "",
-        awareResult.line ? historyBlock("今日一句話", `<p class="history-journal__headline">${escapeHtml(awareResult.line)}</p>`) : "",
+        awareResult.line ? historyBlock("今日一句話", `<p class="history-journal__headline">${highlightedHtml(awareResult.line, fieldHighlightsOf(awareBag, "line"))}</p>`) : "",
       ].join("")
     : "";
   const execFields = (() => {
@@ -11218,7 +11297,20 @@ function renderHistoryJournal(review) {
     [
       "④ 執行力行動清單",
       "exec",
-      [...execFields, historyTextBlock("明天最小的一步", journal.smallestStep), historyBlock("我的行動卡", historyExecChecksHtml(journal)), journal.executionFocus?.title ? historyTextBlock(execFocusKicker(journal.executionFocus.when), `${journal.executionFocus.title}${journal.executionFocus.detail ? `｜${journal.executionFocus.detail}` : ""}`) : ""],
+      [
+        ...execFields,
+        historyTextBlock("明天最小的一步", journal.smallestStep),
+        historyBlock("我的行動卡", historyExecChecksHtml(journal)),
+        journal.executionFocus?.title
+          ? historyBlock(
+              execFocusKicker(journal.executionFocus.when),
+              `<p class="history-journal__text">${highlightedHtml(
+                `${journal.executionFocus.title}${journal.executionFocus.detail ? `｜${journal.executionFocus.detail}` : ""}`,
+                journal.executionFocus.highlights
+              )}</p>`
+            )
+          : "",
+      ],
     ],
     ["深度思考", "insight", insightHtml],
     [
