@@ -7081,82 +7081,22 @@ function setBodyCoachLoading(loading) {
 }
 
 function localBodyCoachFallback(journal) {
-  const check = normalizeBodyCheck(journal.bodyCheck, journal.bodyTags, journal.bodyNote);
-  const moodFlags = check.mood.flags || [];
-  const bodyFlags = (check.body.flags || []).filter((flag) => flag !== "其他");
-  const duration = String(check.sleep.duration || "").trim();
-  const quality = String(check.sleep.quality || "").trim();
-  const energy = String(check.sleep.energy || "").trim();
-  const pleasant = moodFlags.includes("愉快") || moodFlags.includes("平靜") || journal.mood === "愉快" || journal.mood === "平靜" || journal.mood === "很好";
-  const tense = moodFlags.includes("焦慮") || moodFlags.includes("煩躁") || journal.mood === "低落" || journal.mood === "生氣";
-  const bodyIssue =
-    bodyFlags.includes("腸胃不適") ||
-    bodyFlags.includes("頭痛") ||
-    bodyFlags.includes("全身痠痛") ||
-    bodyFlags.includes("身體疲勞") ||
-    Boolean(check.body.other);
-  const sleepShort = duration === "少於5小時" || duration === "5–6小時";
-  const sleepPoor = quality === "差" || quality === "睡不著";
-  const tired = energy === "疲憊";
-  const restGap = sleepShort || sleepPoor || tired;
-  const stable = pleasant && !tense && !bodyIssue && !restGap;
-  const thanks = thanksTextFrom(journal).trim();
-
-  let title = "今天值得看的，是心情、身體與睡眠有沒有對上。";
-  if (pleasant && sleepShort) {
-    title = thanks
-      ? "今天有很多讓你開心的小事，但昨晚的睡眠時間偏短。心情有能量，不一定代表身體已經休息夠了。"
-      : "今天雖然感覺有精神，但昨晚睡眠偏短。心情有能量，不一定代表身體已經休息夠了。";
-  } else if (pleasant && bodyIssue) {
-    title = "心情看起來還過得去，身體卻已經有具體訊號，這兩件事可能沒有完全同步。";
-  } else if (tense && !bodyIssue && !restGap) {
-    title = "今天比較緊的是心情這一側，身體沒有同樣明顯的不適，不必把所有問題都算到身體上。";
-  } else if (tense && restGap) {
-    title = "情緒偏緊，睡眠也還沒補足。今晚比較適合先把負荷放低一點。";
-  } else if (stable) {
-    title = "今天心情、身體與睡眠大致對齊，沒有急著修正的缺口。";
-  }
-
-  let analysis = "";
-  if (pleasant && sleepShort) {
-    analysis = `今天的心理狀態和身體恢復程度可能沒有完全同步：你感覺有精神、有動力，但睡眠時間本身仍偏少。即使現在沒有明顯疲累，身體可能仍需要更多休息。`;
-  } else if (thanks && pleasant && !restGap) {
-    analysis = `今天的愉快比較像很多小事情累積起來的，而不是單一大事件撐住整天。心情、身體與睡眠沒有明顯互相拉扯。`;
-  } else if (tense && !bodyIssue && !restGap) {
-    analysis = `心情這一側比較明顯，身體與睡眠卻沒有同樣的警報。今天比較適合先看情緒本身，而不是把原因全部推給身體。`;
-  } else if (bodyIssue && restGap) {
-    analysis = `今天的行動量或緊繃感，和身體能量之間可能有一點落差。身體已經有疲累或不適，今晚值得把負荷放低。`;
-  } else if (stable) {
-    analysis = `心情、身體與睡眠沒有明顯互相拉扯。今天比較適合維持既有節奏，不必另外製造需要被解決的問題。`;
-  } else {
-    analysis = `把心情、身體與睡眠放在一起看，今天比較像某一處先發出訊號，而不是全面失控。`;
-  }
-
-  let notice = "";
-  if (pleasant && sleepShort) {
-    notice = "值得留意的不是你有沒有精神，而是「有精神」和「有休息夠」其實是兩件事。心情很好時，會比較晚發現身體其實需要休息。";
-  } else if (tense && !bodyIssue) {
-    notice = "心情不好時，人很容易連身體一起檢查。今天身體沒有同樣明顯的訊號，也許問題不在身體，而在今天碰到的事情本身。";
-  } else if (stable) {
-    notice = "今天整體狀態大致穩定。不需要為了「有洞察」而硬找問題，維持原本的收工節奏即可。";
-  } else if (bodyIssue && !tense) {
-    notice = "身體已經有具體訊號時，人常會因為心情還過得去而繼續往前。今晚值得先回應身體，而不是再加一件事。";
-  } else {
-    notice = "今天的訊號不需要被放大成問題，但也不宜直接略過。先看最清楚的那一處即可。";
-  }
-
-  const suggestions = [];
-  if (sleepShort || sleepPoor || (bodyIssue && restGap)) {
-    suggestions.push("今晚比平常提早 15～20 分鐘上床。不用要求自己一定馬上睡著，只是提早把身體帶進休息狀態。");
-  } else {
-    suggestions.push("洗澡後把燈光再調暗一點。給身體一個收工訊號，幫助自己慢慢進入休息狀態。");
-  }
-  suggestions.push("睡前留 10 分鐘什麼都不完成。今晚最後一件事可以不是再完成什麼，而是讓節奏放慢一點。");
+  const api = typeof window !== "undefined" ? window.NichiBodyCoachInsight : null;
+  const ctx = {
+    mood: journal.mood,
+    event: journal.event,
+    thanks: thanksTextFrom(journal),
+    thanksText: thanksTextFrom(journal),
+    bodyCheck: normalizeBodyCheck(journal.bodyCheck, journal.bodyTags, journal.bodyNote),
+    bodyNote: journal.bodyNote,
+    bodyTags: journal.bodyTags,
+  };
+  const built = api && typeof api.buildLocalBodyCoach === "function" ? api.buildLocalBodyCoach(ctx) : {};
   return {
-    title,
-    analysis,
-    notice,
-    suggestions: suggestions.slice(0, 2),
+    title: String(built.title || "今天的身心狀態相對平穩，目前沒有特別明顯的反差。").trim(),
+    analysis: String(built.analysis || "").trim(),
+    notice: String(built.notice || "").trim(),
+    suggestions: Array.isArray(built.suggestions) ? built.suggestions.slice(0, 2) : [],
     sig: bodyCoachSignature(journal),
   };
 }

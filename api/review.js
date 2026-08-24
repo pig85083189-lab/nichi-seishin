@@ -2,6 +2,7 @@ const { requireUser, bearerToken } = require("../lib/auth");
 const { ensureTrial, isEntitled, supabaseAdminConfigured } = require("../lib/supabase");
 const { getApiKey, getModel, getProvider, usesClaude, callOpenAI } = require("../lib/openai");
 const textIntegrity = require("../lib/text-integrity");
+const bodyCoachInsight = require("../lib/body-coach-insight");
 
 function withCompleteRule(system) {
   return `${system}\n\n【文字完整性】\n${textIntegrity.COMPLETE_TEXT_RULE}`;
@@ -972,48 +973,51 @@ ${groupLine("今日身體檢核", check.body)}
 ${sleepLine}`;
 }
 
-const BODY_COACH_SYSTEM = `你是「日精進」的身心觀察者。你不是醫療診斷工具，也不是健康教科書。
+const BODY_COACH_SYSTEM = `你是「日精進」的身心觀察者。你不是醫療診斷工具，也不是健康教科書，更不是替使用者定義人格的分析師。
 
-你的工作是：真的看過這個人今天寫下的心情、身體、睡眠、感謝與事件之後，幫他整理「只屬於今天」的觀察。
-最理想的感受是：「有人看過我今天寫的東西，再幫我整理一次。」
-最差的結果是：通用健康知識、把填過的資料再講一次、或替他下診斷。
+你的工作不是把今天填過的資料再整理成「身心狀態分析報告」。
+你要從今天的紀錄中，找出反差、關聯、模式或值得留下來的發現，讓他看完有「原來我今天真正發現的是這個」的感覺。
+
+輸出前，先在內部完成這五步，不要把步驟寫進正文：
+STEP 1 整理事實：今天發生什麼、情緒、身體、睡眠、什麼讓他開心／疲累／有壓力。
+STEP 2 找反差：例如睡得少×精神不差、事情很多×心情穩定、身體疲累×心裡滿足、沒有大事件×卻覺得踏實、完成很多×身體已累。
+STEP 3 找關聯：被關心→心情變好、事情逐漸完成→安心、家人互動→連結感、睡眠品質→精神、想法落地→踏實。
+STEP 4 找值得觀察的模式：只用「可能／似乎／值得繼續觀察／今天的紀錄看起來」。禁止「你就是…」「代表你一定…」「證明你…」「你其實就是…」。
+STEP 5 提煉今天最值得留下的一個發現，再開始寫。
+
+若資料很少、沒有明顯反差：寧願平實，不要硬湊洞察。可以寫：今天身心相對平穩，目前沒有特別明顯的反差，可以繼續觀察什麼情況下精神會特別好或特別疲累。
+
+【四個區塊必須推進，禁止換句話重複同一句結論】
+- title 核心結論：今天最值得帶走的一個洞察。1-2 句，25-55 個中文字，可單獨閱讀。要有反差／關聯／發現，不要重述「今天很開心、睡了 5-6 小時」。不要文青、雞湯、說教、診斷腔。
+- analysis 今天的身心訊號：把資料串起來，寫「發生了什麼＋彼此可能有什麼關聯」。不要逐項報告。
+- notice 今天值得留意的地方：找出今天最值得繼續觀察的反差／模式。只挑最相關的 1-2 點。不要只提醒「睡眠不足，請早點睡」。
+- suggestions 今晚可以這樣照顧自己：剛好 2 條，必須直接來自前面的洞察，具體到今晚能做。不要每次固定喝水／泡澡／早點睡／深呼吸。
 
 【事實 vs 推測】
-明確寫出的才是事實（心情、睡眠時數、身體勾選、感謝、事件）。
-其餘一律當可能性，必須使用：可能、也許、值得留意、看起來、即使現在沒有明顯感覺、身體可能仍需要、今天的紀錄讓人注意到。
-禁止沒有充分依據就寫：代表你、說明你、你的身體正在、你其實已經、你是在硬撐、身體正在透支、身體已經超負荷、睡眠債、長期消耗、身體警訊。
-單日睡眠偏短 ≠ 硬撐。例如只睡 5–6 小時但精神普通／不錯，應寫：「今天雖然感覺有精神，但昨晚只有 5–6 小時睡眠。身體的疲累，可能還沒有完全被你感覺到。」
+明確寫出的才是事實。其餘用：可能、似乎、值得繼續觀察、今天的紀錄看起來。
+禁止：代表你、說明你、你其實已經、你是在硬撐、身體正在透支、睡眠債、長期消耗、宇宙、頻率、綻放、正能量。
+單日睡眠偏短 ≠ 硬撐。若只睡 5-6 小時但精神不錯，要寫反差：睡得少不一定等於精神差；影響精神的可能不只是時數，品質與心理狀態也值得一起看。不要寫成「你其實很累只是沒發現」。
 
-【三個區塊角色必須不同，禁止換句話重複三次】
-- title 核心結論：今天最值得注意的一個身心落差／訊號／狀態。35-70 字。不要塞進所有資料。
-- analysis 今天的身心訊號：把兩個以上的紀錄連起來，指出關係。100-180 字。不要只重述「你很開心、你睡 5 小時」。
-- notice 今天值得留意的地方：一個他原本可能沒注意到的角度，讓人有「喔，對耶」的感覺。80-150 字。不要再把核心結論講一遍。
-若今天整體都很好：直接說狀態大致穩定，不要為了有洞察而製造問題。
-
-【③ 今晚照顧自己：固定 2 條，角色不同】
-01 身體／休息層面的具體行動。
-02 心理／節奏／環境層面的具體行動。
-不要兩條都是睡眠。不要重複他今天已經做過的事：
+【③ 建議】
+不要重複他今天已做過的事：
 已寫感謝 → 禁止再叫他寫感謝／小確幸／感恩日記
 已寫事件 → 禁止再叫他寫日記
 已做身體覺察 → 禁止再叫他重新掃描身體
 紀錄已提到運動／冥想 → 不要再預設叫他做同一件事
-建議要具體到今晚能做：時間（10 分鐘、睡前）、行動（提早上床、關燈、放下手機、伸展、熱敷、把工作停下）、情境（洗澡後、上床前）。
 禁止空泛：好好休息、多照顧自己、放鬆身心、保持正向、多注意睡眠、適度休息、多喝水。
-禁止宣稱療效：改善睡眠品質、調節自律神經、降低壓力荷爾蒙、改善焦慮、幫助身體修復。
-改成：幫助自己慢慢進入休息狀態、讓今晚的節奏放慢、給身體更多休息空間。
+禁止宣稱療效：改善睡眠品質、調節自律神經、降低壓力荷爾蒙。
 
-語氣：溫柔但不要療癒文；有洞察但不要像心理醫師；白話、有陪伴感。不要 emoji。
+語氣：白話、有陪伴感、不過度心理分析。不要 emoji。所有欄位都必須是語意完整的句子。
 
 規則：
 - 只輸出 JSON，繁體中文
 {
-  "title": "35-70字核心結論",
-  "analysis": "100-180字，寫關聯",
-  "notice": "80-150字，新角度",
+  "title": "25-55字洞察，不是摘要",
+  "analysis": "80-180字，資料與關聯",
+  "notice": "60-150字，反差與觀察",
   "suggestions": [
-    { "title": "12-25字動作", "detail": "50-100字，說明今晚為什麼適合" },
-    { "title": "12-25字動作", "detail": "50-100字" }
+    { "title": "12-25字動作", "detail": "40-90字，說明為何跟今天的發現有關" },
+    { "title": "12-25字動作", "detail": "40-90字" }
   ]
 }`;
 
@@ -1037,7 +1041,17 @@ function bodyCoachCompletedNotes(ctx) {
 function bodyCoachUserPrompt(body) {
   const ctx = body.context && typeof body.context === "object" ? body.context : {};
   const done = bodyCoachCompletedNotes(ctx);
-  return `請只根據下面「今天這個人真正寫過的內容」寫出身心小結。少一點通用健康知識，多一點只屬於今天的觀察。單日睡眠偏短不要寫成硬撐、透支或睡眠債。title / analysis / notice 三層不要重複。照顧建議固定 2 條，且不要重複他今天已做過的事。
+  const contrasts = bodyCoachInsight.detectBodyCoachContrasts(ctx);
+  const hint = contrasts.length
+    ? `系統先看到的可能線索（僅供內部參考，不足就忽略，不要照抄）：${contrasts.join("、")}`
+    : "系統沒有看到明顯反差。資料不足時請平實說明，不要硬湊洞察。";
+  return `請只根據下面「今天這個人真正寫過的內容」寫出身心小結。
+先在內部走完：整理事實 → 找反差 → 找關聯 → 找模式 → 提煉一個發現。
+title 是今天最值得帶走的洞察，不是資料摘要。
+analysis 寫關聯，notice 寫反差與值得觀察的點，suggestions 必須承接前面的發現。
+四個區塊不要重複同一句話。單日睡眠偏短不要寫成硬撐或睡眠債。照顧建議固定 2 條，且不要重複他今天已做過的事。
+
+${hint}
 
 今日心情：${ctx.mood || "未選"}
 今日感謝：${formatThanksForPrompt(ctx) || "（未寫）"}
@@ -1113,23 +1127,7 @@ function isRepeatCareSuggestion(text, ctx) {
 }
 
 function defaultBodyCoachSuggestions(ctx) {
-  const check = ctx && ctx.bodyCheck && typeof ctx.bodyCheck === "object" ? ctx.bodyCheck : {};
-  const duration = String((check.sleep && check.sleep.duration) || "").trim();
-  const sleepShort = duration === "少於5小時" || duration === "5–6小時";
-  const first = sleepShort
-    ? {
-        title: "今晚比平常提早 15～20 分鐘上床",
-        detail: "不用要求自己一定馬上睡著，只是提早把身體帶進休息狀態，讓昨晚較短的睡眠有機會慢慢補回來。",
-      }
-    : {
-        title: "洗澡後把燈光再調暗一點",
-        detail: "給身體一個明確的收工訊號，幫助自己慢慢進入休息狀態，而不是再加一件待辦。",
-      };
-  const second = {
-    title: "睡前留 10 分鐘什麼都不完成",
-    detail: "今晚最後一件事可以不是再完成什麼，而是讓節奏放慢，給身體多一點休息空間。",
-  };
-  return [first, second];
+  return bodyCoachInsight.buildLocalBodyCoach(ctx).suggestions || [];
 }
 
 function normalizeBodyCoachSuggestion(item) {
@@ -1163,25 +1161,44 @@ function normalizeBodyCoachResult(raw, ctx) {
     if (!isRepeatCareSuggestion(item, ctx)) suggestions.push(item);
   });
   suggestions = suggestions.slice(0, 2);
-  let title = keepSentencesWithin(softenBodyCoachText(String(data.title || data.conclusion || data.core || "").trim()), 70);
-  let analysis = keepSentencesWithin(softenBodyCoachText(String(data.analysis || data.signals || data.summary || "").trim()), 180);
-  let notice = keepSentencesWithin(softenBodyCoachText(String(data.notice || data.watch || data.attention || "").trim()), 150);
+  const local = bodyCoachInsight.buildLocalBodyCoach(ctx);
+  let title = bodyCoachInsight.keepCompleteField(
+    softenBodyCoachText(String(data.title || data.conclusion || data.core || "").trim()),
+    55
+  );
+  let analysis = bodyCoachInsight.keepCompleteField(
+    softenBodyCoachText(String(data.analysis || data.signals || data.summary || "").trim()),
+    180
+  );
+  let notice = bodyCoachInsight.keepCompleteField(
+    softenBodyCoachText(String(data.notice || data.watch || data.attention || "").trim()),
+    150
+  );
+  if (bodyCoachInsight.looksLikeRestatement(title) && local.title) title = local.title;
+  if (bodyCoachInsight.looksLikeRestatement(analysis) && local.analysis) analysis = local.analysis;
+  if (bodyCoachInsight.looksLikeRestatement(notice) && local.notice) notice = local.notice;
   if (!title && analysis) {
     title = firstBodyCoachSentence(analysis);
-    const rest = analysis.slice(title.length).trim();
-    if (rest) analysis = rest;
+    const rest = analysis.startsWith(title) ? analysis.slice(title.length).trim() : analysis;
+    if (rest && rest !== analysis) analysis = rest;
+    else if (local.title) title = local.title;
   }
   if (title && analysis.startsWith(title)) {
     analysis = analysis.slice(title.length).replace(/^[。！？\s]+/, "");
   }
-  const titleKey = title.replace(/\s+/g, "").slice(0, 16);
-  if (titleKey && notice.replace(/\s+/g, "").includes(titleKey) && zhCharCount(title) > 18) {
-    notice = keepSentencesWithin(
-      "同一個發現不用再講一遍。今天更值得問的是：你現在感覺到的，和身體實際需要的，是不是同一件事。",
-      150
-    );
+  if (!title) title = local.title;
+  if (!analysis) analysis = local.analysis;
+  if (!notice) notice = local.notice;
+  if (bodyCoachInsight.sectionsOverlapTooMuch({ title, analysis, notice }) && local.notice && notice !== local.notice) {
+    notice = local.notice;
   }
   if (!suggestions.length) suggestions = fallbacks.slice(0, 2);
+  [title, analysis, notice].forEach((field, index) => {
+    const name = ["title", "analysis", "notice"][index];
+    if (field && !textIntegrity.isCompleteSentence(field) && textIntegrity.splitSentences(field).some((item) => !textIntegrity.isCompleteSentence(item))) {
+      textIntegrity.warnIncomplete("api/review.normalizeBodyCoachResult", name, field);
+    }
+  });
   return {
     title,
     analysis,
@@ -2818,6 +2835,8 @@ module.exports.normalizeAwarenessResult = normalizeAwarenessResult;
 module.exports.awarenessPromptFallbacks = awarenessPromptFallbacks;
 module.exports.formatRecentAwarenessDays = formatRecentAwarenessDays;
 module.exports.normalizeBodyCoachResult = normalizeBodyCoachResult;
+module.exports.BODY_COACH_SYSTEM = BODY_COACH_SYSTEM;
+module.exports.bodyCoachUserPrompt = bodyCoachUserPrompt;
 module.exports.rewriteExecFocus = rewriteExecFocus;
 module.exports.normalizeExecutionChecklistItems = normalizeExecutionChecklistItems;
 module.exports.looksIncompleteAwarenessText = looksIncompleteAwarenessText;
