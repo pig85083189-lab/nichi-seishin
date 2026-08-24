@@ -11,6 +11,9 @@ const {
   marksForField,
   snapshotSelection,
   createToolbarSession,
+  isMarkMode,
+  enterMarkMode,
+  exitMarkMode,
   ignoreSelectionChange,
   applySelectionChange,
   beginToolbarInteract,
@@ -143,31 +146,44 @@ const twiceSource = "轉折點出現一次。後面又出現轉折點。";
 const htmlQ = renderMarkedText(twiceSource, [{ ...twiceRange[0], start: twiceSource.lastIndexOf("轉折點"), end: twiceSource.lastIndexOf("轉折點") + 3, text: "轉折點" }]);
 assert((htmlQ.match(/class="user-highlight /g) || []).length === 1, "CASE Q：同一句兩次只標選中 range");
 
-const session = createToolbarSession();
 const live = { date: "2026-08-24", field: "bodyCoach.title", start: 2, end: 6, text: "自己的需", rect: { left: 10, top: 10, width: 40, height: 18 } };
-assert(applySelectionChange(session, live) === "open-create", "CASE A：選字後建立 snapshot");
+const reading = createToolbarSession();
+assert(applySelectionChange(reading, live) === "ignore", "CASE A：一般閱讀模式選字不開 toolbar");
+assert(!reading.pending && !reading.mode, "CASE A：一般模式不建立 pending");
+assert(isMarkMode(reading) === false, "CASE A：預設不在畫重點模式");
+
+const session = createToolbarSession();
+assert(enterMarkMode(session) === true, "CASE B：點畫重點進入 mark mode");
+assert(isMarkMode(session) === true, "CASE B：userMarkMode = true");
+assert(applySelectionChange(session, live) === "open-colors", "CASE D：畫重點模式選完直接四色");
+assert(session.mode === "colors", "CASE D：略過『再點畫重點』");
 assert(session.pending.text === "自己的需", "CASE A：pending 保存原文");
 beginToolbarInteract(session);
 assert(ignoreSelectionChange(session) === true, "CASE B：工具列 pointerdown 後忽略 selectionchange");
 assert(applySelectionChange(session, null) === "ignore", "CASE B：collapse 不可關閉 toolbar");
-assert(enterColorMode(session) === true, "CASE A：畫重點進入顏色層");
+assert(enterColorMode(session) === true, "顏色層仍可用 snapshot");
 assert(session.mode === "colors", "CASE B：模式停在顏色層");
-assert(applySelectionChange(session, null) === "ignore", "CASE C：colors 期間 selectionchange 忽略");
+assert(applySelectionChange(session, null) === "ignore", "CASE C：toolbar 期間 selectionchange 忽略");
 assert(pendingMarkPayload(session).text === "自己的需", "CASE C：snapshot 仍在");
 const painted = upsertMark([], { ...pendingMarkPayload(session), color: "sage" });
 assert(painted[0].color === "sage" && painted[0].field === "bodyCoach.title", "CASE A/C：用 snapshot 上色，不靠 live selection");
-const beforeHide = { ...session };
-applySelectionChange(beforeHide, { field: "bodyCoach.title", start: 0, end: 1, text: "看" });
-assert(beforeHide.mode === "colors" && beforeHide.pending.text === "自己的需", "CASE D：toolbar 操作期間不因新 selection 重建/切回第一層");
 completeToolbarSession(session);
-assert(!session.pending && !session.mode && session.interacting === false, "CASE E：上色後 session 關閉");
+assert(!session.pending && !session.mode && session.interacting === false, "CASE E：上色後 pending 關閉");
+assert(isMarkMode(session) === true, "CASE H：完成一筆後仍留在 mark mode");
+assert(applySelectionChange(session, live) === "open-colors", "CASE H：可繼續畫第二筆");
+completeToolbarSession(session);
+exitMarkMode(session);
+assert(isMarkMode(session) === false && !session.pending && !session.mode, "CASE I：完成退出 mark mode");
 const cancelSession = createToolbarSession();
+enterMarkMode(cancelSession);
 applySelectionChange(cancelSession, live);
 cancelToolbarSession(cancelSession);
 assert(!cancelSession.pending && !cancelSession.mode, "CASE F：取消不留下 pending");
+assert(isMarkMode(cancelSession) === true, "CASE F：取消 toolbar 仍留在 mark mode");
 assert(upsertMark([], pendingMarkPayload(cancelSession) || {}).length === 0, "CASE F：取消不建立 userMark");
 
 const editSession = createToolbarSession();
+enterMarkMode(editSession);
 enterEditMode(editSession, { ...live, markId: "m1" });
 assert(ignoreSelectionChange(editSession) === true, "edit 期間忽略 selectionchange");
 assert(pendingMarkPayload(editSession).markId === "m1", "edit 使用 snapshot");

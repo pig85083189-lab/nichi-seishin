@@ -67,6 +67,12 @@ assert(count("awareness.prompt.") >= 2, "覺察題今日與歷史共用");
 assert(count("exec.prompt.") >= 2, "執行題今日與歷史共用");
 assert(has("deep.${fieldIndex}.title") && has("deep.${index}.title"), "深度主題 title 今日與歷史共用");
 
+assert(has("enterUserMarkMode") || has("enterMarkMode"), "畫重點模式入口");
+assert(has("exitUserMarkMode") || has("exitMarkMode"), "完成可退出畫重點模式");
+assert(has("data-user-mark-enter") || has("user-mark-entry"), "輕量畫重點入口");
+assert(has("open-colors"), "選完直接四色");
+assert(has("is-user-mark-mode"), "mark mode 用 body class，不用全域禁選");
+
 assert(has('conclusion-callout__label">核心結論'), "CASE O：固定 UI label「核心結論」不是 markable field");
 assert(!has('data-user-mark-field="核心結論"'), "CASE O：固定 label 不加 field");
 assert(has("isForbiddenMarkTarget") || has("input, textarea"), "CASE P：input/textarea 禁止");

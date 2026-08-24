@@ -391,10 +391,13 @@ function rememberUserMarkHint() {
   }
 }
 
+function userMarkPenIcon() {
+  return `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.8 19.5h6.2"/><path d="M14.7 5.1l4.2 4.2-9.4 9.4H5.3v-4.2L14.7 5.1z"/><path d="M13.3 6.5l4.2 4.2"/></svg>`;
+}
+
 function userMarkHintHtml() {
-  if (userMarkHintSeen()) return "";
-  if (typeof document !== "undefined" && document.querySelector(".user-mark-hint")) return "";
-  return `<p class="user-mark-hint">長按文字，留下今天對你重要的一句。</p>`;
+  if (typeof document !== "undefined" && document.querySelector("[data-user-mark-enter]")) return "";
+  return `<button class="user-mark-entry" type="button" data-user-mark-enter>${userMarkPenIcon()}畫重點</button>`;
 }
 
 function userMarkBag(value) {
@@ -3823,6 +3826,7 @@ function switchPage(page, options = {}) {
     renderHistory();
     if (window.NichiAnalytics) window.NichiAnalytics.trackOnceSession("history_viewed", { source: "nav" }, "history");
   }
+  if (typeof exitUserMarkMode === "function") exitUserMarkMode();
 }
 
 function driverFactory() {
@@ -11820,10 +11824,30 @@ function handleTodayPointerClick(event) {
   return true;
 }
 
-let userMarkSession = typeof userMarkApi().createToolbarSession === "function" ? userMarkApi().createToolbarSession() : { mode: "", interacting: false, pending: null, markId: "" };
+let userMarkSession =
+  typeof userMarkApi().createToolbarSession === "function"
+    ? userMarkApi().createToolbarSession()
+    : { mode: "", interacting: false, pending: null, markId: "", markMode: false };
 
 function userMarkBarEl() {
   return document.getElementById("userMarkBar");
+}
+
+function userMarkModeBannerEl() {
+  return document.getElementById("userMarkModeBanner");
+}
+
+function isUserMarkMode() {
+  const api = userMarkApi();
+  if (typeof api.isMarkMode === "function") return api.isMarkMode(userMarkSession);
+  return Boolean(userMarkSession.markMode);
+}
+
+function syncUserMarkModeChrome() {
+  const on = isUserMarkMode();
+  document.body.classList.toggle("is-user-mark-mode", on);
+  const banner = userMarkModeBannerEl();
+  if (banner) banner.hidden = !on;
 }
 
 function clearNativeSelection() {
@@ -11838,16 +11862,31 @@ function hideUserMarkBar() {
 
 function dismissUserMarkUi(reason) {
   const api = userMarkApi();
-  if (reason === "complete" && typeof api.completeToolbarSession === "function") api.completeToolbarSession(userMarkSession);
+  if (reason === "exit" && typeof api.exitMarkMode === "function") api.exitMarkMode(userMarkSession);
+  else if (reason === "complete" && typeof api.completeToolbarSession === "function") api.completeToolbarSession(userMarkSession);
   else if (typeof api.cancelToolbarSession === "function") api.cancelToolbarSession(userMarkSession);
   else {
     userMarkSession.mode = "";
     userMarkSession.interacting = false;
     userMarkSession.pending = null;
     userMarkSession.markId = "";
+    if (reason === "exit") userMarkSession.markMode = false;
   }
   hideUserMarkBar();
-  if (reason === "complete" || reason === "cancel") clearNativeSelection();
+  if (reason === "complete" || reason === "cancel" || reason === "exit") clearNativeSelection();
+  syncUserMarkModeChrome();
+}
+
+function enterUserMarkMode() {
+  const api = userMarkApi();
+  if (typeof api.enterMarkMode === "function") api.enterMarkMode(userMarkSession);
+  else userMarkSession.markMode = true;
+  hideUserMarkBar();
+  syncUserMarkModeChrome();
+}
+
+function exitUserMarkMode() {
+  dismissUserMarkUi("exit");
 }
 
 function placeUserMarkBar(rect) {
@@ -11873,10 +11912,12 @@ function setUserMarkBarMode(mode) {
   const start = document.getElementById("userMarkBarStart");
   const colors = document.getElementById("userMarkBarColors");
   const remove = document.getElementById("userMarkBarRemove");
+  const cancel = document.getElementById("userMarkBarCancel");
   const title = document.getElementById("userMarkBarTitle");
-  if (start) start.hidden = mode !== "create";
-  if (colors) colors.hidden = mode === "create" || !mode;
+  if (start) start.hidden = true;
+  if (colors) colors.hidden = mode !== "colors" && mode !== "edit";
   if (remove) remove.hidden = mode !== "edit";
+  if (cancel) cancel.hidden = mode !== "colors";
   if (title) {
     title.hidden = mode !== "edit";
     title.textContent = mode === "edit" ? "改重點" : "畫重點";
@@ -11920,6 +11961,7 @@ function coveringUserMark(field, start, end, date) {
 
 function showUserMarkBarFromPending() {
   const api = userMarkApi();
+  if (!isUserMarkMode()) return;
   const pending = typeof api.pendingMarkPayload === "function" ? api.pendingMarkPayload(userMarkSession) : userMarkSession.pending;
   if (!pending) return;
   const cover = coveringUserMark(pending.field, pending.start, pending.end, pending.date);
@@ -11927,14 +11969,12 @@ function showUserMarkBarFromPending() {
     userMarkSession.markId = cover.id;
     userMarkSession.mode = "edit";
     setUserMarkBarMode("edit");
-  } else if (userMarkSession.mode === "colors") {
-    setUserMarkBarMode("colors");
   } else if (userMarkSession.mode === "edit") {
     setUserMarkBarMode("edit");
   } else {
     userMarkSession.markId = "";
-    userMarkSession.mode = "create";
-    setUserMarkBarMode("create");
+    userMarkSession.mode = "colors";
+    setUserMarkBarMode("colors");
   }
   placeUserMarkBar(pending.rect);
 }
@@ -11949,12 +11989,19 @@ function syncUserMarkBarFromLiveSelection() {
     hideUserMarkBar();
     return;
   }
-  if (action === "open-create") showUserMarkBarFromPending();
+  if (action === "open-create" || action === "open-colors") showUserMarkBarFromPending();
 }
 
 function refreshUserMarkSurfaces(date) {
   const draftThink = thinkGuideBodyEl()?.querySelector(".think-guide-answer")?.value || "";
+  const keepMode = isUserMarkMode();
   dismissUserMarkUi("complete");
+  if (keepMode) {
+    const api = userMarkApi();
+    if (typeof api.enterMarkMode === "function") api.enterMarkMode(userMarkSession);
+    else userMarkSession.markMode = true;
+    syncUserMarkModeChrome();
+  }
   if (!date || date === currentIso()) {
     const journal = collectJournal();
     renderBodyCoachCard(state.journalBodyCoach);
@@ -11973,7 +12020,8 @@ function refreshUserMarkSurfaces(date) {
     renderManifestSentence(state.journalManifestSentence);
     renderDeepThemes(state.deepPrompts, { deep: journal.deep });
   }
-  if (state.page === "history") renderHistory();
+    if (state.page === "history") renderHistory();
+  syncUserMarkModeChrome();
 }
 
 function persistUserMarks(next, date) {
@@ -12022,15 +12070,18 @@ function removeCurrentUserMark() {
 }
 
 function openUserMarkCreate(payload) {
+  if (!isUserMarkMode()) return;
   const api = userMarkApi();
   const snap = typeof api.snapshotSelection === "function" ? api.snapshotSelection(payload) : payload;
   if (!snap) return;
   userMarkSession.pending = snap;
   userMarkSession.interacting = false;
+  userMarkSession.mode = "colors";
   showUserMarkBarFromPending();
 }
 
 function openUserMarkEdit(span) {
+  if (!isUserMarkMode()) return;
   const api = userMarkApi();
   const root = closestMarkable(span);
   const id = String(span.getAttribute("data-mark-id") || "");
@@ -12059,6 +12110,7 @@ function openUserMarkEdit(span) {
 }
 
 function maybeShowUserMarkBar() {
+  if (!isUserMarkMode()) return;
   const api = userMarkApi();
   if (typeof api.ignoreSelectionChange === "function" && api.ignoreSelectionChange(userMarkSession)) return;
   const payload = readMarkableSelection();
@@ -12074,14 +12126,11 @@ function handleUserMarkToolbarPointer(event) {
   const api = userMarkApi();
   if (typeof api.beginToolbarInteract === "function") api.beginToolbarInteract(userMarkSession);
   else userMarkSession.interacting = true;
-  const draw = event.target.closest && event.target.closest("#userMarkBarDraw");
+  const cancel = event.target.closest && event.target.closest("#userMarkBarCancel");
   const swatch = event.target.closest && event.target.closest("[data-mark-color]");
   const remove = event.target.closest && event.target.closest("#userMarkBarRemove");
-  if (draw) {
-    if (typeof api.enterColorMode === "function") api.enterColorMode(userMarkSession);
-    else if (userMarkSession.pending) userMarkSession.mode = "colors";
-    setUserMarkBarMode("colors");
-    placeUserMarkBar(userMarkSession.pending && userMarkSession.pending.rect);
+  if (cancel) {
+    dismissUserMarkUi("cancel");
     return true;
   }
   if (swatch) {
@@ -12117,23 +12166,52 @@ function bindUserMarkUi() {
   });
   document.addEventListener("mouseup", (event) => {
     if (userMarkBarEl()?.contains(event.target)) return;
+    if (event.target.closest && event.target.closest("[data-user-mark-chrome]")) return;
     window.setTimeout(maybeShowUserMarkBar, 0);
   });
   document.addEventListener(
     "touchend",
     (event) => {
       if (userMarkBarEl()?.contains(event.target)) return;
+      if (event.target.closest && event.target.closest("[data-user-mark-chrome]")) return;
       window.setTimeout(maybeShowUserMarkBar, 0);
     },
     { passive: true }
+  );
+  document.addEventListener(
+    "contextmenu",
+    (event) => {
+      if (!isUserMarkMode()) return;
+      const target = event.target && event.target.nodeType === 1 ? event.target : event.target && event.target.parentElement;
+      if (!target || typeof target.closest !== "function") return;
+      if (target.closest("[data-user-mark-toolbar], [data-user-mark-chrome]")) {
+        event.preventDefault();
+        return;
+      }
+      if (closestMarkable(target)) event.preventDefault();
+    },
+    true
   );
   document.addEventListener(
     "click",
     (event) => {
       const toolbar = userMarkBarEl();
       if (toolbar && toolbar.contains(event.target)) return;
+      if (event.target.closest && event.target.closest("[data-user-mark-chrome]")) {
+        if (event.target.closest("#userMarkModeDone, [data-user-mark-done]")) {
+          event.preventDefault();
+          exitUserMarkMode();
+        }
+        return;
+      }
+      if (event.target.closest && event.target.closest("[data-user-mark-enter]")) {
+        event.preventDefault();
+        enterUserMarkMode();
+        return;
+      }
       const highlight = event.target.closest && event.target.closest(".user-highlight");
       if (highlight && closestMarkable(highlight)) {
+        if (!isUserMarkMode()) return;
         event.preventDefault();
         event.stopPropagation();
         openUserMarkEdit(highlight);
@@ -12151,7 +12229,7 @@ function bindUserMarkUi() {
         dismissUserMarkUi("cancel");
         return;
       }
-      if (userMarkSession.mode && !closestMarkable(event.target)) dismissUserMarkUi("cancel");
+      if (isUserMarkMode() && userMarkSession.mode && !closestMarkable(event.target)) dismissUserMarkUi("cancel");
     },
     true
   );
@@ -12171,6 +12249,7 @@ function bindUserMarkUi() {
       placeUserMarkBar(userMarkSession.pending.rect);
     }
   });
+  syncUserMarkModeChrome();
 }
 
 function bindEvents() {

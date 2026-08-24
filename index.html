@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=159" />
+    <link rel="stylesheet" href="app.css?v=160" />
     <style>
       .splash {
         position: fixed;
@@ -102,6 +102,23 @@
       <button class="notice-bar__text" id="reminderCta" type="button">
         🔔 開啟每日覺察提醒
       </button>
+    </div>
+
+    <div class="user-mark-mode-banner" id="userMarkModeBanner" hidden data-user-mark-chrome>
+      <div class="user-mark-mode-banner__lead">
+        <span class="user-mark-mode-banner__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4.8 19.5h6.2" />
+            <path d="M14.7 5.1l4.2 4.2-9.4 9.4H5.3v-4.2L14.7 5.1z" />
+            <path d="M13.3 6.5l4.2 4.2" />
+          </svg>
+        </span>
+        <div class="user-mark-mode-banner__copy">
+          <p class="user-mark-mode-banner__kicker">畫重點中</p>
+          <p class="user-mark-mode-banner__hint">選取一句今天對你重要的話</p>
+        </div>
+      </div>
+      <button class="user-mark-mode-banner__done" id="userMarkModeDone" type="button" data-user-mark-done>完成</button>
     </div>
 
     <div class="scrim" id="scrim" hidden></div>
@@ -1065,7 +1082,7 @@
 
     <div class="user-mark-bar" id="userMarkBar" hidden data-user-mark-toolbar>
       <p class="user-mark-bar__title" id="userMarkBarTitle">畫重點</p>
-      <div id="userMarkBarStart">
+      <div id="userMarkBarStart" hidden>
         <button class="user-mark-bar__draw" id="userMarkBarDraw" type="button">畫重點</button>
       </div>
       <div id="userMarkBarColors" hidden>
@@ -1074,8 +1091,9 @@
           <button class="user-mark-bar__swatch" data-mark-color="yellow" type="button" aria-label="奶黃"></button>
           <button class="user-mark-bar__swatch" data-mark-color="sage" type="button" aria-label="鼠尾草"></button>
           <button class="user-mark-bar__swatch" data-mark-color="pink" type="button" aria-label="霧粉"></button>
+          <button class="user-mark-bar__cancel" id="userMarkBarCancel" type="button" aria-label="取消">×</button>
         </div>
-        <button class="user-mark-bar__remove" id="userMarkBarRemove" type="button" hidden>移除重點</button>
+        <button class="user-mark-bar__remove" id="userMarkBarRemove" type="button" hidden>移除</button>
       </div>
     </div>
     <div class="toast" id="toast" hidden></div>
@@ -1094,7 +1112,7 @@
     <script src="lib/review-merge.js?v=3"></script>
     <script src="lib/history-summary.js?v=3"></script>
     <script src="lib/insight-highlight.js?v=2"></script>
-    <script src="lib/user-mark.js?v=2"></script>
-    <script src="app.js?v=189"></script>
+    <script src="lib/user-mark.js?v=3"></script>
+    <script src="app.js?v=190"></script>
   </body>
 </html>
