@@ -3651,9 +3651,9 @@ body.nav-closed .auth-pay {
 .conclusion-callout {
   min-width: 0;
   max-width: 100%;
-  margin: 8px 0 20px;
-  padding: 20px 22px 22px 24px;
-  background: rgba(251, 247, 242, 0.55);
+  margin: 4px 0 16px;
+  padding: 16px 20px 17px 20px;
+  background: rgba(251, 247, 242, 0.45);
   border: 0;
   border-left: 2px solid #bca58f;
   border-radius: 0 10px 10px 0;
@@ -3662,7 +3662,7 @@ body.nav-closed .auth-pay {
 }
 
 .conclusion-callout__label {
-  margin: 0 0 12px;
+  margin: 0 0 10px;
   color: #806d5e;
   font-size: 12px;
   font-weight: 700;
@@ -3670,12 +3670,22 @@ body.nav-closed .auth-pay {
   line-height: 1.4;
 }
 
+.conclusion-callout__label::after {
+  content: "";
+  display: block;
+  width: 32px;
+  height: 1px;
+  margin-top: 6px;
+  background: #d7c4a8;
+}
+
 .conclusion-callout__text {
   margin: 0;
   font-family: var(--serif);
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
-  line-height: 1.75;
+  line-height: 1.72;
+  letter-spacing: 0.01em;
   color: #342c27;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -3831,17 +3841,17 @@ body.nav-closed .auth-pay {
   }
 
   .conclusion-callout {
-    margin: 6px 0 16px;
-    padding: 18px 16px 20px 18px;
+    margin: 4px 0 14px;
+    padding: 15px 16px 16px 16px;
   }
 
   .conclusion-callout__label {
-    margin-bottom: 12px;
+    margin-bottom: 10px;
   }
 
   .conclusion-callout__text {
-    font-size: 19px;
-    line-height: 1.72;
+    font-size: 17px;
+    line-height: 1.7;
   }
 
   .check-row {
