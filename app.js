@@ -9276,13 +9276,8 @@ function renderConclusionCallout(text, field, date, highlights) {
   if (!line) return "";
   return `
     <aside class="conclusion-callout">
-      <div class="conclusion-callout__quote">
-        <span class="conclusion-callout__mark" aria-hidden="true">❝</span>
-      </div>
-      <div class="conclusion-callout__content">
-        <p class="conclusion-callout__label">核心結論</p>
-        ${field ? markableP(line, field, "conclusion-callout__text", date, highlights) : `<p class="conclusion-callout__text">${highlightedHtml(line, highlights)}</p>`}
-      </div>
+      <p class="conclusion-callout__label">核心結論</p>
+      ${field ? markableP(line, field, "conclusion-callout__text", date, highlights) : `<p class="conclusion-callout__text">${highlightedHtml(line, highlights)}</p>`}
     </aside>
   `;
 }
