@@ -9,6 +9,17 @@ const {
   removeMark,
   mergeUserMarks,
   marksForField,
+  snapshotSelection,
+  createToolbarSession,
+  ignoreSelectionChange,
+  applySelectionChange,
+  beginToolbarInteract,
+  enterColorMode,
+  enterEditMode,
+  pendingMarkPayload,
+  cancelToolbarSession,
+  completeToolbarSession,
+  isForbiddenMarkTarget,
 } = require("../lib/user-mark");
 const { mergeJournalObjects } = require("../lib/review-merge");
 
@@ -100,5 +111,73 @@ assert(overlap.length === 1, "重疊時不重複包兩層");
 
 const normalized = normalizeMarks([{ field: "", text: "轉折點", start: 0, end: 3 }]);
 assert(normalized.length === 0, "沒有 field 的 mark 不保存");
+
+const titleHtml = renderMarkedText("看見自己的需要，也是一種照顧", [
+  { id: "g", field: "bodyCoach.title", start: 2, end: 6, text: "自己的需", color: "tea" },
+]);
+assert(titleHtml.includes("user-highlight--tea"), "CASE G：AI 標題可畫 2～5 字");
+assert(plainTextFromMarkedHtml(titleHtml) === "看見自己的需要，也是一種照顧", "CASE G：標題正文不變");
+
+const titleAll = renderMarkedText("看見自己的需要，也是一種照顧", [
+  { id: "h", field: "think.title", start: 0, end: 14, text: "看見自己的需要，也是一種照顧", color: "sage" },
+]);
+assert(titleAll.includes("user-highlight--sage"), "CASE H：AI 標題整句可畫");
+
+const quoteHtml = renderMarkedText("今天你留下的，是自己點頭的那一面。", [
+  { id: "j", field: "awareness.line", start: 0, end: 17, text: "今天你留下的，是自己點頭的那一面。", color: "pink" },
+]);
+assert(quoteHtml.includes("user-highlight--pink"), "CASE J：金句可畫");
+
+const cardTitle = renderMarkedText("明天11:00躺下休息20分鐘", [
+  { id: "k", field: "exec.item.0.title", start: 0, end: 5, text: "明天11:00", color: "yellow" },
+]);
+assert(cardTitle.includes("exec.item.0.title") || cardTitle.includes("user-highlight--yellow"), "CASE K：行動卡 title 可畫");
+
+const cardDetail = renderMarkedText("10:50設提醒，11:00放下手機。", [
+  { id: "l", field: "exec.item.0.detail", start: 0, end: 12, text: "10:50設提醒，11:00放下手機。", color: "tea" },
+]);
+assert(cardDetail.includes("user-highlight--tea"), "CASE L：行動卡 detail 可畫");
+
+const twiceRange = upsertMark([], { field: "think.round.0.question", start: 8, end: 11, text: "轉折點", color: "sage" });
+const twiceSource = "轉折點出現一次。後面又出現轉折點。";
+const htmlQ = renderMarkedText(twiceSource, [{ ...twiceRange[0], start: twiceSource.lastIndexOf("轉折點"), end: twiceSource.lastIndexOf("轉折點") + 3, text: "轉折點" }]);
+assert((htmlQ.match(/class="user-highlight /g) || []).length === 1, "CASE Q：同一句兩次只標選中 range");
+
+const session = createToolbarSession();
+const live = { date: "2026-08-24", field: "bodyCoach.title", start: 2, end: 6, text: "自己的需", rect: { left: 10, top: 10, width: 40, height: 18 } };
+assert(applySelectionChange(session, live) === "open-create", "CASE A：選字後建立 snapshot");
+assert(session.pending.text === "自己的需", "CASE A：pending 保存原文");
+beginToolbarInteract(session);
+assert(ignoreSelectionChange(session) === true, "CASE B：工具列 pointerdown 後忽略 selectionchange");
+assert(applySelectionChange(session, null) === "ignore", "CASE B：collapse 不可關閉 toolbar");
+assert(enterColorMode(session) === true, "CASE A：畫重點進入顏色層");
+assert(session.mode === "colors", "CASE B：模式停在顏色層");
+assert(applySelectionChange(session, null) === "ignore", "CASE C：colors 期間 selectionchange 忽略");
+assert(pendingMarkPayload(session).text === "自己的需", "CASE C：snapshot 仍在");
+const painted = upsertMark([], { ...pendingMarkPayload(session), color: "sage" });
+assert(painted[0].color === "sage" && painted[0].field === "bodyCoach.title", "CASE A/C：用 snapshot 上色，不靠 live selection");
+const beforeHide = { ...session };
+applySelectionChange(beforeHide, { field: "bodyCoach.title", start: 0, end: 1, text: "看" });
+assert(beforeHide.mode === "colors" && beforeHide.pending.text === "自己的需", "CASE D：toolbar 操作期間不因新 selection 重建/切回第一層");
+completeToolbarSession(session);
+assert(!session.pending && !session.mode && session.interacting === false, "CASE E：上色後 session 關閉");
+const cancelSession = createToolbarSession();
+applySelectionChange(cancelSession, live);
+cancelToolbarSession(cancelSession);
+assert(!cancelSession.pending && !cancelSession.mode, "CASE F：取消不留下 pending");
+assert(upsertMark([], pendingMarkPayload(cancelSession) || {}).length === 0, "CASE F：取消不建立 userMark");
+
+const editSession = createToolbarSession();
+enterEditMode(editSession, { ...live, markId: "m1" });
+assert(ignoreSelectionChange(editSession) === true, "edit 期間忽略 selectionchange");
+assert(pendingMarkPayload(editSession).markId === "m1", "edit 使用 snapshot");
+
+assert(isForbiddenMarkTarget({ nodeType: 1, closest: (sel) => (sel.includes("textarea") ? {} : null) }) === true, "CASE P：textarea 禁止");
+assert(isForbiddenMarkTarget({ nodeType: 1, closest: (sel) => (sel.includes("input") ? {} : null) }) === true, "CASE P：input 禁止");
+assert(isForbiddenMarkTarget({ nodeType: 1, closest: (sel) => (sel.includes("[data-user-mark-toolbar]") ? {} : null) }) === true, "toolbar 自己禁止");
+assert(isForbiddenMarkTarget({ nodeType: 1, closest: () => null }) === false, "一般閱讀文字可畫");
+
+const snapNull = snapshotSelection({ field: "x", start: 0, end: 0, text: "" });
+assert(snapNull == null, "空選取不能當 snapshot");
 
 console.log("user mark tests passed");

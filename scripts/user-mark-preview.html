@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>使用者畫重點預覽</title>
+    <link rel="stylesheet" href="../app.css" />
+    <script src="../lib/user-mark.js"></script>
+    <style>
+      body {
+        margin: 0;
+        padding: 24px 16px 80px;
+        background: #f5efe6;
+        color: #221c18;
+        font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+      }
+      .preview {
+        width: min(720px, 100%);
+        margin: 0 auto;
+        display: grid;
+        gap: 16px;
+      }
+      .preview.is-phone {
+        width: 390px;
+      }
+      .preview__nav {
+        display: flex;
+        gap: 8px;
+      }
+      .preview__nav button {
+        padding: 6px 12px;
+        border: 1px solid rgba(122, 101, 86, 0.18);
+        border-radius: 999px;
+        background: #fff;
+        cursor: pointer;
+      }
+      .preview__nav button.is-on {
+        background: #ebe2d6;
+      }
+      .preview-card {
+        padding: 18px 16px;
+        border-radius: 16px;
+        border: 1px solid rgba(228, 212, 200, 0.95);
+        background: #fff;
+      }
+      .preview__label {
+        margin: 0 0 8px;
+        color: #7a6556;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+      }
+      .preview__text {
+        margin: 0;
+        font-size: 16px;
+        line-height: 1.9;
+      }
+      .preview__title {
+        margin: 0;
+        font-size: 20px;
+        line-height: 1.6;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="preview" id="previewFrame">
+      <div class="preview__nav">
+        <button type="button" data-width="desktop" class="is-on">桌機</button>
+        <button type="button" data-width="phone">390px</button>
+      </div>
+      <p class="user-mark-hint">長按文字，留下今天對你重要的一句。</p>
+      <section class="preview-card">
+        <p class="preview__label">固定 UI label · 不可畫</p>
+        <p class="conclusion-callout__label">核心結論</p>
+        <p class="preview__title js-markable" data-user-mark-field="bodyCoach.title" data-mark-field="bodyCoach.title" id="titleText"></p>
+      </section>
+      <section class="preview-card">
+        <p class="preview__label">今日身心小結 · 同一句出現兩次</p>
+        <p class="preview__text js-markable" data-user-mark-field="bodyCoach.analysis" data-mark-field="bodyCoach.analysis" id="demoText"></p>
+      </section>
+      <section class="preview-card" style="background: #f9f6f0">
+        <p class="preview__label">跨行</p>
+        <p class="preview__text js-markable" data-user-mark-field="think.awareness" data-mark-field="think.awareness" id="wrapText"></p>
+      </section>
+      <label>
+        <span>不可畫的輸入</span>
+        <textarea id="forbiddenInput">這段是使用者正在輸入的內容</textarea>
+      </label>
+    </div>
+    <div class="user-mark-bar" id="userMarkBar" hidden data-user-mark-toolbar>
+      <p class="user-mark-bar__title" id="userMarkBarTitle">畫重點</p>
+      <div id="userMarkBarStart">
+        <button class="user-mark-bar__draw" id="userMarkBarDraw" type="button">畫重點</button>
+      </div>
+      <div id="userMarkBarColors" hidden>
+        <div class="user-mark-bar__colors">
+          <button class="user-mark-bar__swatch" data-mark-color="tea" type="button" aria-label="奶茶"></button>
+          <button class="user-mark-bar__swatch" data-mark-color="yellow" type="button" aria-label="奶黃"></button>
+          <button class="user-mark-bar__swatch" data-mark-color="sage" type="button" aria-label="鼠尾草"></button>
+          <button class="user-mark-bar__swatch" data-mark-color="pink" type="button" aria-label="霧粉"></button>
+        </div>
+        <button class="user-mark-bar__remove" id="userMarkBarRemove" type="button" hidden>移除重點</button>
+      </div>
+    </div>
+    <script>
+      const api = window.NichiUserMark;
+      const title = "看見自己的需要，也是一種照顧";
+      const source = "轉折點出現一次。後面又出現轉折點。";
+      const wrap = "這段比較長的重點加深了你對身邊人的珍視，即使換行也應該自然帶著螢光筆。";
+      let marks = [];
+      const session = api.createToolbarSession();
+
+      function render() {
+        document.getElementById("titleText").innerHTML = api.renderMarkedText(title, api.marksForField(marks, "bodyCoach.title"));
+        document.getElementById("demoText").innerHTML = api.renderMarkedText(source, api.marksForField(marks, "bodyCoach.analysis"));
+        document.getElementById("wrapText").innerHTML = api.renderMarkedText(wrap, api.marksForField(marks, "think.awareness"));
+      }
+
+      function place(rect) {
+        const bar = document.getElementById("userMarkBar");
+        bar.hidden = false;
+        const width = bar.offsetWidth || 176;
+        const height = bar.offsetHeight || 72;
+        let left = rect.left + rect.width / 2 - width / 2;
+        let top = rect.top - height - 12;
+        if (top < 10) top = rect.bottom + 12;
+        left = Math.min(Math.max(10, left), window.innerWidth - width - 10);
+        bar.style.left = left + "px";
+        bar.style.top = top + "px";
+      }
+
+      function setMode(mode) {
+        document.getElementById("userMarkBarStart").hidden = mode !== "create";
+        document.getElementById("userMarkBarColors").hidden = mode === "create" || !mode;
+        document.getElementById("userMarkBarRemove").hidden = mode !== "edit";
+        document.getElementById("userMarkBarTitle").hidden = mode !== "edit";
+        document.getElementById("userMarkBarTitle").textContent = mode === "edit" ? "改重點" : "畫重點";
+      }
+
+      function hide(reason) {
+        if (reason === "complete") api.completeToolbarSession(session);
+        else api.cancelToolbarSession(session);
+        document.getElementById("userMarkBar").hidden = true;
+        if (reason === "complete" || reason === "cancel") window.getSelection().removeAllRanges();
+      }
+
+      function readSelection() {
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
+        const root = api.closestMarkableHost(sel.getRangeAt(0).commonAncestorContainer);
+        if (!root) return null;
+        const offsets = api.selectionOffsets(root, sel);
+        if (!offsets) return null;
+        return {
+          field: root.getAttribute("data-user-mark-field"),
+          ...offsets,
+          rect: sel.getRangeAt(0).getBoundingClientRect(),
+        };
+      }
+
+      function showFromPending() {
+        const pending = api.pendingMarkPayload(session);
+        if (!pending) return;
+        setMode(session.mode === "edit" ? "edit" : session.mode === "colors" ? "colors" : "create");
+        place(pending.rect);
+      }
+
+      function syncFromLive() {
+        if (api.ignoreSelectionChange(session)) return;
+        const payload = readSelection();
+        const action = api.applySelectionChange(session, payload);
+        if (action === "open-create") showFromPending();
+      }
+
+      function onToolbarPointer(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        api.beginToolbarInteract(session);
+        if (event.target.closest("#userMarkBarDraw")) {
+          api.enterColorMode(session);
+          setMode("colors");
+          if (session.pending) place(session.pending.rect);
+          return;
+        }
+        const swatch = event.target.closest("[data-mark-color]");
+        if (swatch) {
+          const pending = api.pendingMarkPayload(session);
+          if (!pending) return;
+          if (pending.markId) marks = api.recolorMark(marks, pending.markId, swatch.getAttribute("data-mark-color"));
+          else marks = api.upsertMark(marks, { ...pending, color: swatch.getAttribute("data-mark-color") });
+          hide("complete");
+          render();
+          return;
+        }
+        if (event.target.closest("#userMarkBarRemove")) {
+          const pending = api.pendingMarkPayload(session);
+          if (pending && pending.markId) marks = api.removeMark(marks, pending.markId);
+          hide("complete");
+          render();
+        }
+      }
+
+      const bar = document.getElementById("userMarkBar");
+      bar.addEventListener("pointerdown", onToolbarPointer);
+      document.addEventListener("selectionchange", function () {
+        if (api.ignoreSelectionChange(session)) return;
+        setTimeout(syncFromLive, 80);
+      });
+      document.addEventListener("mouseup", function (event) {
+        if (bar.contains(event.target)) return;
+        setTimeout(syncFromLive, 0);
+      });
+      document.addEventListener("click", function (event) {
+        if (bar.contains(event.target)) return;
+        const span = event.target.closest(".user-highlight");
+        if (span) {
+          event.preventDefault();
+          const root = api.closestMarkableHost(span);
+          api.enterEditMode(session, {
+            field: root.getAttribute("data-user-mark-field"),
+            start: 0,
+            end: span.textContent.length,
+            text: span.textContent,
+            markId: span.getAttribute("data-mark-id"),
+            rect: span.getBoundingClientRect(),
+          });
+          const mark = marks.find((item) => item.id === span.getAttribute("data-mark-id"));
+          if (mark) {
+            session.pending = { ...mark, rect: span.getBoundingClientRect() };
+            session.markId = mark.id;
+          }
+          setMode("edit");
+          place(span.getBoundingClientRect());
+          return;
+        }
+        if (session.mode && !api.closestMarkableHost(event.target)) hide("cancel");
+      });
+      document.querySelectorAll("[data-width]").forEach(function (btn) {
+        btn.onclick = function () {
+          document.querySelectorAll("[data-width]").forEach(function (item) {
+            item.classList.toggle("is-on", item === btn);
+          });
+          document.getElementById("previewFrame").classList.toggle("is-phone", btn.getAttribute("data-width") === "phone");
+        };
+      });
+      render();
+    </script>
+  </body>
+</html>

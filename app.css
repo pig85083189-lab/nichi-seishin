@@ -5947,7 +5947,13 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   );
 }
 
-.js-markable {
+.js-markable,
+[data-user-mark-field] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+summary [data-user-mark-field] {
   -webkit-user-select: text;
   user-select: text;
 }
@@ -5969,6 +5975,19 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   border-radius: 14px;
   background: #fffdf9;
   box-shadow: 0 10px 28px rgba(92, 74, 58, 0.14);
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.user-mark-bar,
+.user-mark-bar * {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.user-mark-bar button {
+  touch-action: manipulation;
 }
 
 .user-mark-bar[hidden] {
