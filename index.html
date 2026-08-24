@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=156" />
+    <link rel="stylesheet" href="app.css?v=157" />
     <style>
       .splash {
         position: fixed;
@@ -1022,6 +1022,21 @@
       </div>
     </div>
 
+    <div class="user-mark-bar" id="userMarkBar" hidden>
+      <p class="user-mark-bar__title" id="userMarkBarTitle">畫重點</p>
+      <div id="userMarkBarStart">
+        <button class="user-mark-bar__draw" id="userMarkBarDraw" type="button">畫重點</button>
+      </div>
+      <div id="userMarkBarColors" hidden>
+        <div class="user-mark-bar__colors">
+          <button class="user-mark-bar__swatch" data-mark-color="tea" type="button" aria-label="奶茶"></button>
+          <button class="user-mark-bar__swatch" data-mark-color="yellow" type="button" aria-label="奶黃"></button>
+          <button class="user-mark-bar__swatch" data-mark-color="sage" type="button" aria-label="鼠尾草"></button>
+          <button class="user-mark-bar__swatch" data-mark-color="pink" type="button" aria-label="霧粉"></button>
+        </div>
+        <button class="user-mark-bar__remove" id="userMarkBarRemove" type="button" hidden>移除重點</button>
+      </div>
+    </div>
     <div class="toast" id="toast" hidden></div>
     <script>
       if ("serviceWorker" in navigator) {
@@ -1035,9 +1050,10 @@
     <script src="analytics.js?v=1"></script>
     <script src="lib/text-integrity.js?v=1"></script>
     <script src="lib/body-coach-insight.js?v=1"></script>
-    <script src="lib/review-merge.js?v=2"></script>
+    <script src="lib/review-merge.js?v=3"></script>
     <script src="lib/history-summary.js?v=3"></script>
     <script src="lib/insight-highlight.js?v=2"></script>
-    <script src="app.js?v=187"></script>
+    <script src="lib/user-mark.js?v=1"></script>
+    <script src="app.js?v=188"></script>
   </body>
 </html>

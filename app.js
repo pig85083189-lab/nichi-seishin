@@ -14,6 +14,7 @@ const STORAGE_KEYS = {
   reports: "nichi.reports",
   journalMode: "nichi.journalMode",
   journalFolds: "nichi.journalFolds",
+  userMarkHint: "nichi.userMarkHintSeen",
 };
 
 const CLOUD_STORE_NAMES = ["reviews", "tasks", "sfm", "insights", "manifests", "reports"];
@@ -112,6 +113,7 @@ const state = {
   journalBodyCoach: null,
   journalExecFocus: null,
   journalAwarenessResult: null,
+  journalUserMarks: { items: [], updatedAt: "" },
   journalManifestSentence: "",
   manifestPrompts: [],
   manifestPromptsBusy: false,
@@ -357,31 +359,83 @@ function insightHighlightApi() {
   return (typeof window !== "undefined" && window.NichiInsightHighlight) || {};
 }
 
-function highlightedHtml(text, highlights) {
-  const api = insightHighlightApi();
-  if (typeof api.renderHighlightedText === "function") return api.renderHighlightedText(text, highlights);
+function userMarkApi() {
+  return (typeof window !== "undefined" && window.NichiUserMark) || {};
+}
+
+function highlightedHtml(text) {
   return escapeHtml(text);
 }
 
-function fieldHighlightsOf(bag, field) {
-  const api = insightHighlightApi();
-  if (typeof api.fieldHighlights === "function") return api.fieldHighlights(bag, field);
+function fieldHighlightsOf() {
   return [];
 }
 
-function insightHasMarks(text, highlights) {
-  const api = insightHighlightApi();
-  if (typeof api.normalizeHighlights !== "function") return false;
-  return api.normalizeHighlights(highlights, text).length > 0;
+function insightHasMarks() {
+  return false;
 }
 
-function insightFieldHtml(text, highlights, className = "insight-block__text") {
-  const raw = String(text || "").trim();
-  if (!raw) return "";
-  if (insightHasMarks(raw, highlights)) {
-    return `<p class="${className}">${highlightedHtml(raw, highlights)}</p>`;
+function userMarkHintSeen() {
+  try {
+    return localStorage.getItem(STORAGE_KEYS.userMarkHint) === "1";
+  } catch {
+    return false;
   }
-  return emphasizeLeadHtml(raw, className);
+}
+
+function rememberUserMarkHint() {
+  try {
+    localStorage.setItem(STORAGE_KEYS.userMarkHint, "1");
+  } catch {
+    /* ignore */
+  }
+}
+
+function userMarkHintHtml() {
+  if (userMarkHintSeen()) return "";
+  if (typeof document !== "undefined" && document.querySelector(".user-mark-hint")) return "";
+  return `<p class="user-mark-hint">長按文字，留下今天對你重要的一句。</p>`;
+}
+
+function userMarkBag(value) {
+  const api = userMarkApi();
+  return typeof api.asMarkBag === "function" ? api.asMarkBag(value) : { items: [], updatedAt: "" };
+}
+
+function normalizeUserMarks(list) {
+  return userMarkBag(list).items;
+}
+
+function currentUserMarks(date) {
+  if (date && date !== currentIso()) return userMarkBag(getReview(date)?.journal?.userMarks).items;
+  return userMarkBag(state.journalUserMarks).items;
+}
+
+function markedFieldHtml(text, field, date) {
+  const api = userMarkApi();
+  if (typeof api.renderMarkedText === "function") {
+    const marks = typeof api.marksForField === "function" ? api.marksForField(currentUserMarks(date), field) : [];
+    return api.renderMarkedText(text, marks);
+  }
+  return escapeHtml(text);
+}
+
+function markableP(text, field, className, date) {
+  const raw = String(text == null ? "" : text);
+  if (!String(raw).trim()) return "";
+  const dateAttr = date ? ` data-mark-date="${escapeHtml(date)}"` : "";
+  return `<p class="${className} js-markable" data-mark-field="${escapeHtml(field)}"${dateAttr}>${markedFieldHtml(raw, field, date)}</p>`;
+}
+
+function markableSpan(text, field, className, date) {
+  const raw = String(text == null ? "" : text);
+  if (!raw) return "";
+  const dateAttr = date ? ` data-mark-date="${escapeHtml(date)}"` : "";
+  return `<span class="${className} js-markable" data-mark-field="${escapeHtml(field)}"${dateAttr}>${markedFieldHtml(raw, field, date)}</span>`;
+}
+
+function insightFieldHtml(text, field, className = "insight-block__text", date) {
+  return markableP(text, field, className, date);
 }
 
 function highlightsAttr(value) {
@@ -4388,6 +4442,7 @@ function emptyJournal() {
     corePromptsSig: "",
     corePromptsAi: false,
     quickModules: emptyQuickModules(),
+    userMarks: { items: [], updatedAt: "" },
   };
 }
 
@@ -4815,6 +4870,7 @@ function journalHasContent(journal) {
   const bodyCheck = journal.bodyCheck && typeof journal.bodyCheck === "object" ? journal.bodyCheck : {};
   if (["mood", "body", "sleep"].some((key) => (bodyCheck[key] && Array.isArray(bodyCheck[key].flags) && bodyCheck[key].flags.length) || (bodyCheck[key] && bodyCheck[key].none))) return true;
   if (String(journal.bodyCoach?.title || journal.bodyCoach?.analysis || "").trim()) return true;
+  if (userMarkBag(journal.userMarks).items.length) return true;
   return hasAwarenessResult(journal.awarenessResult);
 }
 
@@ -5378,12 +5434,13 @@ function renderAwarenessResultCard(result, checked) {
   const copyText = formatAwarenessResultText(data);
   return `<div class="aware-result${stale ? " is-stale" : ""}" data-quote="${escapeHtml(keep)}" data-copy="${escapeHtml(copyText)}">
       <p class="aware-result__heading">今日覺察</p>
+      ${userMarkHintHtml()}
       ${stale ? `<p class="aware-result__stale">你改了是／否。這份覺察還是依先前的答案寫的，可以再整理一次。</p>` : ""}
       ${sections
         .map(
           (item) => `<article class="aware-result__card${item.kind === "question" ? " aware-result__card--question" : ""}${item.kind === "echo" ? " aware-result__card--echo" : ""}">
         <p class="aware-result__kicker">${escapeHtml(item.kicker)}</p>
-        <p class="aware-result__text${item.kind === "question" ? " aware-result__text--question" : ""}">${highlightedHtml(item.text, fieldHighlightsOf(data.highlights, item.kind))}</p>
+        ${markableP(item.text, `awareness.${item.kind}`, `aware-result__text${item.kind === "question" ? " aware-result__text--question" : ""}`)}
       </article>`
         )
         .join("")}
@@ -5395,7 +5452,11 @@ function renderAwarenessResultCard(result, checked) {
         </label>
         <button class="btn btn--ghost btn--tiny" type="button" data-copy-aware-quote>複製</button>
       </div>
-      ${data.line ? `<p class="aware-result__line"><span>今日帶走的一句話</span>${highlightedHtml(data.line, fieldHighlightsOf(data.highlights, "line"))}</p>` : ""}
+      ${
+        data.line
+          ? `<p class="aware-result__line"><span>今日帶走的一句話</span>${markableSpan(data.line, "awareness.line", "")}</p>`
+          : ""
+      }
     </div>`;
 }
 
@@ -5490,16 +5551,16 @@ function buildExecutionCheckItems(journal) {
 }
 
 function renderExecCheckCard(item, index, done) {
-  const heading = done ? item.title : `${String(index + 1).padStart(2, "0")}｜${item.title}`;
+  const prefix = done ? "" : `${String(index + 1).padStart(2, "0")}｜`;
   const lead = flattenExecSentence(item.detail, item);
-  const marks = item.highlights;
+  const orig = Number.isFinite(item.markIndex) ? item.markIndex : index;
   return `
-    <label class="check-line exec-check${done ? " is-done" : ""}" data-title="${escapeHtml(item.title)}" data-detail="${escapeHtml(lead)}" data-highlights="${escapeHtml(highlightsAttr(marks))}">
+    <label class="check-line exec-check${done ? " is-done" : ""}" data-title="${escapeHtml(item.title)}" data-detail="${escapeHtml(lead)}" data-highlights="${escapeHtml(highlightsAttr(item.highlights))}">
       <input type="checkbox" value="${escapeHtml(item.title)}" ${done ? "checked" : ""} />
       <span class="exec-check__box" aria-hidden="true"></span>
       <span class="exec-check__body">
-        <span class="exec-check__title">${highlightedHtml(heading, marks)}</span>
-        ${lead ? `<span class="exec-check__lead">${highlightedHtml(lead, marks)}</span>` : ""}
+        <span class="exec-check__title">${prefix}${markableSpan(item.title, `exec.item.${orig}.title`, "")}</span>
+        ${lead ? markableSpan(lead, `exec.item.${orig}.detail`, "exec-check__lead") : ""}
       </span>
     </label>
   `;
@@ -5529,6 +5590,12 @@ function normalizeExecFocus(raw, items) {
   };
 }
 
+function execFocusTitleText(title) {
+  const clean = String(title || "").replace(/^[「」]+|[「」]+$/g, "");
+  if (!clean) return "";
+  return /[。！？.]$/.test(clean) ? clean : `${clean}。`;
+}
+
 function renderExecFocus(focus, items) {
   const root = document.getElementById("execFocus");
   if (!root) return;
@@ -5538,15 +5605,14 @@ function renderExecFocus(focus, items) {
     root.innerHTML = "";
     return;
   }
-  const title = data.title.replace(/^[「」]+|[「」]+$/g, "");
-  const titleText = /[。！？.]$/.test(title) ? title : `${title}。`;
+  const titleText = execFocusTitleText(data.title);
   const kicker = execFocusKicker(data.when);
   const hint = data.hint || execFocusHintForWhen(data.when);
   root.hidden = false;
   root.innerHTML = `
     <p class="exec-focus__kicker">${escapeHtml(kicker)}</p>
-    <p class="exec-focus__title">「${highlightedHtml(titleText, data.highlights)}」</p>
-    ${data.detail ? `<p class="exec-focus__why">${highlightedHtml(data.detail, data.highlights)}</p>` : ""}
+    <p class="exec-focus__title">「${markableSpan(titleText, "exec.focus.title", "")}」</p>
+    ${data.detail ? markableP(data.detail, "exec.focus.detail", "exec-focus__why") : ""}
     <p class="exec-focus__hint">${escapeHtml(hint)}</p>
   `;
 }
@@ -5558,8 +5624,9 @@ function renderExecChecklist(items, checked) {
   const set = new Set((checked || []).map((item) => (typeof item === "string" ? item : item && item.title)).filter(Boolean));
   const open = [];
   const done = [];
-  normalized.forEach((item) => (set.has(item.title) ? done : open).push(item));
+  normalized.forEach((item, index) => (set.has(item.title) ? done : open).push({ ...item, markIndex: index }));
   root.innerHTML = `
+    ${normalized.length ? userMarkHintHtml() : ""}
     <div class="exec-check-open">
       ${open.map((item, index) => renderExecCheckCard(item, index, false)).join("") || (done.length ? "" : `<p class="empty">目前沒有待完成的行動。</p>`)}
     </div>
@@ -6470,17 +6537,23 @@ function splitActionLine(text) {
   return { title: raw.slice(0, 10), body: raw };
 }
 
-function actionStepsHtml(items, highlights) {
+function actionStepsHtml(items, options = {}) {
   const list = Array.isArray(items) ? items.map((item) => String(item || "").trim()).filter(Boolean) : [];
   if (!list.length) return "";
+  const fieldPrefix = options.fieldPrefix || "";
+  const date = options.date || "";
   return `<ol class="action-steps">${list
     .map((item, index) => {
-      const { title, body } = splitActionLine(item);
       const num = String(index + 1).padStart(2, "0");
+      const field = fieldPrefix ? `${fieldPrefix}.${index}` : "";
       return `<li class="action-steps__item">
         <div class="action-steps__copy">
-          <p class="action-steps__title">${num}｜${highlightedHtml(title, highlights)}</p>
-          ${body ? `<p class="action-steps__body">${highlightedHtml(body, highlights)}</p>` : ""}
+          <p class="action-steps__title">${num}</p>
+          ${
+            field
+              ? markableP(item, field, "action-steps__body", date)
+              : `<p class="action-steps__body">${escapeHtml(item)}</p>`
+          }
         </div>
       </li>`;
     })
@@ -6502,24 +6575,17 @@ function renderThinkGuideCloseHtml(guide, data) {
   const selfSeen = String(guide.selfSeen || "").trim();
   const takeaway = String(guide.takeaway || "").trim();
   const actions = Array.isArray(guide.actions) ? guide.actions.filter(Boolean) : [];
-  const bag = guide.highlights || data.highlights || {};
-  const awarenessHtml = awareness
-    ? awareness
-        .split(/\n{2,}/)
-        .map((part) => part.trim())
-        .filter(Boolean)
-        .map((part) => `<p class="think-guide__close-text">${highlightedHtml(part, fieldHighlightsOf(bag, "awareness"))}</p>`)
-        .join("")
-    : "";
+  const awarenessHtml = awareness ? markableP(awareness, "think.awareness", "think-guide__close-text") : "";
   return `<article class="think-guide__close">
         <p class="think-guide__kicker">今日覺察總結</p>
-        ${title ? `<p class="think-guide__close-title">${highlightedHtml(title, fieldHighlightsOf(bag, "title"))}</p>` : ""}
+        ${userMarkHintHtml()}
+        ${title ? markableP(title, "think.title", "think-guide__close-title") : ""}
         ${awarenessHtml}
         ${
           selfSeen
             ? `<div class="think-guide__close-block">
           <p class="think-guide__kicker">今天我看見的自己</p>
-          <p class="think-guide__self">${highlightedHtml(selfSeen, fieldHighlightsOf(bag, "selfSeen"))}</p>
+          ${markableP(selfSeen, "think.selfSeen", "think-guide__self")}
         </div>`
             : ""
         }
@@ -6527,11 +6593,11 @@ function renderThinkGuideCloseHtml(guide, data) {
           takeaway
             ? `<div class="think-guide__close-block">
           <p class="think-guide__kicker">今日帶走的一句話</p>
-          <p class="think-guide__takeaway">${highlightedHtml(takeaway, fieldHighlightsOf(bag, "takeaway"))}</p>
+          ${markableP(takeaway, "think.takeaway", "think-guide__takeaway")}
         </div>`
             : ""
         }
-        ${actions.length ? actionStepsHtml(actions) : ""}
+        ${actions.length ? actionStepsHtml(actions, { fieldPrefix: "think.action" }) : ""}
       </article>`;
 }
 
@@ -6584,12 +6650,13 @@ function renderInsightResultHtml(data) {
   const coreLine = String(data.title || takeaways[0] || "").trim();
   return `
     <article class="insight-card__result">
-      ${coreLine ? renderConclusionCallout(coreLine) : ""}
+      ${userMarkHintHtml()}
+      ${coreLine ? renderConclusionCallout(coreLine, "think.title") : ""}
       ${
         analysis
           ? `<section class="insight-block">
         <p class="insight-block__label">① 今天的身心訊號</p>
-        ${emphasizeLeadHtml(analysis)}
+        ${insightFieldHtml(analysis, "think.psychology")}
         ${hasBody ? `<p class="insight-block__note">${escapeHtml(data.bodyLink)}</p>` : ""}
       </section>`
           : ""
@@ -6598,7 +6665,7 @@ function renderInsightResultHtml(data) {
         reflection
           ? `<section class="insight-block insight-block--review">
         <p class="insight-block__label">② 客觀檢討與反思</p>
-        ${emphasizeLeadHtml(reflection)}
+        ${insightFieldHtml(reflection, "think.reflection")}
       </section>`
           : ""
       }
@@ -6606,7 +6673,7 @@ function renderInsightResultHtml(data) {
         suggestions.length
           ? `<section class="insight-block insight-block--tips">
         <p class="insight-block__label">③ 具體突破建議（怎麼做會更好）</p>
-        ${actionStepsHtml(suggestions)}
+        ${actionStepsHtml(suggestions, { fieldPrefix: "think.suggestion" })}
       </section>`
           : ""
       }
@@ -7091,16 +7158,17 @@ function renderBodyCoachCard(coach) {
     root.innerHTML = `<p class="insight-card__empty">先把左邊的心情、身體與睡眠看過，再點看看今天適合怎麼照顧自己。</p>`;
     return;
   }
-  const tips = actionStepsHtml(data.suggestions, fieldHighlightsOf(data.highlights, "suggestions"));
+  const tips = actionStepsHtml(data.suggestions, { fieldPrefix: "bodyCoach.suggestion" });
   const core = String(data.title || "").trim();
   root.innerHTML = `
     <article class="insight-card__result">
-      ${core ? renderConclusionCallout(/[。！？]$/.test(core) ? core : `${core}。`, fieldHighlightsOf(data.highlights, "title")) : ""}
+      ${userMarkHintHtml()}
+      ${core ? renderConclusionCallout(/[。！？]$/.test(core) ? core : `${core}。`, "bodyCoach.title") : ""}
       ${
         data.analysis
           ? `<section class="insight-block">
         <p class="insight-block__label">① 今天的身心訊號</p>
-        ${insightFieldHtml(data.analysis, fieldHighlightsOf(data.highlights, "analysis"))}
+        ${insightFieldHtml(data.analysis, "bodyCoach.analysis")}
       </section>`
           : ""
       }
@@ -7108,7 +7176,7 @@ function renderBodyCoachCard(coach) {
         data.notice
           ? `<section class="insight-block insight-block--review">
         <p class="insight-block__label">② 今天值得留意的地方</p>
-        ${insightFieldHtml(data.notice, fieldHighlightsOf(data.highlights, "notice"))}
+        ${insightFieldHtml(data.notice, "bodyCoach.notice")}
       </section>`
           : ""
       }
@@ -8568,6 +8636,7 @@ function collectJournal() {
     corePromptsSig: state.journalMeta.corePromptsSig || "",
     corePromptsAi: Boolean(state.journalMeta.corePromptsAi),
     quickModules: normalizeQuickModules(state.quickModules),
+    userMarks: userMarkBag(state.journalUserMarks),
   };
   return journal;
 }
@@ -9050,6 +9119,7 @@ function fillJournal(journal) {
   state.journalBodyCoach = normalizeBodyCoach(data.bodyCoach);
   state.journalExecFocus = normalizeExecFocus(data.executionFocus, data.executionCheckItems);
   state.journalAwarenessResult = normalizeAwarenessResult(data.awarenessResult);
+  state.journalUserMarks = userMarkBag(data.userMarks);
   state.journalManifestSentence = String(data.manifestSentence || "").trim();
   state.manifestPrompts = normalizeManifestPrompts(data.manifestPrompts);
   state.awarenessPrompts = hydrateAwarenessPrompts(data);
@@ -9141,13 +9211,13 @@ function loadReviewForDate(iso) {
   maybeAutoGenerateCorePrompts(review?.journal || collectJournal());
 }
 
-function renderConclusionCallout(text, highlights) {
+function renderConclusionCallout(text, field, date) {
   const line = String(text || "").trim();
   if (!line) return "";
   return `
     <aside class="conclusion-callout">
       <p class="conclusion-callout__label">核心結論</p>
-      <p class="conclusion-callout__text">${highlightedHtml(line, highlights)}</p>
+      ${field ? markableP(line, field, "conclusion-callout__text", date) : `<p class="conclusion-callout__text">${escapeHtml(line)}</p>`}
     </aside>
   `;
 }
@@ -10920,25 +10990,28 @@ function historyMarkedItemsHtml(items) {
   const list = (Array.isArray(items) ? items : [items])
     .map((item) => {
       if (item && typeof item === "object" && item.text != null) {
-        return { text: String(item.text || "").trim(), highlights: item.highlights };
+        return { text: String(item.text || "").trim(), field: item.field || "", date: item.date || "" };
       }
-      return { text: String(item || "").trim(), highlights: [] };
+      return { text: String(item || "").trim(), field: "", date: "" };
     })
     .filter((item) => item.text);
   if (!list.length) return "";
-  const cell = (item) => highlightedHtml(item.text, item.highlights);
-  if (list.length === 1) return `<p class="history-journal__text">${cell(list[0])}</p>`;
-  return `<ul class="history-journal__list">${list.map((item) => `<li>${cell(item)}</li>`).join("")}</ul>`;
+  const cell = (item) =>
+    item.field ? markableP(item.text, item.field, "history-journal__text", item.date) : `<p class="history-journal__text">${escapeHtml(item.text)}</p>`;
+  if (list.length === 1) return cell(list[0]);
+  return `<ul class="history-journal__list">${list
+    .map((item) => `<li>${item.field ? markableSpan(item.text, item.field, "", item.date) : escapeHtml(item.text)}</li>`)
+    .join("")}</ul>`;
 }
 
-function historyExecChecksHtml(journal) {
+function historyExecChecksHtml(journal, date) {
   const items = normalizeExecCheckItems(journal && journal.executionCheckItems);
   if (items.length) {
     return `<div class="history-exec-cards">${items
       .map(
-        (item) => `<article class="history-exec-card">
-        <p class="history-exec-card__title">${highlightedHtml(item.title, item.highlights)}</p>
-        ${item.detail ? `<p class="history-exec-card__lead">${highlightedHtml(item.detail, item.highlights)}</p>` : ""}
+        (item, index) => `<article class="history-exec-card">
+        ${markableP(item.title, `exec.item.${index}.title`, "history-exec-card__title", date)}
+        ${item.detail ? markableP(item.detail, `exec.item.${index}.detail`, "history-exec-card__lead", date) : ""}
       </article>`
       )
       .join("")}</div>`;
@@ -10968,7 +11041,7 @@ function historyQuotesHtml(quotes) {
     .join("")}</div>`;
 }
 
-function historyBodyCheckHtml(journal) {
+function historyBodyCheckHtml(journal, date) {
   const check = normalizeBodyCheck(journal.bodyCheck, journal.bodyTags, journal.bodyNote);
   const lines = [];
   const moodFlags = (check.mood.flags || []).join("、");
@@ -10990,14 +11063,20 @@ function historyBodyCheckHtml(journal) {
     );
   }
   const coach = normalizeBodyCoach(journal.bodyCoach);
-  const marked = lines.map((text) => ({ text }));
-  if (coach.title) marked.push({ text: `核心結論：${coach.title}`, highlights: fieldHighlightsOf(coach.highlights, "title") });
-  if (coach.analysis) marked.push({ text: coach.analysis, highlights: fieldHighlightsOf(coach.highlights, "analysis") });
-  if (coach.notice) marked.push({ text: `值得留意：${coach.notice}`, highlights: fieldHighlightsOf(coach.highlights, "notice") });
-  (coach.suggestions || []).forEach((item, index) =>
-    marked.push({ text: `今晚照顧 ${index + 1}：${item}`, highlights: fieldHighlightsOf(coach.highlights, "suggestions") })
-  );
-  return historyMarkedItemsHtml(marked);
+  const title = String(coach.title || "").trim();
+  const titleLine = title ? (/[。！？]$/.test(title) ? title : `${title}。`) : "";
+  const coachHtml = [
+    titleLine ? historyBlock("核心結論", markableP(titleLine, "bodyCoach.title", "history-journal__headline", date)) : "",
+    coach.analysis ? historyBlock("今天的身心訊號", markableP(coach.analysis, "bodyCoach.analysis", "history-journal__text", date)) : "",
+    coach.notice ? historyBlock("值得留意", markableP(coach.notice, "bodyCoach.notice", "history-journal__text", date)) : "",
+    ...(coach.suggestions || []).map((item, index) => {
+      const text = String(item || "").trim();
+      return text
+        ? historyBlock(`今晚照顧 ${index + 1}`, markableP(text, `bodyCoach.suggestion.${index}`, "history-journal__text", date))
+        : "";
+    }),
+  ].join("");
+  return `${historyItemsHtml(lines)}${coachHtml}`;
 }
 
 function historyTextMeaningful(value) {
@@ -11032,7 +11111,7 @@ function historyHasGuideRounds(review) {
   return historyGuideFromReview(review).rounds.some(historyRoundHasContent);
 }
 
-function renderHistoryGuideHtml(insight, guide) {
+function renderHistoryGuideHtml(insight, guide, date) {
   const parsed = historyGuideFromReview({ journal: { insight: { ...(insight || {}), guide } } });
   const rounds = parsed.rounds.filter(historyRoundHasContent);
   const roundBlocks = rounds
@@ -11052,54 +11131,43 @@ function renderHistoryGuideHtml(insight, guide) {
       );
     })
     .join("");
-  const closeBag = guide.highlights || insight.highlights || {};
   const closeBlocks = [
     guide.title || insight.title
-      ? historyBlock("", `<p class="history-journal__headline">${highlightedHtml(guide.title || insight.title, fieldHighlightsOf(closeBag, "title"))}</p>`)
+      ? historyBlock("", markableP(guide.title || insight.title, "think.title", "history-journal__headline", date))
       : "",
     guide.awareness || guide.summary
-      ? historyBlock("今日覺察", `<p class="history-journal__text">${highlightedHtml(guide.awareness || guide.summary, fieldHighlightsOf(closeBag, "awareness"))}</p>`)
+      ? historyBlock("今日覺察", markableP(guide.awareness || guide.summary, "think.awareness", "history-journal__text", date))
       : "",
     guide.selfSeen
-      ? historyBlock("今天我看見的自己", `<p class="history-journal__text">${highlightedHtml(guide.selfSeen, fieldHighlightsOf(closeBag, "selfSeen"))}</p>`)
+      ? historyBlock("今天我看見的自己", markableP(guide.selfSeen, "think.selfSeen", "history-journal__text", date))
       : "",
     guide.takeaway
-      ? historyBlock("今日帶走的一句話", `<p class="history-journal__headline">${highlightedHtml(guide.takeaway, fieldHighlightsOf(closeBag, "takeaway"))}</p>`)
+      ? historyBlock("今日帶走的一句話", markableP(guide.takeaway, "think.takeaway", "history-journal__headline", date))
       : "",
     Array.isArray(guide.actions) && guide.actions.length
-      ? historyBlock(
-          "兩件具體下一步",
-          `<ul class="history-journal__list">${guide.actions
-            .map((item) => String(item || "").trim())
-            .filter(Boolean)
-            .map((item) => `<li>${escapeHtml(item)}</li>`)
-            .join("")}</ul>`
-        )
+      ? historyBlock("兩件具體下一步", actionStepsHtml(guide.actions, { fieldPrefix: "think.action", date }))
       : "",
   ].join("");
   return `${roundBlocks}${closeBlocks}`;
 }
 
-function renderHistoryInsightBlocksHtml(insight) {
+function renderHistoryInsightBlocksHtml(insight, date) {
   const psychology = String(insight.psychology || insight.analysis || insight.logic || "").trim();
   const conclusion = String(insight.conclusion || insight.summary || "").trim();
   const reflection = String(insight.reflection || "").trim();
   const suggestions = Array.isArray(insight.suggestions) ? insight.suggestions : [];
   const takeaways = Array.isArray(insight.takeaways) ? insight.takeaways : [];
-  return `${insight.title ? historyBlock("", `<p class="history-journal__headline">${escapeHtml(insight.title)}</p>`) : ""}${
+  return `${insight.title ? historyBlock("", markableP(insight.title, "think.title", "history-journal__headline", date)) : ""}${
     psychology || conclusion
-      ? historyBlock("① 今天的身心訊號", `<p class="history-journal__text">${escapeHtml(psychology || conclusion)}</p>`)
+      ? historyBlock("① 今天的身心訊號", markableP(psychology || conclusion, "think.psychology", "history-journal__text", date))
       : ""
   }${insight.bodyLink ? historyBlock("", `<p class="history-journal__note">${escapeHtml(insight.bodyLink)}</p>`) : ""}${
     reflection
-      ? historyBlock("② 客觀檢討與反思", `<p class="history-journal__text">${escapeHtml(reflection)}</p>`)
+      ? historyBlock("② 客觀檢討與反思", markableP(reflection, "think.reflection", "history-journal__text", date))
       : ""
   }${
     suggestions.length
-      ? historyBlock(
-          "③ 具體突破建議（怎麼做會更好）",
-          `<ul class="history-journal__list">${suggestions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
-        )
+      ? historyBlock("③ 具體突破建議（怎麼做會更好）", actionStepsHtml(suggestions, { fieldPrefix: "think.suggestion", date }))
       : ""
   }${
     takeaways.length
@@ -11169,15 +11237,15 @@ function renderHistoryDeepThinking(review) {
   let html = "";
   if (historyHasGuideRounds(review) || historyTextMeaningful(parsed.guide.summary) || historyTextMeaningful(parsed.guide.awareness)) {
     selected = "guide";
-    html = renderHistoryGuideHtml(parsed.insight, parsed.guide);
+    html = renderHistoryGuideHtml(parsed.insight, parsed.guide, review && review.date);
   } else if (helperSource.kind === "blocks" || helperSource.kind === "thinkHistory" || helperSource.kind === "deep") {
     selected = helperSource.kind;
-    if (helperSource.kind === "blocks") html = renderHistoryInsightBlocksHtml(helperSource.insight || {});
+    if (helperSource.kind === "blocks") html = renderHistoryInsightBlocksHtml(helperSource.insight || {}, review && review.date);
     else if (helperSource.kind === "thinkHistory") html = renderHistoryThinkHistoryHtml(helperSource.thinkHistory, review);
     else html = renderHistoryDeepJournalHtml(helperSource.deep, helperSource.deepPrompts);
   } else if (parsed.insight && (historyTextMeaningful(parsed.insight.psychology) || historyTextMeaningful(parsed.insight.analysis) || historyTextMeaningful(parsed.insight.conclusion) || historyTextMeaningful(parsed.insight.summary) || historyTextMeaningful(parsed.insight.reflection))) {
     selected = "blocks";
-    html = renderHistoryInsightBlocksHtml(parsed.insight);
+    html = renderHistoryInsightBlocksHtml(parsed.insight, review && review.date);
   } else if (Array.isArray(review && review.thinkHistory) && review.thinkHistory.some((item) => historyTextMeaningful(item && (item.question || item.reply || item.insight || item.title)))) {
     selected = "thinkHistory";
     html = renderHistoryThinkHistoryHtml(review.thinkHistory, review);
@@ -11235,19 +11303,19 @@ function renderHistoryJournal(review) {
       ? normalizeAwarenessQuotes(journal.awarenessCheckItems)
       : journal.awarenessChecks
   );
+  const historyIso = String((review && review.date) || "");
   const awareResult = normalizeAwarenessResult(journal.awarenessResult);
-  const awareBag = awareResult.highlights || {};
   const awareResultHtml = awareResult.seen
     ? [
-        historyBlock("今天，我看見了自己", `<p class="history-journal__text">${highlightedHtml(awareResult.seen, fieldHighlightsOf(awareBag, "seen"))}</p>`),
+        historyBlock("今天，我看見了自己", markableP(awareResult.seen, "awareness.seen", "history-journal__text", historyIso)),
         awareResult.gap
-          ? historyBlock("我可能忽略的地方", `<p class="history-journal__text">${highlightedHtml(awareResult.gap, fieldHighlightsOf(awareBag, "gap"))}</p>`)
+          ? historyBlock("我可能忽略的地方", markableP(awareResult.gap, "awareness.gap", "history-journal__text", historyIso))
           : "",
         awareResult.question
-          ? historyBlock("今晚留給自己的一個問題", `<p class="history-journal__text">${highlightedHtml(awareResult.question, fieldHighlightsOf(awareBag, "question"))}</p>`)
+          ? historyBlock("今晚留給自己的一個問題", markableP(awareResult.question, "awareness.question", "history-journal__text", historyIso))
           : "",
         awareResult.echo ? historyBlock("跨日覺察", `<p class="history-journal__note">${escapeHtml(awareResult.echo)}</p>`) : "",
-        awareResult.line ? historyBlock("今日一句話", `<p class="history-journal__headline">${highlightedHtml(awareResult.line, fieldHighlightsOf(awareBag, "line"))}</p>`) : "",
+        awareResult.line ? historyBlock("今日一句話", markableP(awareResult.line, "awareness.line", "history-journal__headline", historyIso)) : "",
       ].join("")
     : "";
   const execFields = (() => {
@@ -11272,7 +11340,6 @@ function renderHistoryJournal(review) {
       htmlLength: String(insightHtml || "").length,
     });
   }
-  const historyIso = String((review && review.date) || "");
   const parts = historySectionsHtml([
     ["① 今日感謝", "thanks", historyBlock("", thanks)],
     [
@@ -11289,7 +11356,7 @@ function renderHistoryJournal(review) {
       "③ 身心覺察與今日覺察",
       "aware",
       [
-        historyGroup("身心檢核", historyBlock("", historyBodyCheckHtml(journal))),
+        historyGroup("身心檢核", historyBlock("", historyBodyCheckHtml(journal, historyIso))),
         historyGroup("覺察作答", awareFields),
         historyGroup("今日覺察", awareResultHtml || historyBlock("", quotes)),
       ],
@@ -11300,14 +11367,20 @@ function renderHistoryJournal(review) {
       [
         ...execFields,
         historyTextBlock("明天最小的一步", journal.smallestStep),
-        historyBlock("我的行動卡", historyExecChecksHtml(journal)),
+        historyBlock("我的行動卡", historyExecChecksHtml(journal, historyIso)),
         journal.executionFocus?.title
           ? historyBlock(
               execFocusKicker(journal.executionFocus.when),
-              `<p class="history-journal__text">${highlightedHtml(
-                `${journal.executionFocus.title}${journal.executionFocus.detail ? `｜${journal.executionFocus.detail}` : ""}`,
-                journal.executionFocus.highlights
-              )}</p>`
+              `${markableP(
+                execFocusTitleText(journal.executionFocus.title),
+                "exec.focus.title",
+                "history-journal__text",
+                historyIso
+              )}${
+                journal.executionFocus.detail
+                  ? markableP(journal.executionFocus.detail, "exec.focus.detail", "history-journal__text", historyIso)
+                  : ""
+              }`
             )
           : "",
       ],
@@ -11667,7 +11740,256 @@ function handleTodayPointerClick(event) {
   return true;
 }
 
+let userMarkUi = {
+  mode: "",
+  field: "",
+  date: "",
+  start: 0,
+  end: 0,
+  text: "",
+  markId: "",
+  rect: null,
+};
+
+function userMarkBarEl() {
+  return document.getElementById("userMarkBar");
+}
+
+function hideUserMarkBar() {
+  const bar = userMarkBarEl();
+  if (bar) bar.hidden = true;
+  userMarkUi.mode = "";
+  userMarkUi.markId = "";
+  userMarkUi.text = "";
+}
+
+function placeUserMarkBar(rect) {
+  const bar = userMarkBarEl();
+  if (!bar || !rect) return;
+  bar.hidden = false;
+  const pad = 10;
+  const width = bar.offsetWidth || 176;
+  const height = bar.offsetHeight || 72;
+  let left = rect.left + rect.width / 2 - width / 2;
+  let top = rect.top - height - 12;
+  if (top < pad) top = rect.bottom + 12;
+  left = Math.min(Math.max(pad, left), window.innerWidth - width - pad);
+  top = Math.min(Math.max(pad, top), window.innerHeight - height - pad);
+  bar.style.left = `${Math.round(left)}px`;
+  bar.style.top = `${Math.round(top)}px`;
+  userMarkUi.rect = rect;
+}
+
+function setUserMarkBarMode(mode) {
+  const bar = userMarkBarEl();
+  if (!bar) return;
+  const start = document.getElementById("userMarkBarStart");
+  const colors = document.getElementById("userMarkBarColors");
+  const remove = document.getElementById("userMarkBarRemove");
+  const title = document.getElementById("userMarkBarTitle");
+  userMarkUi.mode = mode;
+  if (start) start.hidden = mode !== "create";
+  if (colors) colors.hidden = mode === "create";
+  if (remove) remove.hidden = mode !== "edit";
+  if (title) {
+    title.hidden = mode !== "edit";
+    title.textContent = mode === "edit" ? "改重點" : "畫重點";
+  }
+}
+
+function closestMarkable(node) {
+  const el = node && node.nodeType === 1 ? node : node && node.parentElement;
+  if (!el || typeof el.closest !== "function") return null;
+  if (el.closest("input, textarea, button, [contenteditable='true']")) return null;
+  return el.closest(".js-markable");
+}
+
+function readMarkableSelection() {
+  const api = userMarkApi();
+  const sel = typeof window !== "undefined" ? window.getSelection() : null;
+  if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
+  const range = sel.getRangeAt(0);
+  const root = closestMarkable(range.commonAncestorContainer);
+  if (!root || !root.contains(range.startContainer) || !root.contains(range.endContainer)) return null;
+  const field = String(root.getAttribute("data-mark-field") || "").trim();
+  if (!field) return null;
+  const date = String(root.getAttribute("data-mark-date") || "");
+  const offsets = typeof api.selectionOffsets === "function" ? api.selectionOffsets(root, sel) : null;
+  if (!offsets || !String(offsets.text || "").trim()) return null;
+  return {
+    field,
+    date,
+    start: offsets.start,
+    end: offsets.end,
+    text: offsets.text,
+    rect: range.getBoundingClientRect(),
+  };
+}
+
+function coveringUserMark(field, start, end, date) {
+  return currentUserMarks(date).find((item) => item.field === field && item.start <= start && item.end >= end) || null;
+}
+
+function refreshUserMarkSurfaces(date) {
+  hideUserMarkBar();
+  if (!date || date === currentIso()) {
+    renderBodyCoachCard(state.journalBodyCoach);
+    renderInsightCard(state.journalInsight);
+    const journal = collectJournal();
+    renderAwareQuote(journal.awarenessCheckItems, journal.awarenessChecks);
+    renderExecChecklist(journal.executionCheckItems, journal.executionChecks);
+    renderExecFocus(journal.executionFocus, journal.executionCheckItems);
+  }
+  if (state.page === "history") renderHistory();
+}
+
+function persistUserMarks(next, date) {
+  const bag = { items: normalizeUserMarks(next), updatedAt: new Date().toISOString() };
+  const iso = date || currentIso();
+  if (!iso || iso === currentIso()) {
+    state.journalUserMarks = bag;
+    persistJournalQuietly();
+  } else {
+    const review = getReview(iso) || {};
+    const journal = { ...(review.journal && typeof review.journal === "object" ? review.journal : {}), userMarks: bag };
+    upsertReview(iso, { journal, updatedAt: new Date().toISOString() });
+  }
+  rememberUserMarkHint();
+  refreshUserMarkSurfaces(iso);
+}
+
+function applyUserMarkColor(color) {
+  const api = userMarkApi();
+  const date = userMarkUi.date;
+  const current = currentUserMarks(date);
+  let next = current;
+  if (userMarkUi.mode === "edit" && userMarkUi.markId && typeof api.recolorMark === "function") {
+    next = api.recolorMark(current, userMarkUi.markId, color);
+  } else if (typeof api.upsertMark === "function") {
+    next = api.upsertMark(current, {
+      field: userMarkUi.field,
+      start: userMarkUi.start,
+      end: userMarkUi.end,
+      text: userMarkUi.text,
+      color,
+    });
+  }
+  const sel = window.getSelection();
+  if (sel && typeof sel.removeAllRanges === "function") sel.removeAllRanges();
+  persistUserMarks(next, date);
+}
+
+function removeCurrentUserMark() {
+  const api = userMarkApi();
+  if (!userMarkUi.markId || typeof api.removeMark !== "function") return;
+  const next = api.removeMark(currentUserMarks(userMarkUi.date), userMarkUi.markId);
+  persistUserMarks(next, userMarkUi.date);
+}
+
+function openUserMarkCreate(payload) {
+  const cover = coveringUserMark(payload.field, payload.start, payload.end, payload.date);
+  userMarkUi = { ...userMarkUi, ...payload, markId: cover ? cover.id : "", mode: cover ? "edit" : "create" };
+  setUserMarkBarMode(cover ? "edit" : "create");
+  placeUserMarkBar(payload.rect);
+}
+
+function openUserMarkEdit(span) {
+  const root = span.closest(".js-markable");
+  const id = String(span.getAttribute("data-mark-id") || "");
+  if (!root || !id) return;
+  const field = String(root.getAttribute("data-mark-field") || "");
+  const date = String(root.getAttribute("data-mark-date") || "");
+  const mark = currentUserMarks(date).find((item) => item.id === id);
+  userMarkUi = {
+    mode: "edit",
+    field,
+    date,
+    start: mark ? mark.start : 0,
+    end: mark ? mark.end : 0,
+    text: mark ? mark.text : "",
+    markId: id,
+    rect: span.getBoundingClientRect(),
+  };
+  setUserMarkBarMode("edit");
+  placeUserMarkBar(userMarkUi.rect);
+}
+
+function maybeShowUserMarkBar() {
+  const payload = readMarkableSelection();
+  if (!payload) return;
+  openUserMarkCreate(payload);
+}
+
+function bindUserMarkUi() {
+  if (bindUserMarkUi.bound) return;
+  bindUserMarkUi.bound = true;
+  let timer = 0;
+  document.addEventListener("selectionchange", () => {
+    clearTimeout(timer);
+    timer = window.setTimeout(() => {
+      const payload = readMarkableSelection();
+      if (!payload) {
+        if (userMarkUi.mode === "create") hideUserMarkBar();
+        return;
+      }
+      openUserMarkCreate(payload);
+    }, 120);
+  });
+  document.addEventListener("mouseup", () => window.setTimeout(maybeShowUserMarkBar, 0));
+  document.addEventListener("touchend", () => window.setTimeout(maybeShowUserMarkBar, 0), { passive: true });
+  document.addEventListener(
+    "click",
+    (event) => {
+      const bar = userMarkBarEl();
+      if (bar && bar.contains(event.target)) return;
+      const highlight = event.target.closest && event.target.closest(".user-highlight");
+      if (highlight && closestMarkable(highlight)) {
+        event.preventDefault();
+        event.stopPropagation();
+        openUserMarkEdit(highlight);
+        return;
+      }
+      if (event.target.closest && event.target.closest(".js-markable") && event.target.closest(".exec-check")) {
+        const sel = window.getSelection();
+        if (sel && !sel.isCollapsed) event.preventDefault();
+      }
+      if (event.target.closest && event.target.closest("[data-journal-fold], [data-history-section], [data-history-toggle]")) {
+        hideUserMarkBar();
+        return;
+      }
+      if (!readMarkableSelection()) hideUserMarkBar();
+    },
+    true
+  );
+  document.getElementById("userMarkBarDraw")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    setUserMarkBarMode("colors");
+    placeUserMarkBar(userMarkUi.rect);
+  });
+  document.getElementById("userMarkBarColors")?.addEventListener("click", (event) => {
+    const swatch = event.target.closest("[data-mark-color]");
+    if (!swatch) return;
+    event.preventDefault();
+    applyUserMarkColor(swatch.getAttribute("data-mark-color"));
+  });
+  document.getElementById("userMarkBarRemove")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    removeCurrentUserMark();
+  });
+  window.addEventListener(
+    "scroll",
+    () => {
+      if (userMarkUi.mode && userMarkUi.rect) placeUserMarkBar(userMarkUi.rect);
+    },
+    true
+  );
+  window.addEventListener("resize", () => {
+    if (userMarkUi.mode && userMarkUi.rect) placeUserMarkBar(userMarkUi.rect);
+  });
+}
+
 function bindEvents() {
+  bindUserMarkUi();
   document.addEventListener("click", (event) => {
     try {
       const target = event.target?.closest ? event.target : event.target?.parentElement;
