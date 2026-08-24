@@ -68,6 +68,9 @@ const state = {
   historyQuery: "",
   historyTag: "all",
   historyOpen: "",
+  historyDetailDate: "",
+  historyListScroll: null,
+  historyHashSync: false,
   historyOpenSections: {},
   journalMode: "deep",
   quickModules: { body: false, aware: false, exec: false, manifest: false },
@@ -3817,8 +3820,148 @@ function toggleMenu() {
   setSidebarCollapsed(!document.body.classList.contains("nav-closed"));
 }
 
+const PAGE_HASH = {
+  today: "today",
+  report: "reports",
+  next: "actions",
+  sfm: "me",
+  manifest: "vision",
+  history: "history",
+  guide: "guide",
+};
+
+const HASH_PAGE = {
+  today: "today",
+  reports: "report",
+  actions: "next",
+  me: "sfm",
+  vision: "manifest",
+  history: "history",
+  guide: "guide",
+};
+
+function historyDetailIso(value) {
+  const iso = String(value || "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso : "";
+}
+
+function parseAppHash() {
+  const raw = String(location.hash || "").replace(/^#/, "").trim();
+  const detail = raw.match(/^history\/(\d{4}-\d{2}-\d{2})$/);
+  if (detail) return { page: "history", date: detail[1] };
+  if (HASH_PAGE[raw]) return { page: HASH_PAGE[raw], date: "" };
+  return { page: "", date: "" };
+}
+
+function hashForPage(page, date) {
+  if (page === "history" && historyDetailIso(date)) return `#history/${historyDetailIso(date)}`;
+  return `#${PAGE_HASH[page] || page || "today"}`;
+}
+
+function syncAppHash(page, date, options = {}) {
+  const next = hashForPage(page, date);
+  if (location.hash === next) return;
+  const payload = { page, date: historyDetailIso(date) };
+  state.historyHashSync = true;
+  try {
+    if (options.replace) history.replaceState(payload, "", next);
+    else history.pushState(payload, "", next);
+  } catch {
+    location.hash = next;
+  }
+  state.historyHashSync = false;
+}
+
+function historyListViewEl() {
+  return document.getElementById("historyListView");
+}
+
+function historyDetailViewEl() {
+  return document.getElementById("historyDetailView");
+}
+
+function showHistoryListView() {
+  const list = historyListViewEl();
+  const detail = historyDetailViewEl();
+  if (list) list.hidden = false;
+  if (detail) detail.hidden = true;
+}
+
+function showHistoryDetailView() {
+  const list = historyListViewEl();
+  const detail = historyDetailViewEl();
+  if (list) list.hidden = true;
+  if (detail) detail.hidden = false;
+}
+
+function openHistoryDetail(iso, options = {}) {
+  const date = historyDetailIso(iso);
+  if (!date) return;
+  if (state.page !== "history") {
+    switchPage("history", { keepDetail: true, skipHash: true, skipHistoryRender: true });
+  }
+  if (!options.fromPop && state.historyDetailDate !== date) {
+    if (!state.historyDetailDate) state.historyListScroll = captureHistoryScroll();
+    syncAppHash("history", date, { replace: Boolean(options.replace) });
+  }
+  state.historyDetailDate = date;
+  state.historyOpen = date;
+  showHistoryDetailView();
+  renderHistoryDetail(date);
+  if (!options.keepScroll) {
+    const view = document.getElementById("view");
+    if (view) view.scrollTop = 0;
+    if (typeof window.scrollTo === "function") window.scrollTo(0, 0);
+  }
+}
+
+function closeHistoryDetail(options = {}) {
+  const hadDetail = Boolean(state.historyDetailDate);
+  const listScroll = state.historyListScroll;
+  state.historyDetailDate = "";
+  state.historyOpen = "";
+  showHistoryListView();
+  if (state.page !== "history") {
+    switchPage("history", { keepDetail: true, skipHash: true, skipHistoryRender: true });
+  }
+  if (!options.skipRender) renderHistory({ scroll: listScroll });
+  if (hadDetail && !options.fromPop) syncAppHash("history", "", { replace: Boolean(options.replace) });
+  restoreHistoryScroll(listScroll);
+}
+
+function backToHistoryList() {
+  const loc = parseAppHash();
+  if (loc.date && history.state && history.state.date === loc.date) {
+    history.back();
+    return;
+  }
+  closeHistoryDetail({ replace: true });
+}
+
+function applyAppLocation() {
+  if (state.historyHashSync) return;
+  const loc = parseAppHash();
+  if (!loc.page) return;
+  if (loc.page === "history" && loc.date) {
+    if (state.page === "history" && state.historyDetailDate === loc.date) return;
+    openHistoryDetail(loc.date, { fromPop: true });
+    return;
+  }
+  if (state.historyDetailDate && loc.page === "history") {
+    closeHistoryDetail({ fromPop: true });
+    return;
+  }
+  if (loc.page === "history" && state.page === "history" && !state.historyDetailDate) return;
+  if (loc.page !== state.page) switchPage(loc.page, { skipHash: true });
+}
+
 function switchPage(page, options = {}) {
   if (!page) return;
+  if (page !== "history" || !options.keepDetail) {
+    state.historyDetailDate = "";
+    state.historyOpen = "";
+    showHistoryListView();
+  }
   state.page = page;
   document.querySelectorAll(".side-item").forEach((btn) => {
     btn.classList.toggle("is-active", btn.dataset.page === page);
@@ -3843,8 +3986,15 @@ function switchPage(page, options = {}) {
   if (page === "sfm") renderTasks();
   if (page === "manifest") renderManifests();
   if (page === "history") {
-    renderHistory();
+    if (options.keepDetail && state.historyDetailDate) {
+      if (!options.skipHistoryRender) renderHistoryDetail(state.historyDetailDate);
+    } else if (!options.skipHistoryRender) {
+      renderHistory();
+    }
     if (window.NichiAnalytics) window.NichiAnalytics.trackOnceSession("history_viewed", { source: "nav" }, "history");
+  }
+  if (!options.skipHash) {
+    syncAppHash(page, page === "history" ? state.historyDetailDate : "", { replace: Boolean(options.replaceHash) });
   }
   if (typeof dismissUserMarkUi === "function") dismissUserMarkUi("cancel");
 }
@@ -10948,15 +11098,9 @@ function historyJournalIcon(name) {
 }
 
 function historySectionMarkup(title, icon, body, open, iso = "") {
-  return `<section class="history-subcard${open ? " is-open" : ""}" data-history-section-id="${escapeHtml(icon)}" data-history-section-date="${escapeHtml(iso)}">
-    <button class="history-subcard__toggle" type="button" data-history-section aria-expanded="${open ? "true" : "false"}">
-      <span class="history-subcard__icon" aria-hidden="true">${historyJournalIcon(icon)}</span>
-      <h3 class="history-subcard__title">${escapeHtml(title)}</h3>
-      <span class="history-subcard__chevron" aria-hidden="true"></span>
-    </button>
-    <div class="history-subcard__panel"${open ? "" : " inert"} aria-hidden="${open ? "false" : "true"}">
-      <div class="history-subcard__body">${body}</div>
-    </div>
+  return `<section class="history-subcard is-open history-subcard--static" data-history-section-id="${escapeHtml(icon)}" data-history-section-date="${escapeHtml(iso)}">
+    <h3 class="history-subcard__title">${escapeHtml(title)}</h3>
+    <div class="history-subcard__body">${body}</div>
   </section>`;
 }
 
@@ -11581,11 +11725,17 @@ function renderHistoryJournal(review) {
   return `<div class="history-journal">${parts}</div>`;
 }
 
-function renderHistory() {
+function renderHistory(options = {}) {
   const list = document.getElementById("historyList");
   if (!list) return;
   if (state.page && state.page !== "history") return;
-  const scroll = captureHistoryScroll();
+  if (state.historyDetailDate) {
+    showHistoryDetailView();
+    renderHistoryDetail(state.historyDetailDate);
+    return;
+  }
+  showHistoryListView();
+  const scroll = options.scroll || captureHistoryScroll();
   const query = state.historyQuery.trim().toLowerCase();
   const entries = Object.entries(getReviews())
     .filter(([, review]) => reviewIsComplete(review))
@@ -11613,38 +11763,17 @@ function renderHistory() {
     return;
   }
 
-  console.log(
-    "[history-debug] history list keys",
-    entries.map(([iso, review]) => ({
-      iso,
-      reviewDate: review && review.date,
-      sameKey: Boolean(review && review.date ? review.date === iso : true),
-      hasGuideRounds: historyHasGuideRounds(review),
-      rounds: historyGuideFromReview(review).rounds.length,
-    }))
-  );
   list.innerHTML = entries
     .map(([iso, review]) => {
       const historyReview = { ...review, date: (review && review.date) || iso };
-      if (iso !== historyReview.date) {
-        console.warn("[history-debug] date key mismatch", { iso, reviewDate: review && review.date });
-      }
-      const open = state.historyOpen === iso;
       const summary = getHistoryDailySummary(historyReview);
       const stars = historyListStars(historyReview);
       const tags = (summary.tags || [])
         .map((tag) => `<span class="tag tag--ai">${escapeHtml(tag)}</span>`)
         .join("");
-      const journalHtml = renderHistoryJournal(historyReview);
-      const hasInsightSection = /history-subcard__title">深度思考</.test(journalHtml);
-      console.log("[history-debug] card", iso, {
-        hasInsightSection,
-        journalHtmlLength: journalHtml.length,
-        accordionClosedByDefault: !open,
-      });
       return `
-        <article class="history-card ${open ? "is-open" : ""}" data-history-iso="${escapeHtml(iso)}" data-history-debug-guide="${historyHasGuideRounds(historyReview) ? "1" : "0"}" data-history-debug-insight="${hasInsightSection ? "1" : "0"}">
-          <button class="history-card__summary" data-history-toggle="${iso}" type="button" aria-expanded="${open ? "true" : "false"}">
+        <article class="history-card" data-history-iso="${escapeHtml(iso)}">
+          <button class="history-card__summary" data-history-open="${iso}" type="button" aria-label="開啟 ${escapeHtml(formatHistoryListDate(iso))} 完整紀錄">
             <span class="history-card__content">
               <span class="history-card__title">${escapeHtml(summary.title)}</span>
               <span class="history-card__date">${escapeHtml(formatHistoryListDate(iso))}${
@@ -11652,21 +11781,47 @@ function renderHistory() {
               }</span>
               ${tags ? `<span class="history-card__tags">${tags}</span>` : ""}
             </span>
-            <span class="history-card__chevron" aria-hidden="true"></span>
           </button>
-          <div class="history-card__panel">
-            <div class="history-card__panel-inner">
-              ${journalHtml}
-              <div class="history-card__actions">
-                <button class="btn btn--ghost btn--tiny" data-open="${iso}" type="button">打開這天</button>
-              </div>
-            </div>
-          </div>
         </article>
       `;
     })
     .join("");
   restoreHistoryScroll(scroll);
+}
+
+function renderHistoryDetail(iso) {
+  const root = historyDetailViewEl();
+  if (!root) return;
+  const date = historyDetailIso(iso);
+  if (!date) {
+    root.innerHTML = `<p class="history-journal__empty">找不到這一天的紀錄。</p>`;
+    return;
+  }
+  const review = getReview(date);
+  if (!review || !reviewIsComplete(review)) {
+    root.innerHTML = `
+      <header class="history-detail__head">
+        <button class="history-detail__back" data-history-back type="button">← 返回歷史紀錄</button>
+      </header>
+      <p class="history-journal__empty">這天還沒有留下完整復盤內容。</p>
+    `;
+    return;
+  }
+  const historyReview = { ...review, date: (review && review.date) || date };
+  const summary = getHistoryDailySummary(historyReview);
+  const stars = historyListStars(historyReview);
+  const tags = (summary.tags || []).filter(Boolean);
+  root.innerHTML = `
+    <header class="history-detail__head">
+      <button class="history-detail__back" data-history-back type="button">← 返回歷史紀錄</button>
+      <p class="history-detail__date">${escapeHtml(formatHistoryListDate(date))}${
+        stars ? `<span class="history-card__stars">${escapeHtml(stars)}</span>` : ""
+      }</p>
+      <h1 class="history-detail__title">「${escapeHtml(summary.title)}」</h1>
+      ${tags.length ? `<p class="history-detail__tags">${escapeHtml(tags.join(" / "))}</p>` : ""}
+    </header>
+    ${renderHistoryJournal(historyReview)}
+  `;
 }
 
 function renderHistoryReport(review) {
@@ -12249,7 +12404,7 @@ function bindUserMarkUi() {
         const sel = window.getSelection();
         if (sel && !sel.isCollapsed) event.preventDefault();
       }
-      if (event.target.closest && event.target.closest("[data-journal-fold], [data-history-section], [data-history-toggle]")) {
+      if (event.target.closest && event.target.closest("[data-journal-fold], [data-history-section], [data-history-open], [data-history-back]")) {
         dismissUserMarkUi("cancel");
       }
     },
@@ -12721,6 +12876,12 @@ function bindEvents() {
     renderHistory();
   });
   document.getElementById("historyList")?.addEventListener("click", (event) => {
+    const openDay = event.target.closest("[data-history-open]");
+    if (openDay) {
+      event.preventDefault();
+      openHistoryDetail(openDay.dataset.historyOpen);
+      return;
+    }
     const open = event.target.closest("[data-open]");
     if (open) {
       event.preventDefault();
@@ -12744,24 +12905,19 @@ function bindEvents() {
         panel.inert = !next;
         panel.setAttribute("aria-hidden", next ? "false" : "true");
       }
-      const iso = card.dataset.historySectionDate || state.historyOpen;
+      const iso = card.dataset.historySectionDate || state.historyOpen || state.historyDetailDate;
       const sectionId = card.dataset.historySectionId;
       setHistorySectionOpen(iso, sectionId, next);
-      return;
     }
-    const toggle = event.target.closest("[data-history-toggle]");
-    if (!toggle) return;
-    const iso = toggle.dataset.historyToggle;
-    const nextOpen = state.historyOpen === iso ? "" : iso;
-    state.historyOpen = nextOpen;
-    const list = document.getElementById("historyList");
-    list.querySelectorAll(".history-card").forEach((card) => {
-      const isOpen = card.dataset.historyIso === nextOpen;
-      card.classList.toggle("is-open", isOpen);
-      const summary = card.querySelector("[data-history-toggle]");
-      if (summary) summary.setAttribute("aria-expanded", isOpen ? "true" : "false");
-    });
   });
+  document.getElementById("page-history")?.addEventListener("click", (event) => {
+    const back = event.target.closest("[data-history-back]");
+    if (!back) return;
+    event.preventDefault();
+    backToHistoryList();
+  });
+  window.addEventListener("popstate", applyAppLocation);
+  window.addEventListener("hashchange", applyAppLocation);
 
   const topAuth = document.getElementById("topAuthBtn");
   if (topAuth) {
@@ -12870,6 +13026,7 @@ function init() {
     bindCloudLiveSync();
     refreshAuth();
     handleAuthQuery();
+    applyAppLocation();
     setInterval(() => {
       if (state.user) applyAccessLock();
     }, 30000);

@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=170" />
+    <link rel="stylesheet" href="app.css?v=174" />
     <style>
       .splash {
         position: fixed;
@@ -821,6 +821,7 @@
         </section>
 
         <section class="page" id="page-history" data-page="history" hidden>
+          <div id="historyListView">
           <header class="page__header">
             <h2 class="page__title">歷史紀錄</h2>
             <p class="page__subtitle">先看這一天真正看見了什麼，點開再讀完整復盤。</p>
@@ -846,6 +847,8 @@
           </div>
 
           <div class="history-list" id="historyList"></div>
+          </div>
+          <div class="history-detail" id="historyDetailView" hidden></div>
         </section>
 
         <section class="page page--guide" id="page-guide" data-page="guide" hidden>
@@ -1203,6 +1206,6 @@
     <script src="lib/history-summary.js?v=3"></script>
     <script src="lib/insight-highlight.js?v=5"></script>
     <script src="lib/user-mark.js?v=6"></script>
-    <script src="app.js?v=198"></script>
+    <script src="app.js?v=200"></script>
   </body>
 </html>
