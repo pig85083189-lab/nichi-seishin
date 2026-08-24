@@ -6,12 +6,23 @@ const bodyCoachInsight = require("../lib/body-coach-insight");
 const insightHighlight = require("../lib/insight-highlight");
 
 const HIGHLIGHT_RULE = `【重點反白 highlights】
-請從你實際生成的原文中，挑選最值得使用者停下來看的關鍵短句。
-highlight.text 必須 100% 原樣存在於對應欄位原文中，不可改寫、不可摘要、不可自行補字。
-每個主要區塊最多 1～2 個 highlight。strong 最多 1 個。每個 highlight 約 2～18 個中文字。
-2～3 個中文字也可以，但必須是有獨立覺察價值的關鍵詞，例如轉折點、被看見、安全感。
+從你實際生成的原文中，挑選最值得停下來看的核心片段。目的是抓重點，不是把整段塗成彩色。
+highlight.text 必須 100% 原樣存在於對應欄位原文中，不可改寫、不可摘要、不可自行補字、不可截斷詞語。
+短段落（標題、一句話、短建議）：0～1 個 highlight。
+較長段落：最多 2 個。同一區塊不要同時塞滿不同顏色。
+沒有非常值得強調的核心時，該欄位回傳 []。寧缺勿濫。
+長度以 2～12 個中文字為主，必須是完整詞或完整短語，例如「看見自己的需要」「回到自己的節奏」。
+2～3 個中文字也可以，但必須本身就有意義，例如轉折點、被看見、安全感。
 不要選今天、覺得、可能、可以、需要、自己這類沒有獨立意義的普通詞。
-不要整段或整句上色。若沒有真正重要的句子，該欄位回傳 []。`;
+不要整句塗滿。不要為了有顏色硬找文字。
+
+color 只能是下面四個，依語意決定，不要隨機。相同內容請給同一種顏色：
+- yellow：覺察／發現／突然理解
+- sage：成長／行動／選擇／前進
+- pink：情緒／關係／需要／接納
+- tea：核心觀點／穩定／提醒／一般智慧
+
+若同一段文字在原文出現超過一次，且你無法用 start 標出正確位置，該 highlight 請省略。`;
 
 function withCompleteRule(system) {
   return `${system}\n\n【文字完整性】\n${textIntegrity.COMPLETE_TEXT_RULE}`;
@@ -189,7 +200,7 @@ const CHECKLIST_AWARENESS_SYSTEM = `你是「日精進」的覺察整理者。�
   "line": "15到30個中文字",
   "echo": "",
   "highlights": {
-    "seen": [{ "text": "必須原樣出現在 seen 裡的短句", "level": "strong" }],
+    "seen": [{ "text": "必須原樣出現在 seen 裡的短句", "color": "yellow" }],
     "gap": [],
     "question": [],
     "line": []
@@ -257,10 +268,14 @@ title 18-42 字，就是方向本身。detail 可空，或一句更短的補充�
 只輸出 JSON：
 {
   "items": [
-    { "kind": "start", "title": "...", "detail": "..." }
+    { "kind": "start", "title": "...", "detail": "...", "highlights": { "title": [], "detail": [] } }
   ],
-  "sentence": "我正在……"
+  "sentence": "我正在……",
+  "highlights": {
+    "sentence": [{ "text": "必須原樣出現在 sentence 裡的短句", "color": "sage" }]
+  }
 }
+${HIGHLIGHT_RULE}
 繁體中文`;
 
 function isManifestPromptsRequest(body) {
@@ -356,6 +371,7 @@ function normalizeManifestPathItems(raw) {
       label: labels[kind] || "",
       title: title.replace(/^["「]+|[」"]+$/g, "").slice(0, 48),
       detail: detail.slice(0, 22),
+      highlights: item && typeof item === "object" ? item.highlights : undefined,
     });
   });
   return order.map((kind) => byKind.get(kind)).filter(Boolean).slice(0, 3);
@@ -435,14 +451,14 @@ hint：一句降低負擔，18-28 字，例如「明天不用全部做到，先�
 只輸出 JSON：
 {
   "items": [
-    { "title": "明天其中一餐多一份青菜", "detail": "午餐或晚餐任選一餐，多加一道青菜，不需要同時改變其他飲食。", "highlights": [] }
+    { "title": "明天其中一餐多一份青菜", "detail": "午餐或晚餐任選一餐，多加一道青菜，不需要同時改變其他飲食。", "highlights": { "title": [], "detail": [] } }
   ],
   "focus": {
     "title": "明天其中一餐多一份青菜",
     "detail": "先把「多吃菜」縮成一餐就能完成的一小步。",
     "when": "tomorrow",
     "hint": "明天不用全部做到，先完成這一步就好。",
-    "highlights": []
+    "highlights": { "title": [], "detail": [] }
   }
 }
 每張卡與 focus 可帶 highlights，text 必須原樣出現在該卡 title 或 detail。
@@ -662,7 +678,8 @@ const THINK_GUIDE_CLOSE_SYSTEM = `你不是心理醫師，也不是裁判。你�
   "selfSeen": "今天我看見的自己：只能一句，第一人稱，必須像他自己說的",
   "takeaway": "今日帶走的一句話：只能一句，15-35字，從今天長出來，不要空泛名言",
   "highlights": {
-    "awareness": [{ "text": "必須原樣出現在 awareness 裡的短句", "level": "strong" }],
+    "title": [],
+    "awareness": [{ "text": "必須原樣出現在 awareness 裡的短句", "color": "yellow" }],
     "selfSeen": [],
     "takeaway": []
   }
@@ -1051,7 +1068,7 @@ STEP 5 提煉今天最值得留下的一個發現，再開始寫。
     { "title": "12-25字動作", "detail": "40-90字" }
   ],
   "highlights": {
-    "title": [{ "text": "必須原樣出現在 title 裡的短句", "level": "strong" }],
+    "title": [{ "text": "必須原樣出現在 title 裡的短句", "color": "tea" }],
     "analysis": [],
     "notice": [],
     "suggestions": []
@@ -2865,7 +2882,18 @@ module.exports = async function handler(req, res) {
         return;
       }
       const sentence = normalizeManifestSentence(data, vision);
-      res.status(200).json({ ok: true, source: getProvider(), data: { items: items.slice(0, 3), sentence, kind: "manifest" } });
+      res.status(200).json({
+        ok: true,
+        source: getProvider(),
+        data: {
+          items: items.slice(0, 3),
+          sentence,
+          highlights: {
+            sentence: insightHighlight.fieldHighlights(data.highlights, "sentence"),
+          },
+          kind: "manifest",
+        },
+      });
       return;
     }
     if (mode === "bodycoach") {

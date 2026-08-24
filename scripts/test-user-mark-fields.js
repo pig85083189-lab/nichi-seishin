@@ -5,94 +5,24 @@ function assert(cond, message) {
   if (!cond) throw new Error(message);
 }
 
-const src = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
+const root = path.join(__dirname, "..");
+const src = fs.readFileSync(path.join(root, "app.js"), "utf8");
+const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+const css = fs.readFileSync(path.join(root, "app.css"), "utf8");
 
-function count(needle) {
-  let n = 0;
-  let from = 0;
-  while (from <= src.length) {
-    const found = src.indexOf(needle, from);
-    if (found < 0) return n;
-    n += 1;
-    from = found + needle.length;
-  }
-  return n;
-}
+assert(!html.includes("userMarkBar"), "CASE K：HTML 已移除畫重點 toolbar");
+assert(!html.includes("userMarkBarDraw"), "CASE K：沒有畫重點按鈕");
+assert(!html.includes("lib/user-mark.js"), "CASE K：不載入 user-mark.js");
+assert(!src.includes("bindUserMarkUi"), "CASE K：已移除 bindUserMarkUi");
+assert(!src.includes("pendingUserMark"), "CASE K：已移除 pending snapshot");
+assert(!src.includes("data-user-mark-field"), "CASE K：已移除 data-user-mark-field");
+assert(!src.includes("markableOpenAttrs"), "CASE K：已移除 markableOpenAttrs");
+assert(!src.includes("userMarkSession"), "CASE K：已移除 userMarkSession");
+assert(!/addEventListener\(\s*["']selectionchange["']/.test(src), "CASE L：沒有 selectionchange 監聽");
+assert(src.includes("userMarkBag") && src.includes("userMarks:"), "CASE M：仍保留 userMarks 相容讀寫");
+assert(src.includes("renderHighlightedText") || src.includes("highlightedHtml"), "已重新啟用 AI 反白 render");
+assert(css.includes("insight-highlight--yellow"), "四色自動反白 CSS 存在");
+assert(!css.includes("user-mark-bar"), "CSS 已移除手動 toolbar");
+assert(!html.includes("長按並選取文字"), "使用說明已移除手動畫重點步驟");
 
-function has(needle) {
-  return src.includes(needle);
-}
-
-assert(has("data-user-mark-field"), "使用 data-user-mark-field 標記可畫區域");
-assert(!/tagName\s*===?\s*['\"]H[1-6]['\"]/.test(src), "不可用 h1/h2/h3 tag 禁止畫重點");
-assert(has("pendingMarkPayload") || has("userMarkSession.pending"), "使用 selection snapshot");
-assert(has("beginToolbarInteract") || has("interacting"), "工具列 interaction lock");
-assert(has("ignoreSelectionChange"), "toolbar 操作期間忽略 selectionchange");
-assert(has('dismissUserMarkUi("complete")') || has("clearNativeSelection"), "成功後才清 selection");
-assert(has('dismissUserMarkUi("cancel")'), "取消時才清 selection");
-
-const shared = [
-  "bodyCoach.title",
-  "bodyCoach.analysis",
-  "bodyCoach.notice",
-  "think.title",
-  "think.awareness",
-  "think.selfSeen",
-  "think.takeaway",
-  "think.round.${index}.question",
-  "awareness.seen",
-  "awareness.gap",
-  "awareness.question",
-  "awareness.line",
-  "awareness.prompt.${index}.question",
-  "exec.item.${orig}.title",
-  "exec.focus.title",
-  "exec.focus.detail",
-  "exec.prompt.${index}.question",
-  "manifest.sentence",
-  "manifest.prompt.${index}.question",
-  "deep.${fieldIndex}.title",
-];
-
-shared.forEach((field) => {
-  assert(has(field), `generated field 存在：${field}`);
-});
-
-assert(count("bodyCoach.title") >= 2, "CASE M/S：bodyCoach.title 今日與歷史共用");
-assert(count("think.title") >= 2, "CASE M/S：think.title 今日與歷史共用");
-assert(has("awareness.${item.kind}") && has('"awareness.seen"'), "CASE N/S：awareness.seen 今日與歷史同一 identity");
-assert(count("exec.item.") >= 4, "CASE K/L：行動卡 title/detail 今日與歷史共用");
-assert(count("think.round.") >= 4, "深度思考 round question/answer 今日與歷史共用");
-assert(count("awareness.prompt.") >= 2, "覺察題今日與歷史共用");
-assert(count("exec.prompt.") >= 2, "執行題今日與歷史共用");
-assert(has("deep.${fieldIndex}.title") && has("deep.${index}.title"), "深度主題 title 今日與歷史共用");
-
-assert(!has("enterUserMarkMode") && !has("enterMarkMode"), "已移除 mark mode 入口");
-assert(!has("exitUserMarkMode") && !has("exitMarkMode"), "已移除 mark mode 完成列");
-assert(!has("data-user-mark-enter") && !has("user-mark-entry"), "已移除輕量畫重點入口按鈕");
-assert(!has("is-user-mark-mode"), "已移除 body.is-user-mark-mode");
-assert(has("userMarkBarDraw"), "第一層有「畫重點」按鈕");
-assert(has("enterColorMode"), "點畫重點後才進四色");
-assert(has('setUserMarkBarMode("create")'), "選字後先顯示第一層");
-assert(has("open-create"), "selection 完成開第一層，不是直接四色");
-
-assert(has('conclusion-callout__label">核心結論'), "CASE O：固定 UI label「核心結論」不是 markable field");
-assert(!has('data-user-mark-field="核心結論"'), "CASE O：固定 label 不加 field");
-assert(has("isForbiddenMarkTarget") || has("input, textarea"), "CASE P：input/textarea 禁止");
-assert(!has("if (closestMarkable(target)) event.preventDefault()"), "正文不再 contextmenu preventDefault");
-assert(!src.includes("closestMarkable(target)) event.preventDefault"), "正文 contextmenu 不攔截選字");
-
-const css = fs.readFileSync(path.join(__dirname, "..", "app.css"), "utf8");
-const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
-assert(!css.includes("is-user-mark-mode"), "CSS 已移除 mark mode");
-assert(!css.includes("user-mark-mode-banner"), "CSS 已移除畫重點模式頂部列");
-assert(!html.includes("userMarkModeBanner"), "HTML 已移除畫重點模式頂部列");
-assert(html.includes("userMarkBarDraw"), "HTML 保留第一層畫重點按鈕");
-const fieldBlock = css.match(/\[data-user-mark-field\]\s*\{[^}]+\}/);
-assert(fieldBlock && !fieldBlock[0].includes("-webkit-touch-callout"), "markable 欄位不設 touch-callout none");
-assert(/\[data-user-mark-field\][\s\S]{0,80}-webkit-user-select:\s*text/.test(css), "可標註文字維持 user-select:text");
-assert(css.includes("user-select: text"), "可標註文字 user-select:text");
-assert(!src.includes('document.addEventListener("pointerdown"') && !src.includes("document.addEventListener('pointerdown'"), "正文不攔 pointerdown");
-assert(!src.includes('document.addEventListener("touchstart"') && !src.includes('document.addEventListener("touchmove"'), "正文不攔 touchstart/touchmove");
-
-console.log("user mark field mapping tests passed");
+console.log("manual user-mark UI removal tests passed");
