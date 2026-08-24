@@ -150,7 +150,6 @@ assert(todayHtml === historyHtml && todayHtml.includes("insight-highlight"), "CA
 const oldJournal = { userMarks: { items: [{ id: "keep", field: "bodyCoach.title", start: 0, end: 3, text: "核心", color: "tea" }], updatedAt: "2026-01-01T00:00:00.000Z" }, event: "舊" };
 const merged = mergeJournalObjects(oldJournal, { userMarks: { items: [], updatedAt: "" }, event: "新" });
 assert(merged.userMarks.items.length === 1 && merged.userMarks.items[0].id === "keep", "CASE M：舊 userMarks 不可被空資料覆蓋");
-assert(renderHighlightedText("核心結論還在。", undefined) === escapeHtml("核心結論還在。"), "CASE M：UI 不 render userMarks");
 
 const reviewJs = fs.readFileSync(path.join(__dirname, "../api/review.js"), "utf8");
 const appJs = fs.readFileSync(path.join(__dirname, "../app.js"), "utf8");
@@ -162,15 +161,12 @@ assert(reviewJs.includes("CHECKLIST_AWARENESS_SYSTEM") && reviewJs.includes('"se
 assert(reviewJs.includes("THINK_GUIDE_CLOSE_SYSTEM") && reviewJs.includes('"awareness": [{ "text"'), "深度思考收束 prompt 必須包含 highlights");
 assert(reviewJs.includes("每張卡與 focus 可帶 highlights"), "執行力 prompt 必須包含 highlights");
 assert(reviewJs.includes('color": "yellow"') || reviewJs.includes("color："), "prompt 必須說明四色");
-assert(!html.includes("userMarkBar"), "CASE K：手動畫重點 toolbar 不存在");
-assert(!html.includes("lib/user-mark.js"), "CASE K：不載入手動畫重點 runtime");
-assert(!appJs.includes("bindUserMarkUi") && !appJs.includes("selectionchange"), "CASE L：沒有手動畫重點監聽");
-assert(!appJs.includes("data-user-mark-field"), "CASE L：沒有可畫重點欄位");
-assert(!css.includes("user-mark-bar") && !css.includes(".user-highlight"), "CASE K：已移除手動畫重點 CSS");
 assert(css.includes("box-decoration-break: clone"), "CASE E / N：跨行螢光筆");
 assert(css.includes("rgba(214, 187, 164, 0.7)"), "CASE N：反白強度夠清楚");
 assert(css.includes("line-height: inherit"), "CASE N：不可撐高行距");
-assert(html.includes("自動抓出今天的重點"), "使用說明已改為自動抓重點");
-assert(!html.includes("點「畫重點」"), "使用說明不再教手動畫重點");
+assert(html.includes("自動抓出今天的重點"), "使用說明保留自動抓重點");
+assert(html.includes("也可以留下自己的重點"), "使用說明新增手動畫重點");
+assert(html.includes("lib/user-mark.js"), "手動畫重點 runtime 已接回");
+assert(appJs.includes("renderCombinedHighlightedText"), "今日與歷史走 combined render");
 
 console.log("insight highlight tests passed");

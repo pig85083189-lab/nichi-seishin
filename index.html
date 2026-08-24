@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=164" />
+    <link rel="stylesheet" href="app.css?v=165" />
     <style>
       .splash {
         position: fixed;
@@ -1009,6 +1009,16 @@
               <li>沒有特別值得強調的地方，也可以不標。</li>
               <li>顏色由系統依內容決定，之後到歷史紀錄仍然看得到。</li>
             </ul>
+            <p class="guide-step__label">也可以留下自己的重點</p>
+            <h3 class="guide-step__title">如果還有一句特別打中你，也可以自己畫下來</h3>
+            <p class="guide-step__text">系統會先幫你標出值得注意的地方。如果還有一句話特別打中你，也可以自己選起來留下重點。</p>
+            <ul class="guide-points">
+              <li>手機：長按選取文字 → 點「畫重點」→ 選顏色。</li>
+              <li>電腦：滑鼠選取文字 → 點「畫重點」→ 選顏色。</li>
+              <li>四種顏色可以自由選：奶茶、奶黃、鼠尾草、霧粉。</li>
+              <li>點已經畫過的重點，可以換色或移除。</li>
+              <li>自己留下的重點會跟著當天紀錄保存，之後到歷史紀錄仍然看得到。</li>
+            </ul>
           </article>
 
           <article class="guide-card" id="guide-history">
@@ -1016,7 +1026,7 @@
             <h3 class="guide-step__title">歷史紀錄不是備份，是把那天真正看見的留下來</h3>
             <p class="guide-step__text">完成復盤後，側邊欄「歷史紀錄」會出現當天的摘要標題。點開再讀完整內容。</p>
             <ul class="guide-points">
-              <li>可以看到：當天記錄、身心小結、三輪深度思考、覺察、執行、顯化，以及當天自動標出的重點。</li>
+              <li>可以看到：當天記錄、身心小結、三輪深度思考、覺察、執行、顯化，以及當天自動標出的重點與自己畫下的重點。</li>
               <li>每張卡片上方會有當天的一句摘要，也能用搜尋或標籤快速找到某一天。</li>
               <li>側邊欄「覺察力」「執行力」「顯化力」會收集你勾選留下的內容，方便之後回頭看。</li>
               <li>「週月報」用圖表看見這段時間的節奏，再用文字點出閃光點與突破口。</li>
@@ -1160,6 +1170,22 @@
       </div>
     </div>
 
+    <div class="user-mark-bar" id="userMarkBar" hidden data-user-mark-toolbar>
+      <p class="user-mark-bar__title" id="userMarkBarTitle">畫重點</p>
+      <div id="userMarkBarStart" hidden>
+        <button class="user-mark-bar__draw" id="userMarkBarDraw" type="button">畫重點</button>
+      </div>
+      <div id="userMarkBarColors" hidden>
+        <div class="user-mark-bar__colors">
+          <button class="user-mark-bar__swatch" data-mark-color="tea" type="button" aria-label="奶茶"></button>
+          <button class="user-mark-bar__swatch" data-mark-color="yellow" type="button" aria-label="奶黃"></button>
+          <button class="user-mark-bar__swatch" data-mark-color="sage" type="button" aria-label="鼠尾草"></button>
+          <button class="user-mark-bar__swatch" data-mark-color="pink" type="button" aria-label="霧粉"></button>
+          <button class="user-mark-bar__cancel" id="userMarkBarCancel" type="button" aria-label="取消">×</button>
+        </div>
+        <button class="user-mark-bar__remove" id="userMarkBarRemove" type="button" hidden>移除</button>
+      </div>
+    </div>
     <div class="toast" id="toast" hidden></div>
     <script>
       if ("serviceWorker" in navigator) {
@@ -1175,7 +1201,8 @@
     <script src="lib/body-coach-insight.js?v=1"></script>
     <script src="lib/review-merge.js?v=3"></script>
     <script src="lib/history-summary.js?v=3"></script>
-    <script src="lib/insight-highlight.js?v=4"></script>
-    <script src="app.js?v=193"></script>
+    <script src="lib/insight-highlight.js?v=5"></script>
+    <script src="lib/user-mark.js?v=6"></script>
+    <script src="app.js?v=194"></script>
   </body>
 </html>
