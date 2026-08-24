@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=158" />
+    <link rel="stylesheet" href="app.css?v=159" />
     <style>
       .splash {
         position: fixed;
@@ -318,10 +318,51 @@
               <div class="journal-col">
                 <p class="journal-label">今天的心情是...</p>
                 <div class="mood-row" id="moodRow">
-                  <button class="mood-btn" type="button" data-mood="開心">開心</button>
-                  <button class="mood-btn" type="button" data-mood="平靜">平靜</button>
-                  <button class="mood-btn" type="button" data-mood="生氣">生氣</button>
-                  <button class="mood-btn" type="button" data-mood="難過">難過</button>
+                  <button class="mood-btn" type="button" data-mood="開心" aria-label="開心">
+                    <span class="mood-btn__face" aria-hidden="true">
+                      <svg viewBox="0 0 32 32" width="30" height="30" fill="none">
+                        <circle cx="16" cy="16" r="12.4" stroke="currentColor" stroke-width="1.6" />
+                        <circle cx="11.6" cy="13.6" r="1.45" fill="currentColor" />
+                        <circle cx="20.4" cy="13.6" r="1.45" fill="currentColor" />
+                        <path d="M11.2 19.1c1.8 2.4 7.8 2.4 9.6 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                      </svg>
+                    </span>
+                    <span class="mood-btn__label">開心</span>
+                  </button>
+                  <button class="mood-btn" type="button" data-mood="平靜" aria-label="平靜">
+                    <span class="mood-btn__face" aria-hidden="true">
+                      <svg viewBox="0 0 32 32" width="30" height="30" fill="none">
+                        <circle cx="16" cy="16" r="12.4" stroke="currentColor" stroke-width="1.6" />
+                        <circle cx="11.6" cy="13.6" r="1.45" fill="currentColor" />
+                        <circle cx="20.4" cy="13.6" r="1.45" fill="currentColor" />
+                        <path d="M12.2 20h7.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                      </svg>
+                    </span>
+                    <span class="mood-btn__label">平靜</span>
+                  </button>
+                  <button class="mood-btn" type="button" data-mood="生氣" aria-label="生氣">
+                    <span class="mood-btn__face" aria-hidden="true">
+                      <svg viewBox="0 0 32 32" width="30" height="30" fill="none">
+                        <circle cx="16" cy="16" r="12.4" stroke="currentColor" stroke-width="1.6" />
+                        <path d="M9.6 11.2l4.4 1.6M22.4 11.2l-4.4 1.6" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" />
+                        <circle cx="11.6" cy="14.4" r="1.45" fill="currentColor" />
+                        <circle cx="20.4" cy="14.4" r="1.45" fill="currentColor" />
+                        <path d="M12.2 20.8c1.6-1.3 6-1.3 7.6 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                      </svg>
+                    </span>
+                    <span class="mood-btn__label">生氣</span>
+                  </button>
+                  <button class="mood-btn" type="button" data-mood="難過" aria-label="難過">
+                    <span class="mood-btn__face" aria-hidden="true">
+                      <svg viewBox="0 0 32 32" width="30" height="30" fill="none">
+                        <circle cx="16" cy="16" r="12.4" stroke="currentColor" stroke-width="1.6" />
+                        <circle cx="11.6" cy="13.8" r="1.45" fill="currentColor" />
+                        <circle cx="20.4" cy="13.8" r="1.45" fill="currentColor" />
+                        <path d="M12.2 21c1.6-1.2 6-1.2 7.6 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                      </svg>
+                    </span>
+                    <span class="mood-btn__label">難過</span>
+                  </button>
                 </div>
               </div>
             </div>

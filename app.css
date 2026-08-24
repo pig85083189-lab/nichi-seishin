@@ -4659,32 +4659,134 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
 }
 
 .mood-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
 }
 
 .mood-btn {
-  width: 76px;
-  height: 76px;
-  border: 1px solid var(--border);
-  border-radius: 50%;
-  background: var(--cream);
-  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  height: 88px;
+  padding: 10px 4px 8px;
+  border: 1px solid rgba(184, 164, 148, 0.22);
+  border-radius: 16px;
+  background: #fbf7f2;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72), 0 1px 2px rgba(92, 74, 58, 0.04);
+  color: var(--heading);
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.mood-btn__face {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  pointer-events: none;
+}
+
+.mood-btn__face svg {
+  display: block;
+  width: 30px;
+  height: 30px;
+}
+
+.mood-btn__label {
+  color: inherit;
   font-size: 14px;
   font-weight: 600;
-  cursor: pointer;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.mood-btn[data-mood="開心"] {
+  background: #f8eeec;
+  border-color: rgba(201, 154, 156, 0.28);
+  color: #c08b90;
+}
+
+.mood-btn[data-mood="平靜"] {
+  background: #eef2ea;
+  border-color: rgba(154, 176, 148, 0.32);
+  color: #7d9478;
+}
+
+.mood-btn[data-mood="生氣"] {
+  background: #f6eee6;
+  border-color: rgba(201, 164, 124, 0.3);
+  color: #c49672;
+}
+
+.mood-btn[data-mood="難過"] {
+  background: #eef1f4;
+  border-color: rgba(148, 164, 176, 0.32);
+  color: #7d8e9c;
 }
 
 .mood-btn:hover {
-  border-color: var(--accent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 2px 6px rgba(92, 74, 58, 0.06);
 }
 
 .mood-btn.is-on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-  box-shadow: var(--shadow);
+  transform: scale(1.02);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 2px 8px rgba(92, 74, 58, 0.07);
+}
+
+.mood-btn[data-mood="開心"].is-on {
+  background: #f0d8d6;
+  border-color: #d4a3a4;
+  color: #b06f76;
+}
+
+.mood-btn[data-mood="平靜"].is-on {
+  background: #dce6d6;
+  border-color: #a3b89c;
+  color: #678265;
+}
+
+.mood-btn[data-mood="生氣"].is-on {
+  background: #eedccc;
+  border-color: #c9ae90;
+  color: #b07d56;
+}
+
+.mood-btn[data-mood="難過"].is-on {
+  background: #dde5ec;
+  border-color: #a8b6c2;
+  color: #667888;
+}
+
+@media (max-width: 430px) {
+  .mood-row {
+    gap: 6px;
+  }
+
+  .mood-btn {
+    height: 84px;
+    padding: 8px 2px 7px;
+  }
+}
+
+@media (max-width: 375px) {
+  .mood-row {
+    gap: 5px;
+  }
+
+  .mood-btn {
+    height: 82px;
+    padding: 7px 2px 6px;
+  }
 }
 
 .body-tags {
@@ -6935,7 +7037,6 @@ summary [data-user-mark-field] {
   }
 
   .body-flags,
-  .mood-row,
   .pricing-grid,
   .journal-split,
   .journal-split--body,
