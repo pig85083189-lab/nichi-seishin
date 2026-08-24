@@ -67,11 +67,14 @@ assert(count("awareness.prompt.") >= 2, "覺察題今日與歷史共用");
 assert(count("exec.prompt.") >= 2, "執行題今日與歷史共用");
 assert(has("deep.${fieldIndex}.title") && has("deep.${index}.title"), "深度主題 title 今日與歷史共用");
 
-assert(has("enterUserMarkMode") || has("enterMarkMode"), "畫重點模式入口");
-assert(has("exitUserMarkMode") || has("exitMarkMode"), "完成可退出畫重點模式");
-assert(has("data-user-mark-enter") || has("user-mark-entry"), "輕量畫重點入口");
-assert(has("open-colors"), "選完直接四色");
-assert(has("is-user-mark-mode"), "mark mode 用 body class，不用全域禁選");
+assert(!has("enterUserMarkMode") && !has("enterMarkMode"), "已移除 mark mode 入口");
+assert(!has("exitUserMarkMode") && !has("exitMarkMode"), "已移除 mark mode 完成列");
+assert(!has("data-user-mark-enter") && !has("user-mark-entry"), "已移除輕量畫重點入口按鈕");
+assert(!has("is-user-mark-mode"), "已移除 body.is-user-mark-mode");
+assert(has("userMarkBarDraw"), "第一層有「畫重點」按鈕");
+assert(has("enterColorMode"), "點畫重點後才進四色");
+assert(has('setUserMarkBarMode("create")'), "選字後先顯示第一層");
+assert(has("open-create"), "selection 完成開第一層，不是直接四色");
 
 assert(has('conclusion-callout__label">核心結論'), "CASE O：固定 UI label「核心結論」不是 markable field");
 assert(!has('data-user-mark-field="核心結論"'), "CASE O：固定 label 不加 field");
@@ -80,8 +83,16 @@ assert(!has("if (closestMarkable(target)) event.preventDefault()"), "正文不�
 assert(!src.includes("closestMarkable(target)) event.preventDefault"), "正文 contextmenu 不攔截選字");
 
 const css = fs.readFileSync(path.join(__dirname, "..", "app.css"), "utf8");
-assert(!/is-user-mark-mode \[data-user-mark-field\]\s*\{[^}]*-webkit-touch-callout:\s*none/.test(css), "markable 欄位不設 touch-callout none");
+const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+assert(!css.includes("is-user-mark-mode"), "CSS 已移除 mark mode");
+assert(!css.includes("user-mark-mode-banner"), "CSS 已移除畫重點模式頂部列");
+assert(!html.includes("userMarkModeBanner"), "HTML 已移除畫重點模式頂部列");
+assert(html.includes("userMarkBarDraw"), "HTML 保留第一層畫重點按鈕");
+const fieldBlock = css.match(/\[data-user-mark-field\]\s*\{[^}]+\}/);
+assert(fieldBlock && !fieldBlock[0].includes("-webkit-touch-callout"), "markable 欄位不設 touch-callout none");
 assert(/\[data-user-mark-field\][\s\S]{0,80}-webkit-user-select:\s*text/.test(css), "可標註文字維持 user-select:text");
 assert(css.includes("user-select: text"), "可標註文字 user-select:text");
+assert(!src.includes('document.addEventListener("pointerdown"') && !src.includes("document.addEventListener('pointerdown'"), "正文不攔 pointerdown");
+assert(!src.includes('document.addEventListener("touchstart"') && !src.includes('document.addEventListener("touchmove"'), "正文不攔 touchstart/touchmove");
 
 console.log("user mark field mapping tests passed");

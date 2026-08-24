@@ -6060,99 +6060,11 @@ summary [data-user-mark-field] {
   user-select: text;
 }
 
-.user-mark-entry {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.user-mark-hint {
   margin: 0 0 10px;
-  padding: 5px 10px 5px 8px;
-  border: 1px solid rgba(184, 164, 148, 0.28);
-  border-radius: 999px;
-  background: #fbf7f2;
   color: #8a7363;
   font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  cursor: pointer;
-}
-
-.user-mark-entry svg {
-  display: block;
-  flex: 0 0 auto;
-}
-
-body.is-user-mark-mode .user-mark-entry {
-  display: none;
-}
-
-.user-mark-mode-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-shrink: 0;
-  padding: 8px 16px 8px 14px;
-  border-bottom: 1px solid rgba(184, 164, 148, 0.18);
-  background: #f6efe6;
-  color: #8a7363;
-}
-
-.user-mark-mode-banner[hidden] {
-  display: none;
-}
-
-.user-mark-mode-banner__lead {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.user-mark-mode-banner__icon {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  border-radius: 999px;
-  background: rgba(255, 253, 249, 0.8);
-  color: #9c8879;
-}
-
-.user-mark-mode-banner__copy {
-  min-width: 0;
-}
-
-.user-mark-mode-banner__kicker {
-  margin: 0;
-  color: #7a6556;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-}
-
-.user-mark-mode-banner__hint {
-  margin: 1px 0 0;
-  color: #8a7363;
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-.user-mark-mode-banner__done {
-  flex: 0 0 auto;
-  padding: 6px 12px;
-  border: 1px solid rgba(184, 164, 148, 0.32);
-  border-radius: 999px;
-  background: #fffdf9;
-  color: #7a6556;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-body.is-user-mark-mode [data-user-mark-field] {
-  -webkit-user-select: text;
-  user-select: text;
+  line-height: 1.5;
 }
 
 .user-mark-bar {

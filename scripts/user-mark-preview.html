@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>畫重點模式預覽</title>
+    <title>畫重點兩階段預覽</title>
     <link rel="stylesheet" href="../app.css" />
     <script src="../lib/user-mark.js"></script>
     <style>
@@ -75,36 +75,13 @@
     </style>
   </head>
   <body>
-    <div class="user-mark-mode-banner" id="userMarkModeBanner" hidden data-user-mark-chrome>
-      <div class="user-mark-mode-banner__lead">
-        <span class="user-mark-mode-banner__icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4.8 19.5h6.2" />
-            <path d="M14.7 5.1l4.2 4.2-9.4 9.4H5.3v-4.2L14.7 5.1z" />
-            <path d="M13.3 6.5l4.2 4.2" />
-          </svg>
-        </span>
-        <div class="user-mark-mode-banner__copy">
-          <p class="user-mark-mode-banner__kicker">畫重點中</p>
-          <p class="user-mark-mode-banner__hint">選取一句今天對你重要的話</p>
-        </div>
-      </div>
-      <button class="user-mark-mode-banner__done" id="userMarkModeDone" type="button" data-user-mark-done>完成</button>
-    </div>
     <div class="preview" id="previewFrame">
       <div class="preview__nav">
         <button type="button" data-width="desktop" class="is-on">桌機</button>
         <button type="button" data-width="phone">390px</button>
       </div>
-      <p class="preview__note">一般閱讀可長按複製。要畫重點時，先點下面這顆按鈕。</p>
-      <button class="user-mark-entry" type="button" data-user-mark-enter>
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M4.8 19.5h6.2" />
-          <path d="M14.7 5.1l4.2 4.2-9.4 9.4H5.3v-4.2L14.7 5.1z" />
-          <path d="M13.3 6.5l4.2 4.2" />
-        </svg>
-        畫重點
-      </button>
+      <p class="user-mark-hint">長按文字，留下今天對你重要的一句。</p>
+      <p class="preview__note">直接選字會先出現「畫重點」，點了才出現四色。Safari 原生複製／查詢不要被攔。</p>
       <section class="preview-card">
         <p class="preview__label">固定 UI label · 不可畫</p>
         <p class="conclusion-callout__label">核心結論</p>
@@ -153,11 +130,6 @@
         document.getElementById("wrapText").innerHTML = api.renderMarkedText(wrap, api.marksForField(marks, "think.awareness"));
       }
 
-      function syncChrome() {
-        document.body.classList.toggle("is-user-mark-mode", Boolean(session.markMode));
-        document.getElementById("userMarkModeBanner").hidden = !session.markMode;
-      }
-
       function place(rect) {
         const bar = document.getElementById("userMarkBar");
         bar.hidden = false;
@@ -173,7 +145,7 @@
       }
 
       function setMode(mode) {
-        document.getElementById("userMarkBarStart").hidden = true;
+        document.getElementById("userMarkBarStart").hidden = mode !== "create";
         document.getElementById("userMarkBarColors").hidden = mode !== "colors" && mode !== "edit";
         document.getElementById("userMarkBarRemove").hidden = mode !== "edit";
         document.getElementById("userMarkBarCancel").hidden = mode !== "colors";
@@ -182,12 +154,10 @@
       }
 
       function hide(reason) {
-        if (reason === "exit") api.exitMarkMode(session);
-        else if (reason === "complete") api.completeToolbarSession(session);
+        if (reason === "complete") api.completeToolbarSession(session);
         else api.cancelToolbarSession(session);
         document.getElementById("userMarkBar").hidden = true;
-        if (reason === "complete" || reason === "cancel" || reason === "exit") window.getSelection().removeAllRanges();
-        syncChrome();
+        if (reason === "complete" || reason === "cancel") window.getSelection().removeAllRanges();
       }
 
       function readSelection() {
@@ -205,20 +175,21 @@
       }
 
       function showFromPending() {
-        if (!session.markMode) return;
         const pending = api.pendingMarkPayload(session);
         if (!pending) return;
         const cover = marks.find((item) => item.field === pending.field && item.start <= pending.start && item.end >= pending.end);
-        if (cover && session.mode !== "colors") {
+        if (cover && session.mode !== "colors" && session.mode !== "create") {
           session.markId = cover.id;
           session.mode = "edit";
           setMode("edit");
         } else if (session.mode === "edit") {
           setMode("edit");
+        } else if (session.mode === "colors") {
+          setMode("colors");
         } else {
           session.markId = "";
-          session.mode = "colors";
-          setMode("colors");
+          session.mode = "create";
+          setMode("create");
         }
         place(pending.rect);
       }
@@ -227,15 +198,19 @@
         if (api.ignoreSelectionChange(session)) return;
         const payload = readSelection();
         const action = api.applySelectionChange(session, payload);
-        if (action === "open-colors" || action === "open-create") {
-          if (!window.getSelection() || window.getSelection().isCollapsed) showFromPending();
-        }
+        if (action === "open-create" || action === "open-colors") showFromPending();
       }
 
       function onToolbarPointer(event) {
         event.preventDefault();
         event.stopPropagation();
         api.beginToolbarInteract(session);
+        if (event.target.closest("#userMarkBarDraw")) {
+          api.enterColorMode(session);
+          setMode("colors");
+          if (session.pending && session.pending.rect) place(session.pending.rect);
+          return;
+        }
         if (event.target.closest("#userMarkBarCancel")) {
           hide("cancel");
           return;
@@ -266,13 +241,20 @@
       });
       document.addEventListener("mouseup", function (event) {
         if (bar.contains(event.target)) return;
-        if (event.target.closest("[data-user-mark-chrome]")) return;
         setTimeout(function () {
           const payload = readSelection();
           if (payload) api.applySelectionChange(session, payload);
           if (session.pending) showFromPending();
         }, 0);
       });
+      document.addEventListener("touchend", function (event) {
+        if (bar.contains(event.target)) return;
+        setTimeout(function () {
+          const payload = readSelection();
+          if (payload) api.applySelectionChange(session, payload);
+          if (session.pending) showFromPending();
+        }, 0);
+      }, { passive: true });
       document.addEventListener(
         "contextmenu",
         function (event) {
@@ -282,20 +264,8 @@
       );
       document.addEventListener("click", function (event) {
         if (bar.contains(event.target)) return;
-        if (event.target.closest("[data-user-mark-enter]")) {
-          event.preventDefault();
-          api.enterMarkMode(session);
-          syncChrome();
-          return;
-        }
-        if (event.target.closest("[data-user-mark-done]")) {
-          event.preventDefault();
-          hide("exit");
-          return;
-        }
         const span = event.target.closest(".user-highlight");
         if (span) {
-          if (!session.markMode) return;
           event.preventDefault();
           const root = api.closestMarkableHost(span);
           api.enterEditMode(session, {
@@ -313,7 +283,6 @@
           }
           setMode("edit");
           place(span.getBoundingClientRect());
-          return;
         }
       });
       document.querySelectorAll("[data-width]").forEach(function (btn) {
@@ -325,7 +294,6 @@
         };
       });
       render();
-      syncChrome();
     </script>
   </body>
 </html>
