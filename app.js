@@ -10924,6 +10924,12 @@ function formatHistoryListDate(iso) {
   return `${y} / ${m} / ${d}`;
 }
 
+function historyListStars(review) {
+  const n = Number(review && review.organize && review.organize.themeStars);
+  if (!Number.isFinite(n) || n < 1) return "";
+  return starsText(n);
+}
+
 function historyHighlight(review) {
   return getHistoryDailySummary(review).title;
 }
@@ -11625,6 +11631,7 @@ function renderHistory() {
       }
       const open = state.historyOpen === iso;
       const summary = getHistoryDailySummary(historyReview);
+      const stars = historyListStars(historyReview);
       const tags = (summary.tags || [])
         .map((tag) => `<span class="tag tag--ai">${escapeHtml(tag)}</span>`)
         .join("");
@@ -11640,7 +11647,9 @@ function renderHistory() {
           <button class="history-card__summary" data-history-toggle="${iso}" type="button" aria-expanded="${open ? "true" : "false"}">
             <span class="history-card__content">
               <span class="history-card__title">${escapeHtml(summary.title)}</span>
-              <span class="history-card__date">${escapeHtml(formatHistoryListDate(iso))}</span>
+              <span class="history-card__date">${escapeHtml(formatHistoryListDate(iso))}${
+                stars ? `<span class="history-card__stars">${escapeHtml(stars)}</span>` : ""
+              }</span>
               ${tags ? `<span class="history-card__tags">${tags}</span>` : ""}
             </span>
             <span class="history-card__chevron" aria-hidden="true"></span>
