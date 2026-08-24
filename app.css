@@ -5868,10 +5868,15 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
 
 .insight-highlight {
   display: inline;
-  background: #ede2d7;
-  color: #725f52;
-  padding: 0.08em 0.28em;
-  border-radius: 0.3em;
+  color: inherit;
+  padding: 0 0.04em;
+  border-radius: 0;
+  background: linear-gradient(
+    transparent 38%,
+    rgba(216, 196, 180, 0.46) 38%,
+    rgba(216, 196, 180, 0.46) 86%,
+    transparent 86%
+  );
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
   font-weight: inherit;
@@ -5882,9 +5887,14 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
 }
 
 .insight-highlight--strong {
-  background: #9d8878;
-  color: #fff9f3;
-  padding: 0.08em 0.3em;
+  color: inherit;
+  font-weight: 700;
+  background: linear-gradient(
+    transparent 34%,
+    rgba(190, 158, 134, 0.56) 34%,
+    rgba(190, 158, 134, 0.56) 90%,
+    transparent 90%
+  );
 }
 
 .insight-card__kicker {

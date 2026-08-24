@@ -8,7 +8,9 @@ const insightHighlight = require("../lib/insight-highlight");
 const HIGHLIGHT_RULE = `【重點反白 highlights】
 請從你實際生成的原文中，挑選最值得使用者停下來看的關鍵短句。
 highlight.text 必須 100% 原樣存在於對應欄位原文中，不可改寫、不可摘要、不可自行補字。
-每個主要區塊最多 1～2 個 highlight。strong 最多 1 個。每個 highlight 約 4～18 個中文字。
+每個主要區塊最多 1～2 個 highlight。strong 最多 1 個。每個 highlight 約 2～18 個中文字。
+2～3 個中文字也可以，但必須是有獨立覺察價值的關鍵詞，例如轉折點、被看見、安全感。
+不要選今天、覺得、可能、可以、需要、自己這類沒有獨立意義的普通詞。
 不要整段或整句上色。若沒有真正重要的句子，該欄位回傳 []。`;
 
 function withCompleteRule(system) {

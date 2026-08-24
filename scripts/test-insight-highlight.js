@@ -73,8 +73,63 @@ assert(normalizeHighlights(
   sourceH
 ).length === 1, "CASE H：重疊時只保留一個");
 
-assert(normalizeHighlights([{ text: "太短", level: "normal" }], "這句太短所以不要反白。").length === 0, "少於 4 字不可反白");
+const caseASource = "卻成為一個轉折點。";
+const caseAHtml = renderHighlightedText(caseASource, [{ text: "轉折點", level: "strong" }]);
+assert(caseAHtml.includes("insight-highlight--strong"), "CASE A：轉折點必須出現 strong 螢光筆");
+assert(caseAHtml.includes(">轉折點<") || caseAHtml.includes(">轉折點</span>"), "CASE A：必須包到轉折點");
+assert(plainTextFromHighlightedHtml(caseAHtml) === caseASource, "CASE A：正文必須與原文完全一致");
+
+const caseBSource = "今天讓你感受到被看見。";
+const caseBHtml = renderHighlightedText(caseBSource, [{ text: "被看見", level: "normal" }]);
+assert(caseBHtml.includes('class="insight-highlight"'), "CASE B：被看見必須正常反白");
+assert(plainTextFromHighlightedHtml(caseBHtml) === caseBSource, "CASE B：正文必須與原文完全一致");
+
+const caseCSource = "今天讓你感受到被看見。";
+const caseCHtml = renderHighlightedText(caseCSource, [{ text: "不存在的文字", level: "strong" }]);
+assert(caseCHtml === escapeHtml(caseCSource), "CASE C：找不到原文時不反白");
+assert(plainTextFromHighlightedHtml(caseCHtml) === caseCSource, "CASE C：原文必須完整");
+
+const caseDSource = "舊資料沒有 highlights，也要完整顯示全文。";
+const caseDHtml = renderHighlightedText(caseDSource, undefined);
+assert(caseDHtml === escapeHtml(caseDSource), "CASE D：舊資料必須完整顯示原文");
+
+const caseESource = "這段比較長的重點加深了你對身邊人的珍視，即使換行也應該自然帶著螢光筆。";
+const caseEHtml = renderHighlightedText(caseESource, [{ text: "加深了你對身邊人的珍視", level: "normal" }]);
+assert(caseEHtml.includes("insight-highlight"), "CASE E：跨行 highlight 仍要包 span");
+assert(plainTextFromHighlightedHtml(caseEHtml) === caseESource, "CASE E：跨行時正文仍完整");
+
+const caseFSource = `他寫了 <script>alert(1)</script> 與 "引號" & 符號。`;
+const caseFHtml = renderHighlightedText(caseFSource, [{ text: "引號", level: "normal" }]);
+assert(!caseFHtml.includes("<script>"), "CASE F：不可輸出未 escape 的 script");
+assert(caseFHtml.includes("&lt;script&gt;"), "CASE F：HTML 特殊字元必須被 escape");
+assert(plainTextFromHighlightedHtml(caseFHtml) === caseFSource, "CASE F：特殊字元還原後必須等於原文");
+
+const caseGSource = "真正值得記住的是睡得好不好，不是睡多久。";
+const caseGHtml = renderHighlightedText(caseGSource, [
+  { text: "睡得好不好", level: "strong" },
+  { text: "是睡得好不好，不是", level: "normal" },
+]);
+assert((caseGHtml.match(/睡得好不好/g) || []).length === 1, "CASE G：重疊 highlight 不可重複文字");
+assert(plainTextFromHighlightedHtml(caseGHtml) === caseGSource, "CASE G：重疊時正文仍完整");
+assert(
+  normalizeHighlights(
+    [
+      { text: "睡得好不好", level: "strong" },
+      { text: "是睡得好不好，不是", level: "normal" },
+    ],
+    caseGSource
+  ).length === 1,
+  "CASE G：重疊時只保留一個"
+);
+
+assert(normalizeHighlights([{ text: "一", level: "normal" }], "只有一個字不該反白。").length === 0, "少於 2 字不可反白");
 assert(normalizeHighlights([{ text: "這一段太長了所以不應該被整句反白起來看", level: "normal" }], "這一段太長了所以不應該被整句反白起來看。").length === 0, "超過 18 字不可反白");
+["被看見", "安全感", "有進展", "完成感", "界線感"].forEach((phrase) => {
+  const source = `今天出現了${phrase}。`;
+  const html = renderHighlightedText(source, [{ text: phrase, level: "normal" }]);
+  assert(html.includes(`>${phrase}</span>`), `${phrase} 必須可被反白`);
+  assert(plainTextFromHighlightedHtml(html) === source, `${phrase} 不可改寫原文`);
+});
 
 const bag = {
   title: [{ text: "睡得好不好", level: "strong" }],
