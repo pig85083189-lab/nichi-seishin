@@ -6151,7 +6151,6 @@ body.is-user-mark-mode .user-mark-entry {
 }
 
 body.is-user-mark-mode [data-user-mark-field] {
-  -webkit-touch-callout: none;
   -webkit-user-select: text;
   user-select: text;
 }

@@ -11828,6 +11828,7 @@ let userMarkSession =
   typeof userMarkApi().createToolbarSession === "function"
     ? userMarkApi().createToolbarSession()
     : { mode: "", interacting: false, pending: null, markId: "", markMode: false };
+let userMarkSelectGesture = false;
 
 function userMarkBarEl() {
   return document.getElementById("userMarkBar");
@@ -11983,12 +11984,9 @@ function syncUserMarkBarFromLiveSelection() {
   const api = userMarkApi();
   if (typeof api.ignoreSelectionChange === "function" && api.ignoreSelectionChange(userMarkSession)) return;
   const payload = readMarkableSelection();
-  const action = typeof api.applySelectionChange === "function" ? api.applySelectionChange(userMarkSession, payload) : payload ? "open-create" : "hide";
+  const action = typeof api.applySelectionChange === "function" ? api.applySelectionChange(userMarkSession, payload) : payload ? "open-colors" : "keep";
   if (action === "ignore" || action === "keep") return;
-  if (action === "hide") {
-    hideUserMarkBar();
-    return;
-  }
+  if (userMarkSelectGesture) return;
   if (action === "open-create" || action === "open-colors") showUserMarkBarFromPending();
 }
 
@@ -12114,8 +12112,11 @@ function maybeShowUserMarkBar() {
   const api = userMarkApi();
   if (typeof api.ignoreSelectionChange === "function" && api.ignoreSelectionChange(userMarkSession)) return;
   const payload = readMarkableSelection();
-  if (!payload) return;
-  openUserMarkCreate(payload);
+  if (payload) {
+    if (typeof api.applySelectionChange === "function") api.applySelectionChange(userMarkSession, payload);
+    else openUserMarkCreate(payload);
+  }
+  if (userMarkSession.pending) showUserMarkBarFromPending();
 }
 
 function handleUserMarkToolbarPointer(event) {
@@ -12164,31 +12165,31 @@ function bindUserMarkUi() {
     clearTimeout(timer);
     timer = window.setTimeout(() => syncUserMarkBarFromLiveSelection(), 80);
   });
-  document.addEventListener("mouseup", (event) => {
+  const onSelectGestureStart = (event) => {
     if (userMarkBarEl()?.contains(event.target)) return;
     if (event.target.closest && event.target.closest("[data-user-mark-chrome]")) return;
+    userMarkSelectGesture = true;
+  };
+  const onSelectGestureEnd = (event) => {
+    if (userMarkBarEl()?.contains(event.target)) return;
+    if (event.target.closest && event.target.closest("[data-user-mark-chrome]")) return;
+    userMarkSelectGesture = false;
     window.setTimeout(maybeShowUserMarkBar, 0);
-  });
-  document.addEventListener(
-    "touchend",
-    (event) => {
-      if (userMarkBarEl()?.contains(event.target)) return;
-      if (event.target.closest && event.target.closest("[data-user-mark-chrome]")) return;
-      window.setTimeout(maybeShowUserMarkBar, 0);
-    },
-    { passive: true }
-  );
+  };
+  document.addEventListener("pointerdown", onSelectGestureStart, { passive: true });
+  document.addEventListener("pointerup", onSelectGestureEnd, { passive: true });
+  document.addEventListener("pointercancel", () => {
+    userMarkSelectGesture = false;
+  }, { passive: true });
+  document.addEventListener("mousedown", onSelectGestureStart);
+  document.addEventListener("mouseup", onSelectGestureEnd);
+  document.addEventListener("touchend", onSelectGestureEnd, { passive: true });
   document.addEventListener(
     "contextmenu",
     (event) => {
-      if (!isUserMarkMode()) return;
       const target = event.target && event.target.nodeType === 1 ? event.target : event.target && event.target.parentElement;
       if (!target || typeof target.closest !== "function") return;
-      if (target.closest("[data-user-mark-toolbar], [data-user-mark-chrome]")) {
-        event.preventDefault();
-        return;
-      }
-      if (closestMarkable(target)) event.preventDefault();
+      if (target.closest("[data-user-mark-toolbar]")) event.preventDefault();
     },
     true
   );
@@ -12227,9 +12228,7 @@ function bindUserMarkUi() {
       }
       if (event.target.closest && event.target.closest("[data-journal-fold], [data-history-section], [data-history-toggle]")) {
         dismissUserMarkUi("cancel");
-        return;
       }
-      if (isUserMarkMode() && userMarkSession.mode && !closestMarkable(event.target)) dismissUserMarkUi("cancel");
     },
     true
   );

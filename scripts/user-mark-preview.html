@@ -227,8 +227,9 @@
         if (api.ignoreSelectionChange(session)) return;
         const payload = readSelection();
         const action = api.applySelectionChange(session, payload);
-        if (action === "open-colors" || action === "open-create") showFromPending();
-        if (action === "hide") document.getElementById("userMarkBar").hidden = true;
+        if (action === "open-colors" || action === "open-create") {
+          if (!window.getSelection() || window.getSelection().isCollapsed) showFromPending();
+        }
       }
 
       function onToolbarPointer(event) {
@@ -266,15 +267,16 @@
       document.addEventListener("mouseup", function (event) {
         if (bar.contains(event.target)) return;
         if (event.target.closest("[data-user-mark-chrome]")) return;
-        setTimeout(syncFromLive, 0);
+        setTimeout(function () {
+          const payload = readSelection();
+          if (payload) api.applySelectionChange(session, payload);
+          if (session.pending) showFromPending();
+        }, 0);
       });
       document.addEventListener(
         "contextmenu",
         function (event) {
-          if (!session.markMode) return;
-          if (event.target.closest("[data-user-mark-toolbar], [data-user-mark-chrome], [data-user-mark-field]")) {
-            event.preventDefault();
-          }
+          if (event.target.closest("[data-user-mark-toolbar]")) event.preventDefault();
         },
         true
       );
@@ -313,7 +315,6 @@
           place(span.getBoundingClientRect());
           return;
         }
-        if (session.markMode && session.mode && !api.closestMarkableHost(event.target)) hide("cancel");
       });
       document.querySelectorAll("[data-width]").forEach(function (btn) {
         btn.onclick = function () {

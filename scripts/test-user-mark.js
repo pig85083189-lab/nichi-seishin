@@ -196,4 +196,45 @@ assert(isForbiddenMarkTarget({ nodeType: 1, closest: () => null }) === false, "�
 const snapNull = snapshotSelection({ field: "x", start: 0, end: 0, text: "" });
 assert(snapNull == null, "空選取不能當 snapshot");
 
+const safariSession = createToolbarSession();
+enterMarkMode(safariSession);
+assert(applySelectionChange(safariSession, live) === "open-colors", "CASE A：mark mode 可從合法 selection 建 snapshot");
+assert(safariSession.pending.text === "自己的需", "CASE A：選字後 pending 存在");
+assert(applySelectionChange(safariSession, null) === "keep", "CASE C：collapse 不清 pending");
+assert(safariSession.pending && safariSession.pending.text === "自己的需", "CASE C/D：native menu / collapse 後 snapshot 仍在");
+assert(safariSession.mode === "colors", "CASE C：collapse 不關四色 mode");
+const dragged = { ...live, start: 0, end: 6, text: "看見自己的需" };
+assert(applySelectionChange(safariSession, dragged) === "open-colors", "CASE B：拖曳 handles 可更新 snapshot");
+assert(safariSession.pending.text === "看見自己的需", "CASE B：pending 跟著新 range");
+assert(applySelectionChange(safariSession, null) === "keep", "CASE D：更新後再 collapse 仍保留");
+const paintedFromSnap = upsertMark([], { ...pendingMarkPayload(safariSession), color: "yellow" });
+assert(paintedFromSnap[0].text === "看見自己的需" && paintedFromSnap[0].color === "yellow", "CASE E：上色只用 snapshot，不靠 live selection");
+completeToolbarSession(safariSession);
+assert(isMarkMode(safariSession) === true, "CASE G：第一筆完成後仍在 mark mode");
+assert(applySelectionChange(safariSession, live) === "open-colors", "CASE G：可立刻選第二筆");
+const secondLive = { date: "2026-08-24", field: "bodyCoach.analysis", start: 0, end: 3, text: "轉折點", rect: live.rect };
+assert(applySelectionChange(safariSession, secondLive) === "open-colors", "CASE G：第二段合法 range 取代 pending");
+const secondPaint = upsertMark(paintedFromSnap, { ...pendingMarkPayload(safariSession), color: "pink" });
+assert(secondPaint.length === 2, "CASE F/G：第二筆可獨立上色");
+exitMarkMode(safariSession);
+assert(isMarkMode(safariSession) === false, "CASE H：完成退出 mark mode");
+assert(applySelectionChange(safariSession, live) === "ignore", "CASE H：一般閱讀不再開 toolbar");
+
+const titleMark = upsertMark([], { field: "bodyCoach.title", start: 0, end: 7, text: "看見自己的需要", color: "tea" });
+assert(titleMark[0].field === "bodyCoach.title", "CASE I：標題可畫");
+const bodyMark = upsertMark(titleMark, { field: "bodyCoach.analysis", start: 0, end: 3, text: "轉折點", color: "sage" });
+assert(bodyMark.some((item) => item.field === "bodyCoach.analysis"), "CASE J：一般內文可畫");
+const historyTitle = upsertMark(bodyMark, { field: "think.title", start: 0, end: 4, text: "看見自己", color: "pink" });
+assert(historyTitle.some((item) => item.field === "think.title"), "CASE K：歷史標題 field 可畫");
+
+const stored = { items: historyTitle, updatedAt: "2026-08-24T08:00:00.000Z" };
+assert(stored.items.length === 3, "CASE L：bag 可保存多筆");
+const reloaded = mergeUserMarks({ items: [], updatedAt: "" }, stored);
+assert(reloaded.items.length === 3 && reloaded.updatedAt === stored.updatedAt, "CASE L：reload 後重點仍在");
+const clearedLast = removeMark(reloaded.items, reloaded.items[reloaded.items.length - 1].id);
+const emptied = mergeUserMarks(reloaded, { items: clearedLast.length ? clearedLast : [], updatedAt: "2026-08-24T09:00:00.000Z" });
+assert(emptied.items.length === 2, "CASE M：移除後以新 timestamp 為準");
+const allRemoved = mergeUserMarks(emptied, { items: [], updatedAt: "2026-08-24T10:00:00.000Z" });
+assert(allRemoved.items.length === 0, "CASE M：移除最後一筆後 reload 不復活");
+
 console.log("user mark tests passed");

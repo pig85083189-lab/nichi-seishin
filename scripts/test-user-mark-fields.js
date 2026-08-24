@@ -76,5 +76,12 @@ assert(has("is-user-mark-mode"), "mark mode 用 body class，不用全域禁選"
 assert(has('conclusion-callout__label">核心結論'), "CASE O：固定 UI label「核心結論」不是 markable field");
 assert(!has('data-user-mark-field="核心結論"'), "CASE O：固定 label 不加 field");
 assert(has("isForbiddenMarkTarget") || has("input, textarea"), "CASE P：input/textarea 禁止");
+assert(!has("if (closestMarkable(target)) event.preventDefault()"), "正文不再 contextmenu preventDefault");
+assert(!src.includes("closestMarkable(target)) event.preventDefault"), "正文 contextmenu 不攔截選字");
+
+const css = fs.readFileSync(path.join(__dirname, "..", "app.css"), "utf8");
+assert(!/is-user-mark-mode \[data-user-mark-field\]\s*\{[^}]*-webkit-touch-callout:\s*none/.test(css), "markable 欄位不設 touch-callout none");
+assert(/\[data-user-mark-field\][\s\S]{0,80}-webkit-user-select:\s*text/.test(css), "可標註文字維持 user-select:text");
+assert(css.includes("user-select: text"), "可標註文字 user-select:text");
 
 console.log("user mark field mapping tests passed");
