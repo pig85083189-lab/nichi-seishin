@@ -9276,7 +9276,10 @@ function renderConclusionCallout(text, field, date, highlights) {
   if (!line) return "";
   return `
     <aside class="conclusion-callout">
-      <p class="conclusion-callout__label">核心結論</p>
+      <header class="conclusion-callout__head">
+        <span class="conclusion-callout__mark" aria-hidden="true">❝</span>
+        <p class="conclusion-callout__label">核心結論</p>
+      </header>
       ${field ? markableP(line, field, "conclusion-callout__text", date, highlights) : `<p class="conclusion-callout__text">${highlightedHtml(line, highlights)}</p>`}
     </aside>
   `;
@@ -11148,7 +11151,7 @@ function historyBodyCheckHtml(journal, date) {
   const title = String(coach.title || "").trim();
   const titleLine = title ? (/[。！？]$/.test(title) ? title : `${title}。`) : "";
   const coachHtml = [
-    titleLine ? historyBlock("核心結論", markableP(titleLine, "bodyCoach.title", "history-journal__headline", date, fieldHighlightsOf(coach.highlights, "title"))) : "",
+    titleLine ? renderConclusionCallout(titleLine, "bodyCoach.title", date, fieldHighlightsOf(coach.highlights, "title")) : "",
     coach.analysis ? historyBlock("今天的身心訊號", markableP(coach.analysis, "bodyCoach.analysis", "history-journal__text", date, fieldHighlightsOf(coach.highlights, "analysis"))) : "",
     coach.notice ? historyBlock("值得留意", markableP(coach.notice, "bodyCoach.notice", "history-journal__text", date, fieldHighlightsOf(coach.highlights, "notice"))) : "",
     ...(coach.suggestions || []).map((item, index) => {
@@ -11215,7 +11218,7 @@ function renderHistoryGuideHtml(insight, guide, date) {
     .join("");
   const closeBlocks = [
     guide.title || insight.title
-      ? historyBlock("", markableP(guide.title || insight.title, "think.title", "history-journal__headline", date, fieldHighlightsOf(guide.highlights, "title")))
+      ? renderConclusionCallout(guide.title || insight.title, "think.title", date, fieldHighlightsOf(guide.highlights, "title"))
       : "",
     guide.awareness || guide.summary
       ? historyBlock("今日覺察", markableP(guide.awareness || guide.summary, "think.awareness", "history-journal__text", date, fieldHighlightsOf(guide.highlights, "awareness")))
@@ -11240,7 +11243,7 @@ function renderHistoryInsightBlocksHtml(insight, date) {
   const suggestions = Array.isArray(insight.suggestions) ? insight.suggestions : [];
   const takeaways = Array.isArray(insight.takeaways) ? insight.takeaways : [];
   const marks = insight.highlights && typeof insight.highlights === "object" ? insight.highlights : {};
-  return `${insight.title ? historyBlock("", markableP(insight.title, "think.title", "history-journal__headline", date, fieldHighlightsOf(marks, "title"))) : ""}${
+  return `${insight.title ? renderConclusionCallout(insight.title, "think.title", date, fieldHighlightsOf(marks, "title")) : ""}${
     psychology || conclusion
       ? historyBlock("① 今天的身心訊號", markableP(psychology || conclusion, "think.psychology", "history-journal__text", date, fieldHighlightsOf(marks, "psychology")))
       : ""
