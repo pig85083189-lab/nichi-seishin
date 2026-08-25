@@ -4,6 +4,7 @@ const { getApiKey, getModel, getProvider, usesClaude, callOpenAI } = require("..
 const textIntegrity = require("../lib/text-integrity");
 const bodyCoachInsight = require("../lib/body-coach-insight");
 const insightHighlight = require("../lib/insight-highlight");
+const reviewMerge = require("../lib/review-merge");
 
 const HIGHLIGHT_RULE = `【重點反白 highlights】
 從你實際生成的原文中，挑選最值得停下來看的核心片段。目的是抓重點，不是把整段塗成彩色。
@@ -208,12 +209,54 @@ const CHECKLIST_AWARENESS_SYSTEM = `你是「日精進」的覺察整理者。�
 }
 ${HIGHLIGHT_RULE}`;
 
+const CHECKLIST_AWARENESS_CHOICES_SYSTEM = `你是「日精進」的覺察整理者。使用者剛在 04 勾選了「我現在怎麼了」的選項（最多 2 個，也可以一個都不勾）。
+
+目的不是重述事件，也不是替他下人格結論，而是把今天紀錄與他勾選（或沒勾選）的內容，收成真正值得留下的覺察。
+
+讀完後，他最理想的感受是：「原來我可能是這樣。」最差的結果是把今天發生的 A、B、C 再摘要一次。
+
+【思考順序】
+1. 先讀完感謝、事件、心情、身體、睡眠。
+2. 勾選的句子是「他願意承認的可能」，仍用可能／好像／今天看起來／也許。
+3. 若他勾了「今天沒有特別符合我的選項」，或一個都沒勾：不要硬套選項。改從實際填寫內容找一個較小、較安全的觀察。
+4. 沒被勾選的選項，禁止寫成今天的結論。
+5. 資料不足就寫得簡單、具體；禁止硬湊深度。
+
+【結果結構｜短、準、完整】
+- seen：【01｜今天，我看見了自己】剛好 2 到 4 句。直接指出今天最值得留下來的覺察。
+- gap：【02｜我可能忽略的地方】剛好 2 到 4 句。指出可能存在的矛盾、重複模式或盲點。
+- echo：只有訊息裡列出合格跨日模式時才寫一句；否則必須是 ""。
+- question：可空字串。不要再追問他現在回答。若寫，只留一個問題，禁止萬用題。
+- line：【今日帶走的一句話】15～30 個中文字。
+
+【語氣】使用：可能、好像、看起來、也許。
+禁止：你就是、你一直都、這代表你、你其實只是、你一定是。
+禁止心理診斷、人格標籤、虛構次數／日期／歷史事件。
+
+規則：
+- 只輸出 JSON，繁體中文
+{
+  "seen": "2到4句完整覺察",
+  "gap": "2到4句完整觀察",
+  "question": "",
+  "line": "15到30個中文字",
+  "echo": "",
+  "highlights": {
+    "seen": [{ "text": "必須原樣出現在 seen 裡的短句", "color": "yellow" }],
+    "gap": [],
+    "question": [],
+    "line": []
+  }
+}
+${HIGHLIGHT_RULE}`;
+
 const MANIFEST_PROMPTS_SYSTEM = `你是「日精進」的顯化引導者。04 看見自己，05 把事情做出來；你幫他看見自己想去哪裡，開始成為那個人。
 
-使用者剛寫下「我想顯化的事情」。請只生成 2 道顯化思考題，不要拆待辦，不要給執行清單。
+使用者剛寫下「我想顯化的事情」。請生成 1 到 2 道顯化思考題，不要拆待辦，不要給執行清單。
+寧缺勿濫：願望已經夠清楚時只出 1 題。不要為了湊數固定 2 題。最多 2 題。
 
-第1題：如果這件事已經成真，生活會有什麼不同？
-第2題：那個已經做到的你，現在最不一樣的是什麼？
+若出第1題：如果這件事已經成真，生活會有什麼不同？
+若真的需要第2題：那個已經做到的你，現在最不一樣的是什麼？
 
 可以依願望輕輕個人化，但必須：
 - 一題只問一件事，一個問號
@@ -231,8 +274,9 @@ const MANIFEST_PROMPTS_SYSTEM = `你是「日精進」的顯化引導者。04 �
 「明天你要先打哪三通電話？」
 
 只輸出 JSON：
-{"questions":[{"question":"...","placeholder":"..."},{"question":"...","placeholder":"..."}]}
+{"questions":[{"question":"...","placeholder":"..."}]}
 placeholder 8-24 字，像「生活裡會先鬆開的是…」
+questions 長度必須是 1 或 2。
 繁體中文`;
 
 const MANIFEST_PATHS_SYSTEM = `你是「日精進」的顯化整理者。不要把它變成 05 執行力的待辦清單。
@@ -327,12 +371,7 @@ function normalizeManifestPromptItems(raw, vision) {
       placeholder: String(item?.placeholder || fallbacks[index]?.placeholder || "我想的是…").slice(0, 24),
     });
   });
-  fallbacks.forEach((item) => {
-    if (items.length >= 2) return;
-    if (seen.has(item.question)) return;
-    seen.add(item.question);
-    items.push(item);
-  });
+  if (!items.length) return fallbacks.slice(0, 1);
   return items.slice(0, 2);
 }
 
@@ -1858,6 +1897,31 @@ ${formatBodyCheckPrompt(ctx)}
         .map((question, index) => `${index + 1}. ${question}\n作答：${answers[index] || "（未答）"}`)
         .join("\n\n")
     : `是非題作答：${answer || "（未答）"}`;
+  if (isAwarenessChoiceClose(body)) {
+    const selected = Array.isArray(body.selected) ? body.selected.map((item) => String(item || "").trim()).filter(Boolean) : answers.filter(Boolean);
+    const none = Boolean(body.none) || selected.some((item) => item === "今天沒有特別符合我的選項");
+    const picked = none
+      ? "使用者勾選了「今天沒有特別符合我的選項」。不要硬套未勾選的句子。"
+      : selected.length
+        ? selected.map((item, index) => `${index + 1}. ${item}`).join("\n")
+        : "使用者一個選項都沒勾。不要硬套未勾選的句子。";
+    const progress = body.progress && typeof body.progress === "object" ? body.progress : {};
+    return `請先交叉比對今天所有資料，再依勾選內容整理「今日覺察結果」。不要只給金句，也不要替他下人格結論。question 可空。
+
+【04 勾選｜我現在怎麼了】
+${picked}
+
+【今天已完成的內容｜必須綜合，不要只抓一句】
+今日感謝：
+${formatThanksForPrompt(ctx) || "未寫"}
+今日事件：${compactLine(ctx.event, 800) || "未寫"}
+心情：${ctx.mood || "未選"}
+${formatBodyCheckPrompt(ctx)}
+
+【最近反覆出現的模式｜echo】
+${formatRecentAwarenessDays(progress)}
+`;
+  }
   const yesCount = answers.filter((item) => item === "是").length;
   const noCount = answers.filter((item) => item === "否").length;
   const progress = body.progress && typeof body.progress === "object" ? body.progress : {};
@@ -2071,9 +2135,88 @@ Q3｜碰到更底層的自己
 - 必須能用「是／否」回答
 - 繁體中文`;
 
+const CHOICES_AWARENESS_SYSTEM = `你是「日精進」的覺察引導者。任務是從今天真實寫下的內容，長出幾個「我現在怎麼了」的選項，讓使用者勾選。
+
+這不是測驗，不是診斷，也不是深度意義題。
+04 只處理當下狀態：需要、反應、習慣、情緒、身體感受、我現在怎麼了。
+禁止寫成 06 的題：這件事背後代表什麼、真正想留下什麼、害怕來不及珍惜、價值觀、人生意義。
+
+【生成規則｜寧缺勿濫】
+- 只輸出 3 到 4 個選項。能清楚推導出 3 個就只出 3 個，不要為了湊數硬出第 4、第 5 個。
+- 永遠不要輸出「今天沒有特別符合我的選項」；前端會自己加。
+- 每一句必須能回扣今天感謝、事件、心情或身體紀錄的具體線索。
+- 沒有把握的選項直接省略。
+- 第一人稱、可能／好像／看起來。禁止：你就是、你一直都、這代表你。
+- 每句 18-42 個中文字，完整一句，不要問句。
+
+合格：
+「當別人主動表達在乎時，我會特別有感」
+「我真正被碰到的，可能不是事情本身，而是有人把我放在心上」
+不合格：
+「我害怕的可能不是失去，而是來不及好好珍惜」（這是 06）
+「你就是一個很需要被愛的人」
+
+只輸出 JSON：
+{"options":[{"id":"a1","text":"..."},{"id":"a2","text":"..."}]}
+繁體中文`;
+
+const CHOICES_THINK_SYSTEM = `你是「日精進」的深度思考引導者。任務是從今天真實寫下的內容，長出幾個「這件事背後代表什麼」的選項。
+
+06 不是再描述「我現在怎麼了」。那是 04 的工作。
+不要換句話重複 04 已經出現的覺察。
+04 是「我現在怎麼了」，
+06 必須往「這件事背後代表什麼／價值／信念／長期模式」再走一層。
+禁止改寫、重述或近義改寫 04 已經出現的句子。
+
+【生成規則｜寧缺勿濫】
+- 只輸出 3 到 4 個選項。能清楚推導出 3 個就只出 3 個，不要為了湊數硬出第 4、第 5 個。
+- 永遠不要輸出「今天沒有特別符合我的選項」；前端會自己加。
+- 每一句必須能回扣今天紀錄，且比 04 更深一層。
+- 若使用者訊息列出「04 已出現的覺察」，那些句子與近義句一律禁止再出現。
+- 第一人稱、可能／好像／看起來。禁止：你就是、你一直都、這代表你。
+- 每句 18-42 個中文字，完整一句，不要問句。
+
+合格：
+「我害怕的可能不是失去，而是來不及好好珍惜」
+「有些關係的重要，不需要等到失去才被看見」
+不合格：
+「當別人主動表達在乎時，我會特別有感」（這是 04）
+「我真正被碰到的，可能不是晚餐本身，而是有人把我放在心上」（這是 04）
+
+只輸出 JSON：
+{"options":[{"id":"t1","text":"..."},{"id":"t2","text":"..."}]}
+繁體中文`;
+
+const THINK_CHOICES_CLOSE_SYSTEM = `你不是心理醫師，也不是裁判。你是一面會整理的鏡子。
+
+使用者剛在 06 勾選了「這件事背後代表什麼」的選項（最多 2 個，也可以一個都不勾）。
+請只根據今天原文 + 勾選內容，寫出精短總結。不要再提問，不要列行動清單，不要寫成三輪問答。
+
+若他勾了「今天沒有特別符合我的選項」，或一個都沒勾：不要硬套選項。改從實際填寫內容找一個較小、較安全的觀察。
+沒被勾選的選項，禁止寫成今天的結論。
+證據不足時用「也許／可能／似乎／值得留意」。
+禁止：「你就是……」「這證明你……」「你真正需要的就是……」
+
+規則：
+- 只輸出 JSON：
+{
+  "title": "8-16字，具體，不要雞湯",
+  "awareness": "今日深度看見。剛好 2 到 3 個短段落，用\\n\\n分開。全文 120-220 個中文字。內容只含：1) 今天發生了什麼 2) 勾選共同指向什麼 3) 今天可能值得繼續觀察什麼",
+  "selfSeen": "今天我看見的自己：只能一句，第一人稱，必須像他自己說的",
+  "takeaway": "今日帶走的一句話：只能一句，15-35字，從今天長出來，不要空泛名言",
+  "highlights": {
+    "title": [],
+    "awareness": [{ "text": "必須原樣出現在 awareness 裡的短句", "color": "yellow" }],
+    "selfSeen": [],
+    "takeaway": []
+  }
+}
+${HIGHLIGHT_RULE}
+- 繁體中文`;
+
 const EXECUTION_PROMPTS_SYSTEM = `你是「日精進」的行動教練。先幫他找到卡點與阻力，再把想做的事問到夠具體。不要分析人格，不要列待辦。
 
-這次只出「第 1 題」。後面會依回答再追問，最多 3 輪。
+這次只出「第 1 題」。後面會依回答再追問，最多 2 輪。不要出第 3 題。
 
 第 1 題要讓他說出：明天真正想做的那一件事，或如果太累／事情太多，準備先放下什麼。
 可以輕輕點出今天的人／事／身體訊號，方便對準。
@@ -2105,7 +2248,7 @@ const EXECUTION_FOLLOW_SYSTEM = `你是「日精進」的行動教練。使用�
 若上一答是「明天要休息／多休息」→ 問哪個時間、休息幾分鐘、沒睡著算不算完成。
 若上一答是「早點睡／不要拖延／把事情做好／努力工作」→ 追問具體的事、時間與完成標準。
 
-不要重複上一題。不要診斷腔。不要無限追問之外的題。
+不要重複上一題。不要診斷腔。這已經是最多第 2 題，不要再規劃第 3 題。
 如果已經夠具體（已有事情＋時間或觸發點＋完成標準），仍只出一題把缺的那一格補上。
 
 規則：
@@ -2188,6 +2331,95 @@ ${labeled || "（尚無）"}
 ${formatBodyCheckPrompt(ctx)}
 
 若上一答仍是「最重要的事／早點睡／多休息／開始運動／吃健康一點／不要拖延」，必須再問具體的事、時間與完成標準。`;
+}
+
+function isChoicesRequest(body) {
+  const mode = String(body?.mode || "").trim().toLowerCase();
+  const kind = String(body?.kind || body?.scope || "").trim().toLowerCase();
+  return mode === "choices" || kind === "awareness-choices" || kind === "think-choices" || kind === "think-close";
+}
+
+function choicesKind(body) {
+  const kind = String(body?.kind || body?.scope || body?.step || "").trim().toLowerCase();
+  if (kind === "think-close" || kind === "close") return "think-close";
+  if (kind === "think" || kind === "think-choices" || kind === "deep") return "think";
+  return "awareness";
+}
+
+function isAwarenessChoiceClose(body) {
+  return Boolean(body?.choiceMode || body?.variant === "choices" || body?.source === "choices");
+}
+
+function journalStoryForChoices(body) {
+  const ctx = body && body.context && typeof body.context === "object" ? body.context : {};
+  const progress = body.progress && typeof body.progress === "object" ? body.progress : {};
+  const avoid = Array.isArray(body.avoid) ? body.avoid : Array.isArray(ctx.avoid) ? ctx.avoid : [];
+  const selected = Array.isArray(body.selected) ? body.selected : Array.isArray(ctx.selected) ? ctx.selected : [];
+  const none = Boolean(body.none || ctx.none);
+  return {
+    ctx,
+    progress,
+    avoid: avoid.map((item) => String(item || "").trim()).filter(Boolean),
+    selected: selected.map((item) => String(item || "").trim()).filter(Boolean),
+    none,
+    story: `日期：${body.date || ""}
+連續復盤天數：${progress.streak || 0}
+
+今日感謝：
+${formatThanksForPrompt(ctx) || "未寫"}
+今日事件：${compactLine(ctx.event || body.text, 800) || "（未寫）"}
+心情：${ctx.mood || "未選"}
+${formatBodyCheckPrompt(ctx)}`,
+  };
+}
+
+function choicesUserPrompt(body) {
+  const kind = choicesKind(body);
+  const { avoid, selected, none, story } = journalStoryForChoices(body);
+  if (kind === "think-close") {
+    const picked = none
+      ? "使用者勾選了「今天沒有特別符合我的選項」。不要硬套未勾選的句子。"
+      : selected.length
+        ? selected.map((item, index) => `${index + 1}. ${item}`).join("\n")
+        : "使用者一個選項都沒勾。不要硬套未勾選的句子，改從實際填寫內容找一個較小的觀察。";
+    return `請根據下面內容，寫出精短的「今日深度看見」。不要再提問。
+
+【06 勾選】
+${picked}
+
+【今天的輸入】
+${story}`;
+  }
+  if (kind === "think") {
+    const avoidBlock = avoid.length
+      ? avoid.map((item) => `- ${item}`).join("\n")
+      : "（尚無 04 選項）";
+    return `請只生成 3 到 4 個「這件事背後代表什麼」的選項。寧缺勿濫，不要湊滿 5 個。不要輸出「今天沒有特別符合我的選項」。
+
+不要換句話重複 04 已經出現的覺察。
+04 是「我現在怎麼了」，
+06 必須往「這件事背後代表什麼／價值／信念／長期模式」再走一層。
+禁止改寫下面這些「我現在怎麼了」的句子：
+${avoidBlock}
+
+【今天的輸入｜必須據此長出選項】
+${story}`;
+  }
+  return `請只生成 3 到 4 個「我現在怎麼了」的選項。寧缺勿濫，不要湊滿 5 個。不要輸出「今天沒有特別符合我的選項」。
+
+這是 04：看見當下的需要、反應、習慣、情緒。不要寫成「這件事背後代表什麼」。
+
+【今天的輸入｜必須據此長出選項】
+${story}`;
+}
+
+function normalizeGeneratedChoiceOptions(raw, kind, avoid) {
+  const prefix = kind === "think" ? "t" : "a";
+  const list = reviewMerge.normalizeChoiceOptions(raw, { avoid, max: 4 });
+  return list.map((item, index) => ({
+    id: /^[at]\d+$/.test(item.id) ? item.id : `${prefix}${index + 1}`,
+    text: item.text,
+  }));
 }
 
 function isCorePromptsRequest(body) {
@@ -2517,7 +2749,7 @@ module.exports = async function handler(req, res) {
     const body = readJsonBody(req);
     delete body.user_id;
     delete body.userId;
-    if (body.mode === "checklist" || body.mode === "prompts") {
+    if (body.mode === "checklist" || body.mode === "prompts" || body.mode === "choices") {
       await attachCloudAwarenessHistory(user, body, {
         userToken: bearerToken(req, body),
         email: user.email || "",
@@ -2538,12 +2770,24 @@ module.exports = async function handler(req, res) {
                   ? "manifest"
                   : body.mode === "bodycoach"
                     ? "bodycoach"
-                    : "organize";
+                    : body.mode === "choices"
+                      ? "choices"
+                      : "organize";
     const text = String(body.text || "").trim();
     if (mode === "checklist") {
       const answers = Array.isArray(body.answers) ? body.answers.map((item) => String(item || "").trim()) : [];
-      if (answers.filter(Boolean).length < 1) {
+      const selected = Array.isArray(body.selected) ? body.selected.map((item) => String(item || "").trim()).filter(Boolean) : [];
+      if (!isAwarenessChoiceClose(body) && answers.filter(Boolean).length < 1 && !selected.length && !body.none) {
         res.status(400).json({ ok: false, error: "請先寫完左側這道核心題" });
+        return;
+      }
+    } else if (mode === "choices") {
+      const ctx = body.context && typeof body.context === "object" ? body.context : {};
+      const event = String(ctx.event || text || "").trim();
+      const mood = String(ctx.mood || "").trim();
+      const thanks = thanksItems(ctx.thanksText || ctx.thanks);
+      if (!event || !mood || !thanks.length) {
+        res.status(400).json({ ok: false, error: "請先寫下今日感謝、事件，並選擇心情" });
         return;
       }
     } else if (mode === "insight") {
@@ -2625,9 +2869,21 @@ module.exports = async function handler(req, res) {
       messages = body.messages;
     } else if (mode === "checklist") {
       const kind = body.kind === "execution" ? "execution" : "awareness";
+      const awareChoices = kind === "awareness" && isAwarenessChoiceClose(body);
       messages = [
-        { role: "system", content: withCompleteRule(kind === "execution" ? CHECKLIST_EXECUTION_SYSTEM : CHECKLIST_AWARENESS_SYSTEM) },
+        { role: "system", content: withCompleteRule(kind === "execution" ? CHECKLIST_EXECUTION_SYSTEM : awareChoices ? CHECKLIST_AWARENESS_CHOICES_SYSTEM : CHECKLIST_AWARENESS_SYSTEM) },
         { role: "user", content: checklistUserPrompt(kind, body) },
+      ];
+    } else if (mode === "choices") {
+      const kind = choicesKind(body);
+      messages = [
+        {
+          role: "system",
+          content: withCompleteRule(
+            kind === "think-close" ? THINK_CHOICES_CLOSE_SYSTEM : kind === "think" ? CHOICES_THINK_SYSTEM : CHOICES_AWARENESS_SYSTEM
+          ),
+        },
+        { role: "user", content: choicesUserPrompt(body) },
       ];
     } else if (mode === "insight") {
       if (isThinkGuideRequest(body)) {
@@ -2705,13 +2961,21 @@ module.exports = async function handler(req, res) {
     }
 
     const promptKind = isCorePromptsRequest(body) ? corePromptKind(body) : "";
-    const awareMode = (mode === "prompts" && promptKind === "awareness") || (mode === "checklist" && body.kind !== "execution");
+    const choiceKind = mode === "choices" ? choicesKind(body) : "";
+    const awareMode =
+      (mode === "prompts" && promptKind === "awareness") ||
+      (mode === "checklist" && body.kind !== "execution") ||
+      (mode === "choices" && choiceKind !== "think-close");
     const aiOpts = {
       temperature:
         mode === "insight" && isThinkGuideRequest(body)
           ? thinkGuideStep(body) === "close"
             ? 0.4
             : 0.55
+        : mode === "choices" && choiceKind === "think-close"
+          ? 0.4
+          : mode === "choices"
+            ? 0.55
         : mode === "bodycoach"
           ? 0.45
           : mode === "manifest"
@@ -2725,11 +2989,15 @@ module.exports = async function handler(req, res) {
               : mode === "prompts"
                 ? 0.7
                 : 0.75,
-      timeoutMs: promptKind === "awareness" ? 20000 : 22000,
+      timeoutMs: promptKind === "awareness" || mode === "choices" ? 20000 : 22000,
       rejectPartial: awareMode,
       maxTokens:
         mode === "bodycoach"
           ? 900
+          : mode === "choices" && choiceKind === "think-close"
+            ? 900
+          : mode === "choices"
+            ? 700
           : mode === "insight" && isThinkGuideRequest(body)
           ? thinkGuideStep(body) === "close"
             ? 900
@@ -2756,6 +3024,26 @@ module.exports = async function handler(req, res) {
     } catch (error) {
       if (!awareMode) throw error;
       data = await callOpenAI(messages, { ...aiOpts, _retried: true });
+    }
+    if (mode === "choices") {
+      const kind = choicesKind(body);
+      if (kind === "think-close") {
+        const closed = normalizeThinkGuideClose(data);
+        if (!closed.summary && !closed.awareness) {
+          res.status(502).json({ ok: false, error: "今日深度看見還沒整理好，請再試一次" });
+          return;
+        }
+        res.status(200).json({ ok: true, source: getProvider(), data: closed });
+        return;
+      }
+      const avoid = Array.isArray(body.avoid) ? body.avoid : Array.isArray(body.context?.avoid) ? body.context.avoid : [];
+      const options = normalizeGeneratedChoiceOptions(data, kind, avoid);
+      if (options.length < 3) {
+        res.status(502).json({ ok: false, error: kind === "think" ? "今天的深度選項還沒準備好，請再試一次" : "今天的覺察選項還沒準備好，請再試一次" });
+        return;
+      }
+      res.status(200).json({ ok: true, source: getProvider(), data: { options: options.slice(0, 4), kind } });
+      return;
     }
     if (mode === "checklist") {
       const kind = body.kind === "execution" ? "execution" : "awareness";
@@ -2929,3 +3217,7 @@ module.exports.normalizeAwarenessLine = normalizeAwarenessLine;
 module.exports.padAwarenessPrompts = padAwarenessPrompts;
 module.exports.awarenessPromptStep = awarenessPromptStep;
 module.exports.labeledAwarenessTurns = labeledAwarenessTurns;
+module.exports.normalizeGeneratedChoiceOptions = normalizeGeneratedChoiceOptions;
+module.exports.choicesKind = choicesKind;
+module.exports.CHOICES_AWARENESS_SYSTEM = CHOICES_AWARENESS_SYSTEM;
+module.exports.CHOICES_THINK_SYSTEM = CHOICES_THINK_SYSTEM;

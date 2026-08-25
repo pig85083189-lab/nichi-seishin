@@ -116,6 +116,10 @@ const state = {
   journalBodyCoach: null,
   journalExecFocus: null,
   journalAwarenessResult: null,
+  awarenessChoices: { sourceSig: "", options: [], selectedIds: [], generatedAt: "" },
+  thinkChoices: { sourceSig: "", options: [], selectedIds: [], generatedAt: "" },
+  choicesBusy: { awareness: false, think: false },
+  choicesToken: { awareness: 0, think: 0, thinkClose: 0 },
   journalUserMarks: { items: [], updatedAt: "" },
   journalManifestSentence: "",
   journalManifestHighlights: {},
@@ -2187,6 +2191,8 @@ function reviewContentScore(review) {
     journal.manifestSentence,
     journal.deep ? JSON.stringify(journal.deep) : "",
     journal.awareness ? JSON.stringify(journal.awareness) : "",
+    journal.awarenessChoices ? JSON.stringify(journal.awarenessChoices) : "",
+    journal.thinkChoices ? JSON.stringify(journal.thinkChoices) : "",
     journal.execution ? JSON.stringify(journal.execution) : "",
     journal.manifestThink ? JSON.stringify(journal.manifestThink) : "",
     journal.awarenessResult ? JSON.stringify(journal.awarenessResult) : "",
@@ -2213,6 +2219,74 @@ function reviewContentScore(review) {
 
 function reviewMergeApi() {
   return (typeof window !== "undefined" && window.NichiReviewMerge) || {};
+}
+
+function emptyChoiceBag() {
+  const api = reviewMergeApi();
+  if (typeof api.emptyChoiceBag === "function") return api.emptyChoiceBag();
+  return { sourceSig: "", options: [], selectedIds: [], generatedAt: "" };
+}
+
+function normalizeChoiceBag(raw, options) {
+  const api = reviewMergeApi();
+  if (typeof api.normalizeChoiceBag === "function") return api.normalizeChoiceBag(raw, options);
+  const src = raw && typeof raw === "object" ? raw : {};
+  const optionsList = Array.isArray(src.options) ? src.options : [];
+  return {
+    sourceSig: String(src.sourceSig || "").trim(),
+    options: optionsList
+      .map((item, index) => ({
+        id: String(item && item.id ? item.id : `opt${index + 1}`),
+        text: String(item && (item.text || item.label) ? item.text || item.label : item || "").trim(),
+      }))
+      .filter((item) => item.text),
+    selectedIds: Array.isArray(src.selectedIds) ? src.selectedIds.map((id) => String(id || "").trim()).filter(Boolean).slice(0, 2) : [],
+    generatedAt: String(src.generatedAt || "").trim(),
+    ...(src.none ? { none: true } : {}),
+  };
+}
+
+function hasMeaningfulChoices(value) {
+  const api = reviewMergeApi();
+  if (typeof api.hasMeaningfulChoices === "function") return api.hasMeaningfulChoices(value);
+  const bag = normalizeChoiceBag(value);
+  return bag.options.length > 0 || bag.selectedIds.length > 0 || bag.none === true;
+}
+
+function selectedChoiceTexts(value) {
+  const api = reviewMergeApi();
+  if (typeof api.selectedChoiceTexts === "function") return api.selectedChoiceTexts(value);
+  const bag = normalizeChoiceBag(value);
+  if (bag.none) return [];
+  const map = new Map(bag.options.map((item) => [item.id, item.text]));
+  return bag.selectedIds.map((id) => map.get(id)).filter(Boolean);
+}
+
+function choiceNoneId() {
+  const api = reviewMergeApi();
+  return api.CHOICE_NONE_ID || "none";
+}
+
+function choiceNoneText() {
+  const api = reviewMergeApi();
+  return api.CHOICE_NONE_TEXT || "今天沒有特別符合我的選項";
+}
+
+function choiceMaxSelected() {
+  const api = reviewMergeApi();
+  return Number.isFinite(api.CHOICE_MAX_SELECTED) ? api.CHOICE_MAX_SELECTED : 2;
+}
+
+function serializeChoiceBag(raw) {
+  const bag = normalizeChoiceBag(raw);
+  const next = {
+    sourceSig: bag.sourceSig,
+    options: bag.options.map((item) => ({ id: item.id, text: item.text })),
+    selectedIds: bag.selectedIds.slice(),
+    generatedAt: bag.generatedAt,
+  };
+  if (bag.none) next.none = true;
+  return next;
 }
 
 function hasMeaningfulValue(value) {
@@ -4060,7 +4134,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "02 今日事件",
-        description: "寫下今天真正被碰到的事，再點選心情。快速復盤寫完感謝、事件與心情就能開始 3 輪深度思考；深度復盤則會成為後面出題與思考的原料。",
+        description: "寫下今天真正被碰到的事，再點選心情。這會成為後面覺察選項與思考的原料。",
         side: "bottom",
       },
     },
@@ -4074,20 +4148,11 @@ function tourSteps() {
       },
     },
     {
-      element: "#section-insight",
-      tourPage: "today",
-      popover: {
-        title: "深度思考",
-        description: "寫完事件、心情與身體後，會連續問你 3 輪。答完後給你 2 件具體下一步，以及一段直擊核心的總結。",
-        side: "bottom",
-      },
-    },
-    {
       element: "#section-aware",
       tourPage: "today",
       popover: {
         title: "04 覺察力",
-        description: "寫完今日感謝與事件後，點開始，會依今天的內容準備 3 個驗證問題。逐題回答後，整理今天看見的自己。",
+        description: "寫完今日感謝與事件後，點開始，會依今天的內容長出幾個「我現在怎麼了」的選項。最多勾 2 個，也可以都不勾。",
         side: "top",
       },
     },
@@ -4096,7 +4161,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "今日覺察",
-        description: "回答完 3 個問題後，這裡會整理你今天看見的自己、可能忽略的地方，以及今晚留給自己的一個問題。",
+        description: "勾選後，這裡會整理你今天看見的自己、可能忽略的地方。不必再回答是／否或打字。",
         side: "top",
       },
     },
@@ -4105,7 +4170,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "05 執行力",
-        description: "把今天想做的事問到夠具體，再收成明天真正做得到的一小步。行動卡一打勾，就會同步到側邊欄「執行力」。",
+        description: "把今天想做的事問到夠具體，最多 1～2 題，再收成明天真正做得到的一小步。行動卡一打勾，就會同步到側邊欄「執行力」。",
         side: "top",
       },
     },
@@ -4114,7 +4179,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "06 深度思考",
-        description: "今天先深挖一個最貼近你的主題。若還想繼續，再點「我還想繼續探索」展開另外三題。",
+        description: "從今天的內容長出幾個「這件事背後代表什麼」的選項。最多勾 2 個，也可以都不勾。不必再打字或連續追問。",
         side: "top",
       },
     },
@@ -4123,7 +4188,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "07 顯化力",
-        description: "寫下真正想靠近的事，先想生活與自己會怎麼不同，再找出能慢慢靠近的方向。勾選後會同步到側邊欄「顯化力」。",
+        description: "寫下真正想靠近的事，最多 1～2 道思考題，再找出能慢慢靠近的方向。勾選後會同步到側邊欄「顯化力」。",
         side: "top",
       },
     },
@@ -4298,7 +4363,7 @@ const CORE_EXECUTION_PROMPT = {
   placeholder: "例如：午餐多加一份青菜／下班後走路10分鐘",
 };
 const EXECUTION_PROMPT_MIN = 1;
-const EXECUTION_PROMPT_MAX = 3;
+const EXECUTION_PROMPT_MAX = 2;
 const EXECUTION_CARD_MIN = 1;
 const EXECUTION_CARD_MAX = 3;
 
@@ -4590,7 +4655,9 @@ function emptyJournal() {
     awarenessChecks: [],
     awarenessCheckItems: [],
     awarenessResult: emptyAwarenessResult(),
-    execution: ["", "", ""],
+    awarenessChoices: emptyChoiceBag(),
+    thinkChoices: emptyChoiceBag(),
+    execution: ["", ""],
     executionChecks: [],
     executionCheckItems: [],
     executionFocus: emptyExecFocus(),
@@ -5046,6 +5113,7 @@ function journalHasContent(journal) {
     journal.manifestSentence,
   ];
   if (textBits.some((item) => String(item || "").trim())) return true;
+  if (hasMeaningfulChoices(journal.awarenessChoices) || hasMeaningfulChoices(journal.thinkChoices)) return true;
   if (deepHasContent(journal.deep) || hasMeaningfulValue(journal.deepPrompts)) return true;
   if (hasMeaningfulInsight(journal.insight)) return true;
   if ((journal.bodyTags || []).length || (journal.awarenessChecks || []).length || (journal.executionChecks || []).length || (journal.manifestChecks || []).length) return true;
@@ -5124,6 +5192,7 @@ function awarenessQuizAnsweredCount(answers) {
 }
 
 function awarenessReady(answers) {
+  if (normalizeChoiceBag(state.awarenessChoices).options.length) return true;
   return awarenessQuizAnsweredCount(answers) >= AWARENESS_QUIZ_COUNT;
 }
 
@@ -5468,8 +5537,10 @@ function awarenessQuoteGenCount() {
 }
 
 function awarenessResultStale() {
-  const answers = collectAwarenessQuizAnswers();
-  const sig = checklistSignature(answers);
+  const choiceBag = normalizeChoiceBag(state.awarenessChoices);
+  const sig = choiceBag.options.length
+    ? JSON.stringify({ none: Boolean(choiceBag.none), ids: choiceBag.selectedIds })
+    : checklistSignature(collectAwarenessQuizAnswers());
   const hasResult = hasAwarenessResult(state.journalAwarenessResult) || collectAwareQuotes().length;
   return Boolean(hasResult && state.journalMeta.awarenessAiSig && sig && state.journalMeta.awarenessAiSig !== sig);
 }
@@ -5658,17 +5729,20 @@ function renderAwareQuote(items, checked) {
     return;
   }
   const answers = collectAwarenessQuizAnswers();
+  const choiceBag = normalizeChoiceBag(state.awarenessChoices);
   const done = awarenessQuizAnsweredCount(answers);
-  const ready = done >= AWARENESS_QUIZ_COUNT;
+  const ready = choiceBag.options.length > 0 || done >= AWARENESS_QUIZ_COUNT;
   root.innerHTML = `
     <div class="aware-quote-gate${ready ? " is-ready" : ""}">
       <p class="aware-quote__kicker">今日覺察</p>
       <p class="aware-quote-gate__title">${
-        ready
+        choiceBag.options.length
+          ? "勾選最貼近的 1～2 句，或選沒有特別符合。然後整理今天看見的自己。"
+          : ready
           ? "三個問題都看過了。現在可以把今天看見的自己整理下來。"
-          : "完成 3 題後，整理今天的覺察。"
+          : "產生選項並勾選後，整理今天的覺察。"
       }</p>
-      <p class="aware-quote-gate__meta">${Math.min(done, AWARENESS_QUIZ_COUNT)} / ${AWARENESS_QUIZ_COUNT}</p>
+      ${choiceBag.options.length ? "" : `<p class="aware-quote-gate__meta">${Math.min(done, AWARENESS_QUIZ_COUNT)} / ${AWARENESS_QUIZ_COUNT}</p>`}
       <p class="aware-quote-gate__hint">沒有標準答案，只要選擇最貼近現在的自己。</p>
     </div>
   `;
@@ -5679,8 +5753,8 @@ function syncAwareQuoteGate() {
   const btn = document.getElementById("btnAwareAi");
   const hint = document.getElementById("awareQuoteLimitHint");
   if (!btn) return;
-  const answers = collectAwarenessQuizAnswers();
-  const ready = awarenessReady(answers);
+  const choiceBag = normalizeChoiceBag(state.awarenessChoices);
+  const ready = choiceBag.options.length > 0 || awarenessReady(collectAwarenessQuizAnswers());
   const hasResult = hasAwarenessResult(state.journalAwarenessResult) || Boolean(document.querySelector("#awareChecks .aware-result, #awareChecks .aware-quote"));
   const stale = awarenessResultStale();
   const loading = Boolean(state.checklistBusy.awareness);
@@ -5692,11 +5766,11 @@ function syncAwareQuoteGate() {
   btn.textContent = loading
     ? "正在為你整理…"
     : stale
-      ? "根據你的回答再整理一次"
+      ? "根據你的勾選再整理一次"
       : "✦ 看見今天的覺察";
   if (hint) {
     hint.hidden = !(stale && hasResult && !loading);
-    hint.textContent = stale ? "你改了是／否，最終覺察會依新的答案重新整理。" : "";
+    hint.textContent = stale ? "你改了勾選，最終覺察會依新的選擇重新整理。" : "";
   }
 }
 
@@ -6016,10 +6090,16 @@ async function generateJournalChecklist(kind, options = {}) {
     return;
   }
   const journal = collectJournal();
-  const answers = isAware ? journal.awareness : journal.execution;
-  const ready = isAware ? awarenessReady(answers) : executionReady(answers);
+  const choiceBag = normalizeChoiceBag(state.awarenessChoices);
+  const usingChoices = isAware && choiceBag.options.length > 0;
+  const answers = isAware
+    ? usingChoices
+      ? selectedChoiceTexts(choiceBag)
+      : journal.awareness
+    : journal.execution;
+  const ready = isAware ? (usingChoices || awarenessReady(answers)) : executionReady(answers);
   if (isAware && hasAwarenessResult(state.journalAwarenessResult) && !awarenessResultStale() && !options.force) {
-    if (!options.auto) showToast("今天的覺察已經整理好了。若你改了是／否，可以再整理一次。");
+    if (!options.auto) showToast(usingChoices ? "今天的覺察已經整理好了。若你改了勾選，可以再整理一次。" : "今天的覺察已經整理好了。若你改了是／否，可以再整理一次。");
     syncAwareQuoteGate();
     return;
   }
@@ -6027,7 +6107,7 @@ async function generateJournalChecklist(kind, options = {}) {
     if (!options.auto) {
       showToast(
         isAware
-          ? "先回答完 3 個問題，再整理今天的覺察。"
+          ? "先看完覺察選項，再整理今天的覺察。"
           : "先回答完行動問題，再整理行動卡。"
       );
     }
@@ -6041,7 +6121,9 @@ async function generateJournalChecklist(kind, options = {}) {
       return;
     }
   }
-  const sig = checklistSignature(answers);
+  const sig = usingChoices
+    ? JSON.stringify({ none: Boolean(choiceBag.none), ids: choiceBag.selectedIds })
+    : checklistSignature(answers);
   if (options.auto && state.journalMeta[isAware ? "awarenessAiSig" : "executionAiSig"] === sig) return;
 
   const token = (state.checklistToken[kind] || 0) + 1;
@@ -6101,6 +6183,9 @@ async function generateJournalChecklist(kind, options = {}) {
           }
         : undefined,
       text: answers.join("\n"),
+      choiceMode: usingChoices,
+      selected: usingChoices ? selectedChoiceTexts(choiceBag) : undefined,
+      none: usingChoices ? Boolean(choiceBag.none) : undefined,
     };
     let remote;
     let lastAwareError;
@@ -6321,7 +6406,7 @@ function normalizeManifestPrompts(list) {
 function collectManifestThinkAnswers() {
   const prompts = normalizeManifestPrompts(state.manifestPrompts);
   const prev = getReview(currentIso())?.journal?.manifestThink || [];
-  const count = Math.max(prompts.length, 2);
+  const count = Math.max(prompts.length, 1);
   return Array.from({ length: count }, (_, index) => {
     const el = document.getElementById(`manifestThink${index + 1}`);
     if (el) return String(el.value || "");
@@ -6332,7 +6417,7 @@ function collectManifestThinkAnswers() {
 function manifestThinkReady(answers) {
   const prompts = normalizeManifestPrompts(state.manifestPrompts);
   const list = Array.isArray(answers) ? answers : [];
-  if (prompts.length < 2) return false;
+  if (!prompts.length) return false;
   return prompts.every((_, index) => String(list[index] || "").trim());
 }
 
@@ -6539,7 +6624,7 @@ async function generateManifestPrompts(options = {}) {
     });
     if (state.manifestPromptsToken !== token) return;
     const questions = normalizeManifestPrompts(remote.questions || remote.items);
-    if (questions.length < 2) throw new Error("雲端回傳格式不完整");
+    if (questions.length < 1) throw new Error("雲端回傳格式不完整");
     state.journalMeta.manifestPromptsAi = true;
     state.journalMeta.manifestPromptsSig = vision;
     applyGeneratedManifestPrompts(questions, ["", ""]);
@@ -6565,7 +6650,7 @@ async function generateManifestChecklist(options = {}) {
     return;
   }
   if (!manifestThinkReady(journal.manifestThink)) {
-    if (!options.auto) showToast("先回答兩道顯化思考題，再讓願望靠近現實。");
+    if (!options.auto) showToast("先回答顯化思考題，再讓願望靠近現實。");
     return;
   }
   const sig = [vision, ...(journal.manifestThink || [])].join("\n");
@@ -7768,7 +7853,8 @@ function collectGrowthProgress() {
 
 const EXEC_WAIT_COPY = "寫完今日感謝與事件後，再開始今天的行動整理。";
 const CORE_WAIT_COPY = "請先完成上方今日感謝與事件，將為你準備今日專屬的覺察與執行題";
-const AWARE_WAIT_COPY = "完成「今日感謝」與「今日事件」後，會依照你今天寫下的內容，產生專屬於你的覺察題。";
+const AWARE_WAIT_COPY = "完成「今日感謝」與「今日事件」後，會依照你今天寫下的內容，產生專屬於你的覺察選項。";
+const THINK_WAIT_COPY = "寫完今日感謝與事件後，再開始今天的深度思考。";
 
 function currentAwarenessQuestions() {
   const prompts = normalizeAwarenessPrompts(state.awarenessPrompts);
@@ -7859,8 +7945,10 @@ function collectPromptAnswers(prefix, count = 3) {
 
 function syncCorePromptGate() {
   const ready = coreStoryReady();
-  const loading = Boolean(state.corePromptsBusy);
-  const hasAware = normalizeAwarenessPrompts(state.awarenessPrompts).length >= 1;
+  const loading = Boolean(state.corePromptsBusy || state.choicesBusy?.awareness);
+  const hasAware =
+    normalizeChoiceBag(state.awarenessChoices).options.length > 0 ||
+    normalizeAwarenessPrompts(state.awarenessPrompts).length >= 1;
   const hasExec = normalizeExecutionPrompts(state.executionPrompts).length >= EXECUTION_PROMPT_MIN;
   const staleExec = executionPromptsAreStale(state.executionPrompts);
   const awareEmpty = document.getElementById("awareEmpty");
@@ -7882,7 +7970,7 @@ function syncCorePromptGate() {
       awareBtn.classList.toggle("is-busy", loading);
       awareBtn.setAttribute("aria-busy", loading ? "true" : "false");
       awareBtn.title = ready || loading ? "" : "請先寫下今日感謝、事件，並選擇心情";
-      awareBtn.textContent = loading ? "正在生成覺察題…" : "✦ 開始今天的覺察";
+      awareBtn.textContent = loading ? "正在整理覺察選項…" : "✦ 開始今天的覺察";
     }
   }
   if (execBtn) {
@@ -7941,47 +8029,444 @@ function renderDynamicQuestions(rootId, emptyId, genBtnId, checkBtnId, prompts, 
 }
 
 function renderAwarenessQuestions(prompts, options = {}) {
+  renderAwarenessChoices(state.awarenessChoices, options);
+}
+
+function choiceListHtml(bag, kind) {
+  const data = normalizeChoiceBag(bag);
+  const noneId = choiceNoneId();
+  const selected = new Set(data.selectedIds);
+  const noneOn = Boolean(data.none);
+  const options = data.options.concat([{ id: noneId, text: choiceNoneText(), none: true }]);
+  return `
+    <div class="choice-list" data-choice-kind="${escapeHtml(kind)}" role="group" aria-label="${kind === "think" ? "深度思考選項" : "覺察選項"}">
+      ${options
+        .map((item) => {
+          const on = item.none ? noneOn : selected.has(item.id);
+          return `
+            <button type="button" class="choice-opt${on ? " is-on" : ""}${item.none ? " choice-opt--none" : ""}" data-choice-id="${escapeHtml(item.id)}" data-choice-kind="${escapeHtml(kind)}"${item.none ? " data-choice-none=\"1\"" : ""}>
+              <span class="choice-opt__row">
+                <span class="choice-opt__box" aria-hidden="true"></span>
+                <span class="choice-opt__text">${escapeHtml(item.text)}</span>
+              </span>
+            </button>
+          `;
+        })
+        .join("")}
+      <p class="choice-hint">最多選 2 個，也可以都不選。</p>
+    </div>
+  `;
+}
+
+function renderAwarenessChoices(bag) {
   const root = document.getElementById("awareQuestions");
   const empty = document.getElementById("awareEmpty");
   const genBtn = document.getElementById("btnAwarePrompts");
-  const items = normalizeAwarenessPrompts(prompts);
+  const data = normalizeChoiceBag(bag || state.awarenessChoices);
   if (!root) return;
-  if (!items.length) {
-    root.classList.remove("aware-quiz");
+  root.classList.remove("aware-quiz");
+  if (!data.options.length) {
     root.innerHTML = "";
     if (empty) {
       empty.textContent = AWARE_WAIT_COPY;
-      empty.hidden = Boolean(state.corePromptsBusy);
+      empty.hidden = Boolean(state.choicesBusy?.awareness || state.corePromptsBusy);
     }
     if (genBtn) {
       genBtn.hidden = false;
       genBtn.disabled = false;
-      genBtn.classList.toggle("is-busy", Boolean(state.corePromptsBusy));
-      genBtn.setAttribute("aria-busy", state.corePromptsBusy ? "true" : "false");
-      genBtn.textContent = state.corePromptsBusy ? "正在生成覺察題…" : "✦ 開始今天的覺察";
+      genBtn.classList.toggle("is-busy", Boolean(state.choicesBusy?.awareness || state.corePromptsBusy));
+      genBtn.setAttribute("aria-busy", state.choicesBusy?.awareness || state.corePromptsBusy ? "true" : "false");
+      genBtn.textContent = state.choicesBusy?.awareness || state.corePromptsBusy ? "正在整理覺察選項…" : "✦ 開始今天的覺察";
     }
     syncAwareQuoteGate();
     return;
   }
   if (empty) empty.hidden = true;
   if (genBtn) genBtn.hidden = true;
-  const saved = Array.isArray(options.answers) ? options.answers.map(normalizeYesNo) : collectAwarenessQuizAnswers();
-  root.classList.add("aware-quiz");
-  root.innerHTML = items
-    .map((item, index) => {
-      const answer = normalizeYesNo(saved[index]);
-      return `
-        <article class="aware-quiz__item" data-index="${index}" data-answer="${escapeHtml(answer)}">
-          <p class="aware-quiz__q"><span>${String(index + 1).padStart(2, "0")}</span>${markableSpan(item.question, `awareness.prompt.${index}.question`, "")}</p>
-          <div class="aware-quiz__opts" role="group" aria-label="第 ${index + 1} 題">
-            <button type="button" class="aware-quiz__opt${answer === "是" ? " is-on" : ""}" data-aware-answer="是">是</button>
-            <button type="button" class="aware-quiz__opt${answer === "否" ? " is-on" : ""}" data-aware-answer="否">否</button>
-          </div>
-        </article>
-      `;
-    })
-    .join("");
+  root.innerHTML = choiceListHtml(data, "awareness");
   syncAwareQuoteGate();
+}
+
+function renderThinkChoices(bag) {
+  const root = document.getElementById("thinkQuestions");
+  const empty = document.getElementById("thinkEmpty");
+  const genBtn = document.getElementById("btnThinkChoices");
+  const data = normalizeChoiceBag(bag || state.thinkChoices);
+  if (!root) return;
+  if (!data.options.length) {
+    root.innerHTML = "";
+    if (empty) {
+      empty.textContent = THINK_WAIT_COPY;
+      empty.hidden = Boolean(state.choicesBusy?.think);
+    }
+    if (genBtn) {
+      genBtn.hidden = false;
+      genBtn.disabled = false;
+      genBtn.classList.toggle("is-busy", Boolean(state.choicesBusy?.think));
+      genBtn.setAttribute("aria-busy", state.choicesBusy?.think ? "true" : "false");
+      genBtn.textContent = state.choicesBusy?.think ? "正在整理深度選項…" : "✦ 開始今天的深度思考";
+    }
+    syncThinkChoiceGate();
+    return;
+  }
+  if (empty) empty.hidden = true;
+  if (genBtn) genBtn.hidden = true;
+  root.innerHTML = choiceListHtml(data, "think");
+  syncThinkChoiceGate();
+}
+
+function renderThinkChoiceResult(insight) {
+  const root = document.getElementById("thinkChoiceResult");
+  if (!root) return;
+  const guide = normalizeInsight(insight || state.journalInsight).guide || emptyThinkGuide();
+  const hasClose = Boolean(guide.awareness || guide.summary || guide.selfSeen || guide.takeaway);
+  if (!hasClose) {
+    root.innerHTML = "";
+    return;
+  }
+  const sections = [
+    guide.awareness || guide.summary ? { kicker: "今天，這件事背後可能代表什麼", text: guide.awareness || guide.summary, kind: "awareness" } : null,
+    guide.selfSeen ? { kicker: "今天我看見的自己", text: guide.selfSeen, kind: "selfSeen" } : null,
+    guide.takeaway ? { kicker: "今日帶走的一句話", text: guide.takeaway, kind: "takeaway" } : null,
+  ].filter(Boolean);
+  root.innerHTML = `
+    <div class="think-choice-result aware-result">
+      ${guide.title ? renderConclusionCallout(guide.title, "think.title", "", fieldHighlightsOf(guide.highlights, "title")) : ""}
+      ${sections
+        .map(
+          (item) => `<article class="aware-result__card">
+        <p class="aware-result__kicker">${escapeHtml(item.kicker)}</p>
+        ${markableP(item.text, `think.${item.kind}`, "aware-result__text", "", fieldHighlightsOf(guide.highlights, item.kind))}
+      </article>`
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function toggleJournalChoice(kind, id) {
+  const key = kind === "think" ? "thinkChoices" : "awarenessChoices";
+  const bag = normalizeChoiceBag(state[key]);
+  const noneId = choiceNoneId();
+  const max = choiceMaxSelected();
+  if (id === noneId) {
+    bag.none = !bag.none;
+    bag.selectedIds = [];
+  } else {
+    const has = bag.selectedIds.includes(id);
+    if (has) bag.selectedIds = bag.selectedIds.filter((item) => item !== id);
+    else {
+      if (bag.selectedIds.length >= max) {
+        showToast("最多選 2 個就好。");
+        return bag;
+      }
+      bag.selectedIds = bag.selectedIds.concat(id);
+    }
+    bag.none = false;
+  }
+  const next = serializeChoiceBag(bag);
+  state[key] = next;
+  if (kind === "think") {
+    renderThinkChoices(next);
+    persistJournalQuietly();
+    syncThinkChoiceGate();
+  } else {
+    renderAwarenessChoices(next);
+    persistJournalQuietly();
+    syncAwareQuoteGate();
+  }
+  return next;
+}
+
+function setChoicesLoading(kind, loading) {
+  if (!state.choicesBusy) state.choicesBusy = { awareness: false, think: false };
+  state.choicesBusy[kind] = loading;
+  if (kind === "awareness") {
+    const loader = document.getElementById("awarePromptLoading");
+    if (loader) loader.hidden = !loading;
+    renderAwarenessChoices(state.awarenessChoices);
+  } else {
+    const loader = document.getElementById("deepPromptLoading");
+    if (loader) loader.hidden = !loading;
+    renderThinkChoices(state.thinkChoices);
+  }
+}
+
+function syncThinkChoiceGate() {
+  const btn = document.getElementById("btnThinkClose");
+  const closeLoader = document.getElementById("thinkCloseLoading");
+  if (!btn) return;
+  const bag = normalizeChoiceBag(state.thinkChoices);
+  const guide = normalizeInsight(state.journalInsight).guide || emptyThinkGuide();
+  const hasClose = Boolean(guide.awareness || guide.summary || guide.selfSeen || guide.takeaway);
+  const loading = Boolean(state.choicesBusy?.thinkClose);
+  const show = bag.options.length > 0 && (!hasClose || loading);
+  btn.hidden = !(show || loading);
+  btn.disabled = !bag.options.length || loading;
+  btn.classList.toggle("is-busy", loading);
+  btn.textContent = loading ? "正在整理…" : "✦ 整理今天的深度看見";
+  if (closeLoader) closeLoader.hidden = !loading;
+}
+
+function localAwarenessChoiceFallbacks(journal) {
+  const event = String(journal?.event || "").trim();
+  const thanks = thanksTextFrom(journal);
+  const mood = String(journal?.mood || "").trim();
+  const options = [];
+  if (/放在心上|辛苦了|主動|關心|煮|晚餐|記得/.test(`${thanks} ${event}`)) {
+    options.push({ id: "a1", text: "當別人主動表達在乎時，我會特別有感" });
+    options.push({ id: "a2", text: "我真正被碰到的，可能不是事情本身，而是有人把我放在心上" });
+  }
+  if (/珍惜|擔心|怕|來不及|平常/.test(`${thanks} ${event}`)) {
+    options.push({ id: "a3", text: "我在感動之後，很容易接著擔心自己是不是不夠珍惜" });
+  }
+  if (/女兒|陪伴|看書|日常/.test(`${thanks} ${event}`)) {
+    options.push({ id: "a4", text: "我開始發現，自己珍惜的是關係裡那些很小、很日常的陪伴" });
+  }
+  if (mood && options.length < 3) {
+    options.push({ id: "a5", text: `今天的心情偏「${mood}」，我好像比平常更在意當下被碰到的感覺` });
+  }
+  if (options.length < 3) {
+    options.push({ id: "a6", text: "今天真正碰到我的，可能不是事情本身，而是當下被對待的感覺" });
+    options.push({ id: "a7", text: "我好像比自己以為的，更在意有沒有被放在心上" });
+    options.push({ id: "a8", text: "我現在的反應裡，可能同時有感動，也有一點緊" });
+  }
+  return reviewMergeApi().normalizeChoiceOptions
+    ? reviewMergeApi().normalizeChoiceOptions(options, { max: 4 })
+    : options.slice(0, 4);
+}
+
+function localThinkChoiceFallbacks(journal, avoid) {
+  const event = String(journal?.event || "").trim();
+  const thanks = thanksTextFrom(journal);
+  const options = [];
+  if (/珍惜|擔心|怕|來不及/.test(`${thanks} ${event}`)) {
+    options.push({ id: "t1", text: "我害怕的可能不是失去，而是來不及好好珍惜" });
+  }
+  if (/關係|陪伴|晚餐|女兒|老公|愛/.test(`${thanks} ${event}`)) {
+    options.push({ id: "t2", text: "有些關係的重要，不需要等到失去才被看見" });
+    options.push({ id: "t3", text: "我真正想留下的，也許不是某個結果，而是彼此有好好在一起的感覺" });
+  }
+  options.push({ id: "t4", text: "我正在從「等別人表達愛」，慢慢變成「自己也能停下來感受愛」" });
+  const api = reviewMergeApi();
+  if (typeof api.normalizeChoiceOptions === "function") {
+    return api.normalizeChoiceOptions(options, { avoid, max: 4 });
+  }
+  return options.slice(0, 4);
+}
+
+function choicesContext(journal) {
+  return {
+    thanks: thanksTextFrom(journal),
+    thanksText: thanksTextFrom(journal),
+    event: journal.event,
+    mood: journal.mood,
+    bodyTags: journal.bodyTags,
+    bodyNote: journal.bodyNote,
+    bodyCheck: journal.bodyCheck,
+  };
+}
+
+async function generateAwarenessChoices(options = {}) {
+  pinAwareFold();
+  if (state.choicesBusy?.awareness) {
+    if (!options.auto) showToast("還在為你整理今天的覺察選項，請稍候。");
+    return;
+  }
+  const journal = collectJournal();
+  if (!coreStoryReady(journal)) {
+    if (!options.auto) showToast("請先寫下今日感謝、事件，並選擇心情。");
+    return;
+  }
+  const token = (state.choicesToken.awareness || 0) + 1;
+  state.choicesToken.awareness = token;
+  setChoicesLoading("awareness", true);
+  const fallback = localAwarenessChoiceFallbacks(journal);
+  try {
+    if (!state.user) throw new Error("請先登入，才能使用雲端出題。");
+    const remote = await postReview({
+      mode: "choices",
+      kind: "awareness",
+      date: currentIso(),
+      text: journal.event,
+      context: choicesContext(journal),
+      progress: { streak: collectGrowthProgress().streak },
+    });
+    if (state.choicesToken.awareness !== token) return;
+    const optionsList = normalizeChoiceBag({ options: remote.options }).options;
+    if (optionsList.length < 3) throw new Error("今天的覺察選項還沒準備好，請再試一次。");
+    state.awarenessChoices = serializeChoiceBag({
+      sourceSig: `${thanksTextFrom(journal)}\n${journal.event}\n${journal.mood}`,
+      options: optionsList.slice(0, 4),
+      selectedIds: [],
+      generatedAt: new Date().toISOString(),
+    });
+    renderAwarenessChoices(state.awarenessChoices);
+    persistJournalQuietly();
+    if (!options.auto) showToast("今天的覺察選項已經準備好了。");
+  } catch (error) {
+    if (state.choicesToken.awareness !== token) return;
+    if (fallback.length >= 3) {
+      state.awarenessChoices = serializeChoiceBag({
+        sourceSig: `${thanksTextFrom(journal)}\n${journal.event}\n${journal.mood}`,
+        options: fallback.slice(0, 4),
+        selectedIds: [],
+        generatedAt: new Date().toISOString(),
+      });
+      renderAwarenessChoices(state.awarenessChoices);
+      persistJournalQuietly();
+      if (!options.auto) showToast(`雲端選項還沒好：${formatApiError(error)}，先用本地整理。`);
+    } else if (!options.auto) {
+      showToast("這次覺察選項沒有完整生成，請再試一次。");
+    }
+  } finally {
+    if (state.choicesToken.awareness === token) setChoicesLoading("awareness", false);
+  }
+}
+
+async function generateThinkChoices(options = {}) {
+  setJournalFoldOpen("section-deep", true, { manual: true });
+  if (state.choicesBusy?.think) {
+    if (!options.auto) showToast("還在為你整理今天的深度選項，請稍候。");
+    return;
+  }
+  const journal = collectJournal();
+  if (!coreStoryReady(journal)) {
+    if (!options.auto) showToast("請先寫下今日感謝、事件，並選擇心情。");
+    return;
+  }
+  const avoid = [
+    ...normalizeChoiceBag(state.awarenessChoices).options.map((item) => item.text),
+    ...selectedChoiceTexts(state.awarenessChoices),
+  ];
+  const token = (state.choicesToken.think || 0) + 1;
+  state.choicesToken.think = token;
+  setChoicesLoading("think", true);
+  const fallback = localThinkChoiceFallbacks(journal, avoid);
+  try {
+    if (!state.user) throw new Error("請先登入，才能使用雲端出題。");
+    const remote = await postReview({
+      mode: "choices",
+      kind: "think",
+      date: currentIso(),
+      text: journal.event,
+      avoid,
+      context: { ...choicesContext(journal), avoid },
+      progress: { streak: collectGrowthProgress().streak },
+    });
+    if (state.choicesToken.think !== token) return;
+    const optionsList = normalizeChoiceBag({ options: remote.options }, { avoid }).options;
+    if (optionsList.length < 3) throw new Error("今天的深度選項還沒準備好，請再試一次。");
+    state.thinkChoices = serializeChoiceBag({
+      sourceSig: `${thanksTextFrom(journal)}\n${journal.event}\n${journal.mood}`,
+      options: optionsList.slice(0, 4),
+      selectedIds: [],
+      generatedAt: new Date().toISOString(),
+    });
+    renderThinkChoices(state.thinkChoices);
+    persistJournalQuietly();
+    if (!options.auto) showToast("今天的深度選項已經準備好了。");
+  } catch (error) {
+    if (state.choicesToken.think !== token) return;
+    if (fallback.length >= 3) {
+      state.thinkChoices = serializeChoiceBag({
+        sourceSig: `${thanksTextFrom(journal)}\n${journal.event}\n${journal.mood}`,
+        options: fallback.slice(0, 4),
+        selectedIds: [],
+        generatedAt: new Date().toISOString(),
+      });
+      renderThinkChoices(state.thinkChoices);
+      persistJournalQuietly();
+      if (!options.auto) showToast(`雲端選項還沒好：${formatApiError(error)}，先用本地整理。`);
+    } else if (!options.auto) {
+      showToast("這次深度選項沒有完整生成，請再試一次。");
+    }
+  } finally {
+    if (state.choicesToken.think === token) setChoicesLoading("think", false);
+  }
+}
+
+async function generateThinkChoicesClose(options = {}) {
+  setJournalFoldOpen("section-deep", true, { manual: true });
+  const bag = normalizeChoiceBag(state.thinkChoices);
+  if (!bag.options.length) {
+    if (!options.auto) showToast("先產生今天的深度選項。");
+    return;
+  }
+  if (state.choicesBusy?.thinkClose) {
+    if (!options.auto) showToast("還在為你整理今天的深度看見，請稍候。");
+    return;
+  }
+  const journal = collectJournal();
+  const token = (state.choicesToken.thinkClose || 0) + 1;
+  state.choicesToken.thinkClose = token;
+  state.choicesBusy.thinkClose = true;
+  syncThinkChoiceGate();
+  const selected = selectedChoiceTexts(bag);
+  try {
+    if (!state.user) throw new Error("請先登入，才能使用雲端分析。");
+    const remote = await postReview({
+      mode: "choices",
+      kind: "think-close",
+      date: currentIso(),
+      text: journal.event,
+      selected,
+      none: Boolean(bag.none),
+      context: { ...choicesContext(journal), selected, none: Boolean(bag.none) },
+    });
+    if (state.choicesToken.thinkClose !== token) return;
+    const closed = {
+      title: String(remote.title || "").trim(),
+      summary: String(remote.awareness || remote.summary || "").trim(),
+      awareness: String(remote.awareness || remote.summary || "").trim(),
+      selfSeen: String(remote.selfSeen || "").trim(),
+      takeaway: String(remote.takeaway || "").trim(),
+      highlights: remote.highlights && typeof remote.highlights === "object" ? remote.highlights : {},
+    };
+    if (!closed.awareness && !closed.summary) throw new Error("今日深度看見還沒整理好，請再試一次。");
+    applyThinkChoicesClose(closed);
+    if (!options.auto) showToast("今天的深度看見，已經整理好了。");
+  } catch (error) {
+    if (state.choicesToken.thinkClose !== token) return;
+    applyThinkChoicesClose(localThinkChoicesClose(journal, bag));
+    if (!options.auto) showToast(`雲端整理失敗：${formatApiError(error)}，先用本地整理。`);
+  } finally {
+    if (state.choicesToken.thinkClose === token) {
+      state.choicesBusy.thinkClose = false;
+      syncThinkChoiceGate();
+    }
+  }
+}
+
+function applyThinkChoicesClose(closed) {
+  const insight = normalizeInsight(state.journalInsight);
+  const guide = insight.guide || emptyThinkGuide();
+  insight.guide = {
+    ...guide,
+    title: closed.title || guide.title,
+    summary: closed.awareness || closed.summary || guide.summary,
+    awareness: closed.awareness || closed.summary || guide.awareness,
+    selfSeen: closed.selfSeen || guide.selfSeen,
+    takeaway: closed.takeaway || guide.takeaway,
+    highlights: closed.highlights || guide.highlights,
+  };
+  if (closed.title) insight.title = closed.title;
+  state.journalInsight = insight;
+  renderThinkChoiceResult(insight);
+  persistJournalQuietly();
+}
+
+function localThinkChoicesClose(journal, bag) {
+  const selected = selectedChoiceTexts(bag);
+  const event = String(journal?.event || "").trim().slice(0, 42) || "今天這件事";
+  const line = selected[0] || "今天我先把真正有感的那一層留下來。";
+  return {
+    title: "今天真正有感的那一層",
+    awareness: `${event}裡，有些東西比事情本身更靠近你。\n\n${selected.length ? `你勾選的是：${selected.join("；")}。` : "你今天沒有特別勾選，這也表示那些現成的句子還不是最貼近的。"}\n\n也許值得繼續觀察的，不是再解釋一次發生了什麼，而是你真正想留下的感覺。`,
+    selfSeen: selected[0] ? `我看見：${selected[0]}` : "我看見自己今天先停在「還沒有特別符合的選項」。",
+    takeaway: line.replace(/[。！？]?$/, "").slice(0, 32),
+    highlights: {},
+  };
 }
 
 function renderExecutionQuestions(prompts, options = {}) {
@@ -8316,6 +8801,10 @@ async function generateAwarenessFollowup(options = {}) {
 async function generateCorePrompts(options = {}) {
   const scope =
     options.scope === "execution" ? "execution" : options.scope === "core" ? "core" : "awareness";
+  if (scope === "awareness") {
+    await generateAwarenessChoices(options);
+    return;
+  }
   if (recoverStaleBusy(state.corePromptsBusy, state.corePromptsBusyAt, () => setCorePromptsLoading(false))) {
     if (!options.auto) {
       showToast(scope === "execution" ? "還在為你準備執行題，請稍候。" : "還在生成覺察題，請稍候。");
@@ -8454,13 +8943,6 @@ async function generateCorePrompts(options = {}) {
 function maybeAutoGenerateCorePrompts(journal) {
   if (state.journalHydrating) return;
   syncCorePromptGate();
-  const data = journal || collectJournal();
-  if (!coreStoryReady(data) || !state.user) return;
-  const prompts = normalizeAwarenessPrompts(state.awarenessPrompts);
-  const answered = awarenessQuizAnsweredCount(data.awareness);
-  if (prompts.length && answered >= prompts.length && prompts.length < AWARENESS_QUIZ_COUNT && state.journalMeta.corePromptsAi) {
-    catchAsync(() => generateAwarenessFollowup({ auto: true }), "下一題覺察還沒好");
-  }
 }
 
 function captureReviewPatch() {
@@ -8552,12 +9034,7 @@ async function generateJournalPrompts(options = {}) {
 }
 
 function maybeAutoGeneratePrompts(journal) {
-  if (state.journalHydrating || state.journalMode === "quick") return;
-  const data = journal || collectJournal();
-  if (!insightReady(data)) return;
-  if (state.deepPrompts.length === 4 && state.journalMeta.promptsSig === promptsSignature(data)) return;
-  if (deepHasContent(data.deep) && state.deepPrompts.length === 4) return;
-  generateJournalPrompts({ auto: true });
+  return;
 }
 
 function currentDeepTheme(index) {
@@ -8805,6 +9282,8 @@ function collectJournal() {
       return quotes.length ? quotes : normalizeAwarenessQuotes(checklistItems("awareChecks"));
     })(),
     awarenessResult: normalizeAwarenessResult(state.journalAwarenessResult),
+    awarenessChoices: serializeChoiceBag(state.awarenessChoices),
+    thinkChoices: serializeChoiceBag(state.thinkChoices),
     execution: collectExecutionAnswers(),
     executionChecks: checkedValues("execChecks"),
     executionCheckItems: (() => {
@@ -9022,6 +9501,7 @@ const JOURNAL_FOLD_IDS = [
 function journalFoldIsActive(id) {
   const el = document.getElementById(id);
   if (!el || el.hidden) return false;
+  if (id === "section-insight" || id === "section-quick-insight") return false;
   const quick = state.journalMode === "quick";
   if (id === "quickModules" || id === "section-quick-insight") return quick;
   if (!quick) return id !== "quickModules" && id !== "section-quick-insight";
@@ -9328,6 +9808,8 @@ function fillJournal(journal) {
   state.journalBodyCoach = normalizeBodyCoach(data.bodyCoach);
   state.journalExecFocus = normalizeExecFocus(data.executionFocus, data.executionCheckItems);
   state.journalAwarenessResult = normalizeAwarenessResult(data.awarenessResult);
+  state.awarenessChoices = normalizeChoiceBag(data.awarenessChoices);
+  state.thinkChoices = normalizeChoiceBag(data.thinkChoices);
   state.journalUserMarks = userMarkBag(data.userMarks);
   state.journalManifestSentence = String(data.manifestSentence || "").trim();
   state.journalManifestHighlights = data.manifestHighlights && typeof data.manifestHighlights === "object" ? data.manifestHighlights : {};
@@ -9352,10 +9834,13 @@ function fillJournal(journal) {
   renderManifestQuestions(state.manifestPrompts, { answers: data.manifestThink });
   renderManifestSentence(state.journalManifestSentence, state.journalManifestHighlights);
   renderAwarenessQuestions(state.awarenessPrompts, { answers: data.awareness });
+  renderAwarenessChoices(state.awarenessChoices);
   renderExecutionQuestions(state.executionPrompts, { answers: data.execution });
   const execNext = document.getElementById("execNext");
   if (execNext) execNext.value = data.smallestStep || "";
   renderDeepThemes(state.deepPrompts, { deep: normalizeDeep(data.deep) });
+  renderThinkChoices(state.thinkChoices);
+  renderThinkChoiceResult(state.journalInsight);
   refreshJournalChecklists(data, { useSaved: true });
   renderInsightCard(state.journalInsight);
   renderBodyCoachCard(state.journalBodyCoach);
@@ -11343,6 +11828,25 @@ function historyHasGuideRounds(review) {
   return historyGuideFromReview(review).rounds.some(historyRoundHasContent);
 }
 
+function renderHistoryGuideCloseHtml(insight, guide, date) {
+  const data = guide && typeof guide === "object" ? guide : {};
+  const insightData = insight && typeof insight === "object" ? insight : {};
+  return [
+    data.title || insightData.title
+      ? renderConclusionCallout(data.title || insightData.title, "think.title", date, fieldHighlightsOf(data.highlights, "title"))
+      : "",
+    data.awareness || data.summary
+      ? historyBlock("今日覺察", markableP(data.awareness || data.summary, "think.awareness", "history-journal__text", date, fieldHighlightsOf(data.highlights, "awareness")))
+      : "",
+    data.selfSeen
+      ? historyBlock("今天我看見的自己", markableP(data.selfSeen, "think.selfSeen", "history-journal__text", date, fieldHighlightsOf(data.highlights, "selfSeen")))
+      : "",
+    data.takeaway
+      ? historyBlock("今日帶走的一句話", markableP(data.takeaway, "think.takeaway", "history-journal__headline", date, fieldHighlightsOf(data.highlights, "takeaway")))
+      : "",
+  ].join("");
+}
+
 function renderHistoryGuideHtml(insight, guide, date) {
   const parsed = historyGuideFromReview({ journal: { insight: { ...(insight || {}), guide } } });
   const rounds = parsed.rounds.filter(historyRoundHasContent);
@@ -11484,7 +11988,19 @@ function renderHistoryDeepThinking(review) {
       : { kind: "none" };
   let selected = "none";
   let html = "";
-  if (historyHasGuideRounds(review) || historyTextMeaningful(parsed.guide.summary) || historyTextMeaningful(parsed.guide.awareness)) {
+  const thinkChoiceBag = normalizeChoiceBag(review && review.journal && review.journal.thinkChoices);
+  if (hasMeaningfulChoices(thinkChoiceBag)) {
+    selected = "thinkChoices";
+    const date = review && review.date;
+    const selectedLines = selectedChoiceTexts(thinkChoiceBag)
+      .map((text, index) => markableP(text, `think.choice.${index}`, "history-journal__text", date))
+      .join("");
+    const noneLine = thinkChoiceBag.none
+      ? markableP(choiceNoneText(), "think.choice.none", "history-journal__note", date)
+      : "";
+    const choiceHtml = selectedLines || noneLine ? historyBlock("今日勾選", `${selectedLines}${noneLine}`) : "";
+    html = `${choiceHtml}${renderHistoryGuideCloseHtml(parsed.insight, parsed.guide, date)}`;
+  } else if (historyHasGuideRounds(review) || historyTextMeaningful(parsed.guide.summary) || historyTextMeaningful(parsed.guide.awareness)) {
     selected = "guide";
     html = renderHistoryGuideHtml(parsed.insight, parsed.guide, review && review.date);
   } else if (helperSource.kind === "blocks" || helperSource.kind === "thinkHistory" || helperSource.kind === "deep") {
@@ -11502,7 +12018,7 @@ function renderHistoryDeepThinking(review) {
     selected = "deep";
     html = renderHistoryDeepJournalHtml(review.journal.deep, review.journal.deepPrompts, review && review.date);
   }
-  if (parsed.rounds.some(historyRoundHasContent) && !String(html || "").trim()) {
+  if (parsed.rounds.some(historyRoundHasContent) && selected !== "thinkChoices" && !String(html || "").trim()) {
     console.error("[history-debug] GUIDE EXISTS BUT RENDER EMPTY", {
       date: review && (review.date || review.iso),
       roundsLength: parsed.rounds.length,
@@ -11544,7 +12060,23 @@ function renderHistoryJournal(review) {
       date: historyIso,
     }))
   );
-  const awareFields = (
+  const awareChoiceBag = normalizeChoiceBag(journal.awarenessChoices);
+  const useAwareChoices = hasMeaningfulChoices(awareChoiceBag);
+  const awareChoiceFields = useAwareChoices
+    ? [
+        ...selectedChoiceTexts(awareChoiceBag).map((text, index) =>
+          markableP(text, `awareness.choice.${index}`, "history-journal__text", historyIso)
+        ),
+        awareChoiceBag.none
+          ? markableP(choiceNoneText(), "awareness.choice.none", "history-journal__note", historyIso)
+          : "",
+      ]
+        .filter(Boolean)
+        .join("")
+    : "";
+  const awareFields = useAwareChoices
+    ? awareChoiceFields
+    : (
     journal.awarenessPrompts && journal.awarenessPrompts.length ? journal.awarenessPrompts : AWARENESS_QUESTIONS
   )
     .map((item, index) => {
@@ -11593,7 +12125,7 @@ function renderHistoryJournal(review) {
   })();
   const insightHtml = renderHistoryDeepThinking(review);
   console.log("[history-debug] rendered html length", String(insightHtml || "").length);
-  if (parsedGuide.rounds.some(historyRoundHasContent) && !String(insightHtml || "").trim()) {
+  if (parsedGuide.rounds.some(historyRoundHasContent) && !hasMeaningfulChoices(journal.thinkChoices) && !String(insightHtml || "").trim()) {
     console.error("[history-debug] GUIDE EXISTS BUT RENDER EMPTY", {
       date: review && review.date,
       roundsLength: parsedGuide.rounds.length,
@@ -11617,7 +12149,7 @@ function renderHistoryJournal(review) {
       "aware",
       [
         historyGroup("身心檢核", historyBlock("", historyBodyCheckHtml(journal, historyIso))),
-        historyGroup("覺察作答", awareFields),
+        historyGroup(useAwareChoices ? "今日勾選" : "覺察作答", awareFields),
         historyGroup("今日覺察", awareResultHtml || historyBlock("", quotes)),
       ],
     ],
@@ -11958,7 +12490,18 @@ function handleTodayPointerClick(event) {
   if (node.closest("#btnAwarePrompts")) {
     handled();
     pinAwareFold();
-    catchAsync(() => generateCorePrompts({ scope: "awareness" }), "覺察題生成失敗");
+    catchAsync(() => generateAwarenessChoices(), "覺察選項生成失敗");
+    return true;
+  }
+  if (node.closest("#btnThinkChoices")) {
+    handled();
+    setJournalFoldOpen("section-deep", true, { manual: true });
+    catchAsync(() => generateThinkChoices(), "深度選項生成失敗");
+    return true;
+  }
+  if (node.closest("#btnThinkClose")) {
+    handled();
+    catchAsync(() => generateThinkChoicesClose(), "今天的深度看見還沒整理好");
     return true;
   }
   if (node.closest("#btnExecFollow")) {
@@ -12021,6 +12564,15 @@ function handleTodayPointerClick(event) {
   if (nextThink) {
     handled();
     catchAsync(() => submitThinkGuideRound(), "下一輪還沒送出");
+    return true;
+  }
+  const choiceBtn = node.closest("[data-choice-id]");
+  if (choiceBtn) {
+    handled();
+    const kind = choiceBtn.dataset.choiceKind === "think" ? "think" : "awareness";
+    if (kind === "awareness") pinAwareFold();
+    else setJournalFoldOpen("section-deep", true, { manual: true });
+    toggleJournalChoice(kind, choiceBtn.dataset.choiceId);
     return true;
   }
   const answerBtn = node.closest("[data-aware-answer]");
