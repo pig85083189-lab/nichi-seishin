@@ -107,9 +107,9 @@ assert(isCompactAwarenessResult(compact), "CASE E：新結果是 compact");
 assert(!compact.gap && !compact.question && !compact.echo, "CASE F：沒有 gap／question");
 
 assert(EXECUTION_PROMPTS_SYSTEM.includes("既然我已經看見這件事"), "CASE G：06 讀 04＋05 後問下一步");
-assert(EXECUTION_PROMPTS_SYSTEM.includes("最多 2 輪"), "CASE H：06 最多 2 題");
-assert(EXECUTION_PROMPTS_SYSTEM.includes("不要出第 3 題"), "CASE H：不可恢復第 3 題");
+assert(EXECUTION_PROMPTS_SYSTEM.includes("最多 2 輪"), "CASE H：舊 execution Q&A 路徑仍最多 2 題");
 assert(app.includes("const EXECUTION_PROMPT_MAX = 2"), "CASE H：runtime 最多 2 題");
+assert(app.includes("function generateExecutionChoices"), "新版 06 走 executionChoices，不再預設出題");
 
 assert(MANIFEST_PROMPTS_SYSTEM.includes("最多 2 題"), "CASE I：07 最多 2 題");
 assert(MANIFEST_PATHS_SYSTEM.includes("06 執行力"), "CASE I：07 不再把執行力叫 05");

@@ -118,8 +118,9 @@ const state = {
   journalAwarenessResult: null,
   awarenessChoices: { sourceSig: "", options: [], selectedIds: [], generatedAt: "" },
   thinkChoices: { sourceSig: "", options: [], selectedIds: [], generatedAt: "" },
-  choicesBusy: { awareness: false, think: false },
-  choicesToken: { awareness: 0, think: 0, thinkClose: 0 },
+  executionChoices: { sourceSig: "", options: [], selectedId: "", custom: "", followupQuestion: "", followupPlaceholder: "", generatedAt: "" },
+  choicesBusy: { awareness: false, think: false, execution: false },
+  choicesToken: { awareness: 0, think: 0, thinkClose: 0, execution: 0 },
   journalUserMarks: { items: [], updatedAt: "" },
   journalManifestSentence: "",
   journalManifestHighlights: {},
@@ -2193,6 +2194,7 @@ function reviewContentScore(review) {
     journal.awareness ? JSON.stringify(journal.awareness) : "",
     journal.awarenessChoices ? JSON.stringify(journal.awarenessChoices) : "",
     journal.thinkChoices ? JSON.stringify(journal.thinkChoices) : "",
+    journal.executionChoices ? JSON.stringify(journal.executionChoices) : "",
     journal.execution ? JSON.stringify(journal.execution) : "",
     journal.manifestThink ? JSON.stringify(journal.manifestThink) : "",
     journal.awarenessResult ? JSON.stringify(journal.awarenessResult) : "",
@@ -2287,6 +2289,78 @@ function serializeChoiceBag(raw) {
   };
   if (bag.none) next.none = true;
   return next;
+}
+
+function emptyExecutionChoiceBag() {
+  const api = reviewMergeApi();
+  if (typeof api.emptyExecutionChoiceBag === "function") return api.emptyExecutionChoiceBag();
+  return { sourceSig: "", options: [], selectedId: "", custom: "", followupQuestion: "", followupPlaceholder: "", generatedAt: "" };
+}
+
+function normalizeExecutionChoiceBag(raw, options) {
+  const api = reviewMergeApi();
+  if (typeof api.normalizeExecutionChoiceBag === "function") return api.normalizeExecutionChoiceBag(raw, options);
+  const src = raw && typeof raw === "object" ? raw : {};
+  return {
+    sourceSig: String(src.sourceSig || "").trim(),
+    options: Array.isArray(src.options) ? src.options.map((item, index) => ({
+      id: String(item && item.id ? item.id : `e${index + 1}`),
+      text: String(item && (item.text || item.label) ? item.text || item.label : item || "").trim(),
+    })).filter((item) => item.text) : [],
+    selectedId: String(src.selectedId || "").trim(),
+    custom: String(src.custom || "").trim(),
+    followupQuestion: String(src.followupQuestion || "").trim(),
+    followupPlaceholder: String(src.followupPlaceholder || "").trim(),
+    generatedAt: String(src.generatedAt || "").trim(),
+  };
+}
+
+function hasMeaningfulExecutionChoices(value) {
+  const api = reviewMergeApi();
+  if (typeof api.hasMeaningfulExecutionChoices === "function") return api.hasMeaningfulExecutionChoices(value);
+  const bag = normalizeExecutionChoiceBag(value);
+  return bag.options.length > 0 || Boolean(bag.selectedId) || Boolean(bag.custom) || Boolean(bag.followupQuestion);
+}
+
+function selectedExecutionChoiceText(value) {
+  const api = reviewMergeApi();
+  if (typeof api.selectedExecutionChoiceText === "function") return api.selectedExecutionChoiceText(value);
+  const bag = normalizeExecutionChoiceBag(value);
+  if (bag.selectedId === "custom") return bag.custom;
+  const match = bag.options.find((item) => item.id === bag.selectedId);
+  return match ? match.text : "";
+}
+
+function serializeExecutionChoiceBag(raw) {
+  const bag = normalizeExecutionChoiceBag(raw);
+  return {
+    sourceSig: bag.sourceSig,
+    options: bag.options.map((item) => ({ id: item.id, text: item.text })),
+    selectedId: bag.selectedId,
+    custom: bag.custom,
+    followupQuestion: bag.followupQuestion,
+    followupPlaceholder: bag.followupPlaceholder,
+    generatedAt: bag.generatedAt,
+  };
+}
+
+function execChoiceCustomId() {
+  const api = reviewMergeApi();
+  return api.EXEC_CHOICE_CUSTOM_ID || "custom";
+}
+
+function execChoiceCustomText() {
+  const api = reviewMergeApi();
+  return api.EXEC_CHOICE_CUSTOM_TEXT || "我想自己寫";
+}
+
+function usesExecutionChoiceUi(journal) {
+  const mode = journal && journal.mode ? journal.mode : state.journalMode;
+  if (mode === "quick") return false;
+  const bag = normalizeExecutionChoiceBag((journal && journal.executionChoices) || state.executionChoices);
+  if (bag.options.length || bag.followupQuestion || bag.selectedId || bag.custom) return true;
+  const legacy = normalizeExecutionPrompts((journal && journal.executionPrompts) || state.executionPrompts);
+  return legacy.length === 0;
 }
 
 function hasMeaningfulValue(value) {
@@ -4179,7 +4253,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "06 執行力",
-        description: "既然已經看見這件事，把下一步問到夠具體，最多 1～2 題，再收成明天真正做得到的一小步。行動卡一打勾，就會同步到側邊欄「執行力」。",
+        description: "既然已經看見了，會整理 3 個明天做得到的小行動。選 1 個，或自己寫，再收下行動卡。",
         side: "top",
       },
     },
@@ -4502,17 +4576,19 @@ function isAbstractExecAnswer(text) {
   return false;
 }
 
-function rewriteGeneratedExecTitle(title, smallestStep) {
+function rewriteGeneratedExecTitle(title, smallestStep, options) {
+  const keepFull = Boolean(options && options.keepFull);
   const cleaned = softenExecCoachText(String(title || "").replace(/^[\d.、｜|\-\s]+/, "")).trim();
   const api = textIntegrityApi();
   const pickTitle = (value) => {
     if (!value) return "";
+    if (keepFull) return value;
     if (value.replace(/\s+/g, "").length <= 32 && !looksIncompleteAwarenessText(value)) return value;
     return typeof api.pickCompleteSentence === "function" ? api.pickCompleteSentence(value, 32) || (value.replace(/\s+/g, "").length <= 32 ? value : "") : value;
   };
   if (cleaned && !looksLikeAnalysisExecTitle(cleaned)) return pickTitle(cleaned);
   const step = String(smallestStep || "").trim().replace(/[。！？.]+$/g, "");
-  if (step && !looksLikeAnalysisExecTitle(step)) return pickTitle(step);
+  if (step && !looksLikeAnalysisExecTitle(step)) return pickTitle(keepFull ? String(smallestStep || "").trim() : step);
   return pickTitle(cleaned);
 }
 
@@ -4528,19 +4604,20 @@ function pickExecItemByTitle(items, title) {
   );
 }
 
-function rewriteGeneratedExecFocus(focus, items, smallestStep) {
+function rewriteGeneratedExecFocus(focus, items, smallestStep, options) {
+  const keepFull = Boolean(options && options.keepFull);
   const list = Array.isArray(items) ? items : [];
   const source = focus && typeof focus === "object" ? focus : {};
   const picked = pickExecItemByTitle(list, source.title) || list[0] || null;
   if (!picked) {
     const step = String(smallestStep || "").trim().replace(/[。！？.]+$/g, "");
-    const title = rewriteGeneratedExecTitle(source.title || step, smallestStep);
+    const title = rewriteGeneratedExecTitle(source.title || step, smallestStep, { keepFull });
     const when = source.when === "tomorrow" || source.when === "today" ? source.when : execFocusWhenFromText(title, "");
     return {
       title,
-      detail: shortenExecWhy(source.detail),
+      detail: keepFull ? String(source.detail || "").trim() : shortenExecWhy(source.detail),
       when,
-      hint: String(source.hint || "").trim().slice(0, 28) || execFocusHintForWhen(when),
+      hint: String(source.hint || "").trim() || execFocusHintForWhen(when),
       highlights: source.highlights,
     };
   }
@@ -4548,10 +4625,10 @@ function rewriteGeneratedExecFocus(focus, items, smallestStep) {
     ? source.when
     : execFocusWhenFromText(picked.title, picked.detail);
   return {
-    title: rewriteGeneratedExecTitle(picked.title, smallestStep),
-    detail: shortenExecWhy(source.detail || picked.detail),
+    title: rewriteGeneratedExecTitle(picked.title, smallestStep, { keepFull }),
+    detail: keepFull ? String(source.detail || picked.detail || "").trim() : shortenExecWhy(source.detail || picked.detail),
     when,
-    hint: String(source.hint || "").trim().slice(0, 28) || execFocusHintForWhen(when),
+    hint: String(source.hint || "").trim() || execFocusHintForWhen(when),
     highlights: source.highlights || picked.highlights,
   };
 }
@@ -4657,6 +4734,7 @@ function emptyJournal() {
     awarenessResult: emptyAwarenessResult(),
     awarenessChoices: emptyChoiceBag(),
     thinkChoices: emptyChoiceBag(),
+    executionChoices: emptyExecutionChoiceBag(),
     execution: ["", ""],
     executionChecks: [],
     executionCheckItems: [],
@@ -5113,7 +5191,7 @@ function journalHasContent(journal) {
     journal.manifestSentence,
   ];
   if (textBits.some((item) => String(item || "").trim())) return true;
-  if (hasMeaningfulChoices(journal.awarenessChoices) || hasMeaningfulChoices(journal.thinkChoices)) return true;
+  if (hasMeaningfulChoices(journal.awarenessChoices) || hasMeaningfulChoices(journal.thinkChoices) || hasMeaningfulExecutionChoices(journal.executionChoices)) return true;
   if (deepHasContent(journal.deep) || hasMeaningfulValue(journal.deepPrompts)) return true;
   if (hasMeaningfulInsight(journal.insight)) return true;
   if ((journal.bodyTags || []).length || (journal.awarenessChecks || []).length || (journal.executionChecks || []).length || (journal.manifestChecks || []).length) return true;
@@ -5197,6 +5275,9 @@ function awarenessReady(answers) {
 }
 
 function executionReady(answers) {
+  if (usesExecutionChoiceUi()) {
+    return Boolean(String(selectedExecutionChoiceText(state.executionChoices) || "").trim());
+  }
   const prompts = normalizeExecutionPrompts(state.executionPrompts);
   const list = Array.isArray(answers) ? answers : [];
   if (prompts.length >= EXECUTION_PROMPT_MIN) {
@@ -5894,6 +5975,11 @@ function buildExecutionCheckItems(journal) {
   const items = [];
   const answers = (journal.execution || []).map((item) => String(item || "").trim()).filter(Boolean);
   const step = String(journal.smallestStep || "").trim();
+  const keepFull = usesExecutionChoiceUi(journal) && Boolean(step);
+  if (keepFull) {
+    pushUniqueExec(items, step, "", EXECUTION_CARD_MAX);
+    return items.slice(0, 1);
+  }
   const blob = `${answers.join("\n")}\n${step}\n${journal.event || ""}`;
   const tired = /很累|好累|疲|睡不飽|精神不佳|事情很多/.test(blob);
   if (/多吃菜|吃.*菜|青菜/.test(blob)) {
@@ -6103,22 +6189,23 @@ function checklistSignature(answers) {
   return (answers || []).map((item) => String(item || "").trim()).join("\n");
 }
 
-function normalizeAiExecItems(raw, min, max, fallback, smallestStep) {
+function normalizeAiExecItems(raw, min, max, fallback, smallestStep, options) {
+  const keepFull = Boolean(options && options.keepFull);
   const seen = new Set();
   const items = [];
   normalizeExecCheckItems(raw).forEach((item) => {
-    const title = rewriteGeneratedExecTitle(item.title, smallestStep);
+    const title = rewriteGeneratedExecTitle(item.title, smallestStep, { keepFull });
     if (!title || seen.has(title)) return;
     seen.add(title);
-    items.push({ ...item, title, detail: shortenExecHow(item.detail) });
+    items.push({ ...item, title, detail: keepFull ? String(item.detail || "").trim() : shortenExecHow(item.detail) });
   });
   if (!items.length) {
     normalizeExecCheckItems(fallback).forEach((item) => {
       if (items.length >= min) return;
-      const title = rewriteGeneratedExecTitle(item.title, smallestStep);
+      const title = rewriteGeneratedExecTitle(item.title, smallestStep, { keepFull });
       if (!title || seen.has(title)) return;
       seen.add(title);
-      items.push({ ...item, title, detail: shortenExecHow(item.detail) });
+      items.push({ ...item, title, detail: keepFull ? String(item.detail || "").trim() : shortenExecHow(item.detail) });
     });
   }
   return items.slice(0, max);
@@ -6146,7 +6233,7 @@ function checklistUi(kind) {
   if (kind === "awareness") {
     return { btn: "btnAwareAi", loader: "awareLoading", list: "awareChecks", idle: "✦ 看見今天的覺察" };
   }
-  return { btn: "btnExecAi", loader: "execLoading", list: "execChecks", idle: "生成我的行動卡" };
+  return { btn: "btnExecAi", loader: "execLoading", list: "execChecks", idle: "收下我的行動卡" };
 }
 
 function setChecklistLoading(kind, loading) {
@@ -6207,12 +6294,17 @@ async function generateJournalChecklist(kind, options = {}) {
   }
   const journal = collectJournal();
   const choiceBag = normalizeChoiceBag(state.awarenessChoices);
+  const execChoiceBag = normalizeExecutionChoiceBag(state.executionChoices);
   const usingChoices = isAware && choiceBag.options.length > 0;
+  const usingExecChoices = !isAware && usesExecutionChoiceUi() && Boolean(execChoiceBag.selectedId || selectedExecutionChoiceText(execChoiceBag));
+  const chosenStep = usingExecChoices ? selectedExecutionChoiceText(execChoiceBag) : "";
   const answers = isAware
     ? usingChoices
       ? selectedChoiceTexts(choiceBag)
       : journal.awareness
-    : journal.execution;
+    : usingExecChoices
+      ? [chosenStep].filter(Boolean)
+      : journal.execution;
   const ready = isAware ? (usingChoices || awarenessReady(answers)) : executionReady(answers);
   if (isAware && hasAwarenessResult(state.journalAwarenessResult) && !awarenessResultStale() && !options.force) {
     if (!options.auto) showToast(usingChoices ? "今天的覺察已經整理好了。若你改了勾選，可以再整理一次。" : "今天的覺察已經整理好了。若你改了是／否，可以再整理一次。");
@@ -6224,12 +6316,14 @@ async function generateJournalChecklist(kind, options = {}) {
       showToast(
         isAware
           ? "先看完覺察選項，再整理今天的覺察。"
-          : "先回答完行動問題，再整理行動卡。"
+          : "先選一個明天的小行動，再收下行動卡。"
       );
     }
     return;
   }
-  if (!isAware && !options.skipFollow) {
+  if (!isAware && usingExecChoices) {
+    /* new 06: no follow-up Q&A after a selected action */
+  } else if (!isAware && !options.skipFollow) {
     const lastAnswer = [...(answers || [])].reverse().find((item) => String(item || "").trim()) || "";
     const prompts = normalizeExecutionPrompts(state.executionPrompts);
     if (isAbstractExecAnswer(lastAnswer) && prompts.length < EXECUTION_PROMPT_MAX) {
@@ -6239,6 +6333,8 @@ async function generateJournalChecklist(kind, options = {}) {
   }
   const sig = usingChoices
     ? JSON.stringify({ none: Boolean(choiceBag.none), ids: choiceBag.selectedIds })
+    : usingExecChoices
+      ? JSON.stringify({ id: execChoiceBag.selectedId, custom: execChoiceBag.custom })
     : checklistSignature(answers);
   if (options.auto && state.journalMeta[isAware ? "awarenessAiSig" : "executionAiSig"] === sig) return;
 
@@ -6258,7 +6354,7 @@ async function generateJournalChecklist(kind, options = {}) {
       : buildAwarenessResult(journal)
     : buildExecutionCheckItems(journal);
   const min = isAware ? 1 : EXECUTION_CARD_MIN;
-  const max = isAware ? 1 : EXECUTION_CARD_MAX;
+  const max = isAware ? 1 : usingExecChoices ? 1 : EXECUTION_CARD_MAX;
 
   try {
     if (!state.user) {
@@ -6272,8 +6368,10 @@ async function generateJournalChecklist(kind, options = {}) {
       answers,
       questions: isAware
         ? currentAwarenessQuestions()
-        : currentExecutionQuestions(),
-      round: isAware ? undefined : currentExecutionQuestions().length,
+        : usingExecChoices
+          ? ["使用者已選好明天最小的一步"]
+          : currentExecutionQuestions(),
+      round: isAware ? undefined : usingExecChoices ? 1 : currentExecutionQuestions().length,
       context: {
         thanks: thanksTextFrom(journal),
         thanksText: thanksTextFrom(journal),
@@ -6303,8 +6401,8 @@ async function generateJournalChecklist(kind, options = {}) {
           }
         : undefined,
       text: answers.join("\n"),
-      choiceMode: usingChoices,
-      selected: usingChoices ? selectedChoiceTexts(choiceBag) : undefined,
+      choiceMode: usingChoices || usingExecChoices,
+      selected: usingChoices ? selectedChoiceTexts(choiceBag) : usingExecChoices ? [chosenStep].filter(Boolean) : undefined,
       none: usingChoices ? Boolean(choiceBag.none) : undefined,
     };
     let remote;
@@ -6337,12 +6435,15 @@ async function generateJournalChecklist(kind, options = {}) {
       showToast("今天的覺察，已經整理好了。");
       return;
     }
-    const items = normalizeAiExecItems(remote.items, min, max, fallback, journal.smallestStep);
+    const items = normalizeAiExecItems(remote.items, min, max, fallback, journal.smallestStep, { keepFull: usingExecChoices });
     if (items.length < min) throw new Error("雲端回傳格式不完整");
-    state.journalExecFocus = rewriteGeneratedExecFocus(remote.focus, items, journal.smallestStep);
+    state.journalExecFocus = rewriteGeneratedExecFocus(remote.focus, items, journal.smallestStep, { keepFull: usingExecChoices });
     applyGeneratedChecklist(kind, items, sig);
     renderExecFocus(state.journalExecFocus, items);
     showToast("行動卡已經整理好了。");
+    if (usingExecChoices && execChoiceBag.selectedId === execChoiceCustomId()) {
+      trackProduct("execution_custom_completed", { source: "checklist", mode: state.journalMode === "quick" ? "quick" : "deep" });
+    }
   } catch (error) {
     if (state.checklistToken[kind] !== token) return;
     if (isAware) {
@@ -6355,7 +6456,7 @@ async function generateJournalChecklist(kind, options = {}) {
       showToast("這次覺察沒有完整生成，請再試一次。");
       return;
     }
-    state.journalExecFocus = rewriteGeneratedExecFocus(fallback[0], fallback, journal.smallestStep);
+    state.journalExecFocus = rewriteGeneratedExecFocus(fallback[0], fallback, journal.smallestStep, { keepFull: usingExecChoices });
     renderExecFocus(state.journalExecFocus, fallback);
     applyGeneratedChecklist(kind, fallback.slice(0, max), sig);
     showToast(`雲端分析失敗：${formatApiError(error)}，先用本地整理。`);
@@ -7984,7 +8085,7 @@ function collectGrowthProgress() {
   };
 }
 
-const EXEC_WAIT_COPY = "寫完今日感謝與事件後，再開始今天的行動整理。";
+const EXEC_WAIT_COPY = "寫完前面的看見後，再開始整理明天的一小步。";
 const CORE_WAIT_COPY = "請先完成上方今日感謝與事件，將為你準備今日專屬的覺察與執行題";
 const AWARE_WAIT_COPY = "完成「今日感謝」與「今日事件」後，會依照你今天寫下的內容，產生專屬於你的覺察選項。";
 const THINK_WAIT_COPY = "寫完今日感謝與事件後，再開始今天的深度思考。";
@@ -8078,42 +8179,47 @@ function collectPromptAnswers(prefix, count = 3) {
 
 function syncCorePromptGate() {
   const ready = coreStoryReady();
-  const loading = Boolean(state.corePromptsBusy || state.choicesBusy?.awareness);
+  const awareLoading = Boolean(state.corePromptsBusy || state.choicesBusy?.awareness);
+  const execLoading = Boolean(state.choicesBusy?.execution || (state.corePromptsBusy && state.corePromptsScope === "execution"));
   const hasAware =
     normalizeChoiceBag(state.awarenessChoices).options.length > 0 ||
     normalizeAwarenessPrompts(state.awarenessPrompts).length >= 1;
-  const hasExec = normalizeExecutionPrompts(state.executionPrompts).length >= EXECUTION_PROMPT_MIN;
-  const staleExec = executionPromptsAreStale(state.executionPrompts);
+  const execBag = normalizeExecutionChoiceBag(state.executionChoices);
+  const hasExecChoices = usesExecutionChoiceUi() && (execBag.options.length > 0 || Boolean(execBag.followupQuestion));
+  const hasExec = usesExecutionChoiceUi()
+    ? hasExecChoices
+    : normalizeExecutionPrompts(state.executionPrompts).length >= EXECUTION_PROMPT_MIN;
+  const staleExec = usesExecutionChoiceUi() ? false : executionPromptsAreStale(state.executionPrompts);
   const awareEmpty = document.getElementById("awareEmpty");
   const execEmpty = document.getElementById("execEmpty");
   const awareBtn = document.getElementById("btnAwarePrompts");
   const execBtn = document.getElementById("btnExecPrompts");
   if (awareEmpty) {
     awareEmpty.textContent = AWARE_WAIT_COPY;
-    awareEmpty.hidden = loading || hasAware;
+    awareEmpty.hidden = awareLoading || hasAware;
   }
   if (execEmpty) {
     execEmpty.textContent = EXEC_WAIT_COPY;
-    execEmpty.hidden = loading || hasExec;
+    execEmpty.hidden = execLoading || hasExec;
   }
   if (awareBtn) {
     awareBtn.hidden = hasAware;
     if (!awareBtn.hidden) {
       awareBtn.disabled = false;
-      awareBtn.classList.toggle("is-busy", loading);
-      awareBtn.setAttribute("aria-busy", loading ? "true" : "false");
-      awareBtn.title = ready || loading ? "" : "請先寫下今日感謝、事件，並選擇心情";
-      awareBtn.textContent = loading ? "正在整理覺察選項…" : "✦ 開始今天的覺察";
+      awareBtn.classList.toggle("is-busy", awareLoading);
+      awareBtn.setAttribute("aria-busy", awareLoading ? "true" : "false");
+      awareBtn.title = ready || awareLoading ? "" : "請先寫下今日感謝、事件，並選擇心情";
+      awareBtn.textContent = awareLoading ? "正在整理覺察選項…" : "✦ 開始今天的覺察";
     }
   }
   if (execBtn) {
     execBtn.hidden = hasExec && !staleExec;
     if (!execBtn.hidden) {
       execBtn.disabled = false;
-      execBtn.classList.toggle("is-busy", loading);
-      execBtn.setAttribute("aria-busy", loading ? "true" : "false");
-      execBtn.textContent = loading
-        ? "正在整理行動問題…"
+      execBtn.classList.toggle("is-busy", execLoading);
+      execBtn.setAttribute("aria-busy", execLoading ? "true" : "false");
+      execBtn.textContent = execLoading
+        ? "正在整理明天的小行動…"
         : staleExec
           ? "重新整理行動問題"
           : "✦ 開始今天的行動整理";
@@ -8277,7 +8383,152 @@ function renderThinkChoiceResult(insight) {
   `;
 }
 
+function syncExecStepUi() {
+  const wrap = document.querySelector("#section-exec .exec-next");
+  const ta = document.getElementById("execNext");
+  const result = document.getElementById("execStepResult");
+  const hint = document.getElementById("execStepHint");
+  const checkBtn = document.getElementById("btnExecAi");
+  if (!usesExecutionChoiceUi()) {
+    if (wrap) wrap.hidden = false;
+    if (ta) ta.hidden = false;
+    if (result) {
+      result.hidden = true;
+      result.innerHTML = "";
+    }
+    if (hint) {
+      hint.hidden = false;
+      hint.textContent = "不是完整計畫，只寫第一步。小到你明天幾乎沒有理由不開始。";
+    }
+    return;
+  }
+  const bag = normalizeExecutionChoiceBag(state.executionChoices);
+  const customId = execChoiceCustomId();
+  const chosen = selectedExecutionChoiceText(bag);
+  const isCustom = bag.selectedId === customId;
+  if (!bag.selectedId) {
+    if (wrap) wrap.hidden = true;
+    if (checkBtn) checkBtn.hidden = true;
+    return;
+  }
+  if (wrap) wrap.hidden = false;
+  if (isCustom) {
+    if (ta) {
+      ta.hidden = false;
+      ta.placeholder = "例如：9:30 洗完澡後把手機放下，直接準備上床";
+      if (bag.custom && ta.value !== bag.custom) ta.value = bag.custom;
+    }
+    if (result) {
+      result.hidden = true;
+      result.innerHTML = "";
+    }
+    if (hint) {
+      hint.hidden = false;
+      hint.textContent = "那你想為明天留下一個什麼小行動？";
+    }
+    if (checkBtn) checkBtn.hidden = !String(chosen || "").trim();
+  } else {
+    if (ta) {
+      ta.hidden = true;
+      ta.value = chosen;
+    }
+    if (hint) hint.hidden = true;
+    if (result) {
+      result.hidden = false;
+      result.innerHTML = markableP(chosen, "exec.smallestStep", "exec-step-result__text");
+    }
+    if (checkBtn) checkBtn.hidden = !String(chosen || "").trim();
+  }
+}
+
+function renderExecutionChoices(bag) {
+  const root = document.getElementById("execQuestions");
+  const empty = document.getElementById("execEmpty");
+  const genBtn = document.getElementById("btnExecPrompts");
+  const checkBtn = document.getElementById("btnExecAi");
+  const data = normalizeExecutionChoiceBag(bag || state.executionChoices);
+  const loading = Boolean(state.choicesBusy?.execution);
+  if (!root) return;
+  if (!data.options.length && !data.followupQuestion) {
+    root.innerHTML = "";
+    if (empty) {
+      empty.textContent = EXEC_WAIT_COPY;
+      empty.hidden = loading;
+    }
+    if (genBtn) {
+      genBtn.hidden = false;
+      genBtn.disabled = false;
+      genBtn.classList.toggle("is-busy", loading);
+      genBtn.setAttribute("aria-busy", loading ? "true" : "false");
+      genBtn.textContent = loading ? "正在整理明天的小行動…" : "✦ 開始今天的行動整理";
+    }
+    if (checkBtn) checkBtn.hidden = true;
+    syncExecStepUi();
+    return;
+  }
+  if (empty) empty.hidden = true;
+  if (genBtn) genBtn.hidden = true;
+  if (data.followupQuestion && !data.options.length) {
+    root.innerHTML = `
+      <div class="aware-q exec-q">
+        <p class="journal-core-q">${escapeHtml(data.followupQuestion)}</p>
+        <textarea class="textarea" id="execFollowup" rows="3" placeholder="${escapeHtml(data.followupPlaceholder || "例如：睡前把手機放到床以外")}"></textarea>
+        <button class="ai-check-btn" id="btnExecChoiceFollow" type="button">整理明天的小行動</button>
+      </div>
+    `;
+    if (checkBtn) checkBtn.hidden = true;
+    syncExecStepUi();
+    return;
+  }
+  const customId = execChoiceCustomId();
+  const customOn = data.selectedId === customId;
+  const options = data.options.concat([{ id: customId, text: execChoiceCustomText(), custom: true }]);
+  root.innerHTML = `
+    <div class="choice-list" data-choice-kind="execution" role="radiogroup" aria-label="明天的小行動">
+      ${options
+        .map((item) => {
+          const on = data.selectedId === item.id;
+          return `
+            <button type="button" class="choice-opt${on ? " is-on" : ""}${item.custom ? " choice-opt--none" : ""}" data-choice-id="${escapeHtml(item.id)}" data-choice-kind="execution" role="radio" aria-checked="${on ? "true" : "false"}">
+              <span class="choice-opt__row">
+                <span class="choice-opt__box" aria-hidden="true"></span>
+                <span class="choice-opt__text">${escapeHtml(item.text)}</span>
+              </span>
+            </button>
+          `;
+        })
+        .join("")}
+      <p class="choice-hint">選 1 個就好。若都不適合，可以自己寫。</p>
+    </div>
+  `;
+  if (checkBtn) checkBtn.hidden = !(data.selectedId && selectedExecutionChoiceText(data));
+  syncExecStepUi();
+}
+
 function toggleJournalChoice(kind, id) {
+  if (kind === "execution") {
+    const bag = normalizeExecutionChoiceBag(state.executionChoices);
+    const customId = execChoiceCustomId();
+    if (!id || (id !== customId && !bag.options.some((item) => item.id === id))) return bag;
+    if (bag.selectedId === id) {
+      renderExecutionChoices(bag);
+      return bag;
+    }
+    bag.selectedId = id;
+    if (id !== customId) {
+      bag.custom = "";
+      const execNext = document.getElementById("execNext");
+      if (execNext) execNext.value = selectedExecutionChoiceText(bag);
+      trackProduct("execution_choice_selected", { source: "journal", mode: "deep" });
+    } else {
+      trackProduct("execution_custom_selected", { source: "journal", mode: "deep" });
+    }
+    const next = serializeExecutionChoiceBag(bag);
+    state.executionChoices = next;
+    renderExecutionChoices(next);
+    persistJournalQuietly();
+    return next;
+  }
   const key = kind === "think" ? "thinkChoices" : "awarenessChoices";
   const bag = normalizeChoiceBag(state[key]);
   const noneId = choiceNoneId();
@@ -8312,16 +8563,21 @@ function toggleJournalChoice(kind, id) {
 }
 
 function setChoicesLoading(kind, loading) {
-  if (!state.choicesBusy) state.choicesBusy = { awareness: false, think: false };
+  if (!state.choicesBusy) state.choicesBusy = { awareness: false, think: false, execution: false };
   state.choicesBusy[kind] = loading;
   if (kind === "awareness") {
     const loader = document.getElementById("awarePromptLoading");
     if (loader) loader.hidden = !loading;
     renderAwarenessChoices(state.awarenessChoices);
-  } else {
+  } else if (kind === "think") {
     const loader = document.getElementById("deepPromptLoading");
     if (loader) loader.hidden = !loading;
     renderThinkChoices(state.thinkChoices);
+  } else if (kind === "execution") {
+    const loader = document.getElementById("execPromptLoading");
+    if (loader) loader.hidden = !loading;
+    renderExecutionChoices(state.executionChoices);
+    syncCorePromptGate();
   }
 }
 
@@ -8625,6 +8881,181 @@ async function generateThinkChoicesClose(options = {}) {
   }
 }
 
+function executionContextEnough(journal) {
+  const think = thinkBitsFrom(journal);
+  const aware = awarenessBitsFrom(journal);
+  return Boolean(
+    aware.line ||
+    aware.seen ||
+    (aware.selected && aware.selected.length) ||
+    (think.selected && think.selected.length) ||
+    think.awareness ||
+    think.selfSeen ||
+    think.takeaway
+  );
+}
+
+function localExecutionChoiceFallbacks(journal) {
+  const think = thinkBitsFrom(journal);
+  const aware = awarenessBitsFrom(journal);
+  const blob = [
+    aware.line,
+    aware.seen,
+    ...(aware.selected || []),
+    ...(think.selected || []),
+    think.awareness,
+    think.selfSeen,
+    journal?.event,
+    thanksTextFrom(journal),
+    Array.isArray(journal?.bodyTags) ? journal.bodyTags.join(" ") : "",
+    journal?.bodyNote,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const candidates = [];
+  if (/睡|床|失眠|熬夜|休息|累|疲/.test(blob)) {
+    candidates.push(
+      { id: "e1", text: "今晚 9:30 洗完澡後就直接準備上床" },
+      { id: "e2", text: "睡前 30 分鐘把手機放到床以外的地方" },
+      { id: "e3", text: "晚上 10 點後不再安排需要動腦的事情" }
+    );
+  } else if (/老公|伴侶|女兒|家人|關係|吵架|溝通|對方/.test(blob)) {
+    candidates.push(
+      { id: "e1", text: "明天主動說一句今天真正想說的話" },
+      { id: "e2", text: "情緒上來時先停 10 秒再回應" },
+      { id: "e3", text: "安排 10 分鐘好好聽對方說話" }
+    );
+  } else if (/工作|任務|專案|截止|開會|拖延|忙碌/.test(blob)) {
+    candidates.push(
+      { id: "e1", text: "明天先做 15 分鐘最重要的那件事" },
+      { id: "e2", text: "開始前先關掉通知 30 分鐘" },
+      { id: "e3", text: "今晚先寫下明天做到哪裡就算過關" }
+    );
+  } else {
+    candidates.push(
+      { id: "e1", text: "明天用 10 分鐘只做一件跟今天看見的有關的小事" },
+      { id: "e2", text: "開始前先把會分心的東西放到手搆不到的地方" },
+      { id: "e3", text: "今晚先寫下明天做到哪一步就算完成" }
+    );
+  }
+  const api = reviewMergeApi();
+  const lookSimilar = typeof api.choicesLookSimilar === "function" ? api.choicesLookSimilar.bind(api) : () => false;
+  const items = [];
+  candidates.forEach((item) => {
+    if (items.some((entry) => lookSimilar(entry.text, item.text))) return;
+    items.push(item);
+  });
+  return items.slice(0, 3);
+}
+
+async function generateExecutionChoices(options = {}) {
+  setJournalFoldOpen("section-exec", true, { manual: true });
+  if (state.choicesBusy?.execution) {
+    if (!options.auto) showToast("還在為你整理明天的小行動，請稍候。");
+    return;
+  }
+  const journal = collectJournal();
+  if (!coreStoryReady(journal)) {
+    if (!options.auto) showToast("請先寫下今日感謝、事件，並選擇心情。");
+    return;
+  }
+  const existing = normalizeExecutionChoiceBag(state.executionChoices);
+  const followupAnswer = String(options.followupAnswer || "").trim();
+  if (!options.force && existing.options.length >= 3 && !followupAnswer) {
+    renderExecutionChoices(existing);
+    return;
+  }
+  const token = (state.choicesToken.execution || 0) + 1;
+  state.choicesToken.execution = token;
+  setChoicesLoading("execution", true);
+  const enough = executionContextEnough(journal);
+  const alreadyFollowed = Boolean(followupAnswer || existing.followupQuestion);
+  const fallback = localExecutionChoiceFallbacks(journal);
+  try {
+    if (!state.user) throw new Error("請先登入，才能使用雲端出題。");
+    const remote = await postReview({
+      mode: "choices",
+      kind: "execution",
+      date: currentIso(),
+      text: journal.event,
+      answers: followupAnswer ? [followupAnswer] : undefined,
+      context: {
+        ...choicesContext(journal, priorThinkAwareContext(journal)),
+        followupAnswer,
+      },
+      progress: { streak: collectGrowthProgress().streak },
+    });
+    if (state.choicesToken.execution !== token) return;
+    const allowFollowup = !enough && !alreadyFollowed;
+    if (allowFollowup && remote.needFollowup && String(remote.question || "").trim()) {
+      state.executionChoices = serializeExecutionChoiceBag({
+        sourceSig: `${thanksTextFrom(journal)}\n${journal.event}\n${journal.mood}`,
+        options: [],
+        selectedId: "",
+        custom: "",
+        followupQuestion: String(remote.question || "").trim(),
+        followupPlaceholder: String(remote.placeholder || "例如：如果明天只改善一件事，你最想先從哪裡開始？").trim(),
+        generatedAt: new Date().toISOString(),
+      });
+      renderExecutionChoices(state.executionChoices);
+      persistJournalQuietly();
+      if (!options.auto) showToast("先補一個很短的問題，再整理明天的小行動。");
+      return;
+    }
+    const optionsList = normalizeExecutionChoiceBag({ options: remote.options }).options;
+    if (optionsList.length < 3) throw new Error("今天的行動選項還沒準備好，請再試一次。");
+    state.executionChoices = serializeExecutionChoiceBag({
+      sourceSig: `${thanksTextFrom(journal)}\n${journal.event}\n${journal.mood}`,
+      options: optionsList,
+      selectedId: "",
+      custom: "",
+      followupQuestion: "",
+      followupPlaceholder: "",
+      generatedAt: new Date().toISOString(),
+    });
+    renderExecutionChoices(state.executionChoices);
+    persistJournalQuietly();
+    trackProduct("execution_choices_generated", { source: "journal", mode: "deep" });
+    if (!options.auto) showToast("明天的小行動已經準備好了。");
+  } catch (error) {
+    if (state.choicesToken.execution !== token) return;
+    if (!enough && !alreadyFollowed) {
+      state.executionChoices = serializeExecutionChoiceBag({
+        sourceSig: `${thanksTextFrom(journal)}\n${journal.event}\n${journal.mood}`,
+        options: [],
+        selectedId: "",
+        custom: "",
+        followupQuestion: "如果明天只改善一件事，你最想先從哪裡開始？",
+        followupPlaceholder: "例如：睡前把手機放到床以外",
+        generatedAt: new Date().toISOString(),
+      });
+      renderExecutionChoices(state.executionChoices);
+      persistJournalQuietly();
+      if (!options.auto) showToast("先補一個很短的問題，再整理明天的小行動。");
+      return;
+    }
+    if (fallback.length >= 3) {
+      state.executionChoices = serializeExecutionChoiceBag({
+        sourceSig: `${thanksTextFrom(journal)}\n${journal.event}\n${journal.mood}`,
+        options: fallback,
+        selectedId: "",
+        custom: "",
+        followupQuestion: "",
+        followupPlaceholder: "",
+        generatedAt: new Date().toISOString(),
+      });
+      renderExecutionChoices(state.executionChoices);
+      persistJournalQuietly();
+      trackProduct("execution_choices_generated", { source: "local", mode: "deep" });
+      if (!options.auto) showToast(`雲端選項還沒好：${formatApiError(error)}，先用本地整理。`);
+    } else if (!options.auto) {
+      showToast("這次行動選項沒有完整生成，請再試一次。");
+    }
+  } finally {
+    if (state.choicesToken.execution === token) setChoicesLoading("execution", false);
+  }
+}
+
 function applyThinkChoicesClose(closed) {
   const insight = normalizeInsight(state.journalInsight);
   const guide = insight.guide || emptyThinkGuide();
@@ -8666,12 +9097,17 @@ function localThinkChoicesClose(journal, bag) {
 }
 
 function renderExecutionQuestions(prompts, options = {}) {
+  if (usesExecutionChoiceUi()) {
+    renderExecutionChoices(state.executionChoices);
+    return;
+  }
   const root = document.getElementById("execQuestions");
   const empty = document.getElementById("execEmpty");
   const genBtn = document.getElementById("btnExecPrompts");
   const checkBtn = document.getElementById("btnExecAi");
   const items = normalizeExecutionPrompts(prompts);
   if (!root) return;
+  syncExecStepUi();
   if (!items.length) {
     root.innerHTML = "";
     if (empty) {
@@ -8838,7 +9274,7 @@ function applyGeneratedCorePrompts(awareness, execution, sig, fromAi, options = 
       answers: options.resetAwarenessAnswers === false ? journal.awareness : ["", "", ""],
     });
   }
-  if (execList.length >= EXECUTION_PROMPT_MIN) {
+  if (execList.length >= EXECUTION_PROMPT_MIN && !usesExecutionChoiceUi()) {
     state.executionPrompts = execList;
     renderExecutionQuestions(state.executionPrompts, { answers: keepExecAnswers ? journal.execution : ["", "", ""] });
   }
@@ -8999,6 +9435,10 @@ async function generateCorePrompts(options = {}) {
     options.scope === "execution" ? "execution" : options.scope === "core" ? "core" : "awareness";
   if (scope === "awareness") {
     await generateAwarenessChoices(options);
+    return;
+  }
+  if (scope === "execution" && usesExecutionChoiceUi()) {
+    await generateExecutionChoices(options);
     return;
   }
   if (recoverStaleBusy(state.corePromptsBusy, state.corePromptsBusyAt, () => setCorePromptsLoading(false))) {
@@ -9481,6 +9921,7 @@ function collectJournal() {
     awarenessResult: normalizeAwarenessResult(state.journalAwarenessResult, { keepSource: true }),
     awarenessChoices: serializeChoiceBag(state.awarenessChoices),
     thinkChoices: serializeChoiceBag(state.thinkChoices),
+    executionChoices: serializeExecutionChoiceBag(state.executionChoices),
     execution: collectExecutionAnswers(),
     executionChecks: checkedValues("execChecks"),
     executionCheckItems: (() => {
@@ -9488,7 +9929,9 @@ function collectJournal() {
       return collected.length ? collected : normalizeExecCheckItems(checklistItems("execChecks"));
     })(),
     executionFocus: normalizeExecFocus(state.journalExecFocus, collectExecCheckItems()),
-    smallestStep: journalFieldValue("execNext"),
+    smallestStep: usesExecutionChoiceUi()
+      ? selectedExecutionChoiceText(state.executionChoices) || journalFieldValue("execNext")
+      : journalFieldValue("execNext"),
     mode: state.journalMode === "quick" ? "quick" : "deep",
     deepExpanded: Boolean(state.deepExpanded),
     awarenessAi: Boolean(state.journalMeta.awarenessAi),
@@ -10012,6 +10455,7 @@ function fillJournal(journal) {
   state.journalAwarenessResult = normalizeAwarenessResult(data.awarenessResult, { keepSource: true });
   state.awarenessChoices = normalizeChoiceBag(data.awarenessChoices);
   state.thinkChoices = normalizeChoiceBag(data.thinkChoices);
+  state.executionChoices = normalizeExecutionChoiceBag(data.executionChoices);
   state.journalUserMarks = userMarkBag(data.userMarks);
   state.journalManifestSentence = String(data.manifestSentence || "").trim();
   state.journalManifestHighlights = data.manifestHighlights && typeof data.manifestHighlights === "object" ? data.manifestHighlights : {};
@@ -10039,7 +10483,11 @@ function fillJournal(journal) {
   renderAwarenessChoices(state.awarenessChoices);
   renderExecutionQuestions(state.executionPrompts, { answers: data.execution });
   const execNext = document.getElementById("execNext");
-  if (execNext) execNext.value = data.smallestStep || "";
+  if (execNext) {
+    const chosen = usesExecutionChoiceUi(data) ? selectedExecutionChoiceText(state.executionChoices) : "";
+    execNext.value = chosen || data.smallestStep || "";
+  }
+  syncExecStepUi();
   renderDeepThemes(state.deepPrompts, { deep: normalizeDeep(data.deep) });
   renderThinkChoices(state.thinkChoices);
   renderThinkChoiceResult(state.journalInsight);
@@ -12326,6 +12774,7 @@ function renderHistoryJournal(review) {
       ].join("")
     : "";
   const execFields = (() => {
+    if (hasMeaningfulExecutionChoices(journal.executionChoices)) return [];
     const prompts = normalizeExecutionPrompts(journal.executionPrompts);
     const answers = Array.isArray(journal.execution) ? journal.execution : [];
     const count = Math.max(prompts.length, answers.length);
@@ -12338,6 +12787,9 @@ function renderHistoryJournal(review) {
       return "";
     }).filter(Boolean);
   })();
+  const execChosen = hasMeaningfulExecutionChoices(journal.executionChoices)
+    ? selectedExecutionChoiceText(journal.executionChoices) || String(journal.smallestStep || "").trim()
+    : String(journal.smallestStep || "").trim();
   const insightHtml = renderHistoryDeepThinking(review);
   console.log("[history-debug] rendered html length", String(insightHtml || "").length);
   if (parsedGuide.rounds.some(historyRoundHasContent) && !hasMeaningfulChoices(journal.thinkChoices) && !String(insightHtml || "").trim()) {
@@ -12378,8 +12830,8 @@ function renderHistoryJournal(review) {
       "exec",
       [
         ...execFields,
-        String(journal.smallestStep || "").trim()
-          ? historyBlock("明天最小的一步", markableP(journal.smallestStep, "exec.smallestStep", "history-journal__text", historyIso))
+        execChosen
+          ? historyBlock("明天最小的一步", markableP(execChosen, "exec.smallestStep", "history-journal__text", historyIso))
           : "",
         historyBlock("我的行動卡", historyExecChecksHtml(journal, historyIso)),
         journal.executionFocus?.title
@@ -12723,6 +13175,17 @@ function handleTodayPointerClick(event) {
     catchAsync(() => generateThinkChoicesClose(), "今天的深度看見還沒整理好");
     return true;
   }
+  if (node.closest("#btnExecChoiceFollow")) {
+    handled();
+    setJournalFoldOpen("section-exec", true, { manual: true });
+    const answer = String(document.getElementById("execFollowup")?.value || "").trim();
+    if (!answer) {
+      showToast("先寫下一句就好，再整理明天的小行動。");
+      return true;
+    }
+    catchAsync(() => generateExecutionChoices({ followupAnswer: answer, force: true }), "明天的小行動還沒好");
+    return true;
+  }
   if (node.closest("#btnExecFollow")) {
     handled();
     setJournalFoldOpen("section-exec", true, { manual: true });
@@ -12788,9 +13251,14 @@ function handleTodayPointerClick(event) {
   const choiceBtn = node.closest("[data-choice-id]");
   if (choiceBtn) {
     handled();
-    const kind = choiceBtn.dataset.choiceKind === "think" ? "think" : "awareness";
+    const kind = choiceBtn.dataset.choiceKind === "think"
+      ? "think"
+      : choiceBtn.dataset.choiceKind === "execution"
+        ? "execution"
+        : "awareness";
     if (kind === "awareness") pinAwareFold();
-    else setJournalFoldOpen("section-deep", true, { manual: true });
+    else if (kind === "think") setJournalFoldOpen("section-deep", true, { manual: true });
+    else setJournalFoldOpen("section-exec", true, { manual: true });
     toggleJournalChoice(kind, choiceBtn.dataset.choiceId);
     return true;
   }
@@ -13393,7 +13861,15 @@ function bindEvents() {
 
   document.getElementById("page-today")?.addEventListener("input", (event) => {
     const id = event.target && event.target.id;
-    if (/^thanksText$|^thanks\d+$|^(aware|exec)\d$|^execNext$|^eventText$|^bodyNote$|^bodyOtherNote$|^bodyMoodReason$|^bodyBodyReason$|^bodySleepReason$|^manifestVision$|^manifestThink\d$/.test(id || "")) {
+    if (/^thanksText$|^thanks\d+$|^(aware|exec)\d$|^execNext$|^execFollowup$|^eventText$|^bodyNote$|^bodyOtherNote$|^bodyMoodReason$|^bodyBodyReason$|^bodySleepReason$|^manifestVision$|^manifestThink\d$/.test(id || "")) {
+      if (id === "execNext" && usesExecutionChoiceUi()) {
+        const bag = normalizeExecutionChoiceBag(state.executionChoices);
+        if (bag.selectedId === execChoiceCustomId()) {
+          bag.custom = journalFieldValue("execNext");
+          state.executionChoices = serializeExecutionChoiceBag(bag);
+          syncExecStepUi();
+        }
+      }
       if (/^thanksText$|^thanks\d+$|^(aware|exec)\d$|^execNext$|^eventText$|^bodyOtherNote$|^body(Mood|Body|Sleep)Reason$|^manifestVision$|^manifestThink\d$/.test(id || "")) persistJournalQuietly();
       scheduleJournalChecklists();
     }

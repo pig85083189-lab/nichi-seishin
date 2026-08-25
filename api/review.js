@@ -503,10 +503,11 @@ const CHECKLIST_EXECUTION_SYSTEM = `你是「日精進」的行動整理者。�
 只來自使用者今天的輸入、執行力回答、明天最小的一步、身體覺察、覺察力或深度思考。
 今天真正重要的只有一件 → 只出 1 張。禁止為了湊數發明運動、喝水、早睡、寫日記。
 如果主要訊號是累、睡眠偏少、精神不佳：休息可以就是有效行動，不要再塞工作＋運動＋飲食。
+若使用者已經選定「明天最小的一步」：只出 1 張卡。title 可以是完整行動句，不要為了字數截成半句。detail 可補充怎麼做，也可留空。
 
 【每張卡必須可執行】
-title：時間或觸發點 ＋ 具體動作，12-32 字。
-detail：怎麼做 ＋ 最低完成標準，36-80 字。
+title：時間或觸發點 ＋ 具體動作。未選定最小一步時，約 12-32 字；已選定時，完整保留原句，禁止截斷。
+detail：怎麼做 ＋ 最低完成標準。已選定時不要把原句切短。
 合格：
 - 明天其中一餐多一份青菜／午餐或晚餐任選一餐，多加一道青菜，不需要同時改變其他飲食。
 - 明天11:00躺下休息20分鐘／10:50設提醒，11:00放下手機。沒有睡著也沒關係，安靜休息20分鐘就算完成。
@@ -1842,8 +1843,15 @@ function execFocusHintForWhen(when) {
     : "今天不用全部做到，先完成這一步就好。";
 }
 
-function rewriteExecActionTitle(title, detail, smallestStep) {
+function rewriteExecActionTitle(title, detail, smallestStep, options) {
+  const keepFull = Boolean(options && options.keepFull);
   const cleaned = softenExecCoachText(String(title || "").replace(/^[\d.、｜|\-\s]+/, "")).trim();
+  if (keepFull) {
+    if (cleaned && !looksLikeAnalysisExecTitle(cleaned)) return cleaned;
+    const step = String(smallestStep || "").trim();
+    if (step && !looksLikeAnalysisExecTitle(step)) return step;
+    return cleaned || step;
+  }
   const pickTitle = (value) => {
     if (!value) return "";
     if (zhCharCount(value) <= 32 && textIntegrity.isCompleteSentence(value)) return value;
@@ -1867,19 +1875,20 @@ function pickExecItemByTitle(items, title) {
   );
 }
 
-function rewriteExecFocus(focus, items, smallestStep, ctx) {
+function rewriteExecFocus(focus, items, smallestStep, ctx, options) {
+  const keepFull = Boolean(options && options.keepFull);
   const list = Array.isArray(items) ? items : [];
   const source = focus && typeof focus === "object" ? focus : {};
   const picked = pickExecItemByTitle(list, source.title) || list[0] || null;
   if (!picked) {
-    const step = String(smallestStep || "").trim().replace(/[。！？.]+$/g, "");
-    const title = rewriteExecActionTitle(step, "", smallestStep);
+    const step = String(smallestStep || "").trim();
+    const title = rewriteExecActionTitle(source.title || step, "", smallestStep, { keepFull });
     const when = execFocusWhenFromText(title, "");
     return {
       title,
-      detail: shortenExecWhy(source.detail),
+      detail: keepFull ? String(source.detail || "").trim() : shortenExecWhy(source.detail),
       when,
-      hint: String(source.hint || "").trim().slice(0, 28) || execFocusHintForWhen(when),
+      hint: String(source.hint || "").trim() || execFocusHintForWhen(when),
       highlights: source.highlights,
     };
   }
@@ -1887,15 +1896,16 @@ function rewriteExecFocus(focus, items, smallestStep, ctx) {
     ? source.when
     : execFocusWhenFromText(picked.title, picked.detail);
   return {
-    title: rewriteExecActionTitle(picked.title, picked.detail, smallestStep),
-    detail: shortenExecWhy(source.detail || picked.detail),
+    title: rewriteExecActionTitle(picked.title, picked.detail, smallestStep, { keepFull }),
+    detail: keepFull ? String(source.detail || picked.detail || "").trim() : shortenExecWhy(source.detail || picked.detail),
     when,
-    hint: String(source.hint || "").trim().slice(0, 28) || execFocusHintForWhen(when),
+    hint: String(source.hint || "").trim() || execFocusHintForWhen(when),
     highlights: source.highlights || picked.highlights,
   };
 }
 
-function normalizeExecutionChecklistItems(raw, min, max, smallestStep) {
+function normalizeExecutionChecklistItems(raw, min, max, smallestStep, options) {
+  const keepFull = Boolean(options && options.keepFull);
   const list = Array.isArray(raw)
     ? raw
     : Array.isArray(raw?.items)
@@ -1919,8 +1929,8 @@ function normalizeExecutionChecklistItems(raw, min, max, smallestStep) {
         detail = parts.detail;
       }
     }
-    title = rewriteExecActionTitle(title.replace(/^[\d.、｜|\-\s]+/, ""), detail, smallestStep);
-    detail = shortenExecHow(detail);
+    title = rewriteExecActionTitle(title.replace(/^[\d.、｜|\-\s]+/, ""), detail, smallestStep, { keepFull });
+    detail = keepFull ? String(detail || "").trim() : shortenExecHow(detail);
     if (!title || seen.has(title)) return;
     seen.add(title);
     items.push({
@@ -1929,6 +1939,9 @@ function normalizeExecutionChecklistItems(raw, min, max, smallestStep) {
       highlights: item && typeof item === "object" ? item.highlights : undefined,
     });
   });
+  if (keepFull && !items.length && String(smallestStep || "").trim()) {
+    items.push({ title: String(smallestStep).trim(), detail: "", highlights: undefined });
+  }
   return items.slice(0, max);
 }
 
@@ -1945,11 +1958,11 @@ function checklistUserPrompt(kind, body) {
           .map((question, index) => `${index + 1}. ${question}\n回答：${answers[index] || "（未填）"}`)
           .join("\n\n")
       : `深度回答：${answer || "（未填）"}`;
-    return `請依這個人今天真正寫過的內容，產出 1 到 3 張可執行行動卡。寧缺勿濫：只有一件重要的事就只出 1 張。不要發明他沒提過的習慣。
+    return `請依這個人今天真正寫過的內容，產出可執行行動卡。寧缺勿濫：只有一件重要的事就只出 1 張。不要發明他沒提過的習慣。
 
+使用者已經選好「明天最小的一步」時：只出 1 張卡，title 與 detail 都必須完整保留語意，禁止截斷、禁止改寫成更短的半句。
 標題＝時間或觸發點＋具體動作。說明＝怎麼做＋最低完成標準。
 最重要的一步必須是 items 裡的其中一張，不要另外發明。若行動屬於明天，focus.when 填 tomorrow。
-若第 3 輪回答仍偏抽象，請根據上下文提出一個最小可行版本寫進卡片。
 若今天主要是累、睡眠偏少：休息可以就是那一張卡，不要再塞很多任務。
 
 ${labeled}
@@ -2300,6 +2313,44 @@ const THINK_CHOICES_CLOSE_SYSTEM = `你不是心理醫師，也不是裁判。�
 ${HIGHLIGHT_RULE}
 - 繁體中文`;
 
+const EXECUTION_CHOICES_SYSTEM = `你是「日精進」的行動整理者。不要再問一長串問題。任務是把今天已經看見的事情，收成明天真的做得到的一小步。
+
+這是 06 執行力。
+04 已經整理事情更深一層的意義，05 已經收成「核心覺察／我看見了」。
+你不要重新分析今天，不要寫人生願景，不要寫想成為什麼樣的人。那些是 07 顯化力。
+
+【優先讀】
+1. 05 核心覺察、我看見了
+2. 04 使用者實際勾選的深度內容與深度看見
+3. 必要時才看 01 感謝、02 事件／心情、03 身體
+
+【輸出 3 個小行動｜必須彼此是不同切入點】
+只輸出 3 個。禁止近義重複，例如「早點睡／提早上床／不要太晚睡」算同一件事。
+三個必須是不同角度，例如：
+- 行為時間：幾點開始做哪一件具體的事
+- 環境：把什麼放到哪裡、關掉什麼
+- 邊界：幾點後不再做哪一類事
+或：主動表達／暫停反應／主動連結
+或：開始做／減少干擾／定義完成
+
+每一句都必須：
+- 具體、可執行、夠小、最好明天就能做到
+- 完整一句，不要口號，不要人生建議
+- 不要問句
+- 永遠不要輸出「我想自己寫」；前端會自己加
+
+若 05 核心覺察或 04 勾選已經夠清楚：必須直接給 3 個行動，needFollowup 必須是 false。
+只有當 04 勾選、05 核心覺察、事件都太空、無法安全寫出具體行動時，才把 needFollowup 設成 true，並只出 1 道簡短追問。不要出第 2 題。
+
+只輸出 JSON：
+{
+  "needFollowup": false,
+  "question": "",
+  "placeholder": "",
+  "options":[{"id":"e1","text":"..."},{"id":"e2","text":"..."},{"id":"e3","text":"..."}]
+}
+繁體中文`;
+
 const EXECUTION_PROMPTS_SYSTEM = `你是「日精進」的行動教練。先幫他找到卡點與阻力，再把想做的事問到夠具體。不要分析人格，不要列待辦。
 
 這是 06 執行力。前面已經有 04 深度思考與 05 核心覺察／我看見了。
@@ -2430,13 +2481,14 @@ ${formatBodyCheckPrompt(ctx)}
 function isChoicesRequest(body) {
   const mode = String(body?.mode || "").trim().toLowerCase();
   const kind = String(body?.kind || body?.scope || "").trim().toLowerCase();
-  return mode === "choices" || kind === "awareness-choices" || kind === "think-choices" || kind === "think-close";
+  return mode === "choices" || kind === "awareness-choices" || kind === "think-choices" || kind === "think-close" || kind === "execution-choices";
 }
 
 function choicesKind(body) {
   const kind = String(body?.kind || body?.scope || body?.step || "").trim().toLowerCase();
   if (kind === "think-close" || kind === "close") return "think-close";
   if (kind === "think" || kind === "think-choices" || kind === "deep") return "think";
+  if (kind === "execution" || kind === "exec" || kind === "execution-choices") return "execution";
   return "awareness";
 }
 
@@ -2514,6 +2566,25 @@ ${story}`;
 不要等待尚未生成的覺察結論。不要寫成「我現在怎麼了／我看見了自己什麼」。
 
 【今天的輸入｜必須據此長出選項】
+${story}`;
+  }
+  if (kind === "execution") {
+    const followAnswer = Array.isArray(body.answers) ? body.answers.map((item) => String(item || "").trim()).filter(Boolean).join("\n") : "";
+    return `請把今天已經看見的事情，收成明天做得到的 3 個小行動。不要再分析人格。不要寫顯化願景。
+
+若 05 核心覺察或 04 勾選已經夠清楚：直接給 3 個不同切入點的行動，needFollowup=false。
+只有資料真的不足時，才 needFollowup=true，並只出 1 道短問。不要出第 2 題。
+三個行動禁止近義重複。
+
+【05 核心覺察】${thinkAware.line || "未寫"}
+【05 我看見了】${thinkAware.seen || "未寫"}
+【04 勾選】
+${thinkAware.thinkPicked}
+【04 深度看見】
+${thinkAware.thinkClose}
+使用者補充：${followAnswer || "無"}
+
+【今天的輸入】
 ${story}`;
   }
   const avoidBlock = avoid.length
@@ -3010,7 +3081,13 @@ module.exports = async function handler(req, res) {
         {
           role: "system",
           content: withCompleteRule(
-            kind === "think-close" ? THINK_CHOICES_CLOSE_SYSTEM : kind === "think" ? CHOICES_THINK_SYSTEM : CHOICES_AWARENESS_SYSTEM
+            kind === "think-close"
+              ? THINK_CHOICES_CLOSE_SYSTEM
+              : kind === "think"
+                ? CHOICES_THINK_SYSTEM
+                : kind === "execution"
+                  ? EXECUTION_CHOICES_SYSTEM
+                  : CHOICES_AWARENESS_SYSTEM
           ),
         },
         { role: "user", content: choicesUserPrompt(body) },
@@ -3095,7 +3172,7 @@ module.exports = async function handler(req, res) {
     const awareMode =
       (mode === "prompts" && promptKind === "awareness") ||
       (mode === "checklist" && body.kind !== "execution") ||
-      (mode === "choices" && choiceKind !== "think-close");
+      (mode === "choices" && choiceKind !== "think-close" && choiceKind !== "execution");
     const aiOpts = {
       temperature:
         mode === "insight" && isThinkGuideRequest(body)
@@ -3168,6 +3245,33 @@ module.exports = async function handler(req, res) {
         res.status(200).json({ ok: true, source: getProvider(), data: closed });
         return;
       }
+      if (kind === "execution") {
+        const followupQuestion = String(data.question || data.followupQuestion || "").trim();
+        const needFollowup = Boolean(data.needFollowup || data.followup) && Boolean(followupQuestion);
+        if (needFollowup) {
+          res.status(200).json({
+            ok: true,
+            source: getProvider(),
+            data: {
+              needFollowup: true,
+              question: followupQuestion,
+              placeholder: String(data.placeholder || "例如：睡前把手機放到床以外").trim(),
+              options: [],
+              kind,
+            },
+          });
+          return;
+        }
+        const options = reviewMerge.normalizeExecutionChoiceOptions
+          ? reviewMerge.normalizeExecutionChoiceOptions(data, { max: 3 })
+          : [];
+        if (options.length < 3) {
+          res.status(502).json({ ok: false, error: "今天的行動選項還沒準備好，請再試一次" });
+          return;
+        }
+        res.status(200).json({ ok: true, source: getProvider(), data: { options: options.slice(0, 3), needFollowup: false, kind } });
+        return;
+      }
       const avoid = Array.isArray(body.avoid) ? body.avoid : Array.isArray(body.context?.avoid) ? body.context.avoid : [];
       const options = normalizeGeneratedChoiceOptions(data, kind, avoid);
       if (options.length < 3) {
@@ -3203,15 +3307,16 @@ module.exports = async function handler(req, res) {
         return;
       }
       const min = 1;
-      const max = 3;
       const smallestStep = String(body.context?.smallestStep || "").trim();
-      const items = normalizeExecutionChecklistItems(data, min, max, smallestStep);
+      const keepFull = Boolean(body.choiceMode) && Boolean(smallestStep);
+      const max = keepFull ? 1 : 3;
+      const items = normalizeExecutionChecklistItems(data, min, max, smallestStep, { keepFull });
       if (items.length < min) {
         res.status(502).json({ ok: false, error: "今天的行動卡還沒整理好，請再試一次" });
         return;
       }
       const focusSource = data && typeof data === "object" ? data.focus || data.priority || items[0] : items[0];
-      const focus = rewriteExecFocus(focusSource, items, smallestStep, body.context);
+      const focus = rewriteExecFocus(focusSource, items, smallestStep, body.context, { keepFull });
       res.status(200).json({ ok: true, source: getProvider(), data: { items: items.slice(0, max), focus, kind } });
       return;
     }
@@ -3368,10 +3473,7 @@ module.exports.choicesKind = choicesKind;
 module.exports.CHOICES_AWARENESS_SYSTEM = CHOICES_AWARENESS_SYSTEM;
 module.exports.CHOICES_THINK_SYSTEM = CHOICES_THINK_SYSTEM;
 module.exports.choicesUserPrompt = choicesUserPrompt;
-module.exports.EXECUTION_PROMPTS_SYSTEM = EXECUTION_PROMPTS_SYSTEM;
-module.exports.MANIFEST_PROMPTS_SYSTEM = MANIFEST_PROMPTS_SYSTEM;
-module.exports.MANIFEST_PATHS_SYSTEM = MANIFEST_PATHS_SYSTEM;
-module.exports.choicesUserPrompt = choicesUserPrompt;
+module.exports.EXECUTION_CHOICES_SYSTEM = EXECUTION_CHOICES_SYSTEM;
 module.exports.EXECUTION_PROMPTS_SYSTEM = EXECUTION_PROMPTS_SYSTEM;
 module.exports.MANIFEST_PROMPTS_SYSTEM = MANIFEST_PROMPTS_SYSTEM;
 module.exports.MANIFEST_PATHS_SYSTEM = MANIFEST_PATHS_SYSTEM;

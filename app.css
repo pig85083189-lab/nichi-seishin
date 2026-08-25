@@ -4671,6 +4671,36 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   word-break: break-word;
 }
 
+.choice-list[data-choice-kind="execution"] .choice-opt__box {
+  border-radius: 50%;
+}
+
+.choice-list[data-choice-kind="execution"] .choice-opt.is-on .choice-opt__box::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  transform: translate(-50%, -50%);
+}
+
+.exec-step-result__text {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+#execStepResult {
+  min-width: 0;
+}
+
 .choice-opt--none .choice-opt__text {
   color: var(--muted);
 }
