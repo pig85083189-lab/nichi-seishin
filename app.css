@@ -7691,3 +7691,404 @@ summary [data-user-mark-field] {
     text-align: center;
   }
 }
+
+/* ——— Sidebar 覺察力／執行力／顯化力 library ——— */
+.page--lib {
+  max-width: 800px;
+  color: var(--text);
+}
+
+.page--lib .lib-head {
+  margin: 0 0 8px;
+}
+
+.page--lib .lib-kicker {
+  margin: 0 0 8px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.page--lib .lib-title {
+  margin: 0 0 10px;
+  font-family: var(--serif);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.page--lib .lib-lead {
+  margin: 0 0 22px;
+  color: var(--ink-soft);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.8;
+}
+
+.page--lib .lib-tabs {
+  display: flex;
+  gap: 18px;
+  margin: 0 0 8px;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--cream-border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.page--lib .lib-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.page--lib .lib-tab {
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.page--lib .lib-tab.is-on,
+.page--lib .lib-tab[aria-selected="true"] {
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--accent);
+  padding-bottom: 12px;
+  margin-bottom: -12px;
+}
+
+.page--lib .lib-list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.page--lib .lib-group + .lib-group,
+.page--lib .lib-day + .lib-act {
+  margin-top: 4px;
+}
+
+.page--lib .lib-empty {
+  margin: 28px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  color: var(--muted);
+}
+
+.page--lib .lib-empty__title,
+.page--lib .lib-empty .empty__title {
+  margin: 0 0 8px;
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.7;
+  color: var(--ink-soft);
+}
+
+.page--lib .lib-empty__text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.page--lib .lib-quote {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  padding: 18px 0 20px;
+  border-bottom: 1px solid var(--cream-border);
+}
+
+.page--lib .lib-list > .lib-group:last-child .lib-quote:last-child,
+.page--lib .lib-list > .lib-act:last-child,
+.page--lib .lib-list > .lib-vision:last-child {
+  border-bottom: 0;
+}
+
+.page--lib .lib-quote__date,
+.page--lib .lib-day {
+  margin: 18px 0 0;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.page--lib .lib-group:first-child .lib-quote__date {
+  margin-top: 10px;
+}
+
+.page--lib .lib-group .lib-quote {
+  padding-top: 10px;
+}
+
+.page--lib .lib-quote__text {
+  grid-column: 1;
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.page--lib .lib-del,
+.page--lib .lib-action {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #c4b4a6;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.page--lib .lib-del {
+  grid-column: 2;
+  align-self: start;
+}
+
+.page--lib .lib-del:hover,
+.page--lib .lib-action:hover {
+  color: #8a6a64;
+}
+
+.page--lib .lib-act {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 16px 0 18px;
+  border-bottom: 1px solid var(--cream-border);
+}
+
+.page--lib .lib-act__check {
+  position: relative;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  cursor: pointer;
+}
+
+.page--lib .lib-act__check input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.page--lib .lib-dot {
+  width: 18px;
+  height: 18px;
+  margin-top: 4px;
+  border: 1.4px solid #bca58f;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.page--lib .lib-act.is-done .lib-dot,
+.page--lib .lib-act__check input:checked + .lib-dot {
+  border-color: var(--accent);
+  background: radial-gradient(circle at center, var(--accent) 0 5px, transparent 6px);
+}
+
+.page--lib .lib-act__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.page--lib .lib-act.is-done .lib-act__title {
+  color: var(--muted);
+}
+
+.page--lib .lib-act__meta,
+.page--lib .lib-vision__meta {
+  display: block;
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+.page--lib .lib-act__ops,
+.page--lib .lib-vision__ops {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 14px;
+  padding-left: 32px;
+}
+
+.page--lib .lib-act__ops .task-chip-btn,
+.page--lib .lib-vision__ops .task-chip-btn {
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #c4b4a6;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  box-shadow: none;
+}
+
+.page--lib .lib-act__ops .task-chip-btn svg,
+.page--lib .lib-vision__ops .task-chip-btn svg {
+  display: none;
+}
+
+.page--lib .lib-act__ops .task-chip-btn:hover,
+.page--lib .lib-vision__ops .task-chip-btn:hover,
+.page--lib .lib-act__ops .task-chip-btn:active,
+.page--lib .lib-vision__ops .task-chip-btn:active {
+  background: transparent;
+  color: #8a6a64;
+  transform: none;
+  box-shadow: none;
+}
+
+.page--lib .lib-add {
+  margin-top: 28px;
+  padding-top: 8px;
+}
+
+.page--lib .lib-add-toggle {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--heading);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.page--lib .lib-add-form {
+  display: none;
+  gap: 4px;
+  margin-top: 14px;
+  padding-top: 8px;
+  border-top: 1px solid var(--cream-border);
+  background: transparent;
+  box-shadow: none;
+}
+
+.page--lib .lib-add-form.is-open,
+.page--lib .lib-add-form:not([hidden]) {
+  display: grid;
+}
+
+.page--lib .lib-add-form[hidden] {
+  display: none;
+}
+
+.page--lib .lib-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 0;
+  border: 0;
+  border-bottom: 1px solid var(--cream-border);
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 15px;
+}
+
+.page--lib .lib-input:focus {
+  outline: none;
+  border-bottom-color: var(--accent);
+}
+
+.page--lib .lib-add-go {
+  justify-self: start;
+  margin-top: 6px;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  color: var(--heading);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.page--lib .lib-vision {
+  padding: 26px 0 24px;
+  border-bottom: 1px solid var(--cream-border);
+}
+
+.page--lib .lib-vision__kicker {
+  margin: 0 0 10px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.page--lib .lib-vision__wish {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.page--lib .lib-vision.is-done .lib-vision__wish {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.page--lib .lib-vision__near {
+  margin: 18px 0 0;
+  padding: 0 0 0 12px;
+  border-left: 2px solid #cbb8a4;
+}
+
+.page--lib .lib-vision__near-label {
+  margin: 0 0 6px;
+  color: #8fa08a;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.page--lib .lib-vision__near-text {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 15px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+.page--lib .lib-vision__ops {
+  padding-left: 0;
+  margin-top: 14px;
+}
+
+@media (max-width: 768px) {
+  .page--lib .lib-title {
+    font-size: 24px;
+  }
+
+  .page--lib .lib-quote__text,
+  .page--lib .lib-vision__wish {
+    font-size: 18px;
+  }
+
+  .page--lib .lib-act__ops {
+    padding-left: 32px;
+  }
+}

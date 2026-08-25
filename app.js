@@ -11835,18 +11835,21 @@ function renderTaskChip(label, variant, attrs, icon) {
   return `<button class="task-chip-btn task-chip-btn--${variant}" ${attrs} type="button">${taskActionIcon(icon)}<span>${escapeHtml(label)}</span></button>`;
 }
 
-function renderStatusActionChips(id, status, attrName) {
+function renderStatusActionChips(id, status, attrName, copy = {}) {
   const safeId = escapeHtml(id);
   const attr = `${attrName}="${safeId}"`;
+  const doing = copy.doing || "進行中";
+  const later = copy.later || "待開始";
+  const done = copy.done || "已完成";
   if (status === "done") {
-    return renderTaskChip("進行中", "back", `${attr} data-to="doing" aria-label="移到進行中"`, "back");
+    return renderTaskChip(doing, "back", `${attr} data-to="doing" aria-label="移到${doing}"`, "back");
   }
   if (status === "later") {
-    return `${renderTaskChip("進行中", "back", `${attr} data-to="doing" aria-label="移到進行中"`, "back")}
-      ${renderTaskChip("已完成", "done", `${attr} data-to="done" aria-label="標記已完成"`, "done")}`;
+    return `${renderTaskChip(doing, "back", `${attr} data-to="doing" aria-label="移到${doing}"`, "back")}
+      ${renderTaskChip(done, "done", `${attr} data-to="done" aria-label="標記${done}"`, "done")}`;
   }
-  return `${renderTaskChip("移到待辦", "hold", `${attr} data-to="later" aria-label="移到待辦"`, "hold")}
-    ${renderTaskChip("已完成", "done", `${attr} data-to="done" aria-label="標記已完成"`, "done")}`;
+  return `${renderTaskChip(later, "hold", `${attr} data-to="later" aria-label="移到${later}"`, "hold")}
+    ${renderTaskChip(done, "done", `${attr} data-to="done" aria-label="標記${done}"`, "done")}`;
 }
 
 function statusMoveToast(to) {
@@ -11856,32 +11859,65 @@ function statusMoveToast(to) {
   return "已更新狀態。";
 }
 
-function renderTaskItem(task, options = {}) {
+function libraryDateLabel(iso) {
+  const day = String(iso || "").slice(0, 10);
+  const [y, m, d] = day.split("-");
+  if (!y || !m || !d) return day || "未標日期";
+  return `${y} / ${m} / ${d}`;
+}
+
+function libraryMonthDay(iso) {
+  const day = String(iso || "").slice(0, 10);
+  const parts = day.split("-");
+  return parts.length >= 3 ? `${parts[1]}/${parts[2]}` : "";
+}
+
+function librarySourceMeta(item) {
+  const src = String((item && item.source) || "").trim() || "自行新增";
+  const md = libraryMonthDay(item && item.date);
+  return md ? `來自 ${md} ${src}` : src;
+}
+
+function libEmptyHtml(title, text) {
+  return `<div class="lib-empty"><p class="lib-empty__title">${escapeHtml(title)}</p>${
+    text ? `<p class="lib-empty__text">${escapeHtml(text)}</p>` : ""
+  }</div>`;
+}
+
+function setTaskAddOpen(open) {
+  const form = document.getElementById("taskForm");
+  const toggle = document.getElementById("taskAddToggle");
+  if (form) {
+    form.hidden = !open;
+    form.classList.toggle("is-open", open);
+  }
+  if (toggle) {
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    toggle.textContent = open ? "收合" : "＋ 新增一個行動";
+  }
+  if (open) {
+    const title = document.getElementById("taskTitle");
+    if (title) title.focus();
+  }
+}
+
+function renderTaskItem(task) {
   const done = task.status === "done";
   const later = task.status === "later";
-  const dateLabel = task.date ? formatDisplayDate(task.date) : "";
   const parts = taskDisplayParts(task);
-  const heading =
-    Number.isInteger(options.index) && !done
-      ? `${String(options.index + 1).padStart(2, "0")}｜${parts.title}`
-      : parts.title;
+  const title = String(task.title || "").trim() || parts.title;
   const id = escapeHtml(task.id);
   return `
-    <article class="task-card task-todo${done ? " is-done" : ""}${later ? " is-later" : ""}">
-      <label class="task-todo__check">
+    <article class="lib-act${done ? " is-done" : ""}${later ? " is-later" : ""}">
+      <label class="lib-act__check">
         <input type="checkbox" data-task-toggle="${id}" ${done ? "checked" : ""} />
-        <span class="task-todo__box" aria-hidden="true"></span>
-        <span class="task-todo__body">
-          <span class="task-card__title">${escapeHtml(heading)}</span>
-          ${parts.detail ? `<span class="task-card__lead">${escapeHtml(parts.detail)}</span>` : ""}
-          <span class="task-card__meta">
-            <span class="tag">${escapeHtml(task.source || "自行新增")}</span>
-            ${later ? `<span class="tag tag--later">待辦</span>` : ""}
-            ${dateLabel ? `<span class="tag">${escapeHtml(dateLabel)}</span>` : ""}
-          </span>
+        <span class="lib-dot" aria-hidden="true"></span>
+        <span class="lib-act__body">
+          <span class="lib-act__title">${escapeHtml(title)}</span>
+          <span class="lib-act__meta">${escapeHtml(librarySourceMeta(task))}</span>
         </span>
       </label>
-      <div class="task-todo__actions" role="group" aria-label="行動操作">
+      <div class="lib-act__ops" role="group" aria-label="行動操作">
         ${renderStatusActionChips(task.id, task.status, "data-task-status")}
         ${renderTaskChip("刪除", "delete", `data-task-delete="${id}" aria-label="刪除這項行動"`, "trash")}
       </div>
@@ -11889,16 +11925,21 @@ function renderTaskItem(task, options = {}) {
   `;
 }
 
-function renderTaskSection(title, lead, items, emptyText) {
-  return `
-    <section class="todo-section">
-      <header class="todo-section__head">
-        <h3>${escapeHtml(title)}${items.length ? `（${items.length}）` : ""}</h3>
-        <p>${escapeHtml(lead)}</p>
-      </header>
-      ${items.length ? items.map((task, index) => renderTaskItem(task, { index })).join("") : `<div class="empty">${escapeHtml(emptyText)}</div>`}
-    </section>
-  `;
+function renderLibraryTaskGroups(items) {
+  const today = currentIso();
+  const grouped = new Map();
+  items.forEach((task) => {
+    const iso = task.date || String(task.createdAt || "").slice(0, 10) || "";
+    if (!grouped.has(iso)) grouped.set(iso, []);
+    grouped.get(iso).push(task);
+  });
+  return [...grouped.entries()]
+    .sort((a, b) => String(b[0]).localeCompare(String(a[0])))
+    .map(([iso, rows]) => {
+      const label = iso === today ? "今天" : libraryDateLabel(iso);
+      return `<p class="lib-day">${escapeHtml(label)}</p>${rows.map((task) => renderTaskItem(task)).join("")}`;
+    })
+    .join("");
 }
 
 function renderTasks() {
@@ -11917,32 +11958,25 @@ function renderTasks() {
   const filter = ["doing", "later", "done"].includes(state.taskFilter) ? state.taskFilter : "doing";
 
   if (!all.length) {
-    list.innerHTML = `<div class="empty"><p class="empty__title">執行力還是空的</p>在今日復盤勾選行動卡，完成復盤後就會匯集到這裡。</div>`;
+    list.innerHTML = libEmptyHtml("還沒有正在進行的行動。", "從今天最小的一步開始就好。");
     return;
   }
 
-  if (filter === "later") {
-    list.innerHTML = renderTaskSection("待辦", "點「進行中」就能拿回來做。完成後會走到已完成。", later, "目前沒有待辦的行動。");
-    return;
-  }
-  if (filter === "done") {
-    list.innerHTML = renderTaskSection("已完成", "這些已經被你做完了。點「進行中」或取消勾選就能再拿回來。", done, "還沒有完成的行動。");
-    return;
-  }
-  list.innerHTML = renderTaskSection(
-    "進行中",
-    "勾選或點「已完成」就會走過去。還沒想做的，點「移到待辦」。",
-    doing,
-    "目前沒有進行中的行動。"
-  );
+  const buckets = {
+    later: { items: later, empty: "目前沒有待開始的行動。" },
+    done: { items: done, empty: "還沒有完成的行動。" },
+    doing: { items: doing, empty: "目前沒有進行中的行動。" },
+  };
+  const bucket = buckets[filter];
+  list.innerHTML = bucket.items.length ? renderLibraryTaskGroups(bucket.items) : libEmptyHtml(bucket.empty);
 }
 
 function setTaskFilter(filter) {
   const next = ["doing", "later", "done"].includes(filter) ? filter : "doing";
   state.taskFilter = next;
-  document.querySelectorAll("#taskFilters .chip").forEach((item) => {
+  document.querySelectorAll("#taskFilters .lib-tab").forEach((item) => {
     const on = item.dataset.filter === next;
-    item.classList.toggle("is-active", on);
+    item.classList.toggle("is-on", on);
     item.setAttribute("aria-selected", on ? "true" : "false");
   });
 }
@@ -11986,6 +12020,7 @@ function addTask(event) {
   if (detailInput) detailInput.value = "";
   setTaskFilter("doing");
   renderTasks();
+  setTaskAddOpen(false);
   showToast("行動已加入。");
 }
 
@@ -12007,11 +12042,11 @@ function renderInsights() {
   const all = getInsights();
   const items = all.filter(insightInRange);
   if (!all.length) {
-    list.innerHTML = `<div class="empty"><p class="empty__title">還沒有已覺察洞察</p>在今日復盤收藏今天的覺察，完成復盤後就會出現在這裡。</div>`;
+    list.innerHTML = libEmptyHtml("還沒有留下的覺察。", "完成今日復盤後，重要的看見會慢慢累積在這裡。");
     return;
   }
   if (!items.length) {
-    list.innerHTML = `<div class="empty">這個區間目前沒有洞察。</div>`;
+    list.innerHTML = libEmptyHtml("這個區間目前沒有留下的覺察。");
     return;
   }
   const grouped = new Map();
@@ -12023,71 +12058,63 @@ function renderInsights() {
   list.innerHTML = [...grouped.entries()]
     .sort((a, b) => String(b[0]).localeCompare(String(a[0])))
     .map(([iso, rows]) => {
-      const cards = rows
-        .map((item) => {
-          const dateLabel = iso ? formatDisplayDate(iso) : item.date ? formatDisplayDate(item.date) : "";
-          return `
-            <article class="task-card insight-saved">
-              <div>
-                <p class="task-card__title insight-saved__quote">${escapeHtml(item.title)}</p>
-                ${dateLabel ? `<div class="task-card__meta"><span class="tag tag--date">${escapeHtml(dateLabel)}</span></div>` : ""}
-              </div>
-              <div class="task-card__actions">
-                <button class="btn btn--ghost btn--tiny" data-insight-delete="${item.id}" type="button">刪除</button>
-              </div>
+      const quotes = rows
+        .map(
+          (item) => `
+            <article class="lib-quote">
+              <p class="lib-quote__text">${escapeHtml(item.title)}</p>
+              <button class="lib-del" data-insight-delete="${item.id}" type="button">刪除</button>
             </article>
-          `;
-        })
+          `
+        )
         .join("");
-      return `<section class="library-group"><h3 class="library-group__date">${escapeHtml(iso ? formatDisplayDate(iso) : "未標日期")}</h3>${cards}</section>`;
+      return `<section class="lib-group"><p class="lib-quote__date">${escapeHtml(libraryDateLabel(iso))}</p>${quotes}</section>`;
     })
     .join("");
+}
+
+function manifestKicker(item) {
+  const blob = String((item && item.vision) || "");
+  if (/成為|節奏|證明自己|我想成為/.test(blob)) return "我想成為的自己";
+  return "我想要的生活";
+}
+
+function manifestStatusLabel(status) {
+  if (status === "done") return "已實現 ✓";
+  if (status === "later") return "待開始";
+  return "靠近中";
 }
 
 function renderManifestItem(item) {
   const done = item.status === "done";
   const later = item.status === "later";
-  const dateLabel = item.date ? formatDisplayDate(item.date) : "";
   const vision = String(item.vision || "").trim();
+  const title = String(item.title || "").trim();
+  const wish = vision || title;
+  const near = vision && title && title !== vision ? title : "";
   const id = escapeHtml(item.id);
   return `
-    <article class="task-card task-todo${done ? " is-done" : ""}${later ? " is-later" : ""}">
-      <label class="task-todo__check">
-        <input type="checkbox" data-manifest-toggle="${id}" ${done ? "checked" : ""} />
-        <span class="task-todo__box" aria-hidden="true"></span>
-        <span class="task-todo__body">
-          <span class="task-card__title">${escapeHtml(item.title)}</span>
-          ${vision ? `<span class="task-card__lead">${escapeHtml(vision)}</span>` : ""}
-          <span class="task-card__meta">
-            <span class="tag">顯化力</span>
-            ${later ? `<span class="tag tag--later">待辦</span>` : ""}
-            <span class="tag">${escapeHtml(item.source || "今日復盤")}</span>
-            ${dateLabel ? `<span class="tag">${escapeHtml(dateLabel)}</span>` : ""}
-          </span>
-        </span>
-      </label>
-      <div class="task-todo__actions" role="group" aria-label="顯化操作">
-        ${renderStatusActionChips(item.id, item.status, "data-manifest-status")}
+    <article class="lib-vision${done ? " is-done" : ""}${later ? " is-later" : ""}">
+      <p class="lib-vision__kicker">${escapeHtml(manifestKicker(item))}</p>
+      <p class="lib-vision__wish">${escapeHtml(wish)}</p>
+      ${
+        near
+          ? `<div class="lib-vision__near"><p class="lib-vision__near-label">小小靠近</p><p class="lib-vision__near-text">${escapeHtml(near)}</p></div>`
+          : ""
+      }
+      <span class="lib-vision__meta">${escapeHtml(manifestStatusLabel(item.status))}${
+        item.date ? ` · ${escapeHtml(libraryMonthDay(item.date))}` : ""
+      }</span>
+      <div class="lib-vision__ops" role="group" aria-label="顯化操作">
+        ${renderStatusActionChips(item.id, item.status, "data-manifest-status", {
+          doing: "靠近中",
+          later: "待開始",
+          done: "已實現",
+        })}
         ${renderTaskChip("刪除", "delete", `data-manifest-delete="${id}" aria-label="刪除這項顯化目標"`, "trash")}
       </div>
     </article>
   `;
-}
-
-function renderManifestGroups(items) {
-  const grouped = new Map();
-  items.forEach((item) => {
-    const iso = item.date || String(item.createdAt || "").slice(0, 10) || "";
-    if (!grouped.has(iso)) grouped.set(iso, []);
-    grouped.get(iso).push(item);
-  });
-  return [...grouped.entries()]
-    .sort((a, b) => String(b[0]).localeCompare(String(a[0])))
-    .map(([iso, rows]) => {
-      const cards = rows.map((item) => renderManifestItem(item)).join("");
-      return `<section class="library-group"><h3 class="library-group__date">${escapeHtml(iso ? formatDisplayDate(iso) : "未標日期")}</h3>${cards}</section>`;
-    })
-    .join("");
 }
 
 function renderManifests() {
@@ -12103,45 +12130,36 @@ function renderManifests() {
   const done = all
     .filter((item) => item.status === "done")
     .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
-  const filter = ["doing", "later", "done"].includes(state.manifestFilter) ? state.manifestFilter : "doing";
+  const filter = ["all", "doing", "done"].includes(state.manifestFilter) ? state.manifestFilter : "doing";
 
   if (!all.length) {
-    list.innerHTML = `<div class="empty"><p class="empty__title">顯化力還是空的</p>在今日復盤勾選「讓願望靠近現實」的方向，完成復盤後就會匯集到這裡。</div>`;
+    list.innerHTML = libEmptyHtml("還沒有正在靠近的願景。", "把真正想要的生活慢慢留下來。");
     return;
   }
 
-  const buckets = {
-    doing: {
-      title: "進行中",
-      lead: "勾選或點「已完成」就會走過去。還沒想推進的，點「移到待辦」。",
-      items: doing,
-      empty: "目前沒有進行中的顯化目標。",
-    },
-    later: {
-      title: "待辦",
-      lead: "點「進行中」就能拿回來推進。完成後會走到已完成。",
-      items: later,
-      empty: "目前沒有待辦的顯化目標。",
-    },
-    done: {
-      title: "已完成",
-      lead: "這些願景步驟已經被你做完了。點「進行中」或取消勾選就能再拿回來。",
-      items: done,
-      empty: "還沒有完成的顯化目標。",
-    },
-  };
-  const bucket = buckets[filter];
-  list.innerHTML = `<section class="todo-section"><header class="todo-section__head"><h3>${bucket.title}${bucket.items.length ? `（${bucket.items.length}）` : ""}</h3><p>${bucket.lead}</p></header>${
-    bucket.items.length ? renderManifestGroups(bucket.items) : `<div class="empty">${bucket.empty}</div>`
-  }</section>`;
+  const items =
+    filter === "all"
+      ? [...all].sort((a, b) =>
+          String(b.date || b.createdAt || "").localeCompare(String(a.date || a.createdAt || ""))
+        )
+      : filter === "done"
+      ? done
+      : [...doing, ...later];
+  if (!items.length) {
+    const empty =
+      filter === "done" ? "還沒有已實現的願景。" : "目前沒有正在靠近的願景。";
+    list.innerHTML = libEmptyHtml(empty);
+    return;
+  }
+  list.innerHTML = items.map((item) => renderManifestItem(item)).join("");
 }
 
 function setManifestFilter(filter) {
-  const next = ["doing", "later", "done"].includes(filter) ? filter : "doing";
+  const next = ["all", "doing", "done"].includes(filter) ? filter : "doing";
   state.manifestFilter = next;
-  document.querySelectorAll("#manifestFilters .chip").forEach((item) => {
+  document.querySelectorAll("#manifestFilters .lib-tab").forEach((item) => {
     const on = item.dataset.manifestFilter === next;
-    item.classList.toggle("is-active", on);
+    item.classList.toggle("is-on", on);
     item.setAttribute("aria-selected", on ? "true" : "false");
   });
 }
@@ -14020,6 +14038,10 @@ function bindEvents() {
   window.addEventListener("afterprint", () => document.body.classList.remove("printing-report"));
 
   document.getElementById("taskForm")?.addEventListener("submit", addTask);
+  document.getElementById("taskAddToggle")?.addEventListener("click", () => {
+    const form = document.getElementById("taskForm");
+    setTaskAddOpen(Boolean(form?.hidden));
+  });
   document.getElementById("taskFilters")?.addEventListener("click", (event) => {
     const chip = event.target.closest("[data-filter]");
     if (!chip) return;
@@ -14052,7 +14074,7 @@ function bindEvents() {
     const chip = event.target.closest("[data-insight-filter]");
     if (!chip) return;
     state.insightFilter = chip.dataset.insightFilter;
-    document.querySelectorAll("#insightFilters .chip").forEach((item) => item.classList.toggle("is-active", item === chip));
+    document.querySelectorAll("#insightFilters .lib-tab").forEach((item) => item.classList.toggle("is-on", item === chip));
     renderInsights();
   });
   document.getElementById("insightList")?.addEventListener("click", (event) => {

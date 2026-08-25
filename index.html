@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=178" />
+    <link rel="stylesheet" href="app.css?v=180" />
     <style>
       .splash {
         position: fixed;
@@ -764,70 +764,78 @@
           <div class="report-content" id="reportContent"></div>
         </section>
 
-        <section class="page" id="page-next" data-page="next" hidden>
-          <header class="page__header">
-            <h2 class="page__title">覺察力</h2>
-            <p class="page__subtitle">個人歷史覺察總覽。復盤裡收藏的覺察，會自動收在這裡。</p>
+        <section class="page page--lib" id="page-next" data-page="next" hidden>
+          <header class="lib-head">
+            <p class="lib-kicker">AWARENESS</p>
+            <h2 class="lib-title">覺察力</h2>
+            <p class="lib-lead">看見自己一路走來，<br />那些真正值得留下的理解。</p>
           </header>
 
-          <div class="chips" role="tablist" aria-label="覺察篩選" id="insightFilters">
-            <button class="chip is-active" data-insight-filter="all" type="button">全部</button>
-            <button class="chip" data-insight-filter="week" type="button">本週</button>
-            <button class="chip" data-insight-filter="month" type="button">本月</button>
+          <div class="lib-tabs" role="tablist" aria-label="覺察篩選" id="insightFilters">
+            <button class="lib-tab is-on" data-insight-filter="all" type="button">全部</button>
+            <button class="lib-tab" data-insight-filter="week" type="button">本週</button>
+            <button class="lib-tab" data-insight-filter="month" type="button">本月</button>
           </div>
 
-          <div class="library-list" id="insightList"></div>
+          <div class="lib-list" id="insightList"></div>
         </section>
 
-        <section class="page" id="page-sfm" data-page="sfm" hidden>
-          <header class="page__header todo-hero">
-            <h2 class="page__title">執行力</h2>
+        <section class="page page--lib" id="page-sfm" data-page="sfm" hidden>
+          <header class="lib-head">
+            <p class="lib-kicker">EXECUTION</p>
+            <h2 class="lib-title">執行力</h2>
+            <p class="lib-lead">把想法留在這裡，<br />也記得把它慢慢做完。</p>
           </header>
 
-          <form class="panel add-task" id="taskForm">
-            <input
-              class="input"
-              id="taskTitle"
-              type="text"
-              placeholder="行動標題…"
-              required
-            />
-            <input
-              class="input"
-              id="taskDetail"
-              type="text"
-              placeholder="具體作法（選填）…"
-            />
-            <select class="input select" id="taskSource" aria-label="來源">
-              <option value="自行新增">自行新增</option>
-              <option value="今日復盤">今日復盤</option>
-              <option value="週月報">週月報</option>
-              <option value="執行力">執行力</option>
-            </select>
-            <button class="btn" type="submit">加入</button>
-          </form>
-
-          <div class="chips" role="tablist" aria-label="行動分類" id="taskFilters">
-            <button class="chip is-active" data-filter="doing" type="button" role="tab" aria-selected="true">進行中</button>
-            <button class="chip" data-filter="later" type="button" role="tab" aria-selected="false">待辦</button>
-            <button class="chip" data-filter="done" type="button" role="tab" aria-selected="false">已完成</button>
+          <div class="lib-tabs" role="tablist" aria-label="行動分類" id="taskFilters">
+            <button class="lib-tab is-on" data-filter="doing" type="button" role="tab" aria-selected="true">進行中</button>
+            <button class="lib-tab" data-filter="later" type="button" role="tab" aria-selected="false">待開始</button>
+            <button class="lib-tab" data-filter="done" type="button" role="tab" aria-selected="false">已完成</button>
           </div>
 
-          <div class="task-list" id="taskList"></div>
+          <div class="lib-list" id="taskList"></div>
+
+          <div class="lib-add" id="taskAddWrap">
+            <button class="lib-add-toggle" id="taskAddToggle" type="button" aria-expanded="false" aria-controls="taskForm">＋ 新增一個行動</button>
+            <form class="lib-add-form" id="taskForm" hidden>
+              <input
+                class="lib-input"
+                id="taskTitle"
+                type="text"
+                placeholder="明天要做的那一件小事…"
+                required
+              />
+              <input
+                class="lib-input"
+                id="taskDetail"
+                type="text"
+                placeholder="具體作法（選填）…"
+              />
+              <select class="lib-input lib-input--select" id="taskSource" aria-label="來源">
+                <option value="自行新增">自行新增</option>
+                <option value="今日復盤">今日復盤</option>
+                <option value="週月報">週月報</option>
+                <option value="執行力">執行力</option>
+              </select>
+              <button class="lib-add-go" type="submit">加入</button>
+            </form>
+          </div>
         </section>
 
-        <section class="page" id="page-manifest" data-page="manifest" hidden>
-          <header class="page__header todo-hero">
-            <h2 class="page__title">顯化力</h2>
+        <section class="page page--lib" id="page-manifest" data-page="manifest" hidden>
+          <header class="lib-head">
+            <p class="lib-kicker">MANIFEST</p>
+            <h2 class="lib-title">顯化力</h2>
+            <p class="lib-lead">看看那些你正在慢慢靠近的生活。</p>
           </header>
 
-          <div class="chips" role="tablist" aria-label="顯化分類" id="manifestFilters">
-            <button class="chip is-active" data-manifest-filter="doing" type="button" role="tab" aria-selected="true">進行中</button>
-            <button class="chip" data-manifest-filter="later" type="button" role="tab" aria-selected="false">待辦</button>
-            <button class="chip" data-manifest-filter="done" type="button" role="tab" aria-selected="false">已完成</button>
+          <div class="lib-tabs" role="tablist" aria-label="顯化分類" id="manifestFilters">
+            <button class="lib-tab" data-manifest-filter="all" type="button" role="tab" aria-selected="false">全部</button>
+            <button class="lib-tab is-on" data-manifest-filter="doing" type="button" role="tab" aria-selected="true">靠近中</button>
+            <button class="lib-tab" data-manifest-filter="done" type="button" role="tab" aria-selected="false">已實現</button>
           </div>
 
-          <div class="task-list" id="manifestList"></div>
+          <div class="lib-list" id="manifestList"></div>
         </section>
 
         <section class="page" id="page-history" data-page="history" hidden>
@@ -1216,6 +1224,6 @@
     <script src="lib/history-summary.js?v=5"></script>
     <script src="lib/insight-highlight.js?v=5"></script>
     <script src="lib/user-mark.js?v=6"></script>
-    <script src="app.js?v=207"></script>
+    <script src="app.js?v=209"></script>
   </body>
 </html>
