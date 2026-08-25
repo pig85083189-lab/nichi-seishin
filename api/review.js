@@ -183,7 +183,7 @@ const CHECKLIST_AWARENESS_SYSTEM = `你是「日精進」的覺察整理者。�
 - echo：只有訊息裡列出合格跨日模式時才寫一句；否則必須是 ""。
 - question：【03｜今晚留給自己的一個問題】只留一個問題。不要要求他現在回答，讓他離開後仍可想一下。
   禁止萬用題：今天你學到了什麼？你愛自己嗎？你現在有什麼感覺？你真正的感受是什麼？
-- line：【今日帶走的一句話】15～30 個中文字。要像真正值得收藏的一句覺察，不要雞湯、不要口號。
+- line：【今日帶走的一句話】15～30 個中文字。要像真正值得收藏的一句覺察，不要雞湯、不要口號。寧可短而完整，禁止為了符合字數把句子截在半個詞。
 
 【語氣】
 使用：可能、好像、看起來、也許。
@@ -362,12 +362,16 @@ function normalizeManifestPromptItems(raw, vision) {
   const seen = new Set();
   list.forEach((item, index) => {
     const question = String(item?.question || item?.title || item || "").trim();
-    if (!question || question.length > 56 || (question.match(/[？?]/g) || []).length !== 1) return;
+    if (!question || (question.match(/[？?]/g) || []).length !== 1) return;
     if (mysticManifestText(question) || looksLikeExecTaskManifest(question)) return;
-    if (seen.has(question)) return;
-    seen.add(question);
+    const kept = textIntegrity.retainCompleteText(question, {
+      source: "api/review.normalizeManifestPromptItems",
+      field: "question",
+    });
+    if (!kept || seen.has(kept)) return;
+    seen.add(kept);
     items.push({
-      question: question.slice(0, 48),
+      question: kept,
       placeholder: String(item?.placeholder || fallbacks[index]?.placeholder || "我想的是…").slice(0, 24),
     });
   });
@@ -405,11 +409,19 @@ function normalizeManifestPathItems(raw) {
     if (!title || mysticManifestText(title) || looksLikeExecTaskManifest(title)) return;
     if (!order.includes(kind)) kind = order[Math.min(index, order.length - 1)];
     if (byKind.has(kind)) return;
+    const keptTitle = textIntegrity.retainCompleteText(title.replace(/^["「]+|[」"]+$/g, ""), {
+      source: "api/review.normalizeManifestPathItems",
+      field: "title",
+    });
+    if (!keptTitle) return;
     byKind.set(kind, {
       kind,
       label: labels[kind] || "",
-      title: title.replace(/^["「]+|[」"]+$/g, "").slice(0, 48),
-      detail: detail.slice(0, 22),
+      title: keptTitle,
+      detail: textIntegrity.retainCompleteText(detail, {
+        source: "api/review.normalizeManifestPathItems",
+        field: "detail",
+      }),
       highlights: item && typeof item === "object" ? item.highlights : undefined,
     });
   });
@@ -424,9 +436,13 @@ function normalizeManifestSentence(raw, vision) {
     .trim();
   const fallbackBit = compactLine(vision, 8) || "這件事";
   const fallback = `我正在一步一步，讓「${fallbackBit}」從心念變成可以靠近的方向。`;
-  if (!text || mysticManifestText(text) || /我一定會|宇宙正在把/.test(text)) return fallback.slice(0, 42);
+  if (!text || mysticManifestText(text) || /我一定會|宇宙正在把/.test(text)) return fallback;
   const sentences = text.split(/(?<=[。！？!?])/).map((item) => item.trim()).filter(Boolean);
-  return sentences.slice(0, 2).join("").slice(0, 56) || fallback;
+  const joined = sentences.slice(0, 2).join("");
+  return textIntegrity.retainCompleteText(joined, {
+    source: "api/review.normalizeManifestSentence",
+    field: "sentence",
+  }) || fallback;
 }
 
 function manifestPromptsUserPrompt(body) {
@@ -715,7 +731,7 @@ const THINK_GUIDE_CLOSE_SYSTEM = `你不是心理醫師，也不是裁判。你�
   "title": "8-16字，具體，不要雞湯",
   "awareness": "今日覺察總結。剛好 2 到 3 個短段落，用\\n\\n分開。全文 180-250 個中文字。內容只含：1) 今天發生了什麼 2) 三輪回答共同指向什麼 3) 今天可能值得繼續觀察什麼",
   "selfSeen": "今天我看見的自己：只能一句，第一人稱，必須像他自己說的",
-  "takeaway": "今日帶走的一句話：只能一句，15-35字，從今天長出來，不要空泛名言",
+  "takeaway": "今日帶走的一句話：只能一句，15-35字，必須語意完整。寧可短而完整，禁止截在半個詞",
   "highlights": {
     "title": [],
     "awareness": [{ "text": "必須原樣出現在 awareness 裡的短句", "color": "yellow" }],
@@ -903,15 +919,15 @@ function normalizeThinkTakeaway(text) {
   let next = String(text || "").replace(/\s+/g, " ").trim().split(/[。！？]/)[0] || "";
   next = next.replace(/[。！？「」]+/g, "").trim();
   if (/相信自己|比想像中更|你很有力量|成為更好的自己|你比想像/.test(next)) next = "";
-  if (zhCharCount(next) > 35) {
-    const picked = textIntegrity.pickCompleteSentence(next, 35);
-    if (picked) return picked.replace(/[。！？「」]+/g, "").trim();
+  if (!next) return "";
+  if (!textIntegrity.looksComplete(next)) {
     textIntegrity.warnIncomplete("api/review.normalizeThinkTakeaway", "takeaway", next);
     return "";
   }
-  if (next && !textIntegrity.isCompleteSentence(next) && !textIntegrity.isCompleteSentence(`${next}。`)) {
-    textIntegrity.warnIncomplete("api/review.normalizeThinkTakeaway", "takeaway", next);
-    return "";
+  if (zhCharCount(next) > 35) {
+    const picked = textIntegrity.pickCompleteSentence(`${next}。`, 35);
+    if (picked) return picked.replace(/[。！？「」]+$/g, "").trim();
+    return next;
   }
   return next;
 }
@@ -927,8 +943,10 @@ function normalizeThinkGuideClose(raw) {
     step: "close",
     title: (() => {
       const raw = String(data.title || data.headline || "").trim();
-      if (raw && zhCharCount(raw) <= 26 && textIntegrity.isCompleteSentence(raw)) return raw;
-      return textIntegrity.pickCompleteSentence(raw, 26) || "今天真正有感的那一層";
+      return (
+        textIntegrity.retainCompleteText(raw, { source: "api/review.normalizeThinkGuideClose", field: "title" }) ||
+        "今天真正有感的那一層"
+      );
     })(),
     summary: awareness,
     awareness,
@@ -1020,7 +1038,10 @@ function normalizeInsightResult(raw) {
   const suggestions = normalizeStringList(data.suggestions || data.actions || data.tips, 3);
   const takeaways = normalizeStringList(data.takeaways || data.keyPoints || data.highlights, 4);
   return {
-    title: String(data.title || data.headline || "").trim().slice(0, 48),
+    title: textIntegrity.retainCompleteText(String(data.title || data.headline || "").trim(), {
+      source: "api/review.normalizeInsightResult",
+      field: "title",
+    }),
     psychology,
     reflection,
     conclusion: conclusion || psychology,
@@ -1368,7 +1389,7 @@ function normalizeChecklistItems(raw, min, max) {
     const text = typeof item === "string"
       ? item.trim()
       : String(item?.label || item?.text || item?.title || "").trim();
-    if (text && !items.includes(text)) items.push(text.replace(/^[\d.、\-\s]+/, "").slice(0, 48));
+    if (text && !items.includes(text)) items.push(text.replace(/^[\d.、\-\s]+/, ""));
   });
   return items.slice(0, max);
 }
@@ -1561,10 +1582,10 @@ function mapCloudReviewToAwarenessDay(iso, review) {
     awareness: Array.isArray(journal.awarenessChecks) ? journal.awarenessChecks.slice(0, 4) : [],
     awarenessResult: journal.awarenessResult && typeof journal.awarenessResult === "object"
       ? {
-          seen: String(journal.awarenessResult.seen || "").slice(0, 80),
-          gap: String(journal.awarenessResult.gap || "").slice(0, 80),
-          line: String(journal.awarenessResult.line || "").slice(0, 28),
-          echo: String(journal.awarenessResult.echo || "").slice(0, 80),
+          seen: compactLine(journal.awarenessResult.seen || "", 80),
+          gap: compactLine(journal.awarenessResult.gap || "", 80),
+          line: compactLine(journal.awarenessResult.line || "", 80),
+          echo: compactLine(journal.awarenessResult.echo || "", 80),
         }
       : null,
     actions: Array.isArray(journal.executionChecks) ? journal.executionChecks.slice(0, 3) : [],
@@ -1988,7 +2009,11 @@ const PROMPTS_SYSTEM = `你是「日精進」的高階心靈教練。請依這�
 deep 必須剛好 4 題。`;
 
 function compactLine(value, max) {
-  return String(value || "").replace(/\s+/g, " ").trim().slice(0, max || 160);
+  const cleaned = String(value || "").replace(/\s+/g, " ").trim();
+  if (!cleaned) return "";
+  const limit = max || 160;
+  if (zhCharCount(cleaned) <= limit) return cleaned;
+  return textIntegrity.pickCompleteSentence(cleaned, limit) || "";
 }
 
 function thanksItems(value) {
@@ -2203,7 +2228,7 @@ const THINK_CHOICES_CLOSE_SYSTEM = `你不是心理醫師，也不是裁判。�
   "title": "8-16字，具體，不要雞湯",
   "awareness": "今日深度看見。剛好 2 到 3 個短段落，用\\n\\n分開。全文 120-220 個中文字。內容只含：1) 今天發生了什麼 2) 勾選共同指向什麼 3) 今天可能值得繼續觀察什麼",
   "selfSeen": "今天我看見的自己：只能一句，第一人稱，必須像他自己說的",
-  "takeaway": "今日帶走的一句話：只能一句，15-35字，從今天長出來，不要空泛名言",
+  "takeaway": "今日帶走的一句話：只能一句，15-35字，必須語意完整。寧可短而完整，禁止截在半個詞",
   "highlights": {
     "title": [],
     "awareness": [{ "text": "必須原樣出現在 awareness 裡的短句", "color": "yellow" }],
@@ -2990,7 +3015,7 @@ module.exports = async function handler(req, res) {
                 ? 0.7
                 : 0.75,
       timeoutMs: promptKind === "awareness" || mode === "choices" ? 20000 : 22000,
-      rejectPartial: awareMode,
+      rejectPartial: true,
       maxTokens:
         mode === "bodycoach"
           ? 900
@@ -3214,6 +3239,10 @@ module.exports.normalizeExecutionChecklistItems = normalizeExecutionChecklistIte
 module.exports.looksIncompleteAwarenessText = looksIncompleteAwarenessText;
 module.exports.finishAwarenessBlock = finishAwarenessBlock;
 module.exports.normalizeAwarenessLine = normalizeAwarenessLine;
+module.exports.normalizeThinkTakeaway = normalizeThinkTakeaway;
+module.exports.normalizeThinkGuideClose = normalizeThinkGuideClose;
+module.exports.normalizeInsightResult = normalizeInsightResult;
+module.exports.normalizeManifestSentence = normalizeManifestSentence;
 module.exports.padAwarenessPrompts = padAwarenessPrompts;
 module.exports.awarenessPromptStep = awarenessPromptStep;
 module.exports.labeledAwarenessTurns = labeledAwarenessTurns;

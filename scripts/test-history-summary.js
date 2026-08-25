@@ -205,4 +205,9 @@ const longSource = buildHistoryDisplayTitle({
 assert(!/平$/.test(longSource.replace(/\s+/g, "")), "CASE 7：長文不可切成半句");
 assert(!longSource.includes("…"), "CASE 7：不可用省略號硬切");
 
+const truncatedTitle = buildHistoryDisplayTitle({
+  journal: { insight: { guide: { takeaway: "被愛的感受不只來自別人的惦記，也來自你願意為自己倒一杯溫" } } },
+});
+assert(truncatedTitle !== "被愛的感受不只來自別人的惦記，也來自你願意為自己倒一杯溫", "不完整 takeaway 不可當歷史金句");
+
 console.log("history summary tests passed");

@@ -5290,20 +5290,23 @@ function zhAwarenessCount(text) {
   return String(text || "").replace(/\s+/g, "").length;
 }
 
-function normalizeAwarenessLine(text) {
-  let line = String(text || "").replace(/\s+/g, " ").trim().replace(/^["「『]+|[」』"]+$/g, "");
-  if (!line || looksIncompleteAwarenessText(line)) return "";
+function normalizeAwarenessLine(text, opts = {}) {
+  const keepSource = Boolean(opts.keepSource);
+  const original = String(text || "").replace(/\s+/g, " ").trim().replace(/^["「『]+|[」』"]+$/g, "");
+  let line = original;
+  if (!line) return "";
+  if (looksIncompleteAwarenessText(line)) return keepSource ? original : "";
   if (zhAwarenessCount(line) > 30) {
     const api = textIntegrityApi();
     const picked = typeof api.pickCompleteSentence === "function" ? api.pickCompleteSentence(line, 30) : "";
     if (!picked) {
       if (typeof api.warnIncomplete === "function") api.warnIncomplete("app.normalizeAwarenessLine", "line", line);
-      return "";
+      return keepSource ? original : "";
     }
     line = picked.replace(/[。！？]+$/g, "");
   }
   const count = zhAwarenessCount(line);
-  if (count < 15 || count > 30 || looksIncompleteAwarenessText(line)) return "";
+  if (count < 15 || count > 30 || looksIncompleteAwarenessText(line)) return keepSource ? original : "";
   return line;
 }
 
@@ -5407,7 +5410,8 @@ function emptyAwarenessResult() {
   return { seen: "", gap: "", question: "", line: "", echo: "", generatedAt: "", updatedAt: "", highlights: {} };
 }
 
-function normalizeAwarenessResult(raw) {
+function normalizeAwarenessResult(raw, opts = {}) {
+  const keepSource = Boolean(opts.keepSource);
   const src = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   const nested = src.result && typeof src.result === "object" ? src.result : src;
   let seen = softenAwarenessClaim(finishAwarenessBlock(nested.seen || nested.selfSeen || nested.todaySeen || nested.iSee, 280));
@@ -5420,11 +5424,17 @@ function normalizeAwarenessResult(raw) {
       )
     : compactAwarenessText(nested.question || nested.tonight || nested.prompt || nested.eveningQuestion, 90);
   if (isGenericAwarenessQuestion(question) || looksIncompleteAwarenessText(question)) question = "";
-  let line = normalizeAwarenessLine(nested.line || nested.quote || nested.oneLine);
-  if (!line && Array.isArray(src.quotes) && src.quotes[0]) line = normalizeAwarenessLine(src.quotes[0]);
+  let line = normalizeAwarenessLine(nested.line || nested.quote || nested.oneLine, { keepSource });
+  if (!line && Array.isArray(src.quotes) && src.quotes[0]) line = normalizeAwarenessLine(src.quotes[0], { keepSource });
   const echo = sanitizeAwarenessEcho(nested.echo || nested.weekly || nested.crossDay || nested.pattern, collectRecentAwarenessDays());
   if (echo && gap && !gap.includes(echo)) gap = `${gap}\n\n${echo}`;
-  if (!seen || looksIncompleteAwarenessText(seen)) return emptyAwarenessResult();
+  if (!seen || looksIncompleteAwarenessText(seen)) {
+    if (keepSource && String(nested.seen || nested.selfSeen || nested.todaySeen || nested.iSee || "").trim()) {
+      seen = String(nested.seen || nested.selfSeen || nested.todaySeen || nested.iSee || "").trim();
+    } else {
+      return emptyAwarenessResult();
+    }
+  }
   return {
     seen,
     gap,
@@ -5455,7 +5465,7 @@ function hasAwarenessResult(raw) {
 }
 
 function awarenessResultKeepText(result) {
-  const data = normalizeAwarenessResult(result);
+  const data = normalizeAwarenessResult(result, { keepSource: true });
   if (data.line && data.line.length >= 8) return data.line;
   const quote = cleanAwarenessQuote(data.seen);
   if (quote.length >= 8) return quote;
@@ -5465,7 +5475,7 @@ function awarenessResultKeepText(result) {
 }
 
 function formatAwarenessResultText(result) {
-  const data = normalizeAwarenessResult(result);
+  const data = normalizeAwarenessResult(result, { keepSource: true });
   const parts = [];
   if (data.seen) parts.push(`今天，我看見了自己\n${data.seen}`);
   if (data.gap) parts.push(`我可能忽略的地方\n${data.gap}`);
@@ -5546,7 +5556,7 @@ function awarenessResultStale() {
 }
 
 function collectAwareQuotes() {
-  const result = normalizeAwarenessResult(state.journalAwarenessResult);
+  const result = normalizeAwarenessResult(state.journalAwarenessResult, { keepSource: true });
   const keep = awarenessResultKeepText(result);
   if (keep && keep.length >= 8) return [keep];
   const fromDom = [...document.querySelectorAll("#awareChecks .aware-result, #awareChecks .aware-quote")]
@@ -5669,7 +5679,7 @@ function renderLegacyAwareQuote(quote, checked) {
 }
 
 function awarenessResultSections(result) {
-  const data = normalizeAwarenessResult(result);
+  const data = normalizeAwarenessResult(result, { keepSource: true });
   const sections = [];
   let n = 1;
   const mark = () => `${String(n++).padStart(2, "0")}｜`;
@@ -5716,7 +5726,7 @@ function renderAwarenessResultCard(result, checked) {
 function renderAwareQuote(items, checked) {
   const root = document.getElementById("awareChecks");
   if (!root) return;
-  const result = normalizeAwarenessResult(state.journalAwarenessResult);
+  const result = normalizeAwarenessResult(state.journalAwarenessResult, { keepSource: true });
   if (result.seen) {
     root.innerHTML = renderAwarenessResultCard(result, checked);
     syncAwareQuoteGate();
@@ -5948,7 +5958,7 @@ function refreshJournalChecklists(journal, options = {}) {
   const manifestChecked = options.useSaved ? data.manifestChecks : checkedValues("manifestChecks");
   if (!options.skipAware) {
     state.journalAwarenessResult = keepAware
-      ? normalizeAwarenessResult(data.awarenessResult || state.journalAwarenessResult)
+      ? normalizeAwarenessResult(data.awarenessResult || state.journalAwarenessResult, { keepSource: true })
       : emptyAwarenessResult();
     renderChecklist("awareChecks", awareItems, awareChecked);
   }
@@ -6224,7 +6234,7 @@ async function generateJournalChecklist(kind, options = {}) {
     if (state.checklistToken[kind] !== token) return;
     if (isAware) {
       const previous = hasAwarenessResult(state.journalAwarenessResult)
-        ? normalizeAwarenessResult(state.journalAwarenessResult)
+        ? normalizeAwarenessResult(state.journalAwarenessResult, { keepSource: true })
         : emptyAwarenessResult();
       if (previous.seen && !looksIncompleteAwarenessText(previous.seen)) {
         renderAwareQuote([awarenessResultKeepText(previous)], journal.awarenessChecks);
@@ -6395,7 +6405,7 @@ function normalizeManifestPrompts(list) {
       const question = String(item?.question || item?.title || item || "").trim();
       if (!question) return null;
       return {
-        question: question.slice(0, 56),
+        question,
         placeholder: String(item?.placeholder || "我想的是…").trim().slice(0, 24) || "我想的是…",
       };
     })
@@ -7782,10 +7792,10 @@ function mapReviewToAwarenessDay(iso, review) {
   const sleep = [check.sleep.duration, check.sleep.quality, check.sleep.energy].filter(Boolean).join("／");
   const awarenessResult = hasAwarenessResult(journal.awarenessResult)
     ? {
-        seen: String(journal.awarenessResult.seen || "").slice(0, 80),
-        gap: String(journal.awarenessResult.gap || "").slice(0, 80),
-        line: String(journal.awarenessResult.line || "").slice(0, 28),
-        echo: String(journal.awarenessResult.echo || "").slice(0, 80),
+        seen: compactAwarenessText(journal.awarenessResult.seen || "", 80),
+        gap: compactAwarenessText(journal.awarenessResult.gap || "", 80),
+        line: compactAwarenessText(journal.awarenessResult.line || "", 80),
+        echo: compactAwarenessText(journal.awarenessResult.echo || "", 80),
       }
     : null;
   return {
@@ -8458,13 +8468,22 @@ function applyThinkChoicesClose(closed) {
 
 function localThinkChoicesClose(journal, bag) {
   const selected = selectedChoiceTexts(bag);
-  const event = String(journal?.event || "").trim().slice(0, 42) || "今天這件事";
+  const eventRaw = String(journal?.event || "").trim();
+  const event = eventRaw && eventRaw.replace(/\s+/g, "").length <= 42 ? eventRaw : "今天這件事";
   const line = selected[0] || "今天我先把真正有感的那一層留下來。";
   return {
     title: "今天真正有感的那一層",
     awareness: `${event}裡，有些東西比事情本身更靠近你。\n\n${selected.length ? `你勾選的是：${selected.join("；")}。` : "你今天沒有特別勾選，這也表示那些現成的句子還不是最貼近的。"}\n\n也許值得繼續觀察的，不是再解釋一次發生了什麼，而是你真正想留下的感覺。`,
     selfSeen: selected[0] ? `我看見：${selected[0]}` : "我看見自己今天先停在「還沒有特別符合的選項」。",
-    takeaway: line.replace(/[。！？]?$/, "").slice(0, 32),
+    takeaway: (() => {
+      const raw = String(line || "").replace(/[。！？]+$/g, "").trim();
+      const api = textIntegrityApi();
+      if (typeof api.looksComplete === "function" && api.looksComplete(raw)) return raw;
+      if (typeof api.isCompleteSentence === "function" && (api.isCompleteSentence(raw) || api.isCompleteSentence(`${raw}。`))) {
+        return raw;
+      }
+      return "今天先把真正有感的那一層留下來";
+    })(),
     highlights: {},
   };
 }
@@ -9281,7 +9300,7 @@ function collectJournal() {
       const quotes = collectAwareQuotes();
       return quotes.length ? quotes : normalizeAwarenessQuotes(checklistItems("awareChecks"));
     })(),
-    awarenessResult: normalizeAwarenessResult(state.journalAwarenessResult),
+    awarenessResult: normalizeAwarenessResult(state.journalAwarenessResult, { keepSource: true }),
     awarenessChoices: serializeChoiceBag(state.awarenessChoices),
     thinkChoices: serializeChoiceBag(state.thinkChoices),
     execution: collectExecutionAnswers(),
@@ -9411,7 +9430,7 @@ function composeJournalRawText(journal) {
   });
   const awareQuotes = normalizeAwarenessQuotes(journal.awarenessCheckItems);
   awareQuotes.forEach((quote, index) => lines.push(`今日一句話 ${index + 1}：${quote}`));
-  const awareResult = normalizeAwarenessResult(journal.awarenessResult);
+  const awareResult = normalizeAwarenessResult(journal.awarenessResult, { keepSource: true });
   if (awareResult.seen) lines.push(`今天，我看見了自己：${awareResult.seen}`);
   if (awareResult.gap) lines.push(`我可能忽略的地方：${awareResult.gap}`);
   if (awareResult.question) lines.push(`今晚留給自己的一個問題：${awareResult.question}`);
@@ -9807,7 +9826,7 @@ function fillJournal(journal) {
   state.journalInsight = normalizeInsight(data.insight);
   state.journalBodyCoach = normalizeBodyCoach(data.bodyCoach);
   state.journalExecFocus = normalizeExecFocus(data.executionFocus, data.executionCheckItems);
-  state.journalAwarenessResult = normalizeAwarenessResult(data.awarenessResult);
+  state.journalAwarenessResult = normalizeAwarenessResult(data.awarenessResult, { keepSource: true });
   state.awarenessChoices = normalizeChoiceBag(data.awarenessChoices);
   state.thinkChoices = normalizeChoiceBag(data.thinkChoices);
   state.journalUserMarks = userMarkBag(data.userMarks);
@@ -12094,7 +12113,7 @@ function renderHistoryJournal(review) {
       : journal.awarenessChecks,
     historyIso
   );
-  const awareResult = normalizeAwarenessResult(journal.awarenessResult);
+  const awareResult = normalizeAwarenessResult(journal.awarenessResult, { keepSource: true });
   const awareResultHtml = awareResult.seen
     ? [
         historyBlock("今天，我看見了自己", markableP(awareResult.seen, "awareness.seen", "history-journal__text", historyIso, fieldHighlightsOf(awareResult.highlights, "seen"))),

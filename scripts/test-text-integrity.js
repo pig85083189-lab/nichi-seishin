@@ -73,7 +73,8 @@ const mergedMaps = mergeReviewMaps(
 );
 assert(mergedMaps["2026-08-22"].journal.awarenessResult.seen === fullSeen, "CASE J：cloud merge 後文字完全一致");
 
-assert(finalizeGeneratedQuestion(caseA) === "", "未完成問題不可被 finalize 成半句");
+assert(isCompleteSentence("被愛的感受不只來自別人的惦記，也來自你願意為自己倒一杯溫") === false, "CASE K：一杯溫 必須判定不完整");
+assert(pickCompleteSentence("被愛的感受不只來自別人的惦記，也來自你願意為自己倒一杯溫暖的茶。", 28) === "", "CASE K：不可為了 28 字把完整句切成一杯溫");
 assert(finalizeGeneratedQuestion(caseD) === caseD, "完整問題 finalize 後仍完整");
 
 const rejected = padAwarenessPrompts([{ question: caseA }], { event: "被人惦記", step: 1 });
