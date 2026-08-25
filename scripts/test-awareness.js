@@ -38,7 +38,7 @@ const normalized = normalizeAwarenessResult({
 });
 assert(normalized.seen.includes("完成感"), "今日覺察不可因舊的 100 字上限被截斷");
 assert(String(normalized.line).replace(/\s+/g, "").length >= 15, "帶走的一句話至少 15 字");
-assert(zhOk(normalized.line), "帶走的一句話不可超過 30 個中文字");
+assert(normalized.line.includes("被放在心上"), "舊格式 line 仍完整保留");
 
 const cut = normalizeAwarenessResult({
   seen: "這些都讓你開心。有趣的是，這些時刻的共同點不只是被看見，還包括『別人的主動』和『自己的完成』——一個",
@@ -63,12 +63,9 @@ const turns = labeledAwarenessTurns({
 });
 assert(turns.includes("回答：否"), "否必須進下一題 context");
 
-function zhOk(text) {
-  const n = String(text || "").replace(/\s+/g, "").length;
-  return n <= 30;
-}
-
 assert(String(normalizeAwarenessLine("被放在心上，比事情本身更靠近你")).replace(/\s+/g, "").length >= 15, "line helper 應收下完整短句");
 assert(!normalizeAwarenessLine("太短了"), "太短的 line 應被拒絕");
+const longLine = "我不是沒有行動，只是太習慣先看見自己做得不夠的那些地方";
+assert(normalizeAwarenessLine(longLine) === longLine, "完整超過 24 字的核心覺察不可 hard cut");
 
 console.log("awareness tests passed");

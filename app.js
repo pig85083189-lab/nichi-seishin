@@ -5263,6 +5263,13 @@ function looksIncompleteAwarenessText(text) {
   return false;
 }
 
+function retainCompleteGeneratedText(value, opts) {
+  const api = textIntegrityApi();
+  if (typeof api.retainCompleteText === "function") return api.retainCompleteText(value, opts || {});
+  const cleaned = String(value || "").trim();
+  return !cleaned || looksIncompleteAwarenessText(cleaned) ? "" : cleaned;
+}
+
 function finishAwarenessBlock(value, max) {
   const cleaned = compactAwarenessBlock(value);
   if (!cleaned) return "";
@@ -5296,17 +5303,9 @@ function normalizeAwarenessLine(text, opts = {}) {
   let line = original;
   if (!line) return "";
   if (looksIncompleteAwarenessText(line)) return keepSource ? original : "";
-  if (zhAwarenessCount(line) > 30) {
-    const api = textIntegrityApi();
-    const picked = typeof api.pickCompleteSentence === "function" ? api.pickCompleteSentence(line, 30) : "";
-    if (!picked) {
-      if (typeof api.warnIncomplete === "function") api.warnIncomplete("app.normalizeAwarenessLine", "line", line);
-      return keepSource ? original : "";
-    }
-    line = picked.replace(/[。！？]+$/g, "");
-  }
-  const count = zhAwarenessCount(line);
-  if (count < 15 || count > 30 || looksIncompleteAwarenessText(line)) return keepSource ? original : "";
+  line = line.replace(/[。！？]+$/g, "").trim();
+  if (!line || looksIncompleteAwarenessText(line)) return keepSource ? original : "";
+  if (zhAwarenessCount(line) < 8) return keepSource ? original : "";
   return line;
 }
 
@@ -5410,8 +5409,84 @@ function emptyAwarenessResult() {
   return { seen: "", gap: "", question: "", line: "", echo: "", generatedAt: "", updatedAt: "", highlights: {} };
 }
 
+function isCompactAwarenessResult(raw) {
+  const src = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  const nested = src.result && typeof src.result === "object" ? src.result : src;
+  return Boolean(
+    String(nested.line || "").trim() &&
+      String(nested.seen || nested.selfSeen || "").trim() &&
+      !String(nested.gap || "").trim() &&
+      !String(nested.question || "").trim()
+  );
+}
+
+function compactInnerVoice(value, keepSource) {
+  const raw = String(value || "").trim();
+  if (!raw || keepSource) return raw;
+  const api = textIntegrityApi();
+  return typeof api.toInnerVoice === "function" ? api.toInnerVoice(raw) : raw;
+}
+
+function normalizeCompactAwarenessResult(raw, opts = {}) {
+  const keepSource = Boolean(opts.keepSource);
+  const src = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  const nested = src.result && typeof src.result === "object" ? src.result : src;
+  const line = normalizeAwarenessLine(compactInnerVoice(nested.line || nested.core || nested.quote || nested.oneLine || "", keepSource), { keepSource });
+  const seen = retainCompleteGeneratedText(compactInnerVoice(nested.seen || nested.note || nested.selfSeen || nested.iSee || "", keepSource), {
+    source: "app.normalizeCompactAwarenessResult",
+    field: "seen",
+  });
+  if (!line || !seen || looksIncompleteAwarenessText(seen)) {
+    if (keepSource && (String(nested.line || "").trim() || String(nested.seen || "").trim())) {
+      return {
+        seen: String(nested.seen || nested.selfSeen || "").trim(),
+        gap: "",
+        question: "",
+        line: String(nested.line || "").trim(),
+        echo: "",
+        generatedAt: String(nested.generatedAt || src.generatedAt || "").trim(),
+        updatedAt: String(nested.updatedAt || src.updatedAt || "").trim(),
+        highlights: nested.highlights && typeof nested.highlights === "object" ? nested.highlights : src.highlights && typeof src.highlights === "object" ? src.highlights : {},
+      };
+    }
+    return emptyAwarenessResult();
+  }
+  return {
+    seen,
+    gap: "",
+    question: "",
+    line,
+    echo: "",
+    generatedAt: String(nested.generatedAt || src.generatedAt || "").trim(),
+    updatedAt: String(nested.updatedAt || src.updatedAt || "").trim(),
+    highlights: {
+      seen: Array.isArray(src.highlights?.seen) || Array.isArray(nested.highlights?.seen) ? nested.highlights?.seen || src.highlights?.seen : [],
+      gap: [],
+      question: [],
+      line: Array.isArray(src.highlights?.line) || Array.isArray(nested.highlights?.line) ? nested.highlights?.line || src.highlights?.line : [],
+    },
+  };
+}
+
+function buildCompactAwarenessResult() {
+  const labels = selectedChoiceTexts(state.awarenessChoices);
+  const line = normalizeAwarenessLine(labels[0] || "") || "我先把今天真正有感的地方留下來";
+  const seen = labels.length
+    ? `今天真正碰到我的，是「${labels[0]}」這件事。`
+    : "今天先把真正有感的地方留下來就好，不必急著下更大的結論。";
+  return {
+    seen: retainCompleteGeneratedText(seen, { source: "app.buildCompactAwarenessResult", field: "seen" }) || seen,
+    gap: "",
+    question: "",
+    line,
+    echo: "",
+    highlights: { seen: [], gap: [], question: [], line: [] },
+  };
+}
+
 function normalizeAwarenessResult(raw, opts = {}) {
   const keepSource = Boolean(opts.keepSource);
+  if (isCompactAwarenessResult(raw)) return normalizeCompactAwarenessResult(raw, opts);
   const src = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   const nested = src.result && typeof src.result === "object" ? src.result : src;
   let seen = softenAwarenessClaim(finishAwarenessBlock(nested.seen || nested.selfSeen || nested.todaySeen || nested.iSee, 280));
@@ -5449,7 +5524,7 @@ function normalizeAwarenessResult(raw, opts = {}) {
 
 function stampAwarenessResult(result, prev) {
   const now = new Date().toISOString();
-  const current = normalizeAwarenessResult(result);
+  const current = isCompactAwarenessResult(result) ? normalizeCompactAwarenessResult(result) : normalizeAwarenessResult(result);
   const before = prev && typeof prev === "object" ? prev : {};
   return {
     ...current,
@@ -5476,6 +5551,9 @@ function awarenessResultKeepText(result) {
 
 function formatAwarenessResultText(result) {
   const data = normalizeAwarenessResult(result, { keepSource: true });
+  if (isCompactAwarenessResult(data)) {
+    return [`核心覺察`, data.line, ``, `我看見了`, data.seen].join("\n");
+  }
   const parts = [];
   if (data.seen) parts.push(`今天，我看見了自己\n${data.seen}`);
   if (data.gap) parts.push(`我可能忽略的地方\n${data.gap}`);
@@ -5690,15 +5768,43 @@ function awarenessResultSections(result) {
 }
 
 function renderAwarenessResultCard(result, checked) {
-  const { data, sections } = awarenessResultSections(result);
+  const compact = isCompactAwarenessResult(result);
+  const data = compact ? normalizeCompactAwarenessResult(result, { keepSource: true }) : normalizeAwarenessResult(result, { keepSource: true });
   const keep = awarenessResultKeepText(data);
   const kept = (checked || []).map((item) => String(item || "").trim()).includes(keep);
   const stale = awarenessResultStale();
   const copyText = formatAwarenessResultText(data);
+  const usingChoices = Boolean(normalizeChoiceBag(state.awarenessChoices).options.length);
+  const staleHint = usingChoices
+    ? "你改了勾選。這份覺察還是依先前的選擇寫的，可以再整理一次。"
+    : "你改了是／否。這份覺察還是依先前的答案寫的，可以再整理一次。";
+  if (compact && data.line && data.seen) {
+    return `<div class="aware-result aware-result--compact${stale ? " is-stale" : ""}" data-quote="${escapeHtml(keep)}" data-copy="${escapeHtml(copyText)}">
+      ${userMarkHintHtml()}
+      ${stale ? `<p class="aware-result__stale">${escapeHtml(staleHint)}</p>` : ""}
+      <div class="aware-core">
+        <p class="aware-core__label">核心覺察</p>
+        ${markableP(data.line, "awareness.line", "aware-core__quote", "", fieldHighlightsOf(data.highlights, "line"))}
+      </div>
+      <div class="aware-seen">
+        <p class="aware-seen__label">我看見了</p>
+        ${markableP(data.seen, "awareness.seen", "aware-seen__text", "", fieldHighlightsOf(data.highlights, "seen"))}
+      </div>
+      <div class="aware-result__actions">
+        <label class="aware-quote__keep">
+          <input type="checkbox" value="${escapeHtml(keep)}" ${kept ? "checked" : ""} />
+          <span class="aware-quote__box" aria-hidden="true"></span>
+          <span>收藏今天的覺察</span>
+        </label>
+        <button class="btn btn--ghost btn--tiny" type="button" data-copy-aware-quote>複製</button>
+      </div>
+    </div>`;
+  }
+  const { sections } = awarenessResultSections(data);
   return `<div class="aware-result${stale ? " is-stale" : ""}" data-quote="${escapeHtml(keep)}" data-copy="${escapeHtml(copyText)}">
       <p class="aware-result__heading">今日覺察</p>
       ${userMarkHintHtml()}
-      ${stale ? `<p class="aware-result__stale">你改了是／否。這份覺察還是依先前的答案寫的，可以再整理一次。</p>` : ""}
+      ${stale ? `<p class="aware-result__stale">${escapeHtml(staleHint)}</p>` : ""}
       ${sections
         .map(
           (item) => `<article class="aware-result__card${item.kind === "question" ? " aware-result__card--question" : ""}${item.kind === "echo" ? " aware-result__card--echo" : ""}">
@@ -6146,7 +6252,11 @@ async function generateJournalChecklist(kind, options = {}) {
     }
   }, 32000);
 
-  const fallback = isAware ? buildAwarenessResult(journal) : buildExecutionCheckItems(journal);
+  const fallback = isAware
+    ? usingChoices
+      ? buildCompactAwarenessResult()
+      : buildAwarenessResult(journal)
+    : buildExecutionCheckItems(journal);
   const min = isAware ? 1 : EXECUTION_CARD_MIN;
   const max = isAware ? 1 : EXECUTION_CARD_MAX;
 
@@ -6212,10 +6322,13 @@ async function generateJournalChecklist(kind, options = {}) {
     if (!remote && lastAwareError) throw lastAwareError;
     if (state.checklistToken[kind] !== token) return;
     if (isAware) {
-      const result = hasAwarenessResult(remote.result || remote)
-        ? normalizeAwarenessResult(remote.result || remote)
-        : emptyAwarenessResult();
-      if (!result.seen || looksIncompleteAwarenessText(result.seen)) {
+      const raw = remote.result || remote;
+      const result = usingChoices
+        ? normalizeCompactAwarenessResult(raw)
+        : hasAwarenessResult(raw)
+          ? normalizeAwarenessResult(raw)
+          : emptyAwarenessResult();
+      if (!result.seen || looksIncompleteAwarenessText(result.seen) || (usingChoices && !result.line)) {
         throw new Error("這次覺察沒有完整生成，請再試一次。");
       }
       state.journalAwarenessResult = stampAwarenessResult(result, state.journalAwarenessResult);
@@ -9431,11 +9544,16 @@ function composeJournalRawText(journal) {
   const awareQuotes = normalizeAwarenessQuotes(journal.awarenessCheckItems);
   awareQuotes.forEach((quote, index) => lines.push(`今日一句話 ${index + 1}：${quote}`));
   const awareResult = normalizeAwarenessResult(journal.awarenessResult, { keepSource: true });
-  if (awareResult.seen) lines.push(`今天，我看見了自己：${awareResult.seen}`);
-  if (awareResult.gap) lines.push(`我可能忽略的地方：${awareResult.gap}`);
-  if (awareResult.question) lines.push(`今晚留給自己的一個問題：${awareResult.question}`);
-  if (awareResult.echo) lines.push(`跨日覺察：${awareResult.echo}`);
-  if (awareResult.line) lines.push(`今日一句話：${awareResult.line}`);
+  if (isCompactAwarenessResult(awareResult)) {
+    if (awareResult.line) lines.push(`核心覺察：${awareResult.line}`);
+    if (awareResult.seen) lines.push(`我看見了：${awareResult.seen}`);
+  } else {
+    if (awareResult.seen) lines.push(`今天，我看見了自己：${awareResult.seen}`);
+    if (awareResult.gap) lines.push(`我可能忽略的地方：${awareResult.gap}`);
+    if (awareResult.question) lines.push(`今晚留給自己的一個問題：${awareResult.question}`);
+    if (awareResult.echo) lines.push(`跨日覺察：${awareResult.echo}`);
+    if (awareResult.line) lines.push(`今日一句話：${awareResult.line}`);
+  }
   const execPrompts = normalizeExecutionPrompts(journal.executionPrompts || state.executionPrompts);
   const execAnswers = Array.isArray(journal.execution) ? journal.execution : [];
   const execCount = Math.max(execPrompts.length, execAnswers.length);
@@ -12114,7 +12232,19 @@ function renderHistoryJournal(review) {
     historyIso
   );
   const awareResult = normalizeAwarenessResult(journal.awarenessResult, { keepSource: true });
-  const awareResultHtml = awareResult.seen
+  const compactAware = isCompactAwarenessResult(awareResult);
+  const awareResultHtml = compactAware && awareResult.line && awareResult.seen
+    ? `<div class="aware-result aware-result--compact history-aware-compact">
+        <div class="aware-core">
+          <p class="aware-core__label">核心覺察</p>
+          ${markableP(awareResult.line, "awareness.line", "aware-core__quote", historyIso, fieldHighlightsOf(awareResult.highlights, "line"))}
+        </div>
+        <div class="aware-seen">
+          <p class="aware-seen__label">我看見了</p>
+          ${markableP(awareResult.seen, "awareness.seen", "aware-seen__text", historyIso, fieldHighlightsOf(awareResult.highlights, "seen"))}
+        </div>
+      </div>`
+    : awareResult.seen
     ? [
         historyBlock("今天，我看見了自己", markableP(awareResult.seen, "awareness.seen", "history-journal__text", historyIso, fieldHighlightsOf(awareResult.highlights, "seen"))),
         awareResult.gap

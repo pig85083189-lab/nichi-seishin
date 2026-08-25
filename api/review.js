@@ -211,41 +211,48 @@ ${HIGHLIGHT_RULE}`;
 
 const CHECKLIST_AWARENESS_CHOICES_SYSTEM = `你是「日精進」的覺察整理者。使用者剛在 04 勾選了「我現在怎麼了」的選項（最多 2 個，也可以一個都不勾）。
 
-目的不是重述事件，也不是替他下人格結論，而是把今天紀錄與他勾選（或沒勾選）的內容，收成真正值得留下的覺察。
+你的工作不是分析他，而是幫他把今天真正看見的自己，收成他自己會說出口的兩句話。
+讀完後，他最理想的感受是：「啊，原來我是這樣。」最差的結果是一段 AI 心理分析。
 
-讀完後，他最理想的感受是：「原來我可能是這樣。」最差的結果是把今天發生的 A、B、C 再摘要一次。
+04 只回答：我現在怎麼了／我今天看見自己什麼。
+禁止寫成 06：人生意義、長期價值觀、關係哲學、人生模式的大結論。
 
 【思考順序】
 1. 先讀完感謝、事件、心情、身體、睡眠。
-2. 勾選的句子是「他願意承認的可能」，仍用可能／好像／今天看起來／也許。
+2. 使用者實際勾選的句子權重最高。不要只改寫一次 choice，而要從「今天發生什麼＋被什麼碰到＋他選了哪幾句」收成一個核心看見。
 3. 若他勾了「今天沒有特別符合我的選項」，或一個都沒勾：不要硬套選項。改從實際填寫內容找一個較小、較安全的觀察。
 4. 沒被勾選的選項，禁止寫成今天的結論。
-5. 資料不足就寫得簡單、具體；禁止硬湊深度。
+5. 資料不足就寫得簡單、保守。禁止過度心理推論。
 
-【結果結構｜短、準、完整】
-- seen：【01｜今天，我看見了自己】剛好 2 到 4 句。直接指出今天最值得留下來的覺察。
-- gap：【02｜我可能忽略的地方】剛好 2 到 4 句。指出可能存在的矛盾、重複模式或盲點。
-- echo：只有訊息裡列出合格跨日模式時才寫一句；否則必須是 ""。
-- question：可空字串。不要再追問他現在回答。若寫，只留一個問題，禁止萬用題。
-- line：【今日帶走的一句話】15～30 個中文字。
+【只輸出兩層｜不要問答、不要追問、不要長篇】
+- line【核心覺察】：一句真正值得記住的話。建議 12～24 個中文字，可更短，但必須語意完整。寧可完整 27 字，也不要寫到一半。
+  要像使用者自己突然想通。優先第一人稱：我……／原來我……／我真正……／有些……
+- seen【我看見了】：一句簡短補充，說明這個覺察背後的模式／需要／反應。建議 20～45 字，只要一句。必須完整。
 
-【語氣】使用：可能、好像、看起來、也許。
-禁止：你就是、你一直都、這代表你、你其實只是、你一定是。
-禁止心理診斷、人格標籤、虛構次數／日期／歷史事件。
+合格：
+「我需要的不是完美，而是進展感。」
+「我真正需要的，是被放在心上。」
+「我在意的不是答案，而是有沒有被理解。」
+不合格：
+「你好像正在尋找一種前進的證據。」
+「你可能不是在追求完美，而是在尋找進展感。」
+「從今天的事件可以看出，你對關係有比較高的期待。」
+
+【語氣】禁止：你好像、你可能、也許你、你似乎、這代表、從你的回答可以看出、從今天的事件可以看出。
+禁止心理診斷、人格標籤、雞湯、說教。
+gap、question、echo 必須是空字串。不要再增加第三層。
 
 規則：
 - 只輸出 JSON，繁體中文
 {
-  "seen": "2到4句完整覺察",
-  "gap": "2到4句完整觀察",
+  "line": "核心覺察，第一人稱，一句完整的話",
+  "seen": "我看見了，一句完整補充",
+  "gap": "",
   "question": "",
-  "line": "15到30個中文字",
   "echo": "",
   "highlights": {
-    "seen": [{ "text": "必須原樣出現在 seen 裡的短句", "color": "yellow" }],
-    "gap": [],
-    "question": [],
-    "line": []
+    "line": [{ "text": "必須原樣出現在 line 裡的短語", "color": "yellow" }],
+    "seen": [{ "text": "必須原樣出現在 seen 裡的短語", "color": "pink" }]
   }
 }
 ${HIGHLIGHT_RULE}`;
@@ -1458,17 +1465,51 @@ function finishAwarenessBlock(value, max) {
 function normalizeAwarenessLine(text) {
   let line = String(text || "").replace(/\s+/g, " ").trim().replace(/^["「『]+|[」』"]+$/g, "");
   if (!line || looksIncompleteAwarenessText(line)) return "";
-  if (zhCharCount(line) > 30) {
-    const picked = textIntegrity.pickCompleteSentence(line, 30);
-    if (!picked) {
-      textIntegrity.warnIncomplete("api/review.normalizeAwarenessLine", "line", line);
-      return "";
-    }
-    line = picked.replace(/[。！？]+$/g, "");
-  }
-  const count = zhCharCount(line);
-  if (count < 15 || count > 30 || looksIncompleteAwarenessText(line)) return "";
+  line = textIntegrity.toInnerVoice ? textIntegrity.toInnerVoice(line) : line;
+  line = line.replace(/[。！？]+$/g, "").trim();
+  if (!line || looksIncompleteAwarenessText(line)) return "";
+  if (zhCharCount(line) < 8) return "";
   return line;
+}
+
+function isCompactAwarenessResult(raw) {
+  const src = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  const nested = src.result && typeof src.result === "object" ? src.result : src;
+  const line = String(nested.line || "").trim();
+  const seen = String(nested.seen || nested.selfSeen || "").trim();
+  const gap = String(nested.gap || "").trim();
+  const question = String(nested.question || "").trim();
+  return Boolean(line && seen && !gap && !question);
+}
+
+function normalizeCompactAwarenessResult(raw) {
+  const src = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  const nested = src.result && typeof src.result === "object" ? src.result : src;
+  let line = textIntegrity.toInnerVoice(nested.line || nested.core || nested.quote || nested.oneLine || "");
+  let seen = textIntegrity.toInnerVoice(nested.seen || nested.note || nested.selfSeen || nested.iSee || "");
+  if (zhCharCount(line) > 36 && zhCharCount(seen) > 0 && zhCharCount(seen) <= 28 && zhCharCount(line) > zhCharCount(seen) + 8) {
+    const swapped = line;
+    line = seen;
+    seen = swapped;
+  }
+  line = normalizeAwarenessLine(line);
+  seen = textIntegrity.retainCompleteText(seen, { source: "api/review.normalizeCompactAwarenessResult", field: "seen" });
+  if (!line || !seen || looksIncompleteAwarenessText(seen)) return emptyAwarenessResult();
+  return {
+    seen,
+    gap: "",
+    question: "",
+    line,
+    echo: "",
+    generatedAt: String(nested.generatedAt || src.generatedAt || "").trim(),
+    updatedAt: String(nested.updatedAt || src.updatedAt || "").trim(),
+    highlights: {
+      seen: insightHighlight.fieldHighlights(nested.highlights || src.highlights, "seen"),
+      gap: [],
+      question: [],
+      line: insightHighlight.fieldHighlights(nested.highlights || src.highlights, "line"),
+    },
+  };
 }
 
 function softenAwarenessClaim(text) {
@@ -1659,6 +1700,7 @@ function emptyAwarenessResult() {
 }
 
 function normalizeAwarenessResult(raw, recentDays) {
+  if (isCompactAwarenessResult(raw)) return normalizeCompactAwarenessResult(raw);
   const src = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   const nested = src.result && typeof src.result === "object" ? src.result : src;
   let seen = softenAwarenessClaim(finishAwarenessBlock(nested.seen || nested.selfSeen || nested.todaySeen || nested.iSee, 280));
@@ -1926,21 +1968,20 @@ ${formatBodyCheckPrompt(ctx)}
       : selected.length
         ? selected.map((item, index) => `${index + 1}. ${item}`).join("\n")
         : "使用者一個選項都沒勾。不要硬套未勾選的句子。";
-    const progress = body.progress && typeof body.progress === "object" ? body.progress : {};
-    return `請先交叉比對今天所有資料，再依勾選內容整理「今日覺察結果」。不要只給金句，也不要替他下人格結論。question 可空。
+    return `請先交叉比對今天所有資料，再依勾選內容收成兩句：「核心覺察」＋「我看見了」。不要分析他，不要再提問，不要第三層。
 
-【04 勾選｜我現在怎麼了】
+使用者勾選的句子權重最高。從「今天發生什麼＋被什麼碰到＋他選了哪幾句」收成一個核心看見。不要只改寫 choice。
+04 只寫「我現在怎麼了」。不要寫人生意義、長期價值、關係哲學。
+
+【04 勾選｜權重最高】
 ${picked}
 
-【今天已完成的內容｜必須綜合，不要只抓一句】
+【今天已完成的內容】
 今日感謝：
 ${formatThanksForPrompt(ctx) || "未寫"}
 今日事件：${compactLine(ctx.event, 800) || "未寫"}
 心情：${ctx.mood || "未選"}
 ${formatBodyCheckPrompt(ctx)}
-
-【最近反覆出現的模式｜echo】
-${formatRecentAwarenessDays(progress)}
 `;
   }
   const yesCount = answers.filter((item) => item === "是").length;
@@ -3040,7 +3081,9 @@ module.exports = async function handler(req, res) {
                 : mode === "checklist"
                   ? body.kind === "execution"
                     ? 900
-                    : 1800
+                    : isAwarenessChoiceClose(body)
+                      ? 700
+                      : 1800
                   : 1600,
     };
     let data;
@@ -3073,12 +3116,19 @@ module.exports = async function handler(req, res) {
     if (mode === "checklist") {
       const kind = body.kind === "execution" ? "execution" : "awareness";
       if (kind === "awareness") {
-        let result = normalizeAwarenessResult(data, body.progress);
-        if (!result.seen || looksIncompleteAwarenessText(result.seen)) {
+        const compact = isAwarenessChoiceClose(body);
+        let result = compact ? normalizeCompactAwarenessResult(data) : normalizeAwarenessResult(data, body.progress);
+        const incomplete = compact
+          ? !result.line || !result.seen || looksIncompleteAwarenessText(result.seen)
+          : !result.seen || looksIncompleteAwarenessText(result.seen);
+        if (incomplete) {
           data = await callOpenAI(messages, { ...aiOpts, _retried: true });
-          result = normalizeAwarenessResult(data, body.progress);
+          result = compact ? normalizeCompactAwarenessResult(data) : normalizeAwarenessResult(data, body.progress);
         }
-        if (!result.seen || looksIncompleteAwarenessText(result.seen)) {
+        const stillIncomplete = compact
+          ? !result.line || !result.seen || looksIncompleteAwarenessText(result.seen)
+          : !result.seen || looksIncompleteAwarenessText(result.seen);
+        if (stillIncomplete) {
           res.status(502).json({ ok: false, error: "這次覺察沒有完整生成，請再試一次。" });
           return;
         }
@@ -3239,6 +3289,9 @@ module.exports.normalizeExecutionChecklistItems = normalizeExecutionChecklistIte
 module.exports.looksIncompleteAwarenessText = looksIncompleteAwarenessText;
 module.exports.finishAwarenessBlock = finishAwarenessBlock;
 module.exports.normalizeAwarenessLine = normalizeAwarenessLine;
+module.exports.isCompactAwarenessResult = isCompactAwarenessResult;
+module.exports.normalizeCompactAwarenessResult = normalizeCompactAwarenessResult;
+module.exports.CHECKLIST_AWARENESS_CHOICES_SYSTEM = CHECKLIST_AWARENESS_CHOICES_SYSTEM;
 module.exports.normalizeThinkTakeaway = normalizeThinkTakeaway;
 module.exports.normalizeThinkGuideClose = normalizeThinkGuideClose;
 module.exports.normalizeInsightResult = normalizeInsightResult;

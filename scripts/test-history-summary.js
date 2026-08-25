@@ -210,4 +210,16 @@ const truncatedTitle = buildHistoryDisplayTitle({
 });
 assert(truncatedTitle !== "被愛的感受不只來自別人的惦記，也來自你願意為自己倒一杯溫", "不完整 takeaway 不可當歷史金句");
 
+const compactAwareTitle = buildHistoryDisplayTitle({
+  journal: {
+    awarenessResult: {
+      line: "我需要的不是完美，而是進展感",
+      seen: "當事情沒有明顯進度時，我很容易開始懷疑自己是不是做得不夠。",
+      gap: "",
+      question: "",
+    },
+  },
+});
+assert(compactAwareTitle === "我需要的不是完美，而是進展感", "新 04 compact 列表摘要應優先用核心覺察");
+
 console.log("history summary tests passed");
