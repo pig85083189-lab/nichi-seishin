@@ -19,6 +19,8 @@ assert(src.includes("historyListScroll"), "保留列表 scroll");
 assert(src.includes("historyQuery") && src.includes("historyTag"), "搜尋與 filter state 仍在");
 assert(src.includes("history.back()"), "畫面上返回可走 browser history");
 assert(src.includes("renderHistoryDetail") && src.includes("renderHistoryJournal"), "詳情頁沿用既有 journal render");
+assert(src.includes("history-detail-sheet"), "詳情頁有單日大內容外框");
+assert(src.includes("data-history-back"), "返回按鈕在詳情頁");
 assert(src.includes("history-subcard--static"), "詳情 section 改為靜態閱讀，不再 accordion");
 assert(src.includes("renderCombinedHighlightedText"), "combined highlight 仍在");
 assert(!src.includes("data-history-toggle"), "列表不再用 accordion toggle");

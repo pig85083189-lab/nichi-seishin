@@ -2340,22 +2340,10 @@ body.nav-closed .auth-pay {
   min-width: 0;
 }
 
-.history-detail .history-journal {
-  margin: 0;
-  padding-top: 0;
-  border-top: 0;
-}
-
-.history-detail__head {
-  margin: 0 0 28px;
-  padding: 0 0 22px;
-  border-bottom: 1px solid var(--cream-border);
-}
-
 .history-detail__back {
   display: inline-flex;
   align-items: center;
-  margin: 0 0 18px;
+  margin: 0 0 14px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -2370,31 +2358,66 @@ body.nav-closed .auth-pay {
   color: #342c27;
 }
 
-.history-detail__date {
+.history-detail-sheet {
+  min-width: 0;
+  padding: 21px 17px 22px;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(188, 165, 143, 0.35);
+  border-radius: 18px;
+  box-shadow: 0 2px 8px rgba(92, 74, 58, 0.04);
+}
+
+.history-detail-sheet .history-detail__head {
+  margin: 0;
+  padding: 0 0 22px;
+  border-bottom: 1px solid #e8ddd0;
+}
+
+.history-detail-sheet .history-detail__title {
+  margin: 0 0 12px;
+  color: #2a2320;
+  font-family: var(--serif);
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.history-detail-sheet .history-detail__date {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin: 0 0 10px;
-  color: var(--muted);
+  margin: 0 0 8px;
+  color: #8a7d72;
   font-size: 12px;
 }
 
-.history-detail__title {
-  margin: 0 0 10px;
-  color: #342c27;
-  font-family: var(--serif);
-  font-size: 20px;
-  font-weight: 600;
-  line-height: 1.55;
-  overflow-wrap: anywhere;
-}
-
-.history-detail__tags {
+.history-detail-sheet .history-detail__tags {
   margin: 0;
   color: #8a7d72;
   font-size: 12px;
   line-height: 1.6;
+}
+
+.history-detail-sheet .history-journal {
+  margin: 0;
+  padding: 0;
+  border-top: 0;
+}
+
+.history-detail-sheet .history-subcard {
+  padding: 24px 0 2px;
+}
+
+.history-detail-sheet .history-subcard:first-child {
+  padding-top: 22px;
+}
+
+.history-detail-sheet .history-subcard + .history-subcard {
+  margin-top: 0;
+  padding-top: 24px;
+  border-top: 1px solid #e8ddd0;
 }
 
 .history-subcard--static {
@@ -2408,6 +2431,18 @@ body.nav-closed .auth-pay {
 .history-subcard--static .history-subcard__body {
   overflow: visible;
   padding: 0 0 8px;
+}
+
+@media (min-width: 720px) {
+  .history-detail-sheet {
+    padding: 32px;
+  }
+
+  .history-detail-sheet .history-detail__title {
+    font-size: 23px;
+    font-weight: 700;
+    line-height: 1.45;
+  }
 }
 
 .search-field {
@@ -3963,8 +3998,9 @@ body.nav-closed .auth-pay {
     line-height: 1.7;
   }
 
-  .history-detail__title {
-    font-size: 19px;
+  .history-detail-sheet .history-detail__title {
+    font-size: 21px;
+    line-height: 1.5;
   }
 
   .body-coach__title {

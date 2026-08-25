@@ -11794,16 +11794,21 @@ function renderHistoryDetail(iso) {
   if (!root) return;
   const date = historyDetailIso(iso);
   if (!date) {
-    root.innerHTML = `<p class="history-journal__empty">找不到這一天的紀錄。</p>`;
+    root.innerHTML = `
+      <button class="history-detail__back" data-history-back type="button">← 返回歷史紀錄</button>
+      <article class="history-detail-sheet">
+        <p class="history-journal__empty">找不到這一天的紀錄。</p>
+      </article>
+    `;
     return;
   }
   const review = getReview(date);
   if (!review || !reviewIsComplete(review)) {
     root.innerHTML = `
-      <header class="history-detail__head">
-        <button class="history-detail__back" data-history-back type="button">← 返回歷史紀錄</button>
-      </header>
-      <p class="history-journal__empty">這天還沒有留下完整復盤內容。</p>
+      <button class="history-detail__back" data-history-back type="button">← 返回歷史紀錄</button>
+      <article class="history-detail-sheet">
+        <p class="history-journal__empty">這天還沒有留下完整復盤內容。</p>
+      </article>
     `;
     return;
   }
@@ -11812,15 +11817,17 @@ function renderHistoryDetail(iso) {
   const stars = historyListStars(historyReview);
   const tags = (summary.tags || []).filter(Boolean);
   root.innerHTML = `
-    <header class="history-detail__head">
-      <button class="history-detail__back" data-history-back type="button">← 返回歷史紀錄</button>
-      <p class="history-detail__date">${escapeHtml(formatHistoryListDate(date))}${
-        stars ? `<span class="history-card__stars">${escapeHtml(stars)}</span>` : ""
-      }</p>
-      <h1 class="history-detail__title">「${escapeHtml(summary.title)}」</h1>
-      ${tags.length ? `<p class="history-detail__tags">${escapeHtml(tags.join(" / "))}</p>` : ""}
-    </header>
-    ${renderHistoryJournal(historyReview)}
+    <button class="history-detail__back" data-history-back type="button">← 返回歷史紀錄</button>
+    <article class="history-detail-sheet">
+      <header class="history-detail__head">
+        <h1 class="history-detail__title">${escapeHtml(summary.title)}</h1>
+        <p class="history-detail__date">${escapeHtml(formatHistoryListDate(date))}${
+          stars ? `<span class="history-card__stars">${escapeHtml(stars)}</span>` : ""
+        }</p>
+        ${tags.length ? `<p class="history-detail__tags">${escapeHtml(tags.join(" / "))}</p>` : ""}
+      </header>
+      ${renderHistoryJournal(historyReview)}
+    </article>
   `;
 }
 
