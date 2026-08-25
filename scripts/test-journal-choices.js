@@ -99,31 +99,33 @@ const picked = pickReview(
 );
 assert(picked.journal.awarenessChoices.selectedIds[0] === "a1", "pickReview 空資料不可覆蓋舊 choices");
 
-const avoid = ["當別人主動表達在乎時，我會特別有感", "我真正被碰到的，可能不是事情本身，而是有人把我放在心上"];
-const think = normalizeGeneratedChoiceOptions(
+const avoidThink = ["我害怕的可能不是失去，而是來不及好好珍惜", "有些關係的重要，不需要等到失去才被看見"];
+const awareness = normalizeGeneratedChoiceOptions(
   {
     options: [
-      { id: "t1", text: "當別人主動表達在乎時，我會特別有感" },
-      { id: "t2", text: "我害怕的可能不是失去，而是來不及好好珍惜" },
-      { id: "t3", text: "有些關係的重要，不需要等到失去才被看見" },
-      { id: "t4", text: "我真正想留下的，也許不是某個結果，而是彼此有好好在一起的感覺" },
+      { id: "a1", text: "我害怕的可能不是失去，而是來不及好好珍惜" },
+      { id: "a2", text: "當別人主動表達在乎時，我會特別有感" },
+      { id: "a3", text: "我真正被碰到的，可能不是事情本身，而是有人把我放在心上" },
+      { id: "a4", text: "我好像比自己以為的，更在意有沒有被放在心上" },
     ],
   },
-  "think",
-  avoid
+  "awareness",
+  avoidThink
 );
-assert(think.every((item) => !avoid.includes(item.text)), "06 必須丟掉與 04 重複的句子");
-assert(think.length >= 3, "去掉 04 重複後仍應留下 06 自己的句子");
-assert(CHOICES_AWARENESS_SYSTEM.includes("我現在怎麼了"), "04 prompt 必須是當下狀態");
-assert(CHOICES_THINK_SYSTEM.includes("這件事背後代表什麼"), "06 prompt 必須是意義層");
-assert(CHOICES_THINK_SYSTEM.includes("不要換句話重複 04 已經出現的覺察"), "06 prompt 必須明確禁止換句話重複 04");
-assert(CHOICES_THINK_SYSTEM.includes("價值／信念／長期模式"), "06 prompt 必須要求再走一層");
+assert(awareness.every((item) => !avoidThink.includes(item.text)), "05 必須丟掉與 04 深度思考重複的句子");
+assert(awareness.length >= 3, "去掉 04 重複後仍應留下 05 自己的句子");
+assert(CHOICES_THINK_SYSTEM.includes("這件事背後，對我真正代表什麼"), "04 prompt 必須是意義層");
+assert(CHOICES_THINK_SYSTEM.includes("不要依賴尚未生成的覺察結論"), "04 不可依賴 05");
+assert(CHOICES_THINK_SYSTEM.includes("禁止寫成 05"), "04 不可搶 05 的自我覺察");
+assert(CHOICES_AWARENESS_SYSTEM.includes("我看見了自己什麼"), "05 prompt 必須是看見自己");
+assert(CHOICES_AWARENESS_SYSTEM.includes("發生在 04 深度思考之後"), "05 可以讀 04");
+assert(CHOICES_AWARENESS_SYSTEM.includes("禁止寫成 04"), "05 不可再寫事情意義");
 
 const paraphrased = normalizeChoiceOptions(
-  [{ id: "t1", text: "當別人主動表達在乎時，我好像會特別有感" }],
-  { avoid: ["當別人主動表達在乎時，我會特別有感"] }
+  [{ id: "a1", text: "我害怕的可能不是失去，好像是來不及好好珍惜" }],
+  { avoid: ["我害怕的可能不是失去，而是來不及好好珍惜"] }
 );
-assert(paraphrased.length === 0, "06 去重不可只看前 12 字，換句話說也要擋");
+assert(paraphrased.length === 0, "05 去重不可只看前 12 字，換句話說也要擋");
 
 const oldGuide = historyDeepThinkingView({
   journal: {
@@ -153,7 +155,7 @@ const newThink = historyDeepThinkingView({
     },
   },
 });
-assert(newThink.kind === "thinkChoices", "新版 06 必須走 thinkChoices");
+assert(newThink.kind === "thinkChoices", "新版 04 必須走 thinkChoices");
 assert(newThink.selectedTexts[0].includes("來不及好好珍惜"), "新版必須顯示勾選句");
 assert(!newThink.rounds || newThink.rounds.length === 0, "新版 choices 存在時 history 不可再帶舊 rounds");
 

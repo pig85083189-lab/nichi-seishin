@@ -4148,11 +4148,20 @@ function tourSteps() {
       },
     },
     {
+      element: "#section-deep",
+      tourPage: "today",
+      popover: {
+        title: "04 深度思考",
+        description: "寫完感謝、事件與身體後，點開始，會依今天的內容長出幾個「這件事背後代表什麼」的選項。最多勾 2 個，也可以都不勾。",
+        side: "top",
+      },
+    },
+    {
       element: "#section-aware",
       tourPage: "today",
       popover: {
-        title: "04 覺察力",
-        description: "寫完今日感謝與事件後，點開始，會依今天的內容長出幾個「我現在怎麼了」的選項。最多勾 2 個，也可以都不勾。",
+        title: "05 覺察力",
+        description: "經過今天的事情與深度思考後，會長出幾個「我看見了自己什麼」的選項。最多勾 2 個，也可以都不勾。",
         side: "top",
       },
     },
@@ -4161,7 +4170,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "今日覺察",
-        description: "勾選後，這裡會整理你今天看見的自己、可能忽略的地方。不必再回答是／否或打字。",
+        description: "勾選後，這裡會收成「核心覺察」與「我看見了」。不必再回答是／否或打字。",
         side: "top",
       },
     },
@@ -4169,17 +4178,8 @@ function tourSteps() {
       element: "#section-exec",
       tourPage: "today",
       popover: {
-        title: "05 執行力",
-        description: "把今天想做的事問到夠具體，最多 1～2 題，再收成明天真正做得到的一小步。行動卡一打勾，就會同步到側邊欄「執行力」。",
-        side: "top",
-      },
-    },
-    {
-      element: "#section-deep",
-      tourPage: "today",
-      popover: {
-        title: "06 深度思考",
-        description: "從今天的內容長出幾個「這件事背後代表什麼」的選項。最多勾 2 個，也可以都不勾。不必再打字或連續追問。",
+        title: "06 執行力",
+        description: "既然已經看見這件事，把下一步問到夠具體，最多 1～2 題，再收成明天真正做得到的一小步。行動卡一打勾，就會同步到側邊欄「執行力」。",
         side: "top",
       },
     },
@@ -6286,14 +6286,14 @@ async function generateJournalChecklist(kind, options = {}) {
         deepNote: normalizeDeep(journal.deep)
           .map((item) => [item.plain, item.deep].filter((bit) => String(bit || "").trim()).join(" "))
           .filter(Boolean)
-          .join("／")
-          .slice(0, 160),
-        insight: String(journal.insight?.conclusion || journal.insight?.psychology || "").slice(0, 120),
+          .join("／"),
+        insight: String(journal.insight?.conclusion || journal.insight?.psychology || journal.insight?.guide?.awareness || ""),
         openActions: getTasks()
           .filter((task) => task.status !== "done")
           .slice(0, 6)
           .map((task) => task.title),
         smallestStep: journal.smallestStep,
+        ...priorThinkAwareContext(journal),
       },
       progress: isAware
         ? {
@@ -6409,7 +6409,7 @@ async function generateExecutionFollowup(options = {}) {
     if (options.fromCards) {
       await generateJournalChecklist("execution", { skipFollow: true });
     } else if (!options.auto) {
-      showToast("這三題已經夠用了，可以直接整理行動卡。");
+      showToast("這兩題已經夠用了，可以直接整理行動卡。");
     }
     return;
   }
@@ -6458,6 +6458,7 @@ async function generateExecutionFollowup(options = {}) {
           bodyCheck: journal.bodyCheck,
           awareness: journal.awareness,
           smallestStep: journal.smallestStep,
+          ...priorThinkAwareContext(journal),
         },
       },
       18000
@@ -6744,6 +6745,14 @@ async function generateManifestPrompts(options = {}) {
       date: currentIso(),
       vision,
       text: vision,
+      context: {
+        event: journal.event,
+        mood: journal.mood,
+        bodyTags: journal.bodyTags,
+        bodyNote: journal.bodyNote,
+        bodyCheck: journal.bodyCheck,
+        ...priorThinkAwareContext(journal),
+      },
     });
     if (state.manifestPromptsToken !== token) return;
     const questions = normalizeManifestPrompts(remote.questions || remote.items);
@@ -6800,6 +6809,7 @@ async function generateManifestChecklist(options = {}) {
         mood: journal.mood,
         bodyTags: journal.bodyTags,
         bodyNote: journal.bodyNote,
+        ...priorThinkAwareContext(journal),
       },
     });
     if (state.checklistToken.manifest !== token) return;
@@ -8331,7 +8341,7 @@ function syncThinkChoiceGate() {
   if (closeLoader) closeLoader.hidden = !loading;
 }
 
-function localAwarenessChoiceFallbacks(journal) {
+function localAwarenessChoiceFallbacks(journal, avoid) {
   const event = String(journal?.event || "").trim();
   const thanks = thanksTextFrom(journal);
   const mood = String(journal?.mood || "").trim();
@@ -8355,7 +8365,7 @@ function localAwarenessChoiceFallbacks(journal) {
     options.push({ id: "a8", text: "我現在的反應裡，可能同時有感動，也有一點緊" });
   }
   return reviewMergeApi().normalizeChoiceOptions
-    ? reviewMergeApi().normalizeChoiceOptions(options, { max: 4 })
+    ? reviewMergeApi().normalizeChoiceOptions(options, { avoid, max: 4 })
     : options.slice(0, 4);
 }
 
@@ -8378,7 +8388,53 @@ function localThinkChoiceFallbacks(journal, avoid) {
   return options.slice(0, 4);
 }
 
-function choicesContext(journal) {
+function thinkBitsFrom(journal) {
+  const bag = normalizeChoiceBag((journal && journal.thinkChoices) || state.thinkChoices);
+  const insight = (journal && journal.insight && typeof journal.insight === "object" ? journal.insight : null) || state.journalInsight || {};
+  const guide = insight.guide && typeof insight.guide === "object" ? insight.guide : {};
+  return {
+    bag,
+    selected: selectedChoiceTexts(bag),
+    none: Boolean(bag.none),
+    options: bag.options.map((item) => String(item.text || "").trim()).filter(Boolean),
+    title: String(guide.title || insight.title || "").trim(),
+    awareness: String(guide.awareness || guide.summary || "").trim(),
+    selfSeen: String(guide.selfSeen || "").trim(),
+    takeaway: String(guide.takeaway || "").trim(),
+  };
+}
+
+function awarenessBitsFrom(journal) {
+  const bag = normalizeChoiceBag((journal && journal.awarenessChoices) || state.awarenessChoices);
+  const result = normalizeAwarenessResult((journal && journal.awarenessResult) || state.journalAwarenessResult, { keepSource: true });
+  return {
+    bag,
+    selected: selectedChoiceTexts(bag),
+    none: Boolean(bag.none),
+    line: String(result.line || "").trim(),
+    seen: String(result.seen || "").trim(),
+  };
+}
+
+function priorThinkAwareContext(journal) {
+  const think = thinkBitsFrom(journal);
+  const aware = awarenessBitsFrom(journal);
+  return {
+    thinkSelected: think.selected,
+    thinkNone: think.none,
+    thinkOptions: think.options,
+    thinkCloseTitle: think.title,
+    thinkCloseAwareness: think.awareness,
+    thinkCloseSelfSeen: think.selfSeen,
+    thinkCloseTakeaway: think.takeaway,
+    awarenessSelected: aware.selected,
+    awarenessNone: aware.none,
+    awarenessLine: aware.line,
+    awarenessSeen: aware.seen,
+  };
+}
+
+function choicesContext(journal, extra = {}) {
   return {
     thanks: thanksTextFrom(journal),
     thanksText: thanksTextFrom(journal),
@@ -8387,6 +8443,7 @@ function choicesContext(journal) {
     bodyTags: journal.bodyTags,
     bodyNote: journal.bodyNote,
     bodyCheck: journal.bodyCheck,
+    ...extra,
   };
 }
 
@@ -8404,7 +8461,9 @@ async function generateAwarenessChoices(options = {}) {
   const token = (state.choicesToken.awareness || 0) + 1;
   state.choicesToken.awareness = token;
   setChoicesLoading("awareness", true);
-  const fallback = localAwarenessChoiceFallbacks(journal);
+  const think = thinkBitsFrom(journal);
+  const avoid = [...think.options, ...think.selected];
+  const fallback = localAwarenessChoiceFallbacks(journal, avoid);
   try {
     if (!state.user) throw new Error("請先登入，才能使用雲端出題。");
     const remote = await postReview({
@@ -8412,11 +8471,21 @@ async function generateAwarenessChoices(options = {}) {
       kind: "awareness",
       date: currentIso(),
       text: journal.event,
-      context: choicesContext(journal),
+      avoid,
+      context: choicesContext(journal, {
+        avoid,
+        thinkSelected: think.selected,
+        thinkNone: think.none,
+        thinkOptions: think.options,
+        thinkCloseTitle: think.title,
+        thinkCloseAwareness: think.awareness,
+        thinkCloseSelfSeen: think.selfSeen,
+        thinkCloseTakeaway: think.takeaway,
+      }),
       progress: { streak: collectGrowthProgress().streak },
     });
     if (state.choicesToken.awareness !== token) return;
-    const optionsList = normalizeChoiceBag({ options: remote.options }).options;
+    const optionsList = normalizeChoiceBag({ options: remote.options }, { avoid }).options;
     if (optionsList.length < 3) throw new Error("今天的覺察選項還沒準備好，請再試一次。");
     state.awarenessChoices = serializeChoiceBag({
       sourceSig: `${thanksTextFrom(journal)}\n${journal.event}\n${journal.mood}`,
@@ -8458,14 +8527,10 @@ async function generateThinkChoices(options = {}) {
     if (!options.auto) showToast("請先寫下今日感謝、事件，並選擇心情。");
     return;
   }
-  const avoid = [
-    ...normalizeChoiceBag(state.awarenessChoices).options.map((item) => item.text),
-    ...selectedChoiceTexts(state.awarenessChoices),
-  ];
   const token = (state.choicesToken.think || 0) + 1;
   state.choicesToken.think = token;
   setChoicesLoading("think", true);
-  const fallback = localThinkChoiceFallbacks(journal, avoid);
+  const fallback = localThinkChoiceFallbacks(journal, []);
   try {
     if (!state.user) throw new Error("請先登入，才能使用雲端出題。");
     const remote = await postReview({
@@ -8473,12 +8538,11 @@ async function generateThinkChoices(options = {}) {
       kind: "think",
       date: currentIso(),
       text: journal.event,
-      avoid,
-      context: { ...choicesContext(journal), avoid },
+      context: choicesContext(journal),
       progress: { streak: collectGrowthProgress().streak },
     });
     if (state.choicesToken.think !== token) return;
-    const optionsList = normalizeChoiceBag({ options: remote.options }, { avoid }).options;
+    const optionsList = normalizeChoiceBag({ options: remote.options }).options;
     if (optionsList.length < 3) throw new Error("今天的深度選項還沒準備好，請再試一次。");
     state.thinkChoices = serializeChoiceBag({
       sourceSig: `${thanksTextFrom(journal)}\n${journal.event}\n${journal.mood}`,
@@ -9025,6 +9089,7 @@ async function generateCorePrompts(options = {}) {
           bodyCheck: journal.bodyCheck,
           awareness: journal.awareness,
           smallestStep: journal.smallestStep,
+          ...priorThinkAwareContext(journal),
         },
         progress: {
           streak: progress.streak,
@@ -9628,9 +9693,9 @@ const JOURNAL_FOLD_IDS = [
   "quickModules",
   "section-body",
   "section-insight",
+  "section-deep",
   "section-aware",
   "section-exec",
-  "section-deep",
   "section-manifest",
   "section-quick-insight",
 ];
@@ -11710,6 +11775,7 @@ function historyJournalIcon(name) {
   const icons = {
     thanks: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2 4 4 0 0 1 7 2c0 5.6-7 10-7 10z"/></svg>`,
     event: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 5h12v14H6z"/><path d="M9 9h6M9 13h4"/></svg>`,
+    body: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.5-7-10.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 7 3.5C19 16.5 12 21 12 21z"/><path d="M12 11v3"/></svg>`,
     aware: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>`,
     exec: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h12M8 12h12M8 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg>`,
     insight: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 1 4 10c-.8.7-1 1.4-1 2H9c0-.6-.2-1.3-1-2A6 6 0 0 1 12 3z"/></svg>`,
@@ -12294,16 +12360,21 @@ function renderHistoryJournal(review) {
       ],
     ],
     [
-      "③ 身心覺察與今日覺察",
+      "③ 身體覺察",
+      "body",
+      [historyGroup("身心檢核", historyBlock("", historyBodyCheckHtml(journal, historyIso)))],
+    ],
+    ["④ 深度思考", "insight", insightHtml],
+    [
+      "⑤ 覺察力",
       "aware",
       [
-        historyGroup("身心檢核", historyBlock("", historyBodyCheckHtml(journal, historyIso))),
         historyGroup(useAwareChoices ? "今日勾選" : "覺察作答", awareFields),
         historyGroup("今日覺察", awareResultHtml || historyBlock("", quotes)),
       ],
     ],
     [
-      "④ 執行力行動清單",
+      "⑥ 執行力",
       "exec",
       [
         ...execFields,
@@ -12335,9 +12406,8 @@ function renderHistoryJournal(review) {
           : "",
       ],
     ],
-    ["深度思考", "insight", insightHtml],
     [
-      "⑤ 顯化力",
+      "⑦ 顯化力",
       "manifest",
       [
         String(journal.manifest || "").trim()

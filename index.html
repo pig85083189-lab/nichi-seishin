@@ -545,19 +545,49 @@
             </div>
           </section>
 
+          <section class="journal-card journal-fold" id="section-deep">
+            <button class="journal-fold__toggle" type="button" data-journal-fold aria-expanded="false" aria-controls="deepFoldPanel">
+              <span class="journal-fold__copy">
+                <h2 class="journal-card__title"><span>04</span> 深度思考</h2>
+                <p class="journal-fold__summary">看見這件事背後代表什麼。勾選即可，不必再打字。</p>
+              </span>
+              <span class="journal-fold__chevron" aria-hidden="true"></span>
+            </button>
+            <div class="journal-fold__panel" id="deepFoldPanel" inert aria-hidden="true">
+              <div class="journal-fold__inner">
+            <p class="journal-guide">先理解這件事更深一層的意義：價值、模式、真正在意的是什麼。<br />從今天的感謝、事件與身體紀錄長出幾個選項，最多勾 2 個，也可以都不勾。</p>
+            <div class="check-loading" id="deepPromptLoading" hidden>
+              <p class="check-loading__label">正在整理今天的深度選項…</p>
+              <div class="ai-thinking__bar"><i></i></div>
+            </div>
+            <p class="deep-empty" id="thinkEmpty">寫完今日感謝與事件後，再開始今天的深度思考。</p>
+            <button class="ai-check-btn ai-check-btn--label" id="btnThinkChoices" type="button">✦ 開始今天的深度思考</button>
+            <div id="thinkQuestions"></div>
+            <div class="check-loading" id="thinkCloseLoading" hidden>
+              <p class="check-loading__label">正在整理今天的深度看見…</p>
+              <div class="ai-thinking__bar"><i></i></div>
+            </div>
+            <button class="ai-check-btn ai-check-btn--label" id="btnThinkClose" type="button" hidden>✦ 整理今天的深度看見</button>
+            <div id="thinkChoiceResult"></div>
+            <div class="deep-list" id="deepList" hidden></div>
+            <button class="btn btn--outline deep-more-btn" id="btnDeepMore" type="button" hidden>✨ 我還想繼續探索（再給我 3 題）</button>
+              </div>
+            </div>
+          </section>
+
           <section class="journal-card journal-card--aware journal-fold" id="section-aware">
             <button class="journal-fold__toggle" type="button" data-journal-fold aria-expanded="false" aria-controls="awareFoldPanel">
               <span class="journal-fold__copy">
                 <h2 class="journal-card__title js-quick-only"><span>03</span> 今日覺察</h2>
-                <h2 class="journal-card__title js-deep-only"><span>04</span> 覺察力</h2>
+                <h2 class="journal-card__title js-deep-only"><span>05</span> 覺察力</h2>
                 <p class="journal-fold__summary js-quick-only">從今天的內容長出幾個「我現在怎麼了」的選項。勾選即可。</p>
-                <p class="journal-fold__summary js-deep-only">從今天的內容長出幾個「我現在怎麼了」的選項。勾選即可，不必再打字。</p>
+                <p class="journal-fold__summary js-deep-only">經過今天這些事情，我看見了自己什麼。勾選即可，不必再打字。</p>
               </span>
               <span class="journal-fold__chevron" aria-hidden="true"></span>
             </button>
             <div class="journal-fold__panel" id="awareFoldPanel" inert aria-hidden="true">
               <div class="journal-fold__inner">
-            <p class="journal-guide">今天也許藏著一些你還沒發現的自己。<br />這裡只問「我現在怎麼了」：需要、反應、習慣、情緒。勾選最貼近的 1～2 句，也可以都不勾。</p>
+            <p class="journal-guide">今天也許藏著一些你還沒發現的自己。<br />這裡只問「我看見了自己什麼」：需要、反應、習慣、情緒。勾選最貼近的 1～2 句，也可以都不勾。</p>
             <div class="journal-split journal-split--aware">
               <div class="journal-col aware-col aware-col--quiz">
                 <div class="check-loading" id="awarePromptLoading" hidden>
@@ -570,7 +600,7 @@
               </div>
               <div class="journal-col aware-col aware-col--quotes js-deep-only">
                 <p class="journal-label">今日覺察</p>
-                <p class="journal-guide journal-guide--tight">勾選後，整理今天看見的自己、可能忽略的地方。不必再回答是／否或打字。</p>
+                <p class="journal-guide journal-guide--tight">勾選後，收成「核心覺察」與「我看見了」。不必再回答是／否或打字。</p>
                 <div class="check-loading" id="awareLoading" hidden>
                   <p class="check-loading__label">正在為你整理今天的覺察…</p>
                   <div class="ai-thinking__bar"><i></i></div>
@@ -588,7 +618,7 @@
             <button class="journal-fold__toggle" id="execFoldToggle" type="button" data-journal-fold aria-expanded="false" aria-controls="execFoldPanel">
               <span class="journal-fold__copy">
                 <h2 class="journal-card__title js-quick-only"><span>04</span> 今日最小行動</h2>
-                <h2 class="journal-card__title js-deep-only"><span>05</span> 執行力</h2>
+                <h2 class="journal-card__title js-deep-only"><span>06</span> 執行力</h2>
                 <p class="journal-fold__summary js-quick-only">明天只要一件 5 分鐘內能完成的小事。點開後可寫下，並同步到側邊欄。</p>
                 <p class="journal-fold__summary js-deep-only">把今天的卡點，變成明天可以開始的一小步。完成會同步到側邊欄。</p>
               </span>
@@ -597,7 +627,7 @@
             <div class="journal-fold__panel" id="execFoldPanel" inert aria-hidden="true">
               <div class="journal-fold__inner">
                 <p class="journal-guide js-quick-only">明天只要做一件小到 5 分鐘內能完成的事。完成復盤後會進到側邊欄「執行力」清單，方便追蹤。</p>
-                <p class="journal-guide js-deep-only">有些事情，不是想得不夠，而是還沒找到真正做得到的方法。<br />這裡會陪你把今天的卡點，變成明天可以開始的一小步。</p>
+                <p class="journal-guide js-deep-only">既然已經看見這件事，接下來願意做什麼？<br />這裡會陪你把今天的看見，變成明天可以開始的一小步。</p>
                 <div class="journal-split">
               <div class="journal-col">
                 <div class="js-deep-only">
@@ -629,36 +659,6 @@
                 <article class="exec-focus" id="execFocus" hidden></article>
               </div>
                 </div>
-              </div>
-            </div>
-          </section>
-
-          <section class="journal-card journal-fold" id="section-deep">
-            <button class="journal-fold__toggle" type="button" data-journal-fold aria-expanded="false" aria-controls="deepFoldPanel">
-              <span class="journal-fold__copy">
-                <h2 class="journal-card__title"><span>06</span> 深度思考</h2>
-                <p class="journal-fold__summary">看見這件事背後代表什麼。勾選即可，不必再打字。</p>
-              </span>
-              <span class="journal-fold__chevron" aria-hidden="true"></span>
-            </button>
-            <div class="journal-fold__panel" id="deepFoldPanel" inert aria-hidden="true">
-              <div class="journal-fold__inner">
-            <p class="journal-guide">04 看見「我現在怎麼了」。這裡看見「這件事背後可能代表什麼」。<br />從今天的內容長出幾個選項，最多勾 2 個，也可以都不勾。</p>
-            <div class="check-loading" id="deepPromptLoading" hidden>
-              <p class="check-loading__label">正在整理今天的深度選項…</p>
-              <div class="ai-thinking__bar"><i></i></div>
-            </div>
-            <p class="deep-empty" id="thinkEmpty">寫完今日感謝與事件後，再開始今天的深度思考。</p>
-            <button class="ai-check-btn ai-check-btn--label" id="btnThinkChoices" type="button">✦ 開始今天的深度思考</button>
-            <div id="thinkQuestions"></div>
-            <div class="check-loading" id="thinkCloseLoading" hidden>
-              <p class="check-loading__label">正在整理今天的深度看見…</p>
-              <div class="ai-thinking__bar"><i></i></div>
-            </div>
-            <button class="ai-check-btn ai-check-btn--label" id="btnThinkClose" type="button" hidden>✦ 整理今天的深度看見</button>
-            <div id="thinkChoiceResult"></div>
-            <div class="deep-list" id="deepList" hidden></div>
-            <button class="btn btn--outline deep-more-btn" id="btnDeepMore" type="button" hidden>✨ 我還想繼續探索（再給我 3 題）</button>
               </div>
             </div>
           </section>
@@ -905,9 +905,9 @@
             <button class="guide-toc__item" type="button" data-guide-jump="guide-01"><span>01</span>感恩</button>
             <button class="guide-toc__item" type="button" data-guide-jump="guide-02"><span>02</span>事件</button>
             <button class="guide-toc__item" type="button" data-guide-jump="guide-03"><span>03</span>身體</button>
-            <button class="guide-toc__item" type="button" data-guide-jump="guide-04"><span>04</span>覺察</button>
-            <button class="guide-toc__item" type="button" data-guide-jump="guide-05"><span>05</span>執行</button>
-            <button class="guide-toc__item" type="button" data-guide-jump="guide-06"><span>06</span>深度</button>
+            <button class="guide-toc__item" type="button" data-guide-jump="guide-04"><span>04</span>深度</button>
+            <button class="guide-toc__item" type="button" data-guide-jump="guide-05"><span>05</span>覺察</button>
+            <button class="guide-toc__item" type="button" data-guide-jump="guide-06"><span>06</span>執行</button>
             <button class="guide-toc__item" type="button" data-guide-jump="guide-07"><span>07</span>顯化</button>
             <button class="guide-toc__item" type="button" data-guide-jump="guide-mark"><span>筆</span>重點</button>
             <button class="guide-toc__item" type="button" data-guide-jump="guide-history"><span>史</span>歷史</button>
@@ -956,23 +956,37 @@
             <li class="guide-step" id="guide-04">
               <span class="guide-step__num" aria-hidden="true">04</span>
               <div class="guide-step__body">
-                <p class="guide-step__label">覺察力</p>
-                <h3 class="guide-step__title">勾選「我現在怎麼了」，不必再打字</h3>
-                <p class="guide-step__text">寫完感謝與事件後，點「開始今天的覺察」。會依你今天寫下的內容，長出幾個專屬於你的選項。</p>
+                <p class="guide-step__label">深度思考</p>
+                <h3 class="guide-step__title">勾選「這件事背後代表什麼」，不必再打字</h3>
+                <p class="guide-step__text">系統會根據今天的感謝、事件與身體紀錄，整理幾個更深一層的方向。你只要勾出最有感的，不需要寫長篇答案。</p>
                 <ul class="guide-points">
-                  <li>這裡只問「我現在怎麼了」：需要、反應、習慣、情緒。</li>
+                  <li>這裡問的是意義：我在意的價值、反覆出現的模式、真正害怕或珍惜的是什麼。</li>
                   <li>最多勾 2 個，也可以都不勾，或選「今天沒有特別符合我的選項」。</li>
-                  <li>再點「看見今天的覺察」，會收成兩句：核心覺察，以及一句「我看見了」。</li>
-                  <li>這裡只回答「我今天看見自己什麼」，不再追問，也不做長篇分析。</li>
+                  <li>不必再寫三輪問答，也不會連續追問。</li>
+                  <li>再點「整理今天的深度看見」，會留下今日深度看見、今天我看見的自己，以及帶走的一句話。</li>
                 </ul>
               </div>
             </li>
             <li class="guide-step" id="guide-05">
               <span class="guide-step__num" aria-hidden="true">05</span>
               <div class="guide-step__body">
+                <p class="guide-step__label">覺察力</p>
+                <h3 class="guide-step__title">把前面的感受收成「核心覺察＋我看見了」</h3>
+                <p class="guide-step__text">經過今天的事情與深度思考後，點「開始今天的覺察」。會長出幾個「我看見了自己什麼」的選項。</p>
+                <ul class="guide-points">
+                  <li>這裡只問當下的自己：需要、反應、習慣、情緒。</li>
+                  <li>最多勾 2 個，也可以都不勾，或選「今天沒有特別符合我的選項」。</li>
+                  <li>再點「看見今天的覺察」，會收成兩句：核心覺察，以及一句「我看見了」。</li>
+                  <li>不再追問，也不做長篇分析。</li>
+                </ul>
+              </div>
+            </li>
+            <li class="guide-step" id="guide-06">
+              <span class="guide-step__num" aria-hidden="true">06</span>
+              <div class="guide-step__body">
                 <p class="guide-step__label">執行力</p>
-                <h3 class="guide-step__title">看懂自己怎麼行動，下一步可以怎麼做</h3>
-                <p class="guide-step__text">這裡不是要你一次做更多，而是把今天的卡點，收成明天幾乎做得到的一小步。</p>
+                <h3 class="guide-step__title">把覺察變成下一步，只找真正做得到的一小步</h3>
+                <p class="guide-step__text">既然已經看見這件事，接下來願意做什麼？這裡不是要你一次做更多，而是收成明天幾乎做得到的一小步。</p>
                 <ul class="guide-points">
                   <li>點「開始今天的行動整理」，AI 會依今天的內容問你 1 題；若還太抽象，最多再補 1 題。</li>
                   <li>自己寫下「明天最小的一步」：小到 5 分鐘內也能開始。</li>
@@ -982,25 +996,12 @@
                 </ul>
               </div>
             </li>
-            <li class="guide-step" id="guide-06">
-              <span class="guide-step__num" aria-hidden="true">06</span>
-              <div class="guide-step__body">
-                <p class="guide-step__label">深度思考</p>
-                <h3 class="guide-step__title">勾選「這件事背後代表什麼」，不必再打字</h3>
-                <p class="guide-step__text">04 看見「我現在怎麼了」。06 看見這件事背後可能代表什麼。點「開始今天的深度思考」，會依今天的內容長出幾個選項。</p>
-                <ul class="guide-points">
-                  <li>最多勾 2 個，也可以都不勾，或選「今天沒有特別符合我的選項」。</li>
-                  <li>不必再寫三輪問答，也不會連續追問。</li>
-                  <li>再點「整理今天的深度看見」，會留下今日深度看見、今天我看見的自己，以及帶走的一句話。</li>
-                </ul>
-              </div>
-            </li>
             <li class="guide-step" id="guide-07">
               <span class="guide-step__num" aria-hidden="true">07</span>
               <div class="guide-step__body">
                 <p class="guide-step__label">顯化力</p>
                 <h3 class="guide-step__title">把想要的生活說清楚，再找到可以開始的方向</h3>
-                <p class="guide-step__text">這裡不是保證願望會實現，而是幫你看見自己真正重視什麼，並找出能慢慢靠近的一小步。</p>
+                <p>把真正想要的方向說清楚，慢慢讓想法靠近現實。</p>
                 <ul class="guide-points">
                   <li>先寫下「我想顯化的事情」。</li>
                   <li>點「看看這個願望」，最多 1～2 道思考題，幫你把這件事看清楚一點。</li>
@@ -1037,7 +1038,7 @@
             <h3 class="guide-step__title">歷史紀錄不是備份，是把那天真正看見的留下來</h3>
             <p class="guide-step__text">完成復盤後，側邊欄「歷史紀錄」會出現當天的摘要標題。點開再讀完整內容。</p>
             <ul class="guide-points">
-              <li>可以看到：當天記錄、身心小結、覺察勾選、深度勾選、執行、顯化，以及當天自動標出的重點與自己畫下的重點。舊的三輪問答若還在，也會繼續顯示。</li>
+                  <li>可以看到：當天記錄、身心小結、深度勾選、覺察勾選、執行、顯化，以及當天自動標出的重點與自己畫下的重點。舊的三輪問答若還在，也會繼續顯示。</li>
               <li>每張卡片上方會有當天的一句摘要，也能用搜尋或標籤快速找到某一天。</li>
               <li>側邊欄「覺察力」「執行力」「顯化力」會收集你勾選留下的內容，方便之後回頭看。</li>
               <li>「週月報」用圖表看見這段時間的節奏，再用文字點出閃光點與突破口。</li>
@@ -1214,6 +1215,6 @@
     <script src="lib/history-summary.js?v=5"></script>
     <script src="lib/insight-highlight.js?v=5"></script>
     <script src="lib/user-mark.js?v=6"></script>
-    <script src="app.js?v=205"></script>
+    <script src="app.js?v=206"></script>
   </body>
 </html>

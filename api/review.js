@@ -209,20 +209,21 @@ const CHECKLIST_AWARENESS_SYSTEM = `你是「日精進」的覺察整理者。�
 }
 ${HIGHLIGHT_RULE}`;
 
-const CHECKLIST_AWARENESS_CHOICES_SYSTEM = `你是「日精進」的覺察整理者。使用者剛在 04 勾選了「我現在怎麼了」的選項（最多 2 個，也可以一個都不勾）。
+const CHECKLIST_AWARENESS_CHOICES_SYSTEM = `你是「日精進」的覺察整理者。使用者剛在 05 勾選了「我看見了自己什麼」的選項（最多 2 個，也可以一個都不勾）。
 
 你的工作不是分析他，而是幫他把今天真正看見的自己，收成他自己會說出口的兩句話。
 讀完後，他最理想的感受是：「啊，原來我是這樣。」最差的結果是一段 AI 心理分析。
 
-04 只回答：我現在怎麼了／我今天看見自己什麼。
-禁止寫成 06：人生意義、長期價值觀、關係哲學、人生模式的大結論。
+05 只回答：我現在怎麼了／我的需要／我的情緒反應／我今天看見自己什麼。
+禁止寫成 04：人生意義、長期價值觀、關係哲學、這件事背後代表什麼、人生模式的大結論。
 
 【思考順序】
 1. 先讀完感謝、事件、心情、身體、睡眠。
-2. 使用者實際勾選的句子權重最高。不要只改寫一次 choice，而要從「今天發生什麼＋被什麼碰到＋他選了哪幾句」收成一個核心看見。
-3. 若他勾了「今天沒有特別符合我的選項」，或一個都沒勾：不要硬套選項。改從實際填寫內容找一個較小、較安全的觀察。
-4. 沒被勾選的選項，禁止寫成今天的結論。
-5. 資料不足就寫得簡單、保守。禁止過度心理推論。
+2. 再讀 04 深度思考的選項、使用者實際勾選，以及整理出的深度看見（如果有）。
+3. 使用者實際勾選的 05 句子權重最高。不要只改寫一次 choice，而要從「今天發生什麼＋被什麼碰到＋他在 04／05 選了什麼」收成一個核心看見。
+4. 若他勾了「今天沒有特別符合我的選項」，或一個都沒勾：不要硬套選項。改從實際填寫內容找一個較小、較安全的觀察。
+5. 沒被勾選的選項，禁止寫成今天的結論。
+6. 資料不足就寫得簡單、保守。禁止過度心理推論。
 
 【只輸出兩層｜不要問答、不要追問、不要長篇】
 - line【核心覺察】：一句真正值得記住的話。建議 12～24 個中文字，可更短，但必須語意完整。寧可完整 27 字，也不要寫到一半。
@@ -257,7 +258,7 @@ gap、question、echo 必須是空字串。不要再增加第三層。
 }
 ${HIGHLIGHT_RULE}`;
 
-const MANIFEST_PROMPTS_SYSTEM = `你是「日精進」的顯化引導者。04 看見自己，05 把事情做出來；你幫他看見自己想去哪裡，開始成為那個人。
+const MANIFEST_PROMPTS_SYSTEM = `你是「日精進」的顯化引導者。04 理解事情更深一層的意義，05 看見自己，06 把事情做出來；你幫他看見自己想去哪裡，開始成為那個人。
 
 使用者剛寫下「我想顯化的事情」。請生成 1 到 2 道顯化思考題，不要拆待辦，不要給執行清單。
 寧缺勿濫：願望已經夠清楚時只出 1 題。不要為了湊數固定 2 題。最多 2 題。
@@ -286,9 +287,9 @@ placeholder 8-24 字，像「生活裡會先鬆開的是…」
 questions 長度必須是 1 或 2。
 繁體中文`;
 
-const MANIFEST_PATHS_SYSTEM = `你是「日精進」的顯化整理者。不要把它變成 05 執行力的待辦清單。
+const MANIFEST_PATHS_SYSTEM = `你是「日精進」的顯化整理者。不要把它變成 06 執行力的待辦清單。
 
-05 問「明天／現在具體要做什麼」。
+06 問「明天／現在具體要做什麼」。
 你問「我想去哪裡？我要慢慢成為什麼樣的人？」
 
 請讀取願望、兩道思考題的回答，整理成「讓願望靠近現實」的 2～3 個方向，以及一句「我的顯化句」。
@@ -454,9 +455,16 @@ function normalizeManifestSentence(raw, vision) {
 
 function manifestPromptsUserPrompt(body) {
   const vision = String(body.vision || body.text || "").trim();
-  return `請只生成 2 道顯化思考題。不要拆待辦，不要給步驟。
+  const ctx = body.context && typeof body.context === "object" ? body.context : {};
+  const thinkAware = formatThinkAwarePrompt(ctx);
+  return `請只生成 1 到 2 道顯化思考題。不要拆待辦，不要給步驟。寧缺勿濫，最多 2 題。
 
-我想顯化的事情：${vision || "（未寫）"}`;
+我想顯化的事情：${vision || "（未寫）"}
+今日事件：${compactLine(ctx.event, 220) || "未寫"}
+心情：${ctx.mood || "未選"}
+04 深度看見：${thinkAware.thinkClose}
+05 核心覺察：${thinkAware.line || "未寫"}
+05 我看見了：${thinkAware.seen || "未寫"}`;
 }
 
 function manifestPathsUserPrompt(body) {
@@ -476,7 +484,10 @@ function manifestPathsUserPrompt(body) {
 ${labeled}
 
 今日心情：${ctx.mood || "未選"}
-今日事件：${compactLine(ctx.event, 120) || "未寫"}`;
+今日事件：${compactLine(ctx.event, 220) || "未寫"}
+04 深度看見：${[ctx.thinkCloseAwareness, ctx.thinkCloseSelfSeen, ctx.thinkCloseTakeaway].filter(Boolean).join("／") || "未寫"}
+05 核心覺察：${String(ctx.awarenessLine || "").trim() || "未寫"}
+05 我看見了：${String(ctx.awarenessSeen || "").trim() || "未寫"}`;
 }
 
 const CHECKLIST_EXECUTION_SYSTEM = `你是「日精進」的行動整理者。你的工作不是列待辦清單，而是把使用者今天說想做、卻還太大或太模糊的事，收成明天（或今晚）真的做得到的一小步。
@@ -1952,7 +1963,10 @@ ${labeled}
 今日事件：${ctx.event || "未寫"}
 ${formatBodyCheckPrompt(ctx)}
 今日覺察：${Array.isArray(ctx.awareness) ? ctx.awareness.filter(Boolean).join("／") || "未寫" : ctx.awareness || "未寫"}
-深度思考摘要：${compactLine(ctx.deepNote || ctx.insight, 120) || "未寫"}
+核心覺察：${String(ctx.awarenessLine || "").trim() || "未寫"}
+我看見了：${String(ctx.awarenessSeen || "").trim() || "未寫"}
+04 勾選：${Array.isArray(ctx.thinkSelected) && ctx.thinkSelected.length ? ctx.thinkSelected.join("／") : ctx.thinkNone ? "今天沒有特別符合我的選項" : "未勾"}
+深度看見：${[ctx.thinkCloseTitle, ctx.thinkCloseAwareness, ctx.thinkCloseSelfSeen, ctx.thinkCloseTakeaway].filter(Boolean).join("／") || compactLine(ctx.deepNote || ctx.insight, 220) || "未寫"}
 尚未完成的行動：${openActions.slice(0, 6).join("、") || "尚無"}`;
   }
   const labeled = questions.length
@@ -1970,11 +1984,15 @@ ${formatBodyCheckPrompt(ctx)}
         : "使用者一個選項都沒勾。不要硬套未勾選的句子。";
     return `請先交叉比對今天所有資料，再依勾選內容收成兩句：「核心覺察」＋「我看見了」。不要分析他，不要再提問，不要第三層。
 
-使用者勾選的句子權重最高。從「今天發生什麼＋被什麼碰到＋他選了哪幾句」收成一個核心看見。不要只改寫 choice。
-04 只寫「我現在怎麼了」。不要寫人生意義、長期價值、關係哲學。
+使用者勾選的句子權重最高。從「今天發生什麼＋被什麼碰到＋他在 04／05 選了哪幾句」收成一個核心看見。不要只改寫 choice。
+05 只寫「我看見了自己什麼」。不要寫人生意義、長期價值、關係哲學。
 
-【04 勾選｜權重最高】
+【05 勾選｜權重最高】
 ${picked}
+
+【04 深度思考】
+勾選：${Array.isArray(ctx.thinkSelected) && ctx.thinkSelected.length ? ctx.thinkSelected.map((item, index) => `${index + 1}. ${item}`).join("\n") : ctx.thinkNone ? "今天沒有特別符合我的選項" : "尚未勾選"}
+深度看見：${[ctx.thinkCloseTitle, ctx.thinkCloseAwareness, ctx.thinkCloseSelfSeen, ctx.thinkCloseTakeaway].filter(Boolean).join("\n") || "尚未整理"}
 
 【今天已完成的內容】
 今日感謝：
@@ -2201,11 +2219,13 @@ Q3｜碰到更底層的自己
 - 必須能用「是／否」回答
 - 繁體中文`;
 
-const CHOICES_AWARENESS_SYSTEM = `你是「日精進」的覺察引導者。任務是從今天真實寫下的內容，長出幾個「我現在怎麼了」的選項，讓使用者勾選。
+const CHOICES_AWARENESS_SYSTEM = `你是「日精進」的覺察引導者。任務是從今天真實寫下的內容，長出幾個「經過今天這些事情，我看見了自己什麼」的選項，讓使用者勾選。
 
 這不是測驗，不是診斷，也不是深度意義題。
-04 只處理當下狀態：需要、反應、習慣、情緒、身體感受、我現在怎麼了。
-禁止寫成 06 的題：這件事背後代表什麼、真正想留下什麼、害怕來不及珍惜、價值觀、人生意義。
+這是 05 覺察力，發生在 04 深度思考之後。
+05 只處理當下的自己：我現在怎麼了、我的需要、我的情緒反應、我的習慣、我容易忽略自己的地方、我今天真正看見自己的地方。
+禁止寫成 04 的題：這件事背後代表什麼、人生哲學、價值觀大結論、真正想留下什麼。
+若使用者訊息列出 04 已出現的深度思考句子，禁止改寫或近義重複。
 
 【生成規則｜寧缺勿濫】
 - 只輸出 3 到 4 個選項。能清楚推導出 3 個就只出 3 個，不要為了湊數硬出第 4、第 5 個。
@@ -2219,26 +2239,26 @@ const CHOICES_AWARENESS_SYSTEM = `你是「日精進」的覺察引導者。任�
 「當別人主動表達在乎時，我會特別有感」
 「我真正被碰到的，可能不是事情本身，而是有人把我放在心上」
 不合格：
-「我害怕的可能不是失去，而是來不及好好珍惜」（這是 06）
+「我害怕的可能不是失去，而是來不及好好珍惜」（這是 04）
 「你就是一個很需要被愛的人」
 
 只輸出 JSON：
 {"options":[{"id":"a1","text":"..."},{"id":"a2","text":"..."}]}
 繁體中文`;
 
-const CHOICES_THINK_SYSTEM = `你是「日精進」的深度思考引導者。任務是從今天真實寫下的內容，長出幾個「這件事背後代表什麼」的選項。
+const CHOICES_THINK_SYSTEM = `你是「日精進」的深度思考引導者。任務是從今天真實寫下的內容，長出幾個「這件事背後，對我真正代表什麼？」的選項。
 
-06 不是再描述「我現在怎麼了」。那是 04 的工作。
-不要換句話重複 04 已經出現的覺察。
-04 是「我現在怎麼了」，
-06 必須往「這件事背後代表什麼／價值／信念／長期模式」再走一層。
-禁止改寫、重述或近義改寫 04 已經出現的句子。
+這是 04 深度思考，發生在覺察力之前。
+只根據今日感謝、今日事件、心情、身體覺察生成。不要等待、不要依賴尚未生成的覺察結論。
+
+04 是理解事情更深一層的意義：我在意的價值、關係裡真正重要的東西、反覆出現的模式、我真正害怕／珍惜的是什麼、這件事對我的意義、我真正想留下的是什麼。
+禁止替使用者直接下完整的自我覺察結論。那是後面 05 的工作。
+禁止寫成 05：我現在怎麼了、我的需要、我的情緒反應、我看見了自己什麼。
 
 【生成規則｜寧缺勿濫】
 - 只輸出 3 到 4 個選項。能清楚推導出 3 個就只出 3 個，不要為了湊數硬出第 4、第 5 個。
 - 永遠不要輸出「今天沒有特別符合我的選項」；前端會自己加。
-- 每一句必須能回扣今天紀錄，且比 04 更深一層。
-- 若使用者訊息列出「04 已出現的覺察」，那些句子與近義句一律禁止再出現。
+- 每一句必須能回扣今天感謝、事件、心情或身體紀錄。
 - 第一人稱、可能／好像／看起來。禁止：你就是、你一直都、這代表你。
 - 每句 18-42 個中文字，完整一句，不要問句。
 
@@ -2246,8 +2266,8 @@ const CHOICES_THINK_SYSTEM = `你是「日精進」的深度思考引導者。�
 「我害怕的可能不是失去，而是來不及好好珍惜」
 「有些關係的重要，不需要等到失去才被看見」
 不合格：
-「當別人主動表達在乎時，我會特別有感」（這是 04）
-「我真正被碰到的，可能不是晚餐本身，而是有人把我放在心上」（這是 04）
+「當別人主動表達在乎時，我會特別有感」（這是 05）
+「我真正被碰到的，可能不是晚餐本身，而是有人把我放在心上」（這是 05）
 
 只輸出 JSON：
 {"options":[{"id":"t1","text":"..."},{"id":"t2","text":"..."}]}
@@ -2255,7 +2275,7 @@ const CHOICES_THINK_SYSTEM = `你是「日精進」的深度思考引導者。�
 
 const THINK_CHOICES_CLOSE_SYSTEM = `你不是心理醫師，也不是裁判。你是一面會整理的鏡子。
 
-使用者剛在 06 勾選了「這件事背後代表什麼」的選項（最多 2 個，也可以一個都不勾）。
+使用者剛在 04 勾選了「這件事背後代表什麼」的選項（最多 2 個，也可以一個都不勾）。
 請只根據今天原文 + 勾選內容，寫出精短總結。不要再提問，不要列行動清單，不要寫成三輪問答。
 
 若他勾了「今天沒有特別符合我的選項」，或一個都沒勾：不要硬套選項。改從實際填寫內容找一個較小、較安全的觀察。
@@ -2282,10 +2302,14 @@ ${HIGHLIGHT_RULE}
 
 const EXECUTION_PROMPTS_SYSTEM = `你是「日精進」的行動教練。先幫他找到卡點與阻力，再把想做的事問到夠具體。不要分析人格，不要列待辦。
 
+這是 06 執行力。前面已經有 04 深度思考與 05 核心覺察／我看見了。
+問題要自然變成：既然我已經看見這件事，那接下來我願意做什麼？
+優先參考 04 深度看見與 05 核心覺察，不要再重做一次覺察。
+
 這次只出「第 1 題」。後面會依回答再追問，最多 2 輪。不要出第 3 題。
 
 第 1 題要讓他說出：明天真正想做的那一件事，或如果太累／事情太多，準備先放下什麼。
-可以輕輕點出今天的人／事／身體訊號，方便對準。
+可以輕輕點出今天已看見的方向、人／事／身體訊號，方便對準。
 禁止診斷腔：身體在求救、你已經透支、正在燃燒自己、缺乏自律、你在逃避。
 禁止二選一質問。禁止真正卡住你的、深層原因、自我修復、真因。
 
@@ -2396,6 +2420,10 @@ ${labeled || "（尚無）"}
 心情：${ctx.mood || "未選"}
 ${formatBodyCheckPrompt(ctx)}
 
+核心覺察：${String(ctx.awarenessLine || "").trim() || "未寫"}
+我看見了：${String(ctx.awarenessSeen || "").trim() || "未寫"}
+深度看見：${[ctx.thinkCloseAwareness, ctx.thinkCloseSelfSeen].filter(Boolean).join("／") || "未寫"}
+
 若上一答仍是「最重要的事／早點睡／多休息／開始運動／吃健康一點／不要拖延」，必須再問具體的事、時間與完成標準。`;
 }
 
@@ -2414,6 +2442,28 @@ function choicesKind(body) {
 
 function isAwarenessChoiceClose(body) {
   return Boolean(body?.choiceMode || body?.variant === "choices" || body?.source === "choices");
+}
+
+function formatThinkAwarePrompt(ctx) {
+  const thinkSelected = Array.isArray(ctx.thinkSelected) ? ctx.thinkSelected.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  const thinkOptions = Array.isArray(ctx.thinkOptions) ? ctx.thinkOptions.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  const thinkNone = Boolean(ctx.thinkNone);
+  const thinkClose = [ctx.thinkCloseTitle, ctx.thinkCloseAwareness, ctx.thinkCloseSelfSeen, ctx.thinkCloseTakeaway]
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+  const awareSelected = Array.isArray(ctx.awarenessSelected) ? ctx.awarenessSelected.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  return {
+    thinkPicked: thinkNone
+      ? "使用者勾選了「今天沒有特別符合我的選項」。"
+      : thinkSelected.length
+        ? thinkSelected.map((item, index) => `${index + 1}. ${item}`).join("\n")
+        : "尚未勾選。",
+    thinkOptions: thinkOptions.length ? thinkOptions.map((item) => `- ${item}`).join("\n") : "（尚無）",
+    thinkClose: thinkClose.join("\n") || "尚未整理。",
+    awareSelected: awareSelected.join("／") || "",
+    line: String(ctx.awarenessLine || "").trim(),
+    seen: String(ctx.awarenessSeen || "").trim(),
+  };
 }
 
 function journalStoryForChoices(body) {
@@ -2441,7 +2491,8 @@ ${formatBodyCheckPrompt(ctx)}`,
 
 function choicesUserPrompt(body) {
   const kind = choicesKind(body);
-  const { avoid, selected, none, story } = journalStoryForChoices(body);
+  const { ctx, avoid, selected, none, story } = journalStoryForChoices(body);
+  const thinkAware = formatThinkAwarePrompt(ctx);
   if (kind === "think-close") {
     const picked = none
       ? "使用者勾選了「今天沒有特別符合我的選項」。不要硬套未勾選的句子。"
@@ -2450,30 +2501,37 @@ function choicesUserPrompt(body) {
         : "使用者一個選項都沒勾。不要硬套未勾選的句子，改從實際填寫內容找一個較小的觀察。";
     return `請根據下面內容，寫出精短的「今日深度看見」。不要再提問。
 
-【06 勾選】
+【04 勾選】
 ${picked}
 
 【今天的輸入】
 ${story}`;
   }
   if (kind === "think") {
-    const avoidBlock = avoid.length
-      ? avoid.map((item) => `- ${item}`).join("\n")
-      : "（尚無 04 選項）";
-    return `請只生成 3 到 4 個「這件事背後代表什麼」的選項。寧缺勿濫，不要湊滿 5 個。不要輸出「今天沒有特別符合我的選項」。
+    return `請只生成 3 到 4 個「這件事背後，對我真正代表什麼」的選項。寧缺勿濫，不要湊滿 5 個。不要輸出「今天沒有特別符合我的選項」。
 
-不要換句話重複 04 已經出現的覺察。
-04 是「我現在怎麼了」，
-06 必須往「這件事背後代表什麼／價值／信念／長期模式」再走一層。
-禁止改寫下面這些「我現在怎麼了」的句子：
-${avoidBlock}
+這是 04：理解事情更深一層的意義。只根據感謝、事件、心情、身體覺察生成。
+不要等待尚未生成的覺察結論。不要寫成「我現在怎麼了／我看見了自己什麼」。
 
 【今天的輸入｜必須據此長出選項】
 ${story}`;
   }
-  return `請只生成 3 到 4 個「我現在怎麼了」的選項。寧缺勿濫，不要湊滿 5 個。不要輸出「今天沒有特別符合我的選項」。
+  const avoidBlock = avoid.length
+    ? avoid.map((item) => `- ${item}`).join("\n")
+    : "（尚無 04 選項）";
+  return `請只生成 3 到 4 個「經過今天這些事情，我看見了自己什麼」的選項。寧缺勿濫，不要湊滿 5 個。不要輸出「今天沒有特別符合我的選項」。
 
-這是 04：看見當下的需要、反應、習慣、情緒。不要寫成「這件事背後代表什麼」。
+這是 05：看見當下的自己。不要寫成「這件事背後代表什麼」。
+禁止改寫下面這些 04 深度思考句子：
+${avoidBlock}
+
+【04 深度思考｜可讀，但不要重複】
+勾選：
+${thinkAware.thinkPicked}
+選項：
+${thinkAware.thinkOptions}
+深度看見：
+${thinkAware.thinkClose}
 
 【今天的輸入｜必須據此長出選項】
 ${story}`;
@@ -2559,8 +2617,14 @@ ${today}`;
 
 【今天的輸入｜理解情境，不要把時數或連續天數抄進題目】
 ${story}
+04 深度勾選：${Array.isArray(ctx.thinkSelected) && ctx.thinkSelected.length ? ctx.thinkSelected.join("／") : ctx.thinkNone ? "今天沒有特別符合我的選項" : "未勾"}
+深度看見：${[ctx.thinkCloseAwareness, ctx.thinkCloseSelfSeen, ctx.thinkCloseTakeaway].filter(Boolean).join("／") || "未寫"}
+核心覺察：${String(ctx.awarenessLine || "").trim() || "未寫"}
+我看見了：${String(ctx.awarenessSeen || "").trim() || "未寫"}
 今日覺察：${Array.isArray(ctx.awareness) ? ctx.awareness.filter(Boolean).join("／") || "未寫" : "未寫"}
 明天最小的一步：${compactLine(ctx.smallestStep, 80) || "未寫"}
+
+既然已經看見這件事，問接下來願意做什麼。不要再重做一次覺察。
 
 合格：你想明天開始多吃菜，但也提到最近睡得比較少。如果明天不要求一次做到很多，最容易開始的一步是什麼？
 不合格：身體在求救，你要先休息還是先工作？
@@ -3303,3 +3367,11 @@ module.exports.normalizeGeneratedChoiceOptions = normalizeGeneratedChoiceOptions
 module.exports.choicesKind = choicesKind;
 module.exports.CHOICES_AWARENESS_SYSTEM = CHOICES_AWARENESS_SYSTEM;
 module.exports.CHOICES_THINK_SYSTEM = CHOICES_THINK_SYSTEM;
+module.exports.choicesUserPrompt = choicesUserPrompt;
+module.exports.EXECUTION_PROMPTS_SYSTEM = EXECUTION_PROMPTS_SYSTEM;
+module.exports.MANIFEST_PROMPTS_SYSTEM = MANIFEST_PROMPTS_SYSTEM;
+module.exports.MANIFEST_PATHS_SYSTEM = MANIFEST_PATHS_SYSTEM;
+module.exports.choicesUserPrompt = choicesUserPrompt;
+module.exports.EXECUTION_PROMPTS_SYSTEM = EXECUTION_PROMPTS_SYSTEM;
+module.exports.MANIFEST_PROMPTS_SYSTEM = MANIFEST_PROMPTS_SYSTEM;
+module.exports.MANIFEST_PATHS_SYSTEM = MANIFEST_PATHS_SYSTEM;

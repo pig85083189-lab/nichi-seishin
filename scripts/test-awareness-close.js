@@ -72,7 +72,7 @@ const conservative = normalizeCompactAwarenessResult({
   seen: "今天先把真正有感的地方留下來就好，不必急著下更大的結論。",
 });
 assert(conservative.line && conservative.seen, "CASE D：沒有勾選也可以保守收束");
-assert(!/人生意義|長期價值|關係哲學/.test(`${conservative.line}${conservative.seen}`), "CASE D：不亂推論到 06 層次");
+assert(!/人生意義|長期價值|關係哲學/.test(`${conservative.line}${conservative.seen}`), "CASE D：不亂推論到 04 意義層");
 
 assert(compactLen(LONG_LINE) > 24, "CASE E 測資：超過 24 字");
 assert(normalizeAwarenessLine(LONG_LINE) === LONG_LINE, "CASE E：完整核心覺察不可 hard cut");
