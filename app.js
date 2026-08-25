@@ -5964,7 +5964,7 @@ function syncAwareQuoteGate() {
     ? "正在為你整理…"
     : stale
       ? "根據你的勾選再整理一次"
-      : "看見今天的覺察 →";
+      : "✦ 看見今天的覺察";
   if (hint) {
     hint.hidden = !(stale && hasResult && !loading);
     hint.textContent = stale ? "你改了勾選，最終覺察會依新的選擇重新整理。" : "";
@@ -6228,12 +6228,12 @@ function normalizeAiChecklistItems(raw, min, max, fallback) {
 
 function checklistUi(kind) {
   if (kind === "manifest") {
-    return { btn: "btnManifestPaths", loader: "manifestLoading", list: "manifestChecks", idle: "讓願望靠近現實 →" };
+    return { btn: "btnManifestPaths", loader: "manifestLoading", list: "manifestChecks", idle: "✦ 讓願望靠近現實" };
   }
   if (kind === "awareness") {
-    return { btn: "btnAwareAi", loader: "awareLoading", list: "awareChecks", idle: "看見今天的覺察 →" };
+    return { btn: "btnAwareAi", loader: "awareLoading", list: "awareChecks", idle: "✦ 看見今天的覺察" };
   }
-  return { btn: "btnExecAi", loader: "execLoading", list: "execChecks", idle: "收下我的行動卡 →" };
+  return { btn: "btnExecAi", loader: "execLoading", list: "execChecks", idle: "收下我的行動卡" };
 }
 
 function setChecklistLoading(kind, loading) {
@@ -6813,7 +6813,7 @@ function setManifestPromptsLoading(loading) {
   const loader = document.getElementById("manifestPromptLoading");
   if (btn) {
     btn.disabled = loading;
-    btn.textContent = loading ? "正在看看這個願望…" : "看看這個願望 →";
+    btn.textContent = loading ? "正在看看這個願望…" : "✦ 看看這個願望";
     btn.classList.toggle("is-busy", loading);
   }
   if (loader) loader.hidden = !loading;
@@ -8209,7 +8209,7 @@ function syncCorePromptGate() {
       awareBtn.classList.toggle("is-busy", awareLoading);
       awareBtn.setAttribute("aria-busy", awareLoading ? "true" : "false");
       awareBtn.title = ready || awareLoading ? "" : "請先寫下今日感謝、事件，並選擇心情";
-      awareBtn.textContent = awareLoading ? "正在整理覺察選項…" : "開始今天的覺察 →";
+      awareBtn.textContent = awareLoading ? "正在整理覺察選項…" : "✦ 開始今天的覺察";
     }
   }
   if (execBtn) {
@@ -8222,7 +8222,7 @@ function syncCorePromptGate() {
         ? "正在整理明天的小行動…"
         : staleExec
           ? "重新整理行動問題"
-          : "開始今天的行動整理 →";
+          : "✦ 開始今天的行動整理";
     }
   }
 }
@@ -8315,7 +8315,7 @@ function renderAwarenessChoices(bag) {
       genBtn.disabled = false;
       genBtn.classList.toggle("is-busy", Boolean(state.choicesBusy?.awareness || state.corePromptsBusy));
       genBtn.setAttribute("aria-busy", state.choicesBusy?.awareness || state.corePromptsBusy ? "true" : "false");
-      genBtn.textContent = state.choicesBusy?.awareness || state.corePromptsBusy ? "正在整理覺察選項…" : "開始今天的覺察 →";
+      genBtn.textContent = state.choicesBusy?.awareness || state.corePromptsBusy ? "正在整理覺察選項…" : "✦ 開始今天的覺察";
     }
     syncAwareQuoteGate();
     return;
@@ -8460,7 +8460,7 @@ function renderExecutionChoices(bag) {
       genBtn.disabled = false;
       genBtn.classList.toggle("is-busy", loading);
       genBtn.setAttribute("aria-busy", loading ? "true" : "false");
-      genBtn.textContent = loading ? "正在整理明天的小行動…" : "開始今天的行動整理 →";
+      genBtn.textContent = loading ? "正在整理明天的小行動…" : "✦ 開始今天的行動整理";
     }
     if (checkBtn) checkBtn.hidden = true;
     syncExecStepUi();
@@ -9119,7 +9119,7 @@ function renderExecutionQuestions(prompts, options = {}) {
       genBtn.disabled = false;
       genBtn.classList.toggle("is-busy", Boolean(state.corePromptsBusy));
       genBtn.setAttribute("aria-busy", state.corePromptsBusy ? "true" : "false");
-      genBtn.textContent = state.corePromptsBusy ? "正在整理行動問題…" : "開始今天的行動整理 →";
+      genBtn.textContent = state.corePromptsBusy ? "正在整理行動問題…" : "✦ 開始今天的行動整理";
     }
     if (checkBtn) checkBtn.hidden = true;
     return;
@@ -12234,8 +12234,7 @@ function historyJournalIcon(name) {
 }
 
 function historySectionMarkup(title, icon, body, open, iso = "") {
-  const editorial = icon === "aware" || icon === "exec" || icon === "manifest" ? " history-subcard--editorial" : "";
-  return `<section class="history-subcard is-open history-subcard--static${editorial}" data-history-section-id="${escapeHtml(icon)}" data-history-section-date="${escapeHtml(iso)}">
+  return `<section class="history-subcard is-open history-subcard--static" data-history-section-id="${escapeHtml(icon)}" data-history-section-date="${escapeHtml(iso)}">
     <h3 class="history-subcard__title">${escapeHtml(title)}</h3>
     <div class="history-subcard__body">${body}</div>
   </section>`;
@@ -12313,14 +12312,6 @@ function restoreHistoryScroll(prev) {
   requestAnimationFrame(apply);
 }
 
-function historyQuoteHtml(label, bodyHtml, variant = "") {
-  if (!String(bodyHtml || "").trim()) return "";
-  return `<div class="journal-quote${variant ? ` journal-quote--${variant}` : ""}">
-    ${label ? `<p class="journal-quote__kicker">${escapeHtml(label)}</p>` : ""}
-    ${bodyHtml}
-  </div>`;
-}
-
 function historyBlock(label, bodyHtml) {
   if (!String(bodyHtml || "").trim()) return "";
   return `<div class="history-journal__tile">${
@@ -12385,31 +12376,14 @@ function historyExecChecksHtml(journal, date) {
   if (items.length) {
     return `<div class="history-exec-cards">${items
       .map(
-        (item, index) => `<article class="history-ed-path">
-        ${markableP(item.title, `exec.item.${index}.title`, "history-ed-path__title", date, nestedHighlights(item.highlights, "title"))}
-        ${item.detail ? markableP(item.detail, `exec.item.${index}.detail`, "history-ed-path__lead", date, nestedHighlights(item.highlights, "detail")) : ""}
+        (item, index) => `<article class="history-exec-card">
+        ${markableP(item.title, `exec.item.${index}.title`, "history-exec-card__title", date, nestedHighlights(item.highlights, "title"))}
+        ${item.detail ? markableP(item.detail, `exec.item.${index}.detail`, "history-exec-card__lead", date, nestedHighlights(item.highlights, "detail")) : ""}
       </article>`
       )
       .join("")}</div>`;
   }
   return historyItemsHtml(execCheckHistoryLines(journal));
-}
-
-function historyManifestPathsHtml(journal, date) {
-  const rich = normalizeManifestPathItems(journal && journal.manifestCheckItems);
-  const items = rich.some((item) => item.title)
-    ? rich
-    : (journal && journal.manifestChecks ? journal.manifestChecks : []).map((title) => ({ title }));
-  const list = items.filter((item) => item && String(item.title || "").trim());
-  if (!list.length) return "";
-  return list
-    .map(
-      (item, index) => `<div class="history-ed-path">
-        ${markableP(item.title, `manifest.path.${index}.title`, "history-ed-path__title", date, nestedHighlights(item.highlights, "title"))}
-        ${item.detail ? markableP(item.detail, `manifest.path.${index}.detail`, "history-ed-path__lead", date, nestedHighlights(item.highlights, "detail")) : ""}
-      </div>`
-    )
-    .join("");
 }
 
 function historyListBlock(label, items) {
@@ -12846,12 +12820,10 @@ function renderHistoryJournal(review) {
     [
       "⑤ 覺察力",
       "aware",
-      compactAware && awareResultHtml
-        ? [awareResultHtml]
-        : [
-            historyGroup(useAwareChoices ? "今日勾選" : "覺察作答", awareFields),
-            historyGroup("今日覺察", awareResultHtml || historyBlock("", quotes)),
-          ],
+      [
+        historyGroup(useAwareChoices ? "今日勾選" : "覺察作答", awareFields),
+        historyGroup("今日覺察", awareResultHtml || historyBlock("", quotes)),
+      ],
     ],
     [
       "⑥ 執行力",
@@ -12859,16 +12831,11 @@ function renderHistoryJournal(review) {
       [
         ...execFields,
         execChosen
-          ? historyQuoteHtml(
-              "明天最小的一步",
-              markableP(execChosen, "exec.smallestStep", "journal-quote__core", historyIso),
-              "sage"
-            )
+          ? historyBlock("明天最小的一步", markableP(execChosen, "exec.smallestStep", "history-journal__text", historyIso))
           : "",
-        historyBlock("行動卡", historyExecChecksHtml(journal, historyIso)),
-        hasMeaningfulExecutionChoices(journal.executionChoices) || !journal.executionFocus?.title
-          ? ""
-          : historyBlock(
+        historyBlock("我的行動卡", historyExecChecksHtml(journal, historyIso)),
+        journal.executionFocus?.title
+          ? historyBlock(
               execFocusKicker(journal.executionFocus.when),
               `${markableP(
                 execFocusTitleText(journal.executionFocus.title),
@@ -12887,7 +12854,8 @@ function renderHistoryJournal(review) {
                     )
                   : ""
               }`
-            ),
+            )
+          : "",
       ],
     ],
     [
@@ -12895,16 +12863,51 @@ function renderHistoryJournal(review) {
       "manifest",
       [
         String(journal.manifest || "").trim()
-          ? historyBlock("顯化方向", markableP(journal.manifest, "manifest.vision", "history-journal__text", historyIso))
+          ? historyBlock("我想顯化的事情", markableP(journal.manifest, "manifest.vision", "history-journal__text", historyIso))
           : "",
-        historyBlock("可以先做的一小步", historyManifestPathsHtml(journal, historyIso)),
+        ...normalizeManifestPrompts(journal.manifestPrompts).map((item, index) =>
+          historyQaHtml(
+            item.question,
+            `manifest.prompt.${index}.question`,
+            (journal.manifestThink || [])[index],
+            `manifest.prompt.${index}.answer`,
+            historyIso
+          )
+        ),
+        historyBlock(
+          "讓願望靠近現實",
+          historyMarkedItemsHtml(
+            (normalizeManifestPathItems(journal.manifestCheckItems).some((item) => item.title)
+              ? normalizeManifestPathItems(journal.manifestCheckItems)
+              : (journal.manifestChecks || []).map((title) => ({ title }))
+            ).flatMap((item, index) => {
+              const rows = [
+                {
+                  text: item.title,
+                  field: `manifest.path.${index}.title`,
+                  date: historyIso,
+                  highlights: nestedHighlights(item.highlights, "title"),
+                },
+              ];
+              if (item.detail) {
+                rows.push({
+                  text: item.detail,
+                  field: `manifest.path.${index}.detail`,
+                  date: historyIso,
+                  highlights: nestedHighlights(item.highlights, "detail"),
+                });
+              }
+              return rows;
+            })
+          )
+        ),
         journal.manifestSentence
-          ? historyQuoteHtml(
+          ? historyBlock(
               "我的顯化句",
               markableP(
                 journal.manifestSentence,
                 "manifest.sentence",
-                "journal-quote__core",
+                "history-journal__headline",
                 historyIso,
                 fieldHighlightsOf(journal.manifestHighlights, "sentence")
               )

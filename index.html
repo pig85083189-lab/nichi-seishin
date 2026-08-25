@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=179" />
+    <link rel="stylesheet" href="app.css?v=178" />
     <style>
       .splash {
         position: fixed;
@@ -575,7 +575,7 @@
             </div>
           </section>
 
-          <section class="journal-card journal-card--aware journal-fold journal-editorial" id="section-aware">
+          <section class="journal-card journal-card--aware journal-fold" id="section-aware">
             <button class="journal-fold__toggle" type="button" data-journal-fold aria-expanded="false" aria-controls="awareFoldPanel">
               <span class="journal-fold__copy">
                 <h2 class="journal-card__title js-quick-only"><span>03</span> 今日覺察</h2>
@@ -587,29 +587,34 @@
             </button>
             <div class="journal-fold__panel" id="awareFoldPanel" inert aria-hidden="true">
               <div class="journal-fold__inner">
-            <p class="journal-guide js-quick-only">今天也許藏著一些你還沒發現的自己。<br />這裡只問「我看見了自己什麼」：需要、反應、習慣、情緒。勾選最貼近的 1～2 句，也可以都不勾。</p>
-            <p class="journal-guide js-deep-only">今天，我看見了自己什麼？</p>
+            <p class="journal-guide">今天也許藏著一些你還沒發現的自己。<br />這裡只問「我看見了自己什麼」：需要、反應、習慣、情緒。勾選最貼近的 1～2 句，也可以都不勾。</p>
+            <div class="journal-split journal-split--aware">
+              <div class="journal-col aware-col aware-col--quiz">
                 <div class="check-loading" id="awarePromptLoading" hidden>
                   <p class="check-loading__label">正在整理今天的覺察選項…</p>
                   <div class="ai-thinking__bar"><i></i></div>
                 </div>
                 <p class="deep-empty" id="awareEmpty">完成「今日感謝」與「今日事件」後，會依照你今天寫下的內容，產生專屬於你的覺察選項。</p>
-                <button class="ai-check-btn ai-check-btn--label" id="btnAwarePrompts" type="button">開始今天的覺察 →</button>
+                <button class="ai-check-btn ai-check-btn--label" id="btnAwarePrompts" type="button">✦ 開始今天的覺察</button>
                 <div id="awareQuestions"></div>
-                <div class="journal-editorial__result js-deep-only">
+              </div>
+              <div class="journal-col aware-col aware-col--quotes js-deep-only">
+                <p class="journal-label">今日覺察</p>
+                <p class="journal-guide journal-guide--tight">勾選後，收成「核心覺察」與「我看見了」。不必再回答是／否或打字。</p>
                 <div class="check-loading" id="awareLoading" hidden>
                   <p class="check-loading__label">正在為你整理今天的覺察…</p>
                   <div class="ai-thinking__bar"><i></i></div>
                 </div>
                 <div class="check-list" id="awareChecks"></div>
-                <button class="ai-check-btn ai-check-btn--label" id="btnAwareAi" type="button" hidden>看見今天的覺察 →</button>
+                <button class="ai-check-btn ai-check-btn--label" id="btnAwareAi" type="button" hidden>✦ 看見今天的覺察</button>
                 <p class="aware-quote-limit" id="awareQuoteLimitHint" hidden></p>
-                </div>
+              </div>
+            </div>
               </div>
             </div>
           </section>
 
-          <section class="journal-card journal-fold journal-editorial" id="section-exec">
+          <section class="journal-card journal-fold" id="section-exec">
             <button class="journal-fold__toggle" id="execFoldToggle" type="button" data-journal-fold aria-expanded="false" aria-controls="execFoldPanel">
               <span class="journal-fold__copy">
                 <h2 class="journal-card__title js-quick-only"><span>04</span> 今日最小行動</h2>
@@ -622,14 +627,16 @@
             <div class="journal-fold__panel" id="execFoldPanel" inert aria-hidden="true">
               <div class="journal-fold__inner">
                 <p class="journal-guide js-quick-only">明天只要做一件小到 5 分鐘內能完成的事。完成復盤後會進到側邊欄「執行力」清單，方便追蹤。</p>
-                <p class="journal-guide js-deep-only">既然已經看見了，明天最想先做到哪一個？</p>
+                <p class="journal-guide js-deep-only">既然已經看見了，明天你最想先做到哪一個？</p>
+                <div class="journal-split">
+              <div class="journal-col">
                 <div class="js-deep-only">
                   <div class="check-loading" id="execPromptLoading" hidden>
                     <p class="check-loading__label">正在整理明天做得到的一小步…</p>
                     <div class="ai-thinking__bar"><i></i></div>
                   </div>
                   <p class="deep-empty" id="execEmpty">寫完前面的看見後，再開始整理明天的一小步。</p>
-                  <button class="ai-check-btn" id="btnExecPrompts" type="button">開始今天的行動整理 →</button>
+                  <button class="ai-check-btn" id="btnExecPrompts" type="button">✦ 開始今天的行動整理</button>
                   <div id="execQuestions"></div>
                 </div>
                 <div class="exec-next">
@@ -639,22 +646,25 @@
                   <textarea class="textarea" id="execNext" rows="3" placeholder="例如：早餐後寫下3件小事／22:30放下手機／下午3點換上運動服"></textarea>
                 </div>
                 <div class="js-deep-only">
-                  <button class="ai-check-btn" id="btnExecAi" type="button" hidden>收下我的行動卡 →</button>
+                  <button class="ai-check-btn" id="btnExecAi" type="button" hidden>收下我的行動卡</button>
                 </div>
-                <div class="journal-editorial__result js-deep-only">
+              </div>
+              <div class="journal-col js-deep-only">
                 <p class="journal-label">我的行動卡</p>
+                <p class="journal-guide journal-guide--tight">根據你選的那一步，收成明天真的做得到的行動。做完就勾起來。</p>
                 <div class="check-loading" id="execLoading" hidden>
                   <p class="check-loading__label">正在整理你的行動卡…</p>
                   <div class="ai-thinking__bar"><i></i></div>
                 </div>
                 <div class="check-list" id="execChecks"></div>
                 <article class="exec-focus" id="execFocus" hidden></article>
+              </div>
                 </div>
               </div>
             </div>
           </section>
 
-          <section class="journal-card journal-fold journal-editorial" id="section-manifest">
+          <section class="journal-card journal-fold" id="section-manifest">
             <button class="journal-fold__toggle" type="button" data-journal-fold aria-expanded="false" aria-controls="manifestFoldPanel">
               <span class="journal-fold__copy">
                 <h2 class="journal-card__title"><span>07</span> 顯化力</h2>
@@ -664,24 +674,30 @@
             </button>
             <div class="journal-fold__panel" id="manifestFoldPanel" inert aria-hidden="true">
               <div class="journal-fold__inner">
-            <p class="journal-guide">我真正想往哪裡走？</p>
+            <p class="journal-guide">有些想要的生活，要先看見，才知道自己正在往哪裡走。<br />寫下一件你真正想讓它慢慢成為現實的事。</p>
+            <div class="journal-split">
+              <div class="journal-col">
+                <p class="journal-label">我想顯化的事情</p>
                 <textarea class="textarea" id="manifestVision" rows="5" placeholder="例如：收入突破100萬／擁有自己的品牌／完成一直想做的事⋯"></textarea>
                 <div class="check-loading" id="manifestPromptLoading" hidden>
                   <p class="check-loading__label">正在看看這個願望…</p>
                   <div class="ai-thinking__bar"><i></i></div>
                 </div>
-                <button class="ai-check-btn" id="btnManifestAi" type="button">看看這個願望 →</button>
+                <button class="ai-check-btn" id="btnManifestAi" type="button">✦ 看看這個願望</button>
                 <div id="manifestQuestions"></div>
-                <button class="ai-check-btn" id="btnManifestPaths" type="button" hidden>讓願望靠近現實 →</button>
-                <div class="journal-editorial__result">
-                <p class="journal-label">可以先做的一小步</p>
+                <button class="ai-check-btn" id="btnManifestPaths" type="button" hidden>✦ 讓願望靠近現實</button>
+              </div>
+              <div class="journal-col">
+                <p class="journal-label">讓願望靠近現實</p>
+                <p class="journal-guide journal-guide--tight">不用一次做到全部。從現在開始，找出幾個能讓自己慢慢靠近它的方向。</p>
                 <div class="check-loading" id="manifestLoading" hidden>
                   <p class="check-loading__label">正在整理靠近的方向…</p>
                   <div class="ai-thinking__bar"><i></i></div>
                 </div>
                 <div class="check-list" id="manifestChecks"></div>
                 <article class="exec-focus manifest-sentence" id="manifestSentence" hidden></article>
-                </div>
+              </div>
+            </div>
               </div>
             </div>
           </section>
@@ -1200,6 +1216,6 @@
     <script src="lib/history-summary.js?v=5"></script>
     <script src="lib/insight-highlight.js?v=5"></script>
     <script src="lib/user-mark.js?v=6"></script>
-    <script src="app.js?v=208"></script>
+    <script src="app.js?v=207"></script>
   </body>
 </html>
