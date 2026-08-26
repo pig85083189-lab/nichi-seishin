@@ -7814,8 +7814,7 @@ summary [data-user-mark-field] {
   border-bottom: 0;
 }
 
-.page--lib .lib-quote__date,
-.page--lib .lib-day {
+.page--lib .lib-quote__date {
   margin: 18px 0 0;
   color: var(--accent);
   font-size: 12px;
@@ -7862,58 +7861,6 @@ summary [data-user-mark-field] {
   color: #8a6a64;
 }
 
-.page--lib .lib-act {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-  padding: 16px 0 18px;
-  border-bottom: 1px solid var(--cream-border);
-}
-
-.page--lib .lib-act__check {
-  position: relative;
-  display: grid;
-  grid-template-columns: 20px minmax(0, 1fr);
-  gap: 12px;
-  align-items: start;
-  cursor: pointer;
-}
-
-.page--lib .lib-act__check input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-}
-
-.page--lib .lib-dot {
-  width: 18px;
-  height: 18px;
-  margin-top: 4px;
-  border: 1.4px solid #bca58f;
-  border-radius: 50%;
-  background: transparent;
-}
-
-.page--lib .lib-act.is-done .lib-dot,
-.page--lib .lib-act__check input:checked + .lib-dot {
-  border-color: var(--accent);
-  background: radial-gradient(circle at center, var(--accent) 0 5px, transparent 6px);
-}
-
-.page--lib .lib-act__title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 1.65;
-  overflow-wrap: anywhere;
-}
-
-.page--lib .lib-act.is-done .lib-act__title {
-  color: var(--muted);
-}
-
-.page--lib .lib-act__meta,
 .page--lib .lib-vision__meta {
   display: block;
   margin: 6px 0 0;
@@ -7922,15 +7869,12 @@ summary [data-user-mark-field] {
   letter-spacing: 0.02em;
 }
 
-.page--lib .lib-act__ops,
 .page--lib .lib-vision__ops {
   display: flex;
   flex-wrap: wrap;
   gap: 12px 14px;
-  padding-left: 32px;
 }
 
-.page--lib .lib-act__ops .task-chip-btn,
 .page--lib .lib-vision__ops .task-chip-btn {
   height: auto;
   padding: 0;
@@ -7944,19 +7888,213 @@ summary [data-user-mark-field] {
   box-shadow: none;
 }
 
-.page--lib .lib-act__ops .task-chip-btn svg,
 .page--lib .lib-vision__ops .task-chip-btn svg {
   display: none;
 }
 
-.page--lib .lib-act__ops .task-chip-btn:hover,
 .page--lib .lib-vision__ops .task-chip-btn:hover,
-.page--lib .lib-act__ops .task-chip-btn:active,
 .page--lib .lib-vision__ops .task-chip-btn:active {
   background: transparent;
   color: #8a6a64;
   transform: none;
   box-shadow: none;
+}
+
+#page-sfm {
+  overflow-x: clip;
+}
+
+#page-sfm .lib-tab__count {
+  margin-left: 4px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.72;
+}
+
+#page-sfm .lib-tab.is-on .lib-tab__count,
+#page-sfm .lib-tab[aria-selected="true"] .lib-tab__count {
+  opacity: 0.88;
+}
+
+#page-sfm .lib-day {
+  margin: 20px 0 2px;
+  color: #c4b4a6;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+
+#page-sfm .lib-list > .lib-day:first-child {
+  margin-top: 10px;
+}
+
+#page-sfm .lib-act {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 2px 12px;
+  min-width: 0;
+  padding: 14px 0 16px;
+  border-bottom: 1px solid var(--cream-border);
+}
+
+#page-sfm .lib-act__check {
+  position: relative;
+  display: block;
+  width: 20px;
+  height: 22px;
+  margin-top: 3px;
+  cursor: pointer;
+}
+
+#page-sfm .lib-act__check input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+#page-sfm .lib-dot {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border: 1.4px solid #bca58f;
+  border-radius: 50%;
+  background: transparent;
+}
+
+#page-sfm .lib-act.is-done .lib-dot,
+#page-sfm .lib-act__check input:checked + .lib-dot {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+#page-sfm .lib-act.is-done .lib-dot::after,
+#page-sfm .lib-act__check input:checked + .lib-dot::after {
+  content: "";
+  display: block;
+  width: 5px;
+  height: 8px;
+  margin: 2px auto 0;
+  border-right: 1.5px solid #fffaf4;
+  border-bottom: 1.5px solid #fffaf4;
+  transform: rotate(45deg);
+}
+
+#page-sfm .lib-act__main {
+  min-width: 0;
+}
+
+#page-sfm .lib-act__title {
+  margin: 0;
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+#page-sfm .lib-act.is-done .lib-act__title {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+#page-sfm .lib-act__detail {
+  margin: 6px 0 0;
+  color: var(--ink-soft);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+#page-sfm .lib-act.is-done .lib-act__detail {
+  color: var(--muted);
+}
+
+#page-sfm .lib-act__foot {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+#page-sfm .lib-act__meta {
+  display: block;
+  min-height: 0;
+  color: #c4b4a6;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
+}
+
+#page-sfm .lib-act__ops {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: 12px;
+  padding-left: 0;
+}
+
+#page-sfm .lib-act__move,
+#page-sfm .lib-act__del {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+#page-sfm .lib-act__move {
+  color: #b7a394;
+}
+
+#page-sfm .lib-act__del {
+  color: #d8ccc2;
+}
+
+#page-sfm .lib-act__move:hover,
+#page-sfm .lib-act__del:hover {
+  color: #8a6a64;
+}
+
+#page-sfm .lib-add-label {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+#page-sfm .lib-add-form .lib-add-label:first-child {
+  margin-top: 0;
+}
+
+#page-sfm .lib-add-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+#page-sfm .lib-add-cancel {
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  color: #c4b4a6;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+#page-sfm .lib-add-cancel:hover {
+  color: #8a6a64;
+}
+
+#page-sfm .lib-add-go {
+  justify-self: unset;
+  margin-top: 0;
 }
 
 .page--lib .lib-add {
@@ -8088,7 +8226,11 @@ summary [data-user-mark-field] {
     font-size: 18px;
   }
 
-  .page--lib .lib-act__ops {
-    padding-left: 32px;
+  #page-sfm .lib-act {
+    padding: 12px 0 14px;
+  }
+
+  #page-sfm .lib-act__title {
+    font-size: 17px;
   }
 }

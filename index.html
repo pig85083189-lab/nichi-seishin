@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=180" />
+    <link rel="stylesheet" href="app.css?v=181" />
     <style>
       .splash {
         position: fixed;
@@ -788,9 +788,9 @@
           </header>
 
           <div class="lib-tabs" role="tablist" aria-label="行動分類" id="taskFilters">
-            <button class="lib-tab is-on" data-filter="doing" type="button" role="tab" aria-selected="true">進行中</button>
-            <button class="lib-tab" data-filter="later" type="button" role="tab" aria-selected="false">待開始</button>
-            <button class="lib-tab" data-filter="done" type="button" role="tab" aria-selected="false">已完成</button>
+            <button class="lib-tab is-on" data-filter="doing" type="button" role="tab" aria-selected="true">進行中 <span class="lib-tab__count" data-task-count="doing">0</span></button>
+            <button class="lib-tab" data-filter="later" type="button" role="tab" aria-selected="false">待開始 <span class="lib-tab__count" data-task-count="later">0</span></button>
+            <button class="lib-tab" data-filter="done" type="button" role="tab" aria-selected="false">已完成 <span class="lib-tab__count" data-task-count="done">0</span></button>
           </div>
 
           <div class="lib-list" id="taskList"></div>
@@ -798,6 +798,7 @@
           <div class="lib-add" id="taskAddWrap">
             <button class="lib-add-toggle" id="taskAddToggle" type="button" aria-expanded="false" aria-controls="taskForm">＋ 新增一個行動</button>
             <form class="lib-add-form" id="taskForm" hidden>
+              <label class="lib-add-label" for="taskTitle">要做什麼</label>
               <input
                 class="lib-input"
                 id="taskTitle"
@@ -805,19 +806,17 @@
                 placeholder="明天要做的那一件小事…"
                 required
               />
+              <label class="lib-add-label" for="taskDetail">具體作法（選填）</label>
               <input
                 class="lib-input"
                 id="taskDetail"
                 type="text"
-                placeholder="具體作法（選填）…"
+                placeholder="我準備怎麼做…"
               />
-              <select class="lib-input lib-input--select" id="taskSource" aria-label="來源">
-                <option value="自行新增">自行新增</option>
-                <option value="今日復盤">今日復盤</option>
-                <option value="週月報">週月報</option>
-                <option value="執行力">執行力</option>
-              </select>
-              <button class="lib-add-go" type="submit">加入</button>
+              <div class="lib-add-actions">
+                <button class="lib-add-cancel" id="taskAddCancel" type="button">取消</button>
+                <button class="lib-add-go" type="submit">加入 →</button>
+              </div>
             </form>
           </div>
         </section>
@@ -1224,6 +1223,6 @@
     <script src="lib/history-summary.js?v=5"></script>
     <script src="lib/insight-highlight.js?v=5"></script>
     <script src="lib/user-mark.js?v=6"></script>
-    <script src="app.js?v=209"></script>
+    <script src="app.js?v=210"></script>
   </body>
 </html>

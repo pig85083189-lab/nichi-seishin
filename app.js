@@ -11872,10 +11872,45 @@ function libraryMonthDay(iso) {
   return parts.length >= 3 ? `${parts[1]}/${parts[2]}` : "";
 }
 
+function taskGroupDateLabel(iso) {
+  const day = String(iso || "").slice(0, 10);
+  if (!day) return "";
+  if (day === currentIso()) return "今天";
+  const parts = day.split("-");
+  return parts.length >= 3 ? `${parts[1]} / ${parts[2]}` : day;
+}
+
 function librarySourceMeta(item) {
-  const src = String((item && item.source) || "").trim() || "自行新增";
-  const md = libraryMonthDay(item && item.date);
-  return md ? `來自 ${md} ${src}` : src;
+  const src = String((item && item.source) || "").trim();
+  if (!src) return "";
+  const md = libraryMonthDay(item && (item.date || item.createdAt));
+  return md ? `來自 ${md} ${src}` : `來自 ${src}`;
+}
+
+function taskSidebarDetail(task) {
+  const title = String((task && task.title) || "").trim();
+  const detail = String((task && (task.detail || task.note || task.body)) || "").trim();
+  if (!detail || detail === title) return "";
+  return detail;
+}
+
+function renderTaskMoveAction(task) {
+  const id = escapeHtml(task.id);
+  if (task.status === "later") {
+    return `<button class="lib-act__move" data-task-status="${id}" data-to="doing" type="button">移到進行中</button>`;
+  }
+  if (task.status === "done") {
+    return `<button class="lib-act__move" data-task-status="${id}" data-to="doing" type="button">重新開始</button>`;
+  }
+  return `<button class="lib-act__move" data-task-status="${id}" data-to="later" type="button">移到待開始</button>`;
+}
+
+function syncTaskFilterCounts(doingN, laterN, doneN) {
+  const counts = { doing: doingN, later: laterN, done: doneN };
+  document.querySelectorAll("#taskFilters [data-task-count]").forEach((el) => {
+    const key = el.dataset.taskCount;
+    el.textContent = String(counts[key] ?? 0);
+  });
 }
 
 function libEmptyHtml(title, text) {
@@ -11892,8 +11927,9 @@ function setTaskAddOpen(open) {
     form.classList.toggle("is-open", open);
   }
   if (toggle) {
+    toggle.hidden = open;
     toggle.setAttribute("aria-expanded", open ? "true" : "false");
-    toggle.textContent = open ? "收合" : "＋ 新增一個行動";
+    toggle.textContent = "＋ 新增一個行動";
   }
   if (open) {
     const title = document.getElementById("taskTitle");
@@ -11904,29 +11940,32 @@ function setTaskAddOpen(open) {
 function renderTaskItem(task) {
   const done = task.status === "done";
   const later = task.status === "later";
-  const parts = taskDisplayParts(task);
-  const title = String(task.title || "").trim() || parts.title;
+  const title = String(task.title || "").trim() || String(task.detail || "").trim();
+  const detail = taskSidebarDetail(task);
+  const meta = librarySourceMeta(task);
   const id = escapeHtml(task.id);
   return `
     <article class="lib-act${done ? " is-done" : ""}${later ? " is-later" : ""}">
       <label class="lib-act__check">
-        <input type="checkbox" data-task-toggle="${id}" ${done ? "checked" : ""} />
+        <input type="checkbox" data-task-toggle="${id}" ${done ? "checked" : ""} aria-label="標記完成" />
         <span class="lib-dot" aria-hidden="true"></span>
-        <span class="lib-act__body">
-          <span class="lib-act__title">${escapeHtml(title)}</span>
-          <span class="lib-act__meta">${escapeHtml(librarySourceMeta(task))}</span>
-        </span>
       </label>
-      <div class="lib-act__ops" role="group" aria-label="行動操作">
-        ${renderStatusActionChips(task.id, task.status, "data-task-status")}
-        ${renderTaskChip("刪除", "delete", `data-task-delete="${id}" aria-label="刪除這項行動"`, "trash")}
+      <div class="lib-act__main">
+        <p class="lib-act__title">${escapeHtml(title)}</p>
+        ${detail ? `<p class="lib-act__detail">${escapeHtml(detail)}</p>` : ""}
+        <div class="lib-act__foot">
+          ${meta ? `<span class="lib-act__meta">${escapeHtml(meta)}</span>` : `<span class="lib-act__meta"></span>`}
+          <div class="lib-act__ops" role="group" aria-label="行動操作">
+            ${renderTaskMoveAction(task)}
+            <button class="lib-act__del" data-task-delete="${id}" type="button">刪除</button>
+          </div>
+        </div>
       </div>
     </article>
   `;
 }
 
 function renderLibraryTaskGroups(items) {
-  const today = currentIso();
   const grouped = new Map();
   items.forEach((task) => {
     const iso = task.date || String(task.createdAt || "").slice(0, 10) || "";
@@ -11936,8 +11975,8 @@ function renderLibraryTaskGroups(items) {
   return [...grouped.entries()]
     .sort((a, b) => String(b[0]).localeCompare(String(a[0])))
     .map(([iso, rows]) => {
-      const label = iso === today ? "今天" : libraryDateLabel(iso);
-      return `<p class="lib-day">${escapeHtml(label)}</p>${rows.map((task) => renderTaskItem(task)).join("")}`;
+      const label = taskGroupDateLabel(iso);
+      return `${label ? `<p class="lib-day">${escapeHtml(label)}</p>` : ""}${rows.map((task) => renderTaskItem(task)).join("")}`;
     })
     .join("");
 }
@@ -11956,6 +11995,7 @@ function renderTasks() {
     .filter((task) => task.status === "done")
     .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
   const filter = ["doing", "later", "done"].includes(state.taskFilter) ? state.taskFilter : "doing";
+  syncTaskFilterCounts(doing.length, later.length, done.length);
 
   if (!all.length) {
     list.innerHTML = libEmptyHtml("還沒有正在進行的行動。", "從今天最小的一步開始就好。");
@@ -12008,7 +12048,7 @@ function addTask(event) {
     title,
     detail: document.getElementById("taskDetail")?.value.trim() || "",
     status: "doing",
-    source: document.getElementById("taskSource").value,
+    source: "自行新增",
     date: currentIso(),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -14042,6 +14082,7 @@ function bindEvents() {
     const form = document.getElementById("taskForm");
     setTaskAddOpen(Boolean(form?.hidden));
   });
+  document.getElementById("taskAddCancel")?.addEventListener("click", () => setTaskAddOpen(false));
   document.getElementById("taskFilters")?.addEventListener("click", (event) => {
     const chip = event.target.closest("[data-filter]");
     if (!chip) return;
