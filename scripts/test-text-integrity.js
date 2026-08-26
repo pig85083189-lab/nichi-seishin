@@ -5,6 +5,8 @@ const {
   finalizeGeneratedQuestion,
   splitSentences,
   splitTitleDetail,
+  repairLegacyTimeSplit,
+  resolveTitleDetail,
 } = require("../lib/text-integrity");
 const { mergeJournalObjects, mergeReviewMaps } = require("../lib/review-merge");
 const { padAwarenessPrompts, looksIncompleteAwarenessText } = require("../api/review");
@@ -87,6 +89,12 @@ const timedParts = splitTitleDetail(timedAction);
 assert(timedParts.title === timedAction && timedParts.detail === "", "時間冒號不可當 title/detail delimiter");
 assert(timedParts.title.includes("22:00"), "22:00 必須完整保留");
 assert(splitTitleDetail("放下手機：今晚 22:00 後不再滑手機。").detail.includes("22:00"), "安全 delimiter 拆分後時間仍完整");
+
+const legacyA = resolveTitleDetail("今晚22", "00 後不再滑手機");
+assert(legacyA.title.includes("22:00"), "legacy：今晚22 + 00 必須還原 22:00");
+assert(legacyA.title !== "今晚22", "legacy：不可再顯示今晚22");
+assert(!String(legacyA.detail || "").startsWith("00"), "legacy：detail 不可從 00 開始");
+assert(repairLegacyTimeSplit("完成第2", "00 個步驟").repaired === false, "legacy：完成第2 不可誤接成時間");
 
 function compactOver(text, n) {
   return String(text || "").replace(/\s+/g, "").length > n;

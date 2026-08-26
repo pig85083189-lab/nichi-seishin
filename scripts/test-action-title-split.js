@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const { splitTitleDetail } = require("../lib/text-integrity");
+const { splitTitleDetail, repairLegacyTimeSplit, resolveTitleDetail } = require("../lib/text-integrity");
 const { renderCombinedHighlightedText, plainTextFromHighlightedHtml } = require("../lib/insight-highlight");
 const { normalizeExecutionChecklistItems } = require("../api/review");
 
@@ -118,7 +118,68 @@ assert(review.includes("splitTitleDetail"), "API splitChecklistTitle 改走同�
 assert(!/function splitTaskText\([\s\S]{0,180}search\(\/\[：:\]\/\)/.test(app), "client 不再用第一個冒號硬拆");
 assert(!/function splitChecklistTitle\([\s\S]{0,180}search\(\/\[：:\]\/\)/.test(review), "API 不再用第一個冒號硬拆");
 assert(css.includes("overflow-wrap: anywhere"), "CASE N：長句可換行");
-assert(html.includes("lib/text-integrity.js?v=4"), "cache：text-integrity v=4");
-assert(html.includes("app.js?v=216"), "cache：app.js v=216");
+assert(html.includes("lib/text-integrity.js?v=5"), "cache：text-integrity v=5");
+assert(html.includes("app.js?v=217"), "cache：app.js v=217");
+
+function blobOf(parts) {
+  return `${parts.title}${parts.detail || ""}`;
+}
+
+const legacyA = resolveTitleDetail("今晚22", "00 後不再滑手機");
+assert(legacyA.title.includes("22:00"), "CASE A：今晚22 + 00 顯示 22:00");
+assert(legacyA.title !== "今晚22", "CASE A：title 不再是今晚22");
+assert(!String(legacyA.detail || "").startsWith("00"), "CASE A：detail 不可從 00 開始");
+assert(blobOf(legacyA).includes("後不再滑手機"), "CASE A：後半完整");
+
+const legacyB = resolveTitleDetail("明天09", "30 打電話給媽媽");
+assert(legacyB.title.includes("09:30") || blobOf(legacyB).includes("09:30"), "CASE B：09:30");
+assert(blobOf(legacyB).includes("打電話給媽媽"), "CASE B：後半完整");
+
+const legacyC = resolveTitleDetail("8", "00 起床後喝水");
+assert(legacyC.title.includes("8:00") || blobOf(legacyC).includes("8:00"), "CASE C：8:00");
+assert(blobOf(legacyC).includes("起床後喝水"), "CASE C：後半完整");
+
+const legacyD = resolveTitleDetail("23", "59 前關機");
+assert(legacyD.title.includes("23:59") || blobOf(legacyD).includes("23:59"), "CASE D：23:59");
+
+const legacyE = repairLegacyTimeSplit("完成第2", "00 個步驟");
+assert(legacyE.repaired === false, "CASE E：不可把完成第2 接成時間");
+const resolvedE = resolveTitleDetail("完成第2", "00 個步驟");
+assert(resolvedE.title === "完成第2" && resolvedE.detail === "00 個步驟", "CASE E：原樣保留");
+
+const legacyF = resolveTitleDetail("明天早餐前停留 10 秒，感受當下。", "先停下來感受身體。");
+assert(legacyF.title === "明天早餐前停留 10 秒，感受當下。", "CASE F：一般 title 不變");
+assert(legacyF.detail === "先停下來感受身體。", "CASE F：一般 detail 不變");
+
+const rawSource = "今晚 22:00 後不再滑手機，確保明天睡眠至少 7 小時，讓你有更穩定的精神去觀察和感受日常的小幸福。";
+const legacyG = resolveTitleDetail("今晚22", "00 後不再滑手機，確保明天睡眠至少 7 小時……", [rawSource]);
+assert(legacyG.fromRaw === true, "CASE G：有完整 raw source 時優先使用");
+assert(legacyG.title.includes("22:00"), "CASE G：raw source 含 22:00");
+assert(legacyG.title.includes("小幸福") || blobOf(legacyG).includes("小幸福"), "CASE G：用完整原文，不靠 legacy 猜測");
+
+const legacyCards = normalizeExecutionChecklistItems(
+  [
+    { title: "今晚22", detail: "00 後不再滑手機，確保睡眠至少 7 小時。" },
+    { title: "明天早餐前停留 10 秒，感受當下。", detail: "" },
+    { title: "明天09", detail: "30 打電話給媽媽。" },
+  ],
+  1,
+  6,
+  rawSource,
+  { keepFull: true }
+);
+assert(legacyCards.length === 3, "CASE H：三張舊資料都能 normalize");
+assert(legacyCards[0].title.includes("22:00"), "CASE H：今日 06 舊資料還原");
+assert(legacyCards[1].title.includes("10 秒"), "CASE K：多選其他卡不受影響");
+assert(legacyCards[2].title.includes("09:30") || `${legacyCards[2].title}${legacyCards[2].detail}`.includes("09:30"), "CASE H：第三張時間還原");
+
+assert(app.includes("resolveTitleDetail") && app.includes("execRawSourcesFrom"), "CASE H：今日 06 hydrate 走 legacy repair");
+assert(app.includes("historyExecChecksHtml") && app.includes("execRawSourcesFrom(journal)"), "CASE I：History 舊資料同一套 repair");
+assert(app.includes("taskDisplayParts(task)"), "CASE J：Sidebar 顯示走 display repair");
+assert(app.includes("function renderTasks()"), "CASE L：Sidebar 執行力入口未刪");
+assert(html.includes("id=\"page-sfm\""), "CASE L：#page-sfm 仍在");
+assert(html.includes("id=\"section-manifest\"") && app.includes("generateManifestPlan"), "CASE M：07 仍在");
+assert(!app.includes("CREATE TABLE") && !app.includes("ALTER TABLE") && !/UPDATE\s+reviews/i.test(app), "CASE N：無 schema / 無 UPDATE reviews");
+assert(app.includes("if (state.journalHydrating) return") && app.includes("function persistJournalQuietly"), "hydrate 期間不因 render 自動 persist");
 
 console.log("action title split tests passed");

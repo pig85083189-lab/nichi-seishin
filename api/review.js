@@ -2041,13 +2041,21 @@ function normalizeExecutionChecklistItems(raw, min, max, smallestStep, options) 
     let title = "";
     let detail = "";
     if (typeof item === "string") {
-      const parts = splitChecklistTitle(item);
-      title = parts.title;
-      detail = parts.detail;
+      const resolved = textIntegrity.resolveTitleDetail
+        ? textIntegrity.resolveTitleDetail(item, "", [smallestStep].filter(Boolean))
+        : splitChecklistTitle(item);
+      title = resolved.title;
+      detail = resolved.detail;
     } else if (item && typeof item === "object") {
       title = String(item.title || item.label || item.text || "").trim();
       detail = flattenExecSentence(item);
-      if (!detail && title) {
+      const resolved = textIntegrity.resolveTitleDetail
+        ? textIntegrity.resolveTitleDetail(title, detail, [smallestStep].filter(Boolean))
+        : null;
+      if (resolved && resolved.title) {
+        title = resolved.title;
+        detail = resolved.detail;
+      } else if (!detail && title) {
         const parts = splitChecklistTitle(title);
         title = parts.title;
         detail = parts.detail;

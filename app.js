@@ -592,6 +592,27 @@ function splitTaskText(text) {
   return { title: raw, detail: "" };
 }
 
+function resolveExecTitleDetail(title, detail, rawSources) {
+  const api = textIntegrityApi();
+  if (typeof api.resolveTitleDetail === "function") return api.resolveTitleDetail(title, detail, rawSources);
+  if (typeof api.repairLegacyTimeSplit === "function") {
+    const repaired = api.repairLegacyTimeSplit(title, detail);
+    if (repaired && repaired.repaired) return splitTaskText(repaired.source);
+  }
+  return { title: String(title || "").trim(), detail: String(detail || "").trim() };
+}
+
+function execRawSourcesFrom(journal) {
+  const data = journal && typeof journal === "object" ? journal : {};
+  const bag = data.executionChoices || state.executionChoices;
+  const selected = selectedExecutionChoiceActions(bag).map((item) => item.text);
+  const options = Array.isArray(bag && bag.options) ? bag.options.map((item) => String(item && item.text ? item.text : "").trim()) : [];
+  const custom = String((bag && bag.custom) || "").trim();
+  const step = String(data.smallestStep || "").trim();
+  const checks = Array.isArray(data.executionChecks) ? data.executionChecks : [];
+  return [...selected, ...options, custom, step, ...checks].map((item) => String(item || "").trim()).filter(Boolean);
+}
+
 function flattenExecSentence(text, extra) {
   const how = String(extra?.how || extra?.action || "").trim();
   const raw = String(text || extra?.detail || extra?.lead || extra?.note || "").trim();
@@ -602,10 +623,7 @@ function flattenExecSentence(text, extra) {
 function taskDisplayParts(task) {
   const storedTitle = String(task && task.title ? task.title : "").trim();
   const storedDetail = flattenExecSentence((task && (task.detail || task.note || task.body)) || "", task);
-  if (storedDetail && storedDetail !== storedTitle) {
-    return { title: storedTitle || storedDetail, detail: storedTitle ? storedDetail : "" };
-  }
-  return splitTaskText(storedTitle);
+  return resolveExecTitleDetail(storedTitle, storedDetail && storedDetail !== storedTitle ? storedDetail : "", []);
 }
 
 function findTaskBySourceKey(key) {
@@ -909,14 +927,14 @@ function syncJournalLibraries(iso, journal) {
       source: "今日復盤",
     });
   });
-  const execItems = normalizeExecCheckItems(data.executionCheckItems);
+  const execItems = normalizeExecCheckItems(data.executionCheckItems, execRawSourcesFrom(data));
   (data.executionChecks || []).forEach((label) => {
     const title = String(label || "").trim();
     if (!title) return;
-    const item = execItems.find((entry) => entry.title === title);
+    const item = execItems.find((entry) => entry.title === title || entry.legacyTitle === title);
     addTaskFromGuide({
       key: `exec:${iso}:${title}`,
-      label: title,
+      label: item ? item.title : title,
       detail: item?.detail || "",
       source: "今日復盤",
       date: iso,
@@ -926,7 +944,7 @@ function syncJournalLibraries(iso, journal) {
     const title = String(item && item.title ? item.title : "").trim();
     if (!title) return;
     addTaskFromGuide({
-      key: `exec:${iso}:${title}`,
+      key: `exec:${iso}:${item.legacyTitle || title}`,
       label: title,
       detail: item.detail || "",
       source: "今日復盤",
@@ -6158,24 +6176,27 @@ function renderExecCheckCard(item, index, done) {
   `;
 }
 
-function normalizeExecFocus(raw, items) {
+function normalizeExecFocus(raw, items, sources) {
   const list = Array.isArray(items) ? items : [];
+  const rawSources = Array.isArray(sources) ? sources : [];
   if (typeof raw === "string") {
-    const parts = splitTaskText(raw);
+    const parts = resolveExecTitleDetail(raw, "", rawSources);
     const picked = pickExecItemByTitle(list, parts.title) || (parts.title ? { title: parts.title, detail: flattenExecSentence(parts.detail) } : null);
     if (!picked || !picked.title) return emptyExecFocus();
-    const when = execFocusWhenFromText(picked.title, picked.detail);
-    return { title: picked.title, detail: flattenExecSentence(picked.detail), when, hint: execFocusHintForWhen(when), highlights: picked.highlights };
+    const resolved = resolveExecTitleDetail(picked.title, flattenExecSentence(picked.detail), rawSources);
+    const when = execFocusWhenFromText(resolved.title, resolved.detail);
+    return { title: resolved.title, detail: resolved.detail, when, hint: execFocusHintForWhen(when), highlights: picked.highlights };
   }
   const data = raw && typeof raw === "object" ? raw : {};
   const picked = pickExecItemByTitle(list, data.title);
   const title = String((picked && picked.title) || data.title || "").trim();
   const detail = flattenExecSentence((picked && picked.detail) || data.detail || data.why || data.reason || "");
   if (!title) return emptyExecFocus();
-  const when = data.when === "tomorrow" || data.when === "today" ? data.when : execFocusWhenFromText(title, detail);
+  const resolved = resolveExecTitleDetail(title, detail, rawSources);
+  const when = data.when === "tomorrow" || data.when === "today" ? data.when : execFocusWhenFromText(resolved.title, resolved.detail);
   return {
-    title,
-    detail,
+    title: resolved.title,
+    detail: resolved.detail,
     when,
     hint: String(data.hint || "").trim() || execFocusHintForWhen(when),
     highlights: data.highlights || (picked && picked.highlights),
@@ -6217,11 +6238,20 @@ function renderExecFocus(focus, items) {
 function renderExecChecklist(items, checked) {
   const root = document.getElementById("execChecks");
   if (!root) return;
-  const normalized = normalizeExecCheckItems(items);
+  const normalized = normalizeExecCheckItems(items, execRawSourcesFrom({ executionChoices: state.executionChoices }));
   const set = new Set((checked || []).map((item) => (typeof item === "string" ? item : item && item.title)).filter(Boolean));
   const open = [];
   const done = [];
-  normalized.forEach((item, index) => (set.has(item.title) ? done : open).push({ ...item, markIndex: index }));
+  const isDone = (item) => {
+    if (set.has(item.title) || (item.legacyTitle && set.has(item.legacyTitle))) return true;
+    const compactTitle = String(item.title || "").replace(/\s+/g, "");
+    for (const label of set) {
+      const compactLabel = String(label || "").replace(/\s+/g, "");
+      if (compactLabel && compactTitle.startsWith(compactLabel) && /(?:[01]?\d|2[0-3])[:：][0-5]\d/.test(item.title) && /\d$/.test(String(label))) return true;
+    }
+    return false;
+  };
+  normalized.forEach((item, index) => (isDone(item) ? done : open).push({ ...item, markIndex: index }));
   root.innerHTML = `
     ${normalized.length ? userMarkHintHtml() : ""}
     <div class="exec-check-open">
@@ -6281,7 +6311,7 @@ function refreshJournalChecklists(journal, options = {}) {
     ? normalizeAwarenessQuotes(data.awarenessCheckItems).slice(0, AWARENESS_QUOTE_COUNT)
     : [];
   const execItems = keepExec
-    ? normalizeExecCheckItems(data.executionCheckItems).slice(0, EXECUTION_CARD_MAX)
+    ? normalizeExecCheckItems(data.executionCheckItems, execRawSourcesFrom(data)).slice(0, EXECUTION_CARD_MAX)
     : [];
   const manifestItems = keepManifest ? normalizeManifestPathItems(data.manifestCheckItems).slice(0, 5) : [];
   const awareChecked = options.useSaved ? data.awarenessChecks : checkedValues("awareChecks");
@@ -10365,38 +10395,52 @@ function applyJournalMode(mode, options = {}) {
 }
 
 function collectExecCheckItems() {
+  const sources = execRawSourcesFrom({ executionChoices: state.executionChoices });
   return [...document.querySelectorAll("#execChecks .exec-check")]
-    .map((el) => ({
-      title: String(el.dataset.title || "").trim(),
-      detail: flattenExecSentence(String(el.dataset.detail || "").trim()),
-      highlights: highlightsFromAttr(el.dataset.highlights),
-    }))
+    .map((el) => {
+      const resolved = resolveExecTitleDetail(
+        String(el.dataset.title || "").trim(),
+        flattenExecSentence(String(el.dataset.detail || "").trim()),
+        sources
+      );
+      return {
+        title: resolved.title,
+        detail: flattenExecSentence(resolved.detail),
+        highlights: highlightsFromAttr(el.dataset.highlights),
+      };
+    })
     .filter((item) => item.title);
 }
 
-function normalizeExecCheckItem(item) {
+function normalizeExecCheckItem(item, sources) {
   if (!item) return null;
+  const rawSources = Array.isArray(sources) ? sources : [];
   if (typeof item === "string") {
-    const parts = splitTaskText(item);
-    const detail = flattenExecSentence(parts.detail);
-    return parts.title ? { title: parts.title, detail } : null;
+    const resolved = resolveExecTitleDetail(item, "", rawSources);
+    return resolved.title ? { title: resolved.title, detail: resolved.detail || "" } : null;
   }
   if (typeof item !== "object") return null;
   const title = String(item.title || item.label || item.text || "").trim();
   const detail = flattenExecSentence(item.detail || item.lead || item.note || "", item);
   const highlights = item.highlights;
   if (!title && !detail) return null;
-  if (!title) return { ...splitTaskText(detail), highlights };
-  if (detail && detail !== title) return { title, detail, highlights };
-  const parts = splitTaskText(title);
-  return { title: parts.title, detail: flattenExecSentence(parts.detail || detail), highlights };
+  const resolved = resolveExecTitleDetail(title, detail, rawSources);
+  const nextTitle = resolved.title || resolved.detail;
+  if (!nextTitle) return null;
+  return {
+    title: nextTitle,
+    detail: resolved.title ? resolved.detail : "",
+    highlights,
+    legacyTitle: title && title !== nextTitle ? title : "",
+  };
 }
 
-function normalizeExecCheckItems(list) {
+function normalizeExecCheckItems(list, sources) {
   const items = [];
   const seen = new Set();
+  const rawSources = Array.isArray(sources) ? sources : [];
   (Array.isArray(list) ? list : []).forEach((item) => {
-    const next = normalizeExecCheckItem(item);
+    const next = normalizeExecCheckItem(item, rawSources);
     if (!next || seen.has(next.title)) return;
     seen.add(next.title);
     items.push(next);
@@ -10411,17 +10455,18 @@ function pushUniqueExec(list, title, detail, max) {
   return list;
 }
 
-function formatExecCheckLine(item) {
-  const next = normalizeExecCheckItem(item);
+function formatExecCheckLine(item, sources) {
+  const next = normalizeExecCheckItem(item, sources);
   if (!next) return "";
   return next.detail ? `${next.title}：${next.detail}` : next.title;
 }
 
 function execCheckHistoryLines(journal) {
-  const items = normalizeExecCheckItems(journal && journal.executionCheckItems);
-  if (items.length) return items.map(formatExecCheckLine).filter(Boolean);
+  const sources = execRawSourcesFrom(journal);
+  const items = normalizeExecCheckItems(journal && journal.executionCheckItems, sources);
+  if (items.length) return items.map((item) => formatExecCheckLine(item, sources)).filter(Boolean);
   return (journal && journal.executionChecks ? journal.executionChecks : [])
-    .map(formatExecCheckLine)
+    .map((item) => formatExecCheckLine(item, sources))
     .filter(Boolean);
 }
 
@@ -10450,9 +10495,9 @@ function collectJournal() {
     executionChecks: checkedValues("execChecks"),
     executionCheckItems: (() => {
       const collected = collectExecCheckItems();
-      return collected.length ? collected : normalizeExecCheckItems(checklistItems("execChecks"));
+      return collected.length ? collected : normalizeExecCheckItems(checklistItems("execChecks"), execRawSourcesFrom({ executionChoices: state.executionChoices }));
     })(),
-    executionFocus: normalizeExecFocus(state.journalExecFocus, collectExecCheckItems()),
+    executionFocus: normalizeExecFocus(state.journalExecFocus, collectExecCheckItems(), execRawSourcesFrom({ executionChoices: state.executionChoices })),
     smallestStep: usesExecutionChoiceUi()
       ? selectedExecutionChoiceText(state.executionChoices) || journalFieldValue("execNext")
       : journalFieldValue("execNext"),
@@ -11010,7 +11055,7 @@ function fillJournal(journal) {
   };
   state.journalInsight = normalizeInsight(data.insight);
   state.journalBodyCoach = normalizeBodyCoach(data.bodyCoach);
-  state.journalExecFocus = normalizeExecFocus(data.executionFocus, data.executionCheckItems);
+  state.journalExecFocus = normalizeExecFocus(data.executionFocus, data.executionCheckItems, execRawSourcesFrom(data));
   state.journalAwarenessResult = normalizeAwarenessResult(data.awarenessResult, { keepSource: true });
   state.awarenessChoices = normalizeChoiceBag(data.awarenessChoices);
   state.thinkChoices = normalizeChoiceBag(data.thinkChoices);
@@ -12522,8 +12567,9 @@ function setTaskAddOpen(open) {
 function renderTaskItem(task) {
   const done = task.status === "done";
   const later = task.status === "later";
-  const title = String(task.title || "").trim() || String(task.detail || "").trim();
-  const detail = taskSidebarDetail(task);
+  const parts = taskDisplayParts(task);
+  const title = parts.title || String(task.detail || "").trim();
+  const detail = parts.detail && parts.detail !== title ? parts.detail : "";
   const meta = librarySourceMeta(task);
   const id = escapeHtml(task.id);
   return `
@@ -13036,7 +13082,7 @@ function historyMarkedItemsHtml(items) {
 }
 
 function historyExecChecksHtml(journal, date) {
-  const items = normalizeExecCheckItems(journal && journal.executionCheckItems);
+  const items = normalizeExecCheckItems(journal && journal.executionCheckItems, execRawSourcesFrom(journal));
   if (items.length) {
     return `<div class="history-exec-cards">${items
       .map(
