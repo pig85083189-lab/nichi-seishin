@@ -1893,11 +1893,10 @@ function normalizeAwarenessQuotes(raw) {
 }
 
 function splitChecklistTitle(text) {
-  const raw = String(text || "").trim();
-  const idx = raw.search(/[：:]/);
-  if (idx > 0 && idx < raw.length - 1) {
-    return { title: raw.slice(0, idx).trim(), detail: raw.slice(idx + 1).trim() };
+  if (typeof textIntegrity.splitTitleDetail === "function") {
+    return textIntegrity.splitTitleDetail(text);
   }
+  const raw = String(text || "").trim();
   return { title: raw, detail: "" };
 }
 

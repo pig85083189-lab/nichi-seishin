@@ -586,11 +586,9 @@ function saveTasks(tasks) {
 }
 
 function splitTaskText(text) {
+  const api = textIntegrityApi();
+  if (typeof api.splitTitleDetail === "function") return api.splitTitleDetail(text);
   const raw = String(text || "").trim();
-  const idx = raw.search(/[：:]/);
-  if (idx > 0 && idx < raw.length - 1) {
-    return { title: raw.slice(0, idx).trim(), detail: raw.slice(idx + 1).trim() };
-  }
   return { title: raw, detail: "" };
 }
 

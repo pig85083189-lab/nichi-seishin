@@ -4,6 +4,7 @@ const {
   pickCompleteSentence,
   finalizeGeneratedQuestion,
   splitSentences,
+  splitTitleDetail,
 } = require("../lib/text-integrity");
 const { mergeJournalObjects, mergeReviewMaps } = require("../lib/review-merge");
 const { padAwarenessPrompts, looksIncompleteAwarenessText } = require("../api/review");
@@ -80,6 +81,12 @@ assert(finalizeGeneratedQuestion(caseD) === caseD, "完整問題 finalize 後仍
 const rejected = padAwarenessPrompts([{ question: caseA }], { event: "被人惦記", step: 1 });
 assert(rejected[0] && rejected[0].question !== caseA, "半句覺察題不可直接上畫面");
 assert(isCompleteSentence(rejected[0].question, { requireQuestion: true }), "半句覺察題必須換成完整 fallback");
+
+const timedAction = "今晚 22:00 後不再滑手機，確保明天睡眠至少 7 小時。";
+const timedParts = splitTitleDetail(timedAction);
+assert(timedParts.title === timedAction && timedParts.detail === "", "時間冒號不可當 title/detail delimiter");
+assert(timedParts.title.includes("22:00"), "22:00 必須完整保留");
+assert(splitTitleDetail("放下手機：今晚 22:00 後不再滑手機。").detail.includes("22:00"), "安全 delimiter 拆分後時間仍完整");
 
 function compactOver(text, n) {
   return String(text || "").replace(/\s+/g, "").length > n;
