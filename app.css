@@ -5081,7 +5081,11 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
 #section-manifest .manifest-hint,
 #manifestClose,
 #manifestClose p,
-#manifestClose article {
+#manifestClose article,
+#manifestPlan,
+#manifestPlan p,
+#manifestPlan label,
+#manifestPlan span {
   min-width: 0;
   max-width: 100%;
   overflow-wrap: anywhere;
@@ -5195,6 +5199,126 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   margin: 18px 0 0;
   color: var(--muted);
   font-size: 14px;
+}
+
+#manifestPlan {
+  margin-top: 28px;
+}
+
+.manifest-plan-kicker {
+  margin: 0 0 8px;
+  color: var(--heading);
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.manifest-plan-note {
+  margin: 0 0 18px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.manifest-plan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.manifest-step {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 14px 0;
+  border-top: 1px solid rgba(184, 164, 148, 0.16);
+  cursor: pointer;
+}
+
+.manifest-step:first-child {
+  border-top: 0;
+  padding-top: 4px;
+}
+
+.manifest-step__check {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+.manifest-step__mark {
+  width: 18px;
+  height: 18px;
+  margin-top: 3px;
+  border: 1px solid #c3b09a;
+  border-radius: 50%;
+  background: transparent;
+  flex-shrink: 0;
+}
+
+.manifest-step.is-done .manifest-step__mark {
+  border-color: #b7a28d;
+  background: #f3ece3;
+  box-shadow: inset 0 0 0 4px #f3ece3;
+  background-image: radial-gradient(circle, #7d6654 0 4px, transparent 5px);
+}
+
+.manifest-step__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.manifest-step__title {
+  color: var(--heading);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.7;
+}
+
+.manifest-step__title.is-done {
+  color: var(--muted);
+  font-weight: 500;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.manifest-step__detail {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+.manifest-step.is-done .manifest-step__detail {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.manifest-step .manifest-exec-btn {
+  margin-top: 4px;
+  align-self: flex-start;
+}
+
+.manifest-regen-btn {
+  display: inline-flex;
+  margin: 18px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.manifest-regen-btn:hover {
+  color: var(--heading);
 }
 
 #manifestChecks,
@@ -8403,6 +8527,42 @@ summary [data-user-mark-field] {
   font-size: 18px;
   font-weight: 600;
   line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.page--lib .lib-vision__progress {
+  margin: 14px 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
+
+.page--lib .lib-vision__steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.page--lib .lib-vision__step {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  margin: 0 0 8px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.page--lib .lib-vision__step-mark {
+  color: var(--muted);
+}
+
+.page--lib .lib-vision__step.is-done .lib-vision__step-text {
+  color: var(--muted);
+}
+
+.page--lib .lib-vision__step-text {
   overflow-wrap: anywhere;
 }
 

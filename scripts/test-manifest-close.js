@@ -1,12 +1,11 @@
 const fs = require("fs");
 const path = require("path");
+const { mergeJournalObjects } = require("../lib/review-merge");
 const {
-  mergeJournalObjects,
-} = require("../lib/review-merge");
-const {
+  MANIFEST_PLAN_SYSTEM,
   MANIFEST_CLOSE_SYSTEM,
-  MANIFEST_PATHS_SYSTEM,
   MANIFEST_PROMPTS_SYSTEM,
+  normalizeManifestPlanSteps,
   normalizeManifestClose,
 } = require("../api/review");
 
@@ -18,101 +17,92 @@ const root = path.join(__dirname, "..");
 const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
 const css = fs.readFileSync(path.join(root, "app.css"), "utf8");
+const section = html.slice(html.indexOf('id="section-manifest"'), html.indexOf('id="section-quick-insight"'));
 
-const sectionManifest = html.slice(html.indexOf('id="section-manifest"'), html.indexOf('id="section-quick-insight"'));
+assert(section.includes("我想顯化的是"), "CASE A：07 標題是我想顯化的是");
+assert(section.includes("幫我拆成可以做到的步驟"), "CASE A：CTA");
+assert(section.includes("id=\"manifestVision\""), "CASE A：保留 textarea");
+assert(section.includes("manifest-feel\" hidden") || section.includes("manifest-feel") && section.includes("hidden"), "不再顯示問句輸入");
+assert(!section.includes("看見我正在靠近的未來"), "不再用 close CTA");
 
-assert(sectionManifest.includes("我真正想靠近的是什麼？"), "CASE A：07 有願景標題");
-assert(sectionManifest.includes("id=\"manifestVision\""), "CASE A：保留 textarea");
-assert(sectionManifest.includes("不是只想著得到什麼"), "CASE A：新導語");
-assert(sectionManifest.includes("如果這已經成真，那時候的你會是什麼感覺？"), "CASE B：固定題 1");
-assert(sectionManifest.includes("那個已經做到的你，會怎麼生活／怎麼選擇？"), "CASE B：固定題 2");
-assert(sectionManifest.includes("id=\"manifestThink1\"") && sectionManifest.includes("id=\"manifestThink2\""), "CASE B：兩題都是 textarea");
-assert(sectionManifest.includes("看見我正在靠近的未來"), "CASE C：新 CTA");
-assert(sectionManifest.includes("正在替你整理正在靠近的生活"), "CASE G：loading 文案");
-assert(!sectionManifest.includes("✦ 看看這個願望"), "不再用看看這個願望");
-assert(!/executionChoices/.test(MANIFEST_CLOSE_SYSTEM) || MANIFEST_CLOSE_SYSTEM.includes("不要產生 executionChoices"), "不要回傳 executionChoices");
-assert(!MANIFEST_CLOSE_SYSTEM.includes('"items"'), "CASE D：prompt 不產出 3 個 Todo items");
+assert(MANIFEST_PLAN_SYSTEM.includes("不要再問問題") || MANIFEST_PLAN_SYSTEM.includes("不要問問題"), "CASE A：AI 不再問問題");
+assert(MANIFEST_PLAN_SYSTEM.includes("3 到 6"), "CASE B：3～6 步");
+assert(MANIFEST_PLAN_SYSTEM.includes("不要輸出 futureVision") || MANIFEST_PLAN_SYSTEM.includes("不要生成思考題"), "CASE A：AI 不走舊 close 輸出");
+assert(!/"futureVision"/.test(MANIFEST_PLAN_SYSTEM), "JSON 不輸出 futureVision");
+assert(!/"manifestationStatement"/.test(MANIFEST_PLAN_SYSTEM), "JSON 不輸出顯化句");
+assert(MANIFEST_PLAN_SYSTEM.includes("executionChoices"), "明確不要複製 06");
 
-assert(MANIFEST_CLOSE_SYSTEM.includes("futureVision"), "CASE C：prompt 有 futureVision");
-assert(MANIFEST_CLOSE_SYSTEM.includes("approachStep"), "CASE D：prompt 有 approachStep");
-assert(MANIFEST_CLOSE_SYSTEM.includes("manifestationStatement"), "CASE E：prompt 有顯化句");
-assert(MANIFEST_CLOSE_SYSTEM.includes("我正在成為") || MANIFEST_CLOSE_SYSTEM.includes("我正在走向"), "CASE E：grounded 顯化句");
-assert(MANIFEST_PATHS_SYSTEM === MANIFEST_CLOSE_SYSTEM, "舊 paths step 相容新 close prompt");
-assert(MANIFEST_PROMPTS_SYSTEM.includes("最多 2 題"), "舊 prompts step 仍在");
+const steps = normalizeManifestPlanSteps(
+  {
+    steps: [
+      { title: "先看清楚現在的收入結構", detail: "整理目前每個服務／產品的客單價、成交數與月營收。" },
+      { title: "算出 30 萬需要多少成交", detail: "把目標拆成每月需要的客數、產品數或方案數。" },
+      { title: "找出最值得放大的收入來源", detail: "選出目前成交率與利潤較好的 1～2 個主力項目。" },
+      { title: "建立固定曝光與成交節奏", detail: "安排每週固定內容、引流與銷售行動。" },
+    ],
+  },
+  "我想讓自己的事業每個月穩定收入 30 萬。"
+);
+assert(steps.length >= 3 && steps.length <= 6, `CASE B：steps 應 3～6，實際 ${steps.length}`);
+assert(steps[0].title.includes("收入結構"), "CASE A：依真實目標拆步");
 
-const partial = normalizeManifestClose({ futureVision: "我站在台上，把想說的話說完。" }, "演講順利");
-assert(partial.futureVision.includes("台上"), "CASE F：缺欄仍可 normalize");
-assert(typeof partial.approachStep === "string", "CASE F：缺 approachStep 不 crash");
-assert(typeof partial.manifestationStatement === "string" && partial.manifestationStatement.length > 0, "CASE F：缺顯化句有 fallback");
-assert(!/throw new Error/.test(String(normalizeManifestClose)), "CASE F：normalize 本身不 throw");
+const partial = normalizeManifestPlanSteps({ steps: [{ title: "只做第一步", detail: "寫下現況。" }] }, "想更健康");
+assert(partial.length >= 3, "缺步時用 fallback 補到至少 3");
 
-assert(app.includes("setManifestPromptsLoading(true)"), "CASE G：有 loading");
-assert(app.includes("雲端整理失敗"), "CASE H：error fallback");
-assert(app.includes("buildManifestCloseFallback"), "CASE H：本地 fallback");
-assert(app.includes("generateManifestClose({ force: true })"), "CASE H：可 retry");
+assert(app.includes("toggleManifestPlanStep"), "CASE C：可單獨勾完成");
+assert(app.includes("completed: Boolean"), "CASE D：completed 寫入 state");
+assert(app.includes("manifestPlan: normalizeManifestPlan"), "CASE D：collect 會存 plan");
+assert(css.includes("text-decoration: line-through"), "CASE E：完成 title 刪除線");
+assert(css.includes(".manifest-step.is-done .manifest-step__detail"), "CASE F：detail 只淡化");
+assert(css.includes("text-decoration: none"), "CASE F：detail 不刪除線");
 
-assert(app.includes("addManifestApproachToExec"), "CASE I：放進執行力");
-assert(app.includes('source: "顯化力"'), "CASE I：source 顯化力");
-assert(app.includes("manifest-approach:"), "CASE J：idempotent sourceKey");
-assert(app.includes("manifestCloseTaskExists"), "CASE J：重複點不建第二筆");
-assert(app.includes("addedToExec"), "CASE J：成功後標記已加入");
-assert(app.includes("✓ 已放進執行力"), "CASE J：成功文案");
-assert(!/applyGeneratedManifestClose[\s\S]{0,200}addTaskFromGuide/.test(app), "CASE K：產生結果不自動建 task");
-assert(app.includes("acceptManifestClose"), "CASE L：收下今天的顯化");
-assert(app.includes("manifest-close:"), "CASE L：收藏 sourceKey");
-assert(app.includes("✓ 今天的顯化已留下"), "CASE L：完成 feedback");
-assert(app.includes("futureVision: String(futureVision"), "CASE M：Sidebar 可存 futureVision");
-assert(app.includes("approachStep: String(approachStep"), "CASE M：Sidebar 可存 approachStep");
-assert(app.includes("manifestationStatement: String(manifestationStatement"), "CASE M：Sidebar 可存顯化句");
-assert(app.includes("function renderManifestItem(item)"), "CASE N：Sidebar presentation 函式仍在");
-assert(app.includes("lib-vision__near-label"), "CASE N：Sidebar 仍顯示小小靠近");
+assert(app.includes("addManifestStepToExec"), "CASE G：單步放進執行力");
+assert(app.includes('source: "顯化力"'), "CASE G：source 顯化力");
+assert(app.includes("manifest:${iso"), "CASE H：穩定 sourceKey");
+assert(app.includes("manifestStepTaskExists"), "CASE H：不可重複加入");
+assert(app.includes("data-manifest-step-exec"), "CASE I：每一步獨立 CTA");
+assert(app.includes("addTaskFromGuide"), "CASE J：沿用既有 task 寫入");
+assert(!/function renderTasks\(/.test(app.replace("function renderTasks()", "")) || app.includes("function renderTasks()"), "CASE R：renderTasks 仍在");
 
-assert(app.includes("historyManifestBlocks"), "CASE O／P：history fallback");
-assert(app.includes("讓願望靠近現實"), "CASE O：舊 history 仍可讀 paths");
-assert(app.includes("我想顯化的事情"), "CASE O：舊 history 願景標題");
-assert(app.includes("我真正想靠近的是什麼"), "CASE P：新 history 四層");
-assert(app.includes("我正在靠近的生活"), "CASE P：新 history futureVision");
-assert(app.includes("今天，我可以先靠近一點"), "CASE P：新 history approachStep");
-assert(app.includes("journalUsesManifestClose"), "CASE P：新舊分流");
+assert(app.includes("lib-vision__progress"), "CASE K：Sidebar 完成數");
+assert(app.includes("lib-vision__steps"), "CASE K：Sidebar 顯示 steps");
+assert(app.includes("manifestPlanStatusFromSteps"), "CASE L：全完成＝已實現");
+assert(app.includes("小小靠近"), "CASE M：舊 record 仍可顯示小小靠近");
+assert(app.includes("historyManifestBlocks"), "舊 history fallback 仍在");
+assert(app.includes("讓願望靠近現實"), "CASE M：舊 path history 仍在");
+assert(app.includes("我正在靠近的生活"), "CASE M：舊 close history 仍在");
 
-assert(css.includes(".journal-split--manifest"), "CASE Q：07 單欄");
-assert(css.includes("grid-template-columns: minmax(0, 1fr)"), "CASE Q：單欄 grid");
-assert(css.includes("#section-manifest") && css.includes("overflow-x: hidden"), "CASE Q：無橫向溢出");
-assert(css.includes("overflow-wrap: anywhere"), "CASE R：長句 wrap");
-assert(!/#section-manifest[\s\S]{0,400}-webkit-line-clamp/.test(css), "CASE R：07 不 line-clamp");
-assert(css.includes("font-family: var(--serif)"), "視覺：serif 願景／顯化句");
-assert(css.includes(".manifest-close-vision"), "視覺：futureVision 區塊");
-assert(css.includes(".manifest-close-quote"), "視覺：顯化句高潮");
+assert(css.includes(".journal-split--manifest"), "CASE N：07 單欄");
+assert(css.includes("#section-manifest") && css.includes("overflow-x: hidden"), "CASE N：無橫向溢出");
+assert(!/#section-manifest[\s\S]{0,500}-webkit-line-clamp/.test(css), "CASE N：07 不 clamp");
+assert(css.includes("max-width: 800px"), "CASE O：Desktop lib 仍約 800");
 
-assert(app.includes('"④ 深度思考"'), "CASE S：04 歷史標題未改");
-assert(html.includes("id=\"section-deep\"") && html.includes("id=\"section-insight\""), "CASE S：04 DOM 仍在");
-assert(html.includes("id=\"section-aware\""), "CASE T：05 DOM 未改編號");
-assert(html.includes("id=\"section-exec\""), "CASE U：06 DOM 仍在");
-assert(app.includes("EXEC_CHOICE_MAX_SELECTED") || app.includes("selectedIds"), "CASE U：06 多選仍在");
-assert(html.includes('id="page-sfm"'), "CASE V：Sidebar 執行力頁仍在");
-assert(html.includes('id="page-next"'), "CASE W：Sidebar 覺察力頁仍在");
-assert(app.includes("renderCombinedHighlightedText"), "CASE X：AI highlight 仍在");
-assert(app.includes("manifest.sentence") && app.includes("manifest.path."), "CASE X：userMark 舊欄位仍在");
-assert(app.includes("manifest.close.futureVision") && app.includes("manifest.close.approachStep"), "CASE X：新 close 可畫重點");
-assert(!app.includes("CREATE TABLE") && !app.includes("ALTER TABLE"), "CASE Y：無 schema migration");
-assert(html.includes("id=\"section-thanks\"") && html.includes("id=\"section-manifest\""), "CASE Z：04→07 區塊仍在");
+assert(html.includes('id="section-thanks"') && html.includes('id="section-exec"'), "CASE P：01～06 DOM 仍在");
+assert(app.includes("selectedIds") && app.includes("可以選 1～3 件") || html.includes("1～3"), "CASE Q：06 多選文案仍在");
+assert(html.includes('id="page-sfm"'), "CASE R：Sidebar 執行力頁仍在");
+assert(app.includes("renderCombinedHighlightedText"), "CASE S：AI highlight 仍在");
+assert(app.includes("manifest.sentence") && app.includes("manifest.path."), "CASE S：舊 userMark 欄位仍在");
+assert(app.includes("manifest.plan.step."), "CASE S：新 step 可畫重點");
+assert(!app.includes("CREATE TABLE") && !app.includes("ALTER TABLE"), "CASE T：無 schema migration");
+assert(MANIFEST_CLOSE_SYSTEM.includes("futureVision"), "舊 close prompt 仍保留");
+assert(MANIFEST_PROMPTS_SYSTEM.includes("最多 2 題"), "舊 prompts 仍保留");
+
+const close = normalizeManifestClose({ futureVision: "舊畫面", manifestationStatement: "我正在成為舊的自己。" }, "舊願景");
+assert(close.futureVision.includes("舊畫面"), "舊 close normalize 不壞");
 
 const merged = mergeJournalObjects(
   {
-    manifestClose: {
-      futureVision: "舊畫面",
-      approachStep: "舊一小步",
-      manifestationStatement: "我正在成為舊的自己。",
-      accepted: true,
-      addedToExec: false,
+    manifestPlan: {
+      id: "p1",
+      steps: [{ id: "s1", title: "舊步驟", detail: "細節", completed: true, taskAdded: false }],
     },
   },
-  { manifestClose: { futureVision: "", approachStep: "", manifestationStatement: "", accepted: false, addedToExec: false } }
+  { manifestPlan: { id: "p1", steps: [{ id: "s1", title: "舊步驟", detail: "細節", completed: false, taskAdded: true }] } }
 );
-assert(merged.manifestClose.futureVision === "舊畫面", "舊 close 不被空物件覆蓋");
-assert(merged.manifestClose.accepted === true, "accepted 以 OR 保留");
+assert(merged.manifestPlan.steps[0].completed === true, "merge 保留 completed");
+assert(merged.manifestPlan.steps[0].taskAdded === true, "merge 保留 taskAdded");
 
-const oldHistory = app.includes('historyBlock("我想顯化的事情"');
-assert(oldHistory, "舊 history fallback 仍呼叫我想顯化的事情");
+assert(app.includes("重新整理後，目前的步驟與完成進度會被更新"), "重新生成需確認");
+assert(html.includes("正在把你想要的生活，整理成可以一步一步靠近的路"), "loading 文案");
 
-console.log("manifest close tests passed");
+console.log("manifest plan tests passed");

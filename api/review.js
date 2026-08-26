@@ -321,6 +321,27 @@ ${HIGHLIGHT_RULE}
 
 const MANIFEST_PATHS_SYSTEM = MANIFEST_CLOSE_SYSTEM;
 
+const MANIFEST_PLAN_SYSTEM = `你是「日精進」的顯化路線整理者。04 把事情想清楚，05 看見自己，06 執行力處理明天真正要做的 1～3 件事。你只處理 07：方向＋可以一步一步走的路。
+
+不要再問問題。不要生成思考題。不要輸出 futureVision、顯化句、executionChoices。不要複製 06 的明日行動。不要給超自然保證。不要空泛心靈語錄。
+
+請根據使用者寫下的「我想顯化的是」，拆成 3 到 6 個具體步驟。由簡單、近期 → 中期排列。
+
+每一步必須是具體行動：讓使用者知道下一步到底可以做什麼。
+禁止：相信自己／保持正能量／想像成功／宇宙會安排／一定會達成。
+不承諾結果。不把顯化寫成超自然保證。
+
+title：短標題，18-28 字，不要編號。
+detail：一句到兩句，說明怎麼做。不要截成半句。
+
+只輸出 JSON：
+{
+  "steps": [
+    { "title": "...", "detail": "..." }
+  ]
+}
+繁體中文`;
+
 function isManifestPromptsRequest(body) {
   const step = String(body?.step || body?.kind || "").trim().toLowerCase();
   return step === "prompts" || step === "questions" || step === "think";
@@ -328,7 +349,13 @@ function isManifestPromptsRequest(body) {
 
 function isManifestCloseRequest(body) {
   const step = String(body?.step || body?.kind || "").trim().toLowerCase();
-  return step === "close" || step === "paths" || step === "vision" || !step;
+  return step === "close" || step === "paths" || step === "vision";
+}
+
+function isManifestPlanRequest(body) {
+  if (isManifestPromptsRequest(body) || isManifestCloseRequest(body)) return false;
+  const step = String(body?.step || body?.kind || "").trim().toLowerCase();
+  return step === "plan" || step === "steps" || step === "roadmap" || !step;
 }
 
 function mysticManifestText(text) {
@@ -514,6 +541,78 @@ function manifestCloseUserPrompt(body) {
 
 function manifestPathsUserPrompt(body) {
   return manifestCloseUserPrompt(body);
+}
+
+function manifestPlanFallbackSteps(vision) {
+  const bit = compactLine(vision, 12) || "這件事";
+  if (/收入|營收|事業|客戶|成交|產品|方案/.test(String(vision || ""))) {
+    return [
+      { title: "先看清楚現在的收入結構", detail: "整理目前每個服務／產品的客單價、成交數與月營收。" },
+      { title: "算出目標需要多少成交", detail: "把目標拆成每月需要的客數、產品數或方案數。" },
+      { title: "找出最值得放大的收入來源", detail: "選出目前成交率與利潤較好的 1～2 個主力項目。" },
+      { title: "建立固定曝光與成交節奏", detail: "安排每週固定內容、引流與銷售行動。" },
+      { title: "每週回看一次數字", detail: "記錄曝光、詢問、成交與營收，再決定下一週調整什麼。" },
+    ];
+  }
+  return [
+    { title: `先看清楚「${bit}」現在的真實狀態`, detail: "用一頁寫下現況、已有資源，以及目前最卡住的地方。" },
+    { title: "把目標拆成一個可檢查的畫面", detail: "寫下怎樣算靠近了一步，不要只寫「變好」。" },
+    { title: "選出這一週最值得先做的一件小事", detail: "只選一件今天或這週做得到的行動，先走出去。" },
+    { title: "安排一個固定回看的時間", detail: "每週留 10 分鐘看哪一步有靠近、下一步要改什麼。" },
+  ];
+}
+
+function normalizeManifestPlanSteps(raw, vision) {
+  const list = Array.isArray(raw)
+    ? raw
+    : Array.isArray(raw?.steps)
+      ? raw.steps
+      : Array.isArray(raw?.items)
+        ? raw.items
+        : [];
+  const fallbacks = manifestPlanFallbackSteps(vision);
+  const items = [];
+  const seen = new Set();
+  list.forEach((item) => {
+    const title = textIntegrity.retainCompleteText(
+      String(item && (item.title || item.label || item.text) ? item.title || item.label || item.text : item || "")
+        .replace(/^\s*\d+\s*[.．、｜|]\s*/, "")
+        .trim(),
+      { source: "api/review.normalizeManifestPlanSteps", field: "title" }
+    );
+    if (!title || seen.has(title) || mysticManifestText(title)) return;
+    seen.add(title);
+    const detail = textIntegrity.retainCompleteText(
+      String(item && (item.detail || item.note || item.body) ? item.detail || item.note || item.body : "").trim(),
+      { source: "api/review.normalizeManifestPlanSteps", field: "detail" }
+    );
+    items.push({ title, detail: mysticManifestText(detail) ? "" : detail });
+  });
+  fallbacks.forEach((item) => {
+    if (items.length >= 3) return;
+    if (seen.has(item.title)) return;
+    seen.add(item.title);
+    items.push(item);
+  });
+  return items.slice(0, 6);
+}
+
+function hasManifestPlanSteps(steps) {
+  return Array.isArray(steps) && steps.filter((item) => String(item && item.title || "").trim()).length >= 3;
+}
+
+function manifestPlanUserPrompt(body) {
+  const vision = String(body.vision || body.text || "").trim();
+  const ctx = body.context && typeof body.context === "object" ? body.context : {};
+  const openActions = Array.isArray(ctx.openActions) ? ctx.openActions.filter(Boolean).slice(0, 3).join("／") : "";
+  return `請把下面的顯化目標拆成 3 到 6 個具體步驟。不要問問題，不要給顯化句。
+
+我想顯化的是：${vision || "（未寫）"}
+今日事件：${compactLine(ctx.event, 220) || "未寫"}
+心情：${ctx.mood || "未選"}
+06 明天已選的行動（不要重複）：${openActions || compactLine(ctx.smallestStep, 80) || "未寫"}
+04 深度看見：${[ctx.thinkCloseAwareness, ctx.thinkCloseSelfSeen, ctx.thinkCloseTakeaway].filter(Boolean).join("／") || "未寫"}
+05 核心覺察：${String(ctx.awarenessLine || "").trim() || "未寫"}`;
 }
 
 const CHECKLIST_EXECUTION_SYSTEM = `你是「日精進」的行動整理者。你的工作不是列待辦清單，而是把使用者今天說想做、卻還太大或太模糊的事，收成明天（或今晚）真的做得到的一小步。
@@ -3164,9 +3263,16 @@ module.exports = async function handler(req, res) {
       ];
     } else if (mode === "manifest") {
       const prompts = isManifestPromptsRequest(body);
+      const close = isManifestCloseRequest(body);
       messages = [
-        { role: "system", content: withCompleteRule(prompts ? MANIFEST_PROMPTS_SYSTEM : MANIFEST_CLOSE_SYSTEM) },
-        { role: "user", content: prompts ? manifestPromptsUserPrompt(body) : manifestCloseUserPrompt(body) },
+        {
+          role: "system",
+          content: withCompleteRule(prompts ? MANIFEST_PROMPTS_SYSTEM : close ? MANIFEST_CLOSE_SYSTEM : MANIFEST_PLAN_SYSTEM),
+        },
+        {
+          role: "user",
+          content: prompts ? manifestPromptsUserPrompt(body) : close ? manifestCloseUserPrompt(body) : manifestPlanUserPrompt(body),
+        },
       ];
     } else if (mode === "bodycoach") {
       messages = [
@@ -3434,22 +3540,35 @@ module.exports = async function handler(req, res) {
         res.status(200).json({ ok: true, source: getProvider(), data: { questions, kind: "manifest" } });
         return;
       }
-      const close = normalizeManifestClose(data, vision);
-      if (!hasManifestCloseContent(close)) {
-        res.status(502).json({ ok: false, error: "正在靠近的生活還沒整理好，請再試一次" });
+      if (isManifestCloseRequest(body)) {
+        const close = normalizeManifestClose(data, vision);
+        if (!hasManifestCloseContent(close)) {
+          res.status(502).json({ ok: false, error: "正在靠近的生活還沒整理好，請再試一次" });
+          return;
+        }
+        res.status(200).json({
+          ok: true,
+          source: getProvider(),
+          data: {
+            ...close,
+            sentence: close.manifestationStatement,
+            highlights: {
+              sentence: insightHighlight.fieldHighlights(data.highlights, "sentence"),
+            },
+            kind: "manifest",
+          },
+        });
+        return;
+      }
+      const steps = normalizeManifestPlanSteps(data, vision);
+      if (!hasManifestPlanSteps(steps)) {
+        res.status(502).json({ ok: false, error: "可以做到的步驟還沒整理好，請再試一次" });
         return;
       }
       res.status(200).json({
         ok: true,
         source: getProvider(),
-        data: {
-          ...close,
-          sentence: close.manifestationStatement,
-          highlights: {
-            sentence: insightHighlight.fieldHighlights(data.highlights, "sentence"),
-          },
-          kind: "manifest",
-        },
+        data: { steps, kind: "manifest" },
       });
       return;
     }
@@ -3503,4 +3622,6 @@ module.exports.EXECUTION_PROMPTS_SYSTEM = EXECUTION_PROMPTS_SYSTEM;
 module.exports.MANIFEST_PROMPTS_SYSTEM = MANIFEST_PROMPTS_SYSTEM;
 module.exports.MANIFEST_PATHS_SYSTEM = MANIFEST_PATHS_SYSTEM;
 module.exports.MANIFEST_CLOSE_SYSTEM = MANIFEST_CLOSE_SYSTEM;
+module.exports.MANIFEST_PLAN_SYSTEM = MANIFEST_PLAN_SYSTEM;
 module.exports.normalizeManifestClose = normalizeManifestClose;
+module.exports.normalizeManifestPlanSteps = normalizeManifestPlanSteps;

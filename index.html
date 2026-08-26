@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=185" />
+    <link rel="stylesheet" href="app.css?v=186" />
     <style>
       .splash {
         position: fixed;
@@ -668,29 +668,27 @@
             <button class="journal-fold__toggle" type="button" data-journal-fold aria-expanded="false" aria-controls="manifestFoldPanel">
               <span class="journal-fold__copy">
                 <h2 class="journal-card__title"><span>07</span> 顯化力</h2>
-                <p class="journal-fold__summary">看見自己真正想走向哪裡，開始靠近那一種生活。</p>
+                <p class="journal-fold__summary">寫下想靠近的生活，拆成可以一步一步做到的步驟。</p>
               </span>
               <span class="journal-fold__chevron" aria-hidden="true"></span>
             </button>
             <div class="journal-fold__panel" id="manifestFoldPanel" inert aria-hidden="true">
               <div class="journal-fold__inner">
-            <p class="journal-guide">不是只想著得到什麼，<br />而是看見自己真正想走向哪裡。</p>
+            <p class="journal-guide">寫下你真正想靠近的生活，<br />我們一起把它變成可以做到的步驟。</p>
             <div class="journal-split journal-split--manifest">
               <div class="journal-col">
-                <p class="journal-label">我真正想靠近的是什麼？</p>
-                <p class="manifest-hint">可以是你想成為的自己、想過的生活，或真正想擁有的感受。</p>
-                <textarea class="textarea" id="manifestVision" rows="4" placeholder="例如：我希望今天的演講可以很順利，也可以自在地表達自己。"></textarea>
-                <div class="manifest-feel">
+                <p class="journal-label">我想顯化的是</p>
+                <textarea class="textarea" id="manifestVision" rows="4" placeholder="例如：我想讓自己的事業每個月穩定收入 30 萬。"></textarea>
+                <div class="manifest-feel" hidden>
                   <p class="journal-label">如果這已經成真，那時候的你會是什麼感覺？</p>
                   <textarea class="textarea" id="manifestThink1" rows="3" placeholder="那時候的感覺是…"></textarea>
                   <p class="journal-label">那個已經做到的你，會怎麼生活／怎麼選擇？</p>
                   <textarea class="textarea" id="manifestThink2" rows="3" placeholder="那時候會怎麼過日子…"></textarea>
                 </div>
                 <div class="check-loading" id="manifestPromptLoading" hidden>
-                  <p class="check-loading__label">✦ 正在替你整理正在靠近的生活⋯</p>
-                  <div class="ai-thinking__bar"><i></i></div>
+                  <p class="check-loading__label">✦ 正在把你想要的生活，整理成可以一步一步靠近的路…</p>
                 </div>
-                <button class="ai-check-btn" id="btnManifestAi" type="button">✦ 看見我正在靠近的未來</button>
+                <button class="ai-check-btn" id="btnManifestAi" type="button">✦ 幫我拆成可以做到的步驟</button>
                 <div id="manifestQuestions" hidden></div>
                 <button class="ai-check-btn" id="btnManifestPaths" type="button" hidden>✦ 讓願望靠近現實</button>
                 <div class="check-loading" id="manifestLoading" hidden>
@@ -700,6 +698,7 @@
                 <div class="check-list" id="manifestChecks" hidden></div>
                 <article class="exec-focus manifest-sentence" id="manifestSentence" hidden></article>
                 <div id="manifestClose" hidden></div>
+                <div id="manifestPlan" hidden></div>
               </div>
             </div>
               </div>
@@ -829,7 +828,7 @@
           <header class="lib-head">
             <p class="lib-kicker">MANIFEST</p>
             <h2 class="lib-title">顯化力</h2>
-            <p class="lib-lead">看看那些你正在慢慢靠近的生活。</p>
+            <p class="lib-lead">把想去的地方，變成可以一步一步走的路。</p>
           </header>
 
           <div class="lib-tabs" role="tablist" aria-label="顯化分類" id="manifestFilters">
@@ -1011,13 +1010,13 @@
               <span class="guide-step__num" aria-hidden="true">07</span>
               <div class="guide-step__body">
                 <p class="guide-step__label">顯化力</p>
-                <h3 class="guide-step__title">看見自己真正想走向哪裡</h3>
-                <p>不是只想著得到什麼，而是看見自己真正想走向哪裡。</p>
+                <h3 class="guide-step__title">把想去的地方，拆成可以做到的步驟</h3>
+                <p>告訴我你想去哪裡，我幫你把它變成一條可以一步一步走的路。</p>
                 <ul class="guide-points">
-                  <li>先寫下「我真正想靠近的是什麼」。</li>
-                  <li>再寫兩題：成真時的感覺，以及那個自己會怎麼生活。</li>
-                  <li>點「看見我正在靠近的未來」，整理生活畫面、今天可靠近的一小步，以及一句顯化句。</li>
-                  <li>最後點「收下今天的顯化」，才會收藏到側邊欄「顯化力」。</li>
+                  <li>先寫下「我想顯化的是」。</li>
+                  <li>點「幫我拆成可以做到的步驟」，會整理成 3～6 個具體行動。</li>
+                  <li>每一步都可以打勾完成；需要時，再把其中一步放進側邊欄「執行力」。</li>
+                  <li>完成的步驟會留在側邊欄「顯化力」，讓你看見自己正在靠近哪一種生活。</li>
                 </ul>
               </div>
             </li>
@@ -1226,6 +1225,6 @@
     <script src="lib/history-summary.js?v=5"></script>
     <script src="lib/insight-highlight.js?v=5"></script>
     <script src="lib/user-mark.js?v=6"></script>
-    <script src="app.js?v=214"></script>
+    <script src="app.js?v=215"></script>
   </body>
 </html>

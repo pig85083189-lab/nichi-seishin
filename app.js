@@ -125,6 +125,7 @@ const state = {
   journalManifestSentence: "",
   journalManifestHighlights: {},
   journalManifestClose: { futureVision: "", approachStep: "", manifestationStatement: "", accepted: false, addedToExec: false },
+  journalManifestPlan: { id: "", steps: [] },
   manifestPrompts: [],
   manifestPromptsBusy: false,
   manifestPromptsToken: 0,
@@ -762,6 +763,67 @@ function addManifest({ key, title, vision, date, futureVision, approachStep, man
   return { added: true };
 }
 
+function manifestPlanSidebarKey(iso) {
+  return `manifest-plan:${iso || currentIso()}`;
+}
+
+function manifestPlanStatusFromSteps(steps) {
+  const list = Array.isArray(steps) ? steps.filter((item) => String(item && item.title || "").trim()) : [];
+  if (!list.length) return "";
+  return list.every((item) => item.completed) ? "done" : "doing";
+}
+
+function upsertManifestPlanToSidebar(iso, journal) {
+  const vision = String((journal && journal.manifest) || "").trim();
+  const plan = normalizeManifestPlan(journal && journal.manifestPlan);
+  if (!vision || !plan.steps.length) return { added: false };
+  const date = iso || currentIso();
+  const key = manifestPlanSidebarKey(date);
+  const status = manifestPlanStatusFromSteps(plan.steps) || "doing";
+  const items = getManifests();
+  const index = items.findIndex((item) => item.sourceKey === key);
+  const now = new Date().toISOString();
+  if (index >= 0) {
+    items[index] = {
+      ...items[index],
+      title: vision,
+      vision,
+      steps: plan.steps,
+      planId: plan.id,
+      status,
+      date,
+      updatedAt: now,
+    };
+    saveManifests(items);
+    try {
+      renderManifests();
+    } catch {
+      /* ignore */
+    }
+    return { added: false, exists: true, updated: true };
+  }
+  items.unshift({
+    id: uid(),
+    title: vision,
+    vision,
+    steps: plan.steps,
+    planId: plan.id,
+    date,
+    status,
+    source: "今日復盤",
+    sourceKey: key,
+    createdAt: now,
+    updatedAt: now,
+  });
+  saveManifests(items);
+  try {
+    renderManifests();
+  } catch {
+    /* ignore */
+  }
+  return { added: true };
+}
+
 function removeManifestFromGuide(key) {
   if (!key) return { removed: false };
   const items = getManifests();
@@ -885,6 +947,10 @@ function syncJournalLibraries(iso, journal) {
     });
   }
   const vision = String(data.manifest || "").trim();
+  if (hasManifestPlan(data.manifestPlan)) {
+    upsertManifestPlanToSidebar(iso, data);
+    return;
+  }
   const close = normalizeManifestCloseBag(data.manifestClose);
   if (hasManifestCloseContent(close)) {
     if (close.accepted) {
@@ -2211,6 +2277,7 @@ function reviewContentScore(review) {
     journal.manifest,
     journal.manifestSentence,
     journal.manifestClose ? JSON.stringify(journal.manifestClose) : "",
+    journal.manifestPlan ? JSON.stringify(journal.manifestPlan) : "",
     journal.deep ? JSON.stringify(journal.deep) : "",
     journal.awareness ? JSON.stringify(journal.awareness) : "",
     journal.awarenessChoices ? JSON.stringify(journal.awarenessChoices) : "",
@@ -4318,7 +4385,7 @@ function tourSteps() {
       tourPage: "today",
       popover: {
         title: "07 顯化力",
-        description: "寫下真正想靠近的事，最多 1～2 道思考題，再找出能慢慢靠近的方向。勾選後會同步到側邊欄「顯化力」。",
+        description: "寫下真正想靠近的生活，再拆成可以一步一步做到的步驟。完成的步驟會留在側邊欄「顯化力」。",
         side: "top",
       },
     },
@@ -4778,6 +4845,10 @@ function emptyManifestClose() {
   return { futureVision: "", approachStep: "", manifestationStatement: "", accepted: false, addedToExec: false };
 }
 
+function emptyManifestPlan() {
+  return { id: "", steps: [] };
+}
+
 function emptyJournal() {
   return {
     thanks: "",
@@ -4812,6 +4883,7 @@ function emptyJournal() {
     manifestPrompts: [],
     manifestSentence: "",
     manifestClose: emptyManifestClose(),
+    manifestPlan: emptyManifestPlan(),
     manifestChecks: [],
     manifestCheckItems: [],
     manifestAi: false,
@@ -5252,6 +5324,7 @@ function journalHasContent(journal) {
     journal.manifestSentence,
   ];
   if (journal.manifestClose && (journal.manifestClose.futureVision || journal.manifestClose.approachStep || journal.manifestClose.manifestationStatement)) return true;
+  if (journal.manifestPlan && Array.isArray(journal.manifestPlan.steps) && journal.manifestPlan.steps.some((item) => String(item && item.title || "").trim())) return true;
   if (textBits.some((item) => String(item || "").trim())) return true;
   if (hasMeaningfulChoices(journal.awarenessChoices) || hasMeaningfulChoices(journal.thinkChoices) || hasMeaningfulExecutionChoices(journal.executionChoices)) return true;
   if (deepHasContent(journal.deep) || hasMeaningfulValue(journal.deepPrompts)) return true;
@@ -6229,7 +6302,7 @@ function refreshJournalChecklists(journal, options = {}) {
   if (!options.skipManifest) {
     renderChecklist("manifestChecks", manifestItems, manifestChecked);
     renderManifestSentence(data.manifestSentence || state.journalManifestSentence, data.manifestHighlights || state.journalManifestHighlights);
-    renderManifestCloseResult(data.manifestClose || state.journalManifestClose);
+    renderJournalManifestResult();
   }
 }
 
@@ -6750,6 +6823,80 @@ function journalUsesManifestClose(journal) {
   return hasManifestCloseContent(journal && journal.manifestClose);
 }
 
+function emptyManifestPlanStep() {
+  return { id: "", title: "", detail: "", completed: false, taskAdded: false };
+}
+
+function normalizeManifestPlanStep(raw, index) {
+  const data = raw && typeof raw === "object" ? raw : { title: raw };
+  const title = String(data.title || data.label || data.text || "").replace(/^\s*\d+\s*[.．、｜|]\s*/, "").trim();
+  if (!title) return null;
+  return {
+    id: String(data.id || "").trim() || uid(),
+    title,
+    detail: String(data.detail || data.note || data.body || "").trim(),
+    completed: Boolean(data.completed || data.done),
+    taskAdded: Boolean(data.taskAdded || data.addedToExec),
+  };
+}
+
+function normalizeManifestPlan(raw) {
+  const data = raw && typeof raw === "object" ? raw : {};
+  const steps = (Array.isArray(data.steps) ? data.steps : Array.isArray(data.items) ? data.items : [])
+    .map((item, index) => normalizeManifestPlanStep(item, index))
+    .filter(Boolean)
+    .slice(0, 6);
+  const seen = new Set();
+  const unique = [];
+  steps.forEach((item) => {
+    if (seen.has(item.title)) return;
+    seen.add(item.title);
+    unique.push(item);
+  });
+  return {
+    id: String(data.id || "").trim(),
+    steps: unique,
+  };
+}
+
+function hasManifestPlan(plan) {
+  const data = normalizeManifestPlan(plan && plan.steps ? plan : plan && plan.manifestPlan);
+  return data.steps.length > 0;
+}
+
+function journalUsesManifestPlan(journal) {
+  return hasManifestPlan(journal && journal.manifestPlan) || hasManifestPlan(journal);
+}
+
+function buildManifestPlanFallback(vision) {
+  const text = String(vision || "").trim();
+  const bit = text.slice(0, 12) || "這件事";
+  const rows = /收入|營收|事業|客戶|成交|產品|方案/.test(text)
+    ? [
+        { title: "先看清楚現在的收入結構", detail: "整理目前每個服務／產品的客單價、成交數與月營收。" },
+        { title: "算出目標需要多少成交", detail: "把目標拆成每月需要的客數、產品數或方案數。" },
+        { title: "找出最值得放大的收入來源", detail: "選出目前成交率與利潤較好的 1～2 個主力項目。" },
+        { title: "建立固定曝光與成交節奏", detail: "安排每週固定內容、引流與銷售行動。" },
+        { title: "每週回看一次數字", detail: "記錄曝光、詢問、成交與營收，再決定下一週調整什麼。" },
+      ]
+    : [
+        { title: `先看清楚「${bit}」現在的真實狀態`, detail: "用一頁寫下現況、已有資源，以及目前最卡住的地方。" },
+        { title: "把目標拆成一個可檢查的畫面", detail: "寫下怎樣算靠近了一步，不要只寫「變好」。" },
+        { title: "選出這一週最值得先做的一件小事", detail: "只選一件今天或這週做得到的行動，先走出去。" },
+        { title: "安排一個固定回看的時間", detail: "每週留 10 分鐘看哪一步有靠近、下一步要改什麼。" },
+      ];
+  return normalizeManifestPlan({ id: "", steps: rows });
+}
+
+function manifestStepTaskKey(planId, stepId, iso) {
+  return `manifest:${iso || currentIso()}:${planId || "plan"}:${stepId}`;
+}
+
+function manifestStepTaskExists(planId, stepId, iso) {
+  const key = manifestStepTaskKey(planId, stepId, iso);
+  return getTasks().some((task) => task.sourceKey === key);
+}
+
 function hydrateManifestClose(data) {
   const fromNew = normalizeManifestCloseBag(data && data.manifestClose);
   if (hasManifestCloseContent(fromNew) || fromNew.accepted) return fromNew;
@@ -7015,6 +7162,65 @@ function renderManifestCloseResult(close) {
   `;
 }
 
+function padManifestStepNo(index) {
+  return String(index + 1).padStart(2, "0");
+}
+
+function renderManifestPlanResult(plan) {
+  const root = document.getElementById("manifestPlan");
+  if (!root) return;
+  const data = normalizeManifestPlan(plan || state.journalManifestPlan);
+  if (!data.steps.length) {
+    root.hidden = true;
+    root.innerHTML = "";
+    return;
+  }
+  const iso = currentIso();
+  const planId = data.id || `plan:${iso}`;
+  root.hidden = false;
+  root.innerHTML = `
+    <p class="manifest-plan-kicker">我正在靠近它</p>
+    <p class="manifest-plan-note">不用一次做到全部，每完成一步，你都正在靠近它。</p>
+    <div class="manifest-plan-list">
+      ${data.steps
+        .map((item, index) => {
+          const added = Boolean(item.taskAdded) || manifestStepTaskExists(planId, item.id, iso);
+          return `
+            <label class="manifest-step${item.completed ? " is-done" : ""}">
+              <input class="manifest-step__check" type="checkbox" data-manifest-step="${escapeHtml(item.id)}" ${item.completed ? "checked" : ""} />
+              <span class="manifest-step__mark" aria-hidden="true"></span>
+              <span class="manifest-step__body">
+                ${markableSpan(`${padManifestStepNo(index)}｜${item.title}`, `manifest.plan.step.${index}.title`, `manifest-step__title${item.completed ? " is-done" : ""}`)}
+                ${item.detail ? markableSpan(item.detail, `manifest.plan.step.${index}.detail`, "manifest-step__detail") : ""}
+                <button class="manifest-exec-btn${added ? " is-on" : ""}" type="button" data-manifest-step-exec="${escapeHtml(item.id)}"${added ? " disabled" : ""}>${added ? "✓ 已放進執行力" : "＋ 放進執行力"}</button>
+              </span>
+            </label>
+          `;
+        })
+        .join("")}
+    </div>
+    <button class="manifest-regen-btn" id="btnManifestRegen" type="button">重新整理步驟</button>
+  `;
+}
+
+function renderJournalManifestResult() {
+  if (hasManifestPlan(state.journalManifestPlan)) {
+    renderManifestPlanResult(state.journalManifestPlan);
+    const close = document.getElementById("manifestClose");
+    if (close) {
+      close.hidden = true;
+      close.innerHTML = "";
+    }
+    return;
+  }
+  const plan = document.getElementById("manifestPlan");
+  if (plan) {
+    plan.hidden = true;
+    plan.innerHTML = "";
+  }
+  renderManifestCloseResult(state.journalManifestClose);
+}
+
 function renderManifestSentence(text, highlights) {
   const root = document.getElementById("manifestSentence");
   if (root) {
@@ -7032,7 +7238,7 @@ function setManifestPromptsLoading(loading) {
   if (btn) {
     btn.hidden = loading;
     btn.disabled = false;
-    btn.textContent = "✦ 看見我正在靠近的未來";
+    btn.textContent = "✦ 幫我拆成可以做到的步驟";
     btn.classList.toggle("is-busy", false);
     btn.setAttribute("aria-busy", "false");
   }
@@ -7060,48 +7266,60 @@ function applyGeneratedManifestClose(close, sig) {
 }
 
 async function generateManifestPrompts(options = {}) {
-  await generateManifestClose(options);
+  await generateManifestPlan(options);
 }
 
 async function generateManifestChecklist(options = {}) {
-  await generateManifestClose(options);
+  await generateManifestPlan(options);
 }
 
-async function generateManifestClose(options = {}) {
+function persistManifestPlan(plan, sig) {
+  const next = normalizeManifestPlan(plan);
+  if (!next.id) next.id = uid();
+  state.journalManifestPlan = next;
+  if (sig) {
+    state.journalMeta.manifestAi = true;
+    state.journalMeta.manifestAiSig = sig;
+  }
+  renderJournalManifestResult();
+  persistJournalQuietly();
+  upsertManifestPlanToSidebar(currentIso(), { manifest: journalFieldValue("manifestVision"), manifestPlan: next });
+}
+
+async function generateManifestPlan(options = {}) {
   if (!options.auto) setJournalFoldOpen("section-manifest", true, { manual: true });
   if (state.manifestPromptsBusy && !options.force) {
-    if (!options.auto) showToast("還在替你整理正在靠近的生活，請稍候。");
+    if (!options.auto) showToast("還在整理可以靠近的步驟，請稍候。");
     return;
+  }
+  const current = normalizeManifestPlan(state.journalManifestPlan);
+  if (!options.auto && options.confirm !== false && current.steps.some((item) => item.completed)) {
+    const ok = window.confirm("重新整理後，目前的步驟與完成進度會被更新，確定要重新整理嗎？");
+    if (!ok) return;
   }
   const journal = collectJournal();
   const vision = String(journal.manifest || "").trim();
   if (vision.length < 4) {
-    if (!options.auto) showToast("先寫下你真正想靠近的是什麼。");
+    if (!options.auto) showToast("先寫下你想顯化的是什麼。");
     return;
   }
-  if (!manifestThinkReady(journal.manifestThink)) {
-    if (!options.auto) showToast("先寫完兩題，再看見正在靠近的未來。");
-    return;
-  }
-  const sig = [vision, ...(journal.manifestThink || [])].join("\n");
-  if (options.auto && state.journalMeta.manifestAiSig === sig && hasManifestCloseContent(state.journalManifestClose)) return;
+  const sig = vision;
+  if (options.auto && state.journalMeta.manifestAiSig === sig && hasManifestPlan(current)) return;
 
   const token = (state.manifestPromptsToken || 0) + 1;
   state.manifestPromptsToken = token;
   state.checklistToken.manifest = (state.checklistToken.manifest || 0) + 1;
   setManifestPromptsLoading(true);
-  const fallback = buildManifestCloseFallback(journal);
+  const fallback = buildManifestPlanFallback(vision);
 
   try {
     if (!state.user) throw new Error("請先登入，才能使用雲端分析。");
     const remote = await postReview({
       mode: "manifest",
-      step: "close",
+      step: "plan",
       date: currentIso(),
       vision,
       text: vision,
-      questions: MANIFEST_CLOSE_PROMPTS.map((item) => item.question),
-      answers: journal.manifestThink,
       context: {
         event: journal.event,
         mood: journal.mood,
@@ -7113,23 +7331,66 @@ async function generateManifestClose(options = {}) {
       },
     });
     if (state.manifestPromptsToken !== token) return;
-    const close = normalizeManifestCloseBag({
-      futureVision: remote.futureVision,
-      approachStep: remote.approachStep,
-      manifestationStatement: remote.manifestationStatement || remote.sentence,
+    const plan = normalizeManifestPlan({
+      id: current.id || uid(),
+      steps: Array.isArray(remote.steps) ? remote.steps : remote.items,
     });
-    if (!hasManifestCloseContent(close)) throw new Error("雲端回傳格式不完整");
-    state.journalManifestHighlights = remote.highlights && typeof remote.highlights === "object" ? remote.highlights : {};
-    applyGeneratedManifestClose(close, sig);
-    if (!options.auto) showToast("已經整理出正在靠近的生活。");
+    if (plan.steps.length < 3) throw new Error("雲端回傳格式不完整");
+    persistManifestPlan(plan, sig);
+    if (!options.auto) {
+      showToast("已經整理成可以一步一步靠近的路。");
+      trackProduct("manifestation_created", { source: "journal", mode: state.journalMode === "quick" ? "quick" : "deep" });
+    }
   } catch (error) {
     if (state.manifestPromptsToken !== token) return;
-    state.journalManifestHighlights = {};
-    applyGeneratedManifestClose(fallback, sig);
-    if (!options.auto) showToast(`雲端整理失敗：${formatApiError(error)}，先用本地整理。`);
+    persistManifestPlan({ id: current.id || uid(), steps: fallback.steps }, sig);
+    if (!options.auto) showToast(`雲端整理失敗：${formatApiError(error)}，先用本地步驟。`);
   } finally {
     if (state.manifestPromptsToken === token) setManifestPromptsLoading(false);
   }
+}
+
+function toggleManifestPlanStep(stepId, completed) {
+  const plan = normalizeManifestPlan(state.journalManifestPlan);
+  const next = {
+    ...plan,
+    steps: plan.steps.map((item) => (item.id === stepId ? { ...item, completed: Boolean(completed) } : item)),
+  };
+  persistManifestPlan(next);
+}
+
+function addManifestStepToExec(stepId) {
+  const plan = normalizeManifestPlan(state.journalManifestPlan);
+  const step = plan.steps.find((item) => item.id === stepId);
+  if (!step) return;
+  const iso = currentIso();
+  const planId = plan.id || `plan:${iso}`;
+  if (step.taskAdded || manifestStepTaskExists(planId, step.id, iso)) {
+    persistManifestPlan({
+      ...plan,
+      steps: plan.steps.map((item) => (item.id === stepId ? { ...item, taskAdded: true } : item)),
+    });
+    showToast("這項已在『執行力』");
+    return;
+  }
+  const result = addTaskFromGuide({
+    key: manifestStepTaskKey(planId, step.id, iso),
+    label: step.title,
+    detail: step.detail,
+    source: "顯化力",
+    date: iso,
+  });
+  persistManifestPlan({
+    ...plan,
+    id: planId,
+    steps: plan.steps.map((item) => (item.id === stepId ? { ...item, taskAdded: Boolean(result.added || result.exists) } : item)),
+  });
+  if (result.added) showToast("已放進側邊欄『執行力』");
+  else if (result.exists) showToast("這項已在『執行力』");
+}
+
+async function generateManifestClose(options = {}) {
+  await generateManifestPlan(options);
 }
 
 function addManifestApproachToExec() {
@@ -10213,6 +10474,7 @@ function collectJournal() {
       (state.journalManifestClose && state.journalManifestClose.manifestationStatement) || state.journalManifestSentence || ""
     ).trim(),
     manifestClose: normalizeManifestCloseBag(state.journalManifestClose),
+    manifestPlan: normalizeManifestPlan(state.journalManifestPlan),
     manifestChecks: checkedValues("manifestChecks"),
     manifestCheckItems: (() => {
       const collected = collectManifestPathItems();
@@ -10350,10 +10612,17 @@ function composeJournalRawText(journal) {
   if (execLines.length) lines.push(`我的行動卡：${execLines.join("、")}`);
   if (journal.executionFocus?.title) lines.push(`${execFocusKicker(journal.executionFocus.when)}：${journal.executionFocus.title}`);
   if (String(journal.manifest || "").trim()) {
-    lines.push(journalUsesManifestClose(journal) ? `我真正想靠近的是什麼：${journal.manifest.trim()}` : `我想顯化的事情：${journal.manifest.trim()}`);
+    lines.push(journalUsesManifestPlan(journal) || journalUsesManifestClose(journal) ? (journalUsesManifestPlan(journal) ? `我想顯化的是：${journal.manifest.trim()}` : `我真正想靠近的是什麼：${journal.manifest.trim()}`) : `我想顯化的事情：${journal.manifest.trim()}`);
   }
-  const manifestClose = normalizeManifestCloseBag(journal.manifestClose);
-  if (journalUsesManifestClose(journal)) {
+  const manifestPlan = normalizeManifestPlan(journal.manifestPlan);
+  if (journalUsesManifestPlan(journal)) {
+    lines.push("我正在靠近它");
+    manifestPlan.steps.forEach((item, index) => {
+      lines.push(`${padManifestStepNo(index)}｜${item.title}${item.completed ? "（已完成）" : ""}`);
+      if (item.detail) lines.push(item.detail);
+    });
+  } else if (journalUsesManifestClose(journal)) {
+    const manifestClose = normalizeManifestCloseBag(journal.manifestClose);
     MANIFEST_CLOSE_PROMPTS.forEach((item, index) => {
       const answer = String((Array.isArray(journal.manifestThink) ? journal.manifestThink : [])[index] || "").trim();
       if (answer) lines.push(`${item.question} ${answer}`);
@@ -10757,6 +11026,7 @@ function fillJournal(journal) {
   if (state.journalManifestClose.manifestationStatement && !state.journalManifestSentence) {
     state.journalManifestSentence = state.journalManifestClose.manifestationStatement;
   }
+  state.journalManifestPlan = normalizeManifestPlan(data.manifestPlan);
   state.manifestPrompts = journalUsesManifestClose(state.journalManifestClose)
     ? MANIFEST_CLOSE_PROMPTS.map((item) => ({ question: item.question, placeholder: item.placeholder }))
     : normalizeManifestPrompts(data.manifestPrompts);
@@ -10779,7 +11049,7 @@ function fillJournal(journal) {
   if (manifestVision) manifestVision.value = data.manifest || "";
   renderManifestQuestions(state.manifestPrompts, { answers: data.manifestThink });
   renderManifestSentence(state.journalManifestSentence, state.journalManifestHighlights);
-  renderManifestCloseResult(state.journalManifestClose);
+  renderJournalManifestResult();
   renderAwarenessQuestions(state.awarenessPrompts, { answers: data.awareness });
   renderAwarenessChoices(state.awarenessChoices);
   renderExecutionQuestions(state.executionPrompts, { answers: data.execution });
@@ -12439,28 +12709,52 @@ function manifestStatusLabel(status) {
   return "靠近中";
 }
 
+function manifestRecordStatus(item) {
+  const steps = normalizeManifestPlan({ steps: item && item.steps }).steps;
+  if (!steps.length) return item && item.status ? item.status : "doing";
+  return manifestPlanStatusFromSteps(steps) || item.status || "doing";
+}
+
 function renderManifestItem(item) {
-  const done = item.status === "done";
-  const later = item.status === "later";
+  const steps = normalizeManifestPlan({ steps: item && item.steps }).steps;
+  const hasSteps = steps.length > 0;
+  const autoStatus = hasSteps ? manifestPlanStatusFromSteps(steps) : "";
+  const status = autoStatus || item.status;
+  const done = status === "done";
+  const later = status === "later";
   const vision = String(item.vision || "").trim();
   const title = String(item.title || "").trim();
   const wish = vision || title;
-  const near = vision && title && title !== vision ? title : "";
+  const near = !hasSteps && vision && title && title !== vision ? title : "";
+  const doneCount = steps.filter((step) => step.completed).length;
   const id = escapeHtml(item.id);
   return `
     <article class="lib-vision${done ? " is-done" : ""}${later ? " is-later" : ""}">
       <p class="lib-vision__kicker">${escapeHtml(manifestKicker(item))}</p>
       <p class="lib-vision__wish">${escapeHtml(wish)}</p>
       ${
-        near
+        hasSteps
+          ? `<p class="lib-vision__progress">${doneCount} / ${steps.length} 已完成</p>
+            <ul class="lib-vision__steps">
+              ${steps
+                .map(
+                  (step) => `
+                <li class="lib-vision__step${step.completed ? " is-done" : ""}">
+                  <span class="lib-vision__step-mark" aria-hidden="true">${step.completed ? "✓" : "○"}</span>
+                  <span class="lib-vision__step-text">${escapeHtml(step.title)}</span>
+                </li>`
+                )
+                .join("")}
+            </ul>`
+          : near
           ? `<div class="lib-vision__near"><p class="lib-vision__near-label">小小靠近</p><p class="lib-vision__near-text">${escapeHtml(near)}</p></div>`
           : ""
       }
-      <span class="lib-vision__meta">${escapeHtml(manifestStatusLabel(item.status))}${
+      <span class="lib-vision__meta">${escapeHtml(manifestStatusLabel(status))}${
         item.date ? ` · ${escapeHtml(libraryMonthDay(item.date))}` : ""
       }</span>
       <div class="lib-vision__ops" role="group" aria-label="顯化操作">
-        ${renderStatusActionChips(item.id, item.status, "data-manifest-status", {
+        ${renderStatusActionChips(item.id, status, "data-manifest-status", {
           doing: "靠近中",
           later: "待開始",
           done: "已實現",
@@ -12476,13 +12770,13 @@ function renderManifests() {
   if (!list) return;
   const all = getManifests();
   const later = all
-    .filter((item) => item.status === "later")
+    .filter((item) => manifestRecordStatus(item) === "later")
     .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
   const doing = all
-    .filter((item) => item.status === "doing")
+    .filter((item) => manifestRecordStatus(item) === "doing")
     .sort((a, b) => String(b.createdAt || b.date || "").localeCompare(String(a.createdAt || a.date || "")));
   const done = all
-    .filter((item) => item.status === "done")
+    .filter((item) => manifestRecordStatus(item) === "done")
     .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
   const filter = ["all", "doing", "done"].includes(state.manifestFilter) ? state.manifestFilter : "doing";
 
@@ -13064,6 +13358,25 @@ function renderHistoryDeepThinking(review) {
 }
 
 function historyManifestBlocks(journal, historyIso) {
+  if (journalUsesManifestPlan(journal)) {
+    const plan = normalizeManifestPlan(journal.manifestPlan);
+    return [
+      String(journal.manifest || "").trim()
+        ? historyBlock("我想顯化的是", markableP(journal.manifest, "manifest.vision", "history-journal__text", historyIso))
+        : "",
+      historyBlock(
+        "我正在靠近它",
+        plan.steps
+          .map((item, index) => {
+            const title = `${padManifestStepNo(index)}｜${item.title}${item.completed ? "（已完成）" : ""}`;
+            return `${markableP(title, `manifest.plan.step.${index}.title`, "history-journal__text", historyIso)}${
+              item.detail ? markableP(item.detail, `manifest.plan.step.${index}.detail`, "history-journal__text", historyIso) : ""
+            }`;
+          })
+          .join("")
+      ),
+    ];
+  }
   if (journalUsesManifestClose(journal)) {
     const close = normalizeManifestCloseBag(journal.manifestClose);
     const statement = close.manifestationStatement || String(journal.manifestSentence || "").trim();
@@ -13628,14 +13941,20 @@ function handleTodayPointerClick(event) {
     catchAsync(() => generateJournalChecklist("execution"), "行動卡還沒整理好");
     return true;
   }
-  if (node.closest("#btnManifestAi")) {
+  if (node.closest("#btnManifestAi") || node.closest("#btnManifestRegen")) {
     handled();
-    catchAsync(() => generateManifestClose({ force: true }), "正在靠近的生活還沒整理好");
+    catchAsync(() => generateManifestPlan({ force: true }), "可以做到的步驟還沒整理好");
     return true;
   }
   if (node.closest("#btnManifestPaths")) {
     handled();
-    catchAsync(() => generateManifestClose({ force: true }), "正在靠近的生活還沒整理好");
+    catchAsync(() => generateManifestPlan({ force: true }), "可以做到的步驟還沒整理好");
+    return true;
+  }
+  const stepExec = node.closest("[data-manifest-step-exec]");
+  if (stepExec) {
+    handled();
+    addManifestStepToExec(stepExec.dataset.manifestStepExec);
     return true;
   }
   if (node.closest("#btnManifestToExec")) {
@@ -13885,7 +14204,7 @@ function refreshUserMarkSurfaces(date) {
     renderManifestQuestions(state.manifestPrompts, { answers: journal.manifestThink });
     renderManifestPaths(journal.manifestCheckItems, journal.manifestChecks);
     renderManifestSentence(state.journalManifestSentence);
-    renderManifestCloseResult(state.journalManifestClose);
+    renderJournalManifestResult();
     renderDeepThemes(state.deepPrompts, { deep: journal.deep });
   }
   if (state.page === "history") renderHistory();
@@ -14301,6 +14620,10 @@ function bindEvents() {
   });
 
   document.getElementById("page-today")?.addEventListener("change", (event) => {
+    if (event.target && event.target.matches(".manifest-step__check")) {
+      toggleManifestPlanStep(event.target.dataset.manifestStep, event.target.checked);
+      return;
+    }
     if (event.target && event.target.matches("#awareChecks input, #execChecks input, #manifestChecks input")) {
       const execInput = event.target.matches("#execChecks input") ? event.target : null;
       const execPayload = execInput
