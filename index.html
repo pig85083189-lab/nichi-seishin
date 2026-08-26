@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=182" />
+    <link rel="stylesheet" href="app.css?v=183" />
     <style>
       .splash {
         position: fixed;
@@ -627,12 +627,12 @@
             <div class="journal-fold__panel" id="execFoldPanel" inert aria-hidden="true">
               <div class="journal-fold__inner">
                 <p class="journal-guide js-quick-only">明天只要做一件小到 5 分鐘內能完成的事。完成復盤後會進到側邊欄「執行力」清單，方便追蹤。</p>
-                <p class="journal-guide js-deep-only">既然已經看見了，明天你最想先做到哪一個？</p>
+                <p class="journal-guide js-deep-only">既然已經看見了，明天你最想先做到哪些？</p>
                 <div class="journal-split">
               <div class="journal-col">
                 <div class="js-deep-only">
                   <div class="check-loading" id="execPromptLoading" hidden>
-                    <p class="check-loading__label">正在整理明天做得到的一小步…</p>
+                    <p class="check-loading__label">✦ 正在替你整理明天做得到的小行動⋯</p>
                     <div class="ai-thinking__bar"><i></i></div>
                   </div>
                   <p class="deep-empty" id="execEmpty">寫完前面的看見後，再開始整理明天的一小步。</p>
@@ -640,7 +640,7 @@
                   <div id="execQuestions"></div>
                 </div>
                 <div class="exec-next">
-                  <p class="journal-label">明天最小的一步</p>
+                  <p class="journal-label" id="execStepLabel">明天最小的一步</p>
                   <p class="journal-core-q" id="execStepHint">不是完整計畫，只寫第一步。小到你明天幾乎沒有理由不開始。</p>
                   <div id="execStepResult" hidden></div>
                   <textarea class="textarea" id="execNext" rows="3" placeholder="例如：早餐後寫下3件小事／22:30放下手機／下午3點換上運動服"></textarea>
@@ -651,7 +651,7 @@
               </div>
               <div class="journal-col js-deep-only">
                 <p class="journal-label">我的行動卡</p>
-                <p class="journal-guide journal-guide--tight">根據你選的那一步，收成明天真的做得到的行動。做完就勾起來。</p>
+                <p class="journal-guide journal-guide--tight">根據你選的行動，收成明天真的做得到的事。做完就勾起來。</p>
                 <div class="check-loading" id="execLoading" hidden>
                   <p class="check-loading__label">正在整理你的行動卡…</p>
                   <div class="ai-thinking__bar"><i></i></div>
@@ -994,12 +994,11 @@
               <div class="guide-step__body">
                 <p class="guide-step__label">執行力</p>
                 <h3 class="guide-step__title">把今天的覺察，變成明天做得到的一小步</h3>
-                <p class="guide-step__text">把今天的覺察變成明天做得到的一小步。系統會整理幾個具體方向，你只要選出最想先做到的一個；如果都不適合，也可以自己寫。</p>
+                <p class="guide-step__text">把今天的覺察變成明天做得到的一小步。系統會整理幾個具體方向，你可以選 1～3 件最想先做到的；如果都不適合，也可以自己寫。</p>
                 <ul class="guide-points">
                   <li>點「開始今天的行動整理」，會依 04、05 的看見，整理 3 個明天做得到的小行動。</li>
-                  <li>選 1 個，就會直接成為「明天最小的一步」；若都不適合，再自己寫。</li>
-                  <li>再點「收下我的行動卡」。每張只留一件事，做完就勾起來。</li>
-                  <li>完成後會標出「今天／明天最重要的一步」。</li>
+                  <li>可以選 1～3 件，就會成為「明天，我先做到這些」；若都不適合，再自己寫。</li>
+                  <li>再點「收下我的行動卡」。每一件都會各自成為一張行動卡，做完就勾起來。</li>
                   <li>勾選的行動卡，完成復盤後會進到側邊欄「執行力」，方便之後追蹤。</li>
                 </ul>
               </div>
@@ -1223,6 +1222,6 @@
     <script src="lib/history-summary.js?v=5"></script>
     <script src="lib/insight-highlight.js?v=5"></script>
     <script src="lib/user-mark.js?v=6"></script>
-    <script src="app.js?v=211"></script>
+    <script src="app.js?v=212"></script>
   </body>
 </html>

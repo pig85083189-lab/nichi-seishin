@@ -5,12 +5,14 @@ const {
   normalizeExecutionChoiceOptions,
   normalizeExecutionChoiceBag,
   hasMeaningfulExecutionChoices,
+  selectedExecutionChoiceActions,
   selectedExecutionChoiceText,
   mergeExecutionChoiceBags,
   mergeJournalObjects,
   choicesLookSimilar,
   EXEC_CHOICE_CUSTOM_ID,
   EXEC_CHOICE_CUSTOM_TEXT,
+  EXEC_CHOICE_MAX_SELECTED,
 } = require("../lib/review-merge");
 const {
   EXECUTION_CHOICES_SYSTEM,
@@ -76,12 +78,30 @@ assert(duped.length === 3, `CASE B：近義重複應去掉後仍能湊 3 個，�
 assert(duped[0].text !== duped[1].text, "CASE B：留下的選項不可相同");
 assert(EXECUTION_CHOICES_SYSTEM.includes("禁止近義重複"), "CASE B：system 禁止近義");
 
-/* CASE C：單選 */
-assert(app.includes('role="radiogroup"'), "CASE C：06 用 radiogroup");
-assert(app.includes("選 1 個就好"), "CASE C：文案是單選");
-assert(app.includes('data-choice-kind="execution"'), "CASE C：execution choice kind");
-assert(css.includes('.choice-list[data-choice-kind="execution"] .choice-opt__box'), "CASE C：radio 圓點");
-assert(app.includes("if (bag.selectedId === id)"), "CASE C：再點同一項不會變多選");
+/* CASE C：多選 1～3 */
+assert(app.includes('role="group"'), "CASE C：06 用 group／checkbox");
+assert(app.includes("可以選 1～3 件"), "CASE C：文案是多選");
+assert(app.includes('role="checkbox"'), "CASE C：checkbox role");
+assert(css.includes(".exec-step-list__item"), "CASE C：preview 用簡潔 list");
+assert(!css.includes('.choice-list[data-choice-kind="execution"] .choice-opt__box'), "CASE C：不再用 radio 圓點");
+assert(app.includes("明天先留 3 件就好。"), "CASE C：第 4 個給輕量提示");
+assert(app.includes("selectedIds.includes(id)"), "CASE C：可取消已選");
+assert(EXEC_CHOICE_MAX_SELECTED === 3, "CASE C：最多 3 個實際行動");
+const multiBag = normalizeExecutionChoiceBag({
+  options: sleepOptions,
+  selectedIds: ["e1", "e2", "custom"],
+  custom: "打電話給媽媽",
+});
+assert(multiBag.selectedId === "e1", "CASE C：舊 selectedId 仍寫第一個，給舊讀取端");
+assert(selectedExecutionChoiceActions(multiBag).map((item) => item.text).join("|") === `${sleepOptions[0].text}|${sleepOptions[1].text}|打電話給媽媽`, "CASE C：多選各自獨立");
+const emptyCustomBag = normalizeExecutionChoiceBag({
+  options: sleepOptions,
+  selectedIds: ["e1", "custom"],
+  custom: "   ",
+});
+assert(selectedExecutionChoiceActions(emptyCustomBag).length === 1, "CASE C：空白 custom 不建立空行動");
+const fromOld = normalizeExecutionChoiceBag({ options: sleepOptions, selectedId: "e2" });
+assert(fromOld.selectedIds[0] === "e2" && fromOld.selectedIds.length === 1, "CASE C：舊 selectedId 可 hydrate 成 selectedIds");
 
 /* CASE D／E：選完直接成為明天最小的一步，不再重填 */
 const selectedBag = normalizeExecutionChoiceBag({
@@ -89,7 +109,10 @@ const selectedBag = normalizeExecutionChoiceBag({
   selectedId: "e1",
 });
 assert(selectedExecutionChoiceText(selectedBag) === sleepOptions[0].text, "CASE D：選中全文成為最小一步");
-assert(app.includes('markableP(chosen, "exec.smallestStep"'), "CASE D：選中後直接顯示明天最小的一步");
+assert(app.includes('markableP(chosen, field, "exec-step-list__text", date)'), "CASE D：選中後顯示明天的行動 list");
+assert(app.includes("明天，我先做到這些"), "CASE D：preview 標題改成明天我先做到這些");
+assert(app.includes("alignExecChoiceCheckItems"), "CASE D：收下後依選中行動各自成卡");
+assert(app.includes("addExecutionCheckItemsToSidebar"), "CASE D：收下後寫入獨立 task");
 assert(app.includes("usingExecChoices") && app.includes("no follow-up Q&A after a selected action"), "CASE E：選完不再追問");
 assert(html.includes("那你想為明天留下一個什麼小行動？") || app.includes("那你想為明天留下一個什麼小行動？"), "CASE F：自訂才出提示");
 
@@ -120,7 +143,9 @@ assert(html.includes("收下我的行動卡"), "CASE J：CTA 改收下");
 
 /* CASE K：新版歷史只顯示選中的 */
 assert(app.includes("if (hasMeaningfulExecutionChoices(journal.executionChoices)) return []"), "CASE K：新版不渲染未選 options／舊 Q&A");
-assert(app.includes("execChosen"), "CASE K：歷史用最後選中的一步");
+assert(app.includes("execChosen"), "CASE K：歷史仍能讀舊單選");
+assert(app.includes("execHasNewMulti"), "CASE K：歷史優先新多選");
+assert(app.includes("execStepActionsHtml"), "CASE K：新資料用編號 list");
 
 /* CASE L：舊 Q&A fallback */
 assert(app.includes("historyQaHtml(question, `exec.prompt.${index}.question`"), "CASE L：舊問題／回答仍可顯示");
