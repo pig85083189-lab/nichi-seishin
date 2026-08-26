@@ -4400,23 +4400,20 @@ body[data-journal-mode="quick"] #section-body,
 body[data-journal-mode="quick"] #section-aware,
 body[data-journal-mode="quick"] #section-exec,
 body[data-journal-mode="quick"] #section-insight,
-body[data-journal-mode="quick"] #section-deep,
-body[data-journal-mode="quick"] #section-manifest {
+body[data-journal-mode="quick"] #section-deep {
   display: none !important;
 }
 
 body[data-journal-mode="quick"][data-quick-body="on"] #section-body,
 body[data-journal-mode="quick"][data-quick-aware="on"] #section-aware,
-body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec,
-body[data-journal-mode="quick"][data-quick-manifest="on"] #section-manifest {
+body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec {
   display: block !important;
   animation: quickModIn 0.28s ease;
 }
 
 body[data-journal-mode="quick"][data-quick-body="on"] #section-body .js-deep-only:not([hidden]),
 body[data-journal-mode="quick"][data-quick-aware="on"] #section-aware .js-deep-only:not([hidden]),
-body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-deep-only:not([hidden]),
-body[data-journal-mode="quick"][data-quick-manifest="on"] #section-manifest .js-deep-only:not([hidden]) {
+body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-deep-only:not([hidden]) {
   display: revert !important;
 }
 
@@ -5072,6 +5069,7 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
 }
 
 #section-manifest {
+  display: none !important;
   overflow-x: hidden;
 }
 
@@ -7539,6 +7537,13 @@ summary [data-user-mark-field] {
   background: var(--cream);
   border-color: var(--accent);
   color: var(--header);
+}
+
+.journal-footer__done {
+  margin: 0 0 4px;
+  color: var(--heading);
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .journal-footer__note {

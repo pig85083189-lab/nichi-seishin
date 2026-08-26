@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=186" />
+    <link rel="stylesheet" href="app.css?v=187" />
     <style>
       .splash {
         position: fixed;
@@ -143,12 +143,6 @@
               <path d="M4.5 20.5a7.5 7.5 0 0 1 15 0" />
             </svg>
             <span>執行力</span>
-          </a>
-          <a class="side-item" data-page="manifest" href="#vision">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 3l1.7 4.8L18.5 9.5l-4.2 3 1.2 5L12 15.2 8.5 17.5l1.2-5L5.5 9.5l4.8-1.7L12 3z" />
-            </svg>
-            <span>顯化力</span>
           </a>
           <a class="side-item" data-page="history" href="#history">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -264,7 +258,7 @@
               </button>
               <button class="journal-mode__btn is-on" data-journal-mode="deep" type="button" role="tab" aria-selected="true">
                 <strong>🌙 深度復盤</strong>
-                <span>10–15 分鐘 · 完整七大模組</span>
+                <span>10–15 分鐘 · 完整 01～06</span>
               </button>
             </div>
           </div>
@@ -385,7 +379,6 @@
               <button class="quick-mod" data-quick-mod="body" type="button" aria-pressed="false">身體覺察</button>
               <button class="quick-mod" data-quick-mod="aware" type="button" aria-pressed="false">覺察力</button>
               <button class="quick-mod" data-quick-mod="exec" type="button" aria-pressed="false">執行力</button>
-              <button class="quick-mod" data-quick-mod="manifest" type="button" aria-pressed="false">顯化力</button>
             </div>
               </div>
             </div>
@@ -664,7 +657,7 @@
             </div>
           </section>
 
-          <section class="journal-card journal-fold" id="section-manifest">
+          <section class="journal-card journal-fold" id="section-manifest" hidden>
             <button class="journal-fold__toggle" type="button" data-journal-fold aria-expanded="false" aria-controls="manifestFoldPanel">
               <span class="journal-fold__copy">
                 <h2 class="journal-card__title"><span>07</span> 顯化力</h2>
@@ -743,7 +736,8 @@
               <button class="btn btn--wide" id="btnCompleteToday" type="button">完成今日復盤</button>
               <button class="btn btn--outline" id="btnSaveDraft" type="button">儲存草稿</button>
             </div>
-            <p class="journal-footer__note">✨ 不用完美，只要比昨天更認識自己一點。</p>
+            <p class="journal-footer__done">今天的復盤完成了。</p>
+            <p class="journal-footer__note">看見自己，也留下明天真正做得到的一步。</p>
           </div>
 
           <section class="ai-stage" id="aiStage" aria-live="polite"></section>
@@ -885,7 +879,7 @@
             <ol class="guide-start-list">
               <li><strong>寫下一件感謝的事</strong>一個人、一件小事，或一個讓你覺得還好有它的瞬間。</li>
               <li><strong>記下今天最有感的一件事</strong>再選現在最接近的心情：開心、平靜、生氣、難過。</li>
-              <li><strong>選一個你現在最想探索的功能</strong>身體、覺察、執行、深度思考、顯化，從最有感覺的那一塊開始。</li>
+              <li><strong>選一個你現在最想探索的功能</strong>身體、覺察、執行、深度思考，從最有感覺的那一塊開始。</li>
             </ol>
           </article>
 
@@ -894,19 +888,19 @@
             <h3 class="guide-step__title">三個步驟，就夠開始</h3>
             <ol class="guide-start-list">
               <li><strong>登入帳號</strong>用 Google 登入後，紀錄會跟著你，換手機也能繼續看。</li>
-              <li><strong>從 01～07 開始記錄</strong>忙碌時走「快速復盤」；想慢慢想，再走「深度復盤」。</li>
+              <li><strong>從 01～06 開始記錄</strong>忙碌時走「快速復盤」；想慢慢想，再走「深度復盤」。</li>
               <li><strong>回到歷史，看見自己的變化</strong>寫過的日子、AI 整理，還有當天標出的重點，都會留在這裡。</li>
             </ol>
             <div class="guide-mode-grid">
               <article class="guide-mode">
                 <p class="guide-mode__tag">時間有限</p>
                 <h4>⚡ 快速復盤</h4>
-                <p>大約 3～5 分鐘。寫感謝、事件與心情就好。想加強時，再加選身體覺察、覺察力、執行力或顯化力。</p>
+                <p>大約 3～5 分鐘。寫感謝、事件與心情就好。想加強時，再加選身體覺察、覺察力或執行力。</p>
               </article>
               <article class="guide-mode guide-mode--deep">
                 <p class="guide-mode__tag">想慢慢想</p>
                 <h4>🌙 深度復盤</h4>
-                <p>大約 10～15 分鐘。一次展開 01～07，適合週末、心情波動，或今天有卡點想好好看一眼。</p>
+                <p>大約 10～15 分鐘。一次展開 01～06，適合週末、心情波動，或今天有卡點想好好看一眼。</p>
               </article>
             </div>
           </article>
@@ -919,7 +913,6 @@
             <button class="guide-toc__item" type="button" data-guide-jump="guide-04"><span>04</span>深度</button>
             <button class="guide-toc__item" type="button" data-guide-jump="guide-05"><span>05</span>覺察</button>
             <button class="guide-toc__item" type="button" data-guide-jump="guide-06"><span>06</span>執行</button>
-            <button class="guide-toc__item" type="button" data-guide-jump="guide-07"><span>07</span>顯化</button>
             <button class="guide-toc__item" type="button" data-guide-jump="guide-mark"><span>筆</span>重點</button>
             <button class="guide-toc__item" type="button" data-guide-jump="guide-history"><span>史</span>歷史</button>
             <button class="guide-toc__item" type="button" data-guide-jump="guide-sync"><span>雲</span>同步</button>
@@ -930,94 +923,49 @@
               <span class="guide-step__num" aria-hidden="true">01</span>
               <div class="guide-step__body">
                 <p class="guide-step__label">今日感謝</p>
-                <h3 class="guide-step__title">把今天還好有它的瞬間留下來</h3>
-                <p class="guide-step__text">在同一格裡自由寫。可以是一個人、一件小事，或一個讓你覺得幸福的瞬間。換行就能繼續下一件。</p>
-                <ul class="guide-points">
-                  <li>不用寫得很完整，想到什麼就留下什麼。</li>
-                  <li>後面的 AI 會讀你今天真正寫下的內容，再陪你往下想。</li>
-                </ul>
+                <h3 class="guide-step__title">留下今天值得感謝的片刻</h3>
+                <p class="guide-step__text">留下今天值得感謝的片刻。</p>
               </div>
             </li>
             <li class="guide-step" id="guide-02">
               <span class="guide-step__num" aria-hidden="true">02</span>
               <div class="guide-step__body">
-                <p class="guide-step__label">今日事件與心情</p>
-                <h3 class="guide-step__title">先寫被碰到的那件事，再點現在的心情</h3>
-                <p class="guide-step__text">不管是開心、生氣還是難過，都先把當時發生的事寫下來。然後選一個最接近現在的心情。</p>
-                <ul class="guide-points">
-                  <li>四種心情：開心、平靜、生氣、難過。</li>
-                  <li>快速復盤這裡會寫成「今日事件與心情」；深度復盤則先寫事件，心情也在這一區點選。</li>
-                </ul>
+                <p class="guide-step__label">今日事件</p>
+                <h3 class="guide-step__title">記下今天真正碰到你的事情與感受</h3>
+                <p class="guide-step__text">記下今天真正碰到你的事情與感受。</p>
               </div>
             </li>
             <li class="guide-step" id="guide-03">
               <span class="guide-step__num" aria-hidden="true">03</span>
               <div class="guide-step__body">
                 <p class="guide-step__label">身體覺察</p>
-                <h3 class="guide-step__title">不只是記錄，也慢慢看懂身體在說什麼</h3>
-                <p class="guide-step__text">用三個檢核，把心情、身體與睡眠放在一起看。有感覺的地方都可以選，需要時再補一句原因。</p>
-                <ul class="guide-points">
-                  <li>今日的心情：焦慮、煩躁、平靜、愉快。</li>
-                  <li>身體狀況：腸胃不適、頭痛、全身痠痛、身體疲勞，或其他感受。</li>
-                  <li>昨晚睡得如何：睡眠時間、睡眠品質、起床精神。</li>
-                  <li>點「看看今天的身心建議」後，AI 會整理今日身心小結：今天的身心訊號、值得留意的地方，以及今晚可以怎麼照顧自己。</li>
-                </ul>
+                <h3 class="guide-step__title">快速看看今天的心情、身體與睡眠狀態</h3>
+                <p class="guide-step__text">快速看看今天的心情、身體與睡眠狀態。</p>
               </div>
             </li>
             <li class="guide-step" id="guide-04">
               <span class="guide-step__num" aria-hidden="true">04</span>
               <div class="guide-step__body">
                 <p class="guide-step__label">深度思考</p>
-                <h3 class="guide-step__title">勾選「這件事背後代表什麼」，不必再打字</h3>
-                <p class="guide-step__text">系統會根據今天的感謝、事件與身體紀錄，整理幾個更深一層的方向。你只要勾出最有感的，不需要寫長篇答案。</p>
-                <ul class="guide-points">
-                  <li>這裡問的是意義：我在意的價值、反覆出現的模式、真正害怕或珍惜的是什麼。</li>
-                  <li>最多勾 2 個，也可以都不勾，或選「今天沒有特別符合我的選項」。</li>
-                  <li>不必再寫三輪問答，也不會連續追問。</li>
-                  <li>再點「整理今天的深度看見」，會留下今日深度看見、今天我看見的自己，以及帶走的一句話。</li>
-                </ul>
+                <h3 class="guide-step__title">看見事情背後更深一層的意義</h3>
+                <p class="guide-step__text">從今天的記錄裡，看見事情背後更深一層的意義。</p>
               </div>
             </li>
             <li class="guide-step" id="guide-05">
               <span class="guide-step__num" aria-hidden="true">05</span>
               <div class="guide-step__body">
                 <p class="guide-step__label">覺察力</p>
-                <h3 class="guide-step__title">把前面的感受收成「核心覺察＋我看見了」</h3>
-                <p class="guide-step__text">經過今天的事情與深度思考後，點「開始今天的覺察」。會長出幾個「我看見了自己什麼」的選項。</p>
-                <ul class="guide-points">
-                  <li>這裡只問當下的自己：需要、反應、習慣、情緒。</li>
-                  <li>最多勾 2 個，也可以都不勾，或選「今天沒有特別符合我的選項」。</li>
-                  <li>再點「看見今天的覺察」，會收成兩句：核心覺察，以及一句「我看見了」。</li>
-                  <li>不再追問，也不做長篇分析。</li>
-                </ul>
+                <h3 class="guide-step__title">收成「核心覺察＋我看見了」</h3>
+                <p class="guide-step__text">把前面的感受與深度思考收成「核心覺察＋我看見了」。</p>
               </div>
             </li>
             <li class="guide-step" id="guide-06">
               <span class="guide-step__num" aria-hidden="true">06</span>
               <div class="guide-step__body">
                 <p class="guide-step__label">執行力</p>
-                <h3 class="guide-step__title">把今天的覺察，變成明天做得到的一小步</h3>
-                <p class="guide-step__text">把今天的覺察變成明天做得到的一小步。系統會整理幾個具體方向，你可以選 1～3 件最想先做到的；如果都不適合，也可以自己寫。</p>
-                <ul class="guide-points">
-                  <li>點「開始今天的行動整理」，會依 04、05 的看見，整理 3 個明天做得到的小行動。</li>
-                  <li>可以選 1～3 件，就會成為「明天，我先做到這些」；若都不適合，再自己寫。</li>
-                  <li>再點「收下我的行動卡」。每一件都會各自成為一張行動卡，做完就勾起來。</li>
-                  <li>勾選的行動卡，完成復盤後會進到側邊欄「執行力」，方便之後追蹤。</li>
-                </ul>
-              </div>
-            </li>
-            <li class="guide-step" id="guide-07">
-              <span class="guide-step__num" aria-hidden="true">07</span>
-              <div class="guide-step__body">
-                <p class="guide-step__label">顯化力</p>
-                <h3 class="guide-step__title">把想去的地方，拆成可以做到的步驟</h3>
-                <p>告訴我你想去哪裡，我幫你把它變成一條可以一步一步走的路。</p>
-                <ul class="guide-points">
-                  <li>先寫下「我想顯化的是」。</li>
-                  <li>點「幫我拆成可以做到的步驟」，會整理成 3～6 個具體行動。</li>
-                  <li>每一步都可以打勾完成；需要時，再把其中一步放進側邊欄「執行力」。</li>
-                  <li>完成的步驟會留在側邊欄「顯化力」，讓你看見自己正在靠近哪一種生活。</li>
-                </ul>
+                <h3 class="guide-step__title">留下明天真正做得到的行動</h3>
+                <p class="guide-step__text">把覺察變成下一步，不求做很多，只留下明天真正做得到的行動。</p>
+                <p class="guide-step__text">完成 01～06，就是一次完整的今日復盤。</p>
               </div>
             </li>
           </ol>
@@ -1048,9 +996,9 @@
             <h3 class="guide-step__title">歷史紀錄不是備份，是把那天真正看見的留下來</h3>
             <p class="guide-step__text">完成復盤後，側邊欄「歷史紀錄」會出現當天的摘要標題。點開再讀完整內容。</p>
             <ul class="guide-points">
-                  <li>可以看到：當天記錄、身心小結、深度勾選、覺察勾選、執行、顯化，以及當天自動標出的重點與自己畫下的重點。舊的三輪問答若還在，也會繼續顯示。</li>
+                  <li>可以看到：當天記錄、身心小結、深度勾選、覺察勾選、執行，以及當天自動標出的重點與自己畫下的重點。若舊日曾有顯化紀錄，也會繼續顯示。</li>
               <li>每張卡片上方會有當天的一句摘要，也能用搜尋或標籤快速找到某一天。</li>
-              <li>側邊欄「覺察力」「執行力」「顯化力」會收集你勾選留下的內容，方便之後回頭看。</li>
+              <li>側邊欄「覺察力」「執行力」會收集你勾選留下的內容，方便之後回頭看。</li>
               <li>「週月報」用圖表看見這段時間的節奏，再用文字點出閃光點與突破口。</li>
             </ul>
           </article>
@@ -1093,7 +1041,7 @@
             <p class="pricing-card__desc">不綁約，隨時可取消，享有 30 天免費完整體驗。</p>
             <ul class="pricing-card__list">
               <li>每日復盤無限暢用</li>
-              <li>動態生成（覺察力、執行力、顯化力）</li>
+              <li>動態生成（覺察力、執行力）</li>
               <li>週月報與個人資料庫</li>
             </ul>
             <button class="pricing-card__cta" type="button" data-plan="monthly" data-plan-cta>開始試用</button>
@@ -1157,7 +1105,7 @@
         <div class="paywall__card js-lock-guest" role="dialog" aria-labelledby="paywallGuestTitle" aria-modal="true">
           <p class="paywall__kicker">30 天完整免費試用</p>
           <h2 class="paywall__title" id="paywallGuestTitle">先登入，再把日子寫下來</h2>
-          <p class="paywall__copy">請先使用 Google 登入，即可解鎖 30 天完整免費試用。今日感謝、事件、深度思考、覺察、執行與顯化都會為你打開。</p>
+          <p class="paywall__copy">請先使用 Google 登入，即可解鎖 30 天完整免費試用。今日感謝、事件、深度思考、覺察與執行都會為你打開。</p>
           <button class="paywall__btn paywall__btn--primary paywall__btn--google" type="button" data-google-login>
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
               <path fill="#4285F4" d="M22.6 12.25c0-.8-.07-1.57-.2-2.31H12v4.37h5.95a5.08 5.08 0 0 1-2.2 3.34v2.77h3.56c2.08-1.92 3.29-4.75 3.29-8.17Z" />
@@ -1225,6 +1173,6 @@
     <script src="lib/history-summary.js?v=5"></script>
     <script src="lib/insight-highlight.js?v=5"></script>
     <script src="lib/user-mark.js?v=6"></script>
-    <script src="app.js?v=217"></script>
+    <script src="app.js?v=218"></script>
   </body>
 </html>

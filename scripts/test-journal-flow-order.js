@@ -39,8 +39,9 @@ assert(
       "section-exec",
       "section-manifest",
     ]),
-  "CASE A：今日 DOM 順序必須是 01–03 → 深度 → 覺察 → 執行 → 顯化"
+  "CASE A：相容 DOM 順序仍是 01–06 後接隱藏的舊 07"
 );
+assert(/id="section-manifest"\s+hidden/.test(html), "CASE A：07 區塊 hidden，不進今日主流程");
 
 const foldMatch = app.match(/const JOURNAL_FOLD_IDS = \[([\s\S]*?)\];/);
 assert(foldMatch, "JOURNAL_FOLD_IDS 必須存在");
@@ -50,9 +51,10 @@ const foldCore = foldIds.filter((id) =>
 );
 assert(
   JSON.stringify(foldCore) ===
-    JSON.stringify(["section-body", "section-insight", "section-deep", "section-aware", "section-exec", "section-manifest"]),
-  "fold 順序必須跟著新流程"
+    JSON.stringify(["section-body", "section-insight", "section-deep", "section-aware", "section-exec"]),
+  "fold 順序以 06 執行力為最後一站"
 );
+assert(!foldIds.includes("section-manifest"), "JOURNAL_FOLD_IDS 不再含 section-manifest");
 
 assert(html.includes("<span>04</span> 深度思考"), "畫面 04 是深度思考");
 assert(html.includes("<span>05</span> 覺察力") || html.includes("<span>05</span>覺察"), "畫面 05 是覺察力");
@@ -115,15 +117,19 @@ assert(app.includes("function generateExecutionChoices"), "新版 06 走 executi
 
 assert(MANIFEST_PROMPTS_SYSTEM.includes("最多 2 題"), "CASE I：舊 07 prompts 路徑仍最多 2 題");
 assert(MANIFEST_CLOSE_SYSTEM.includes("futureVision"), "CASE I：舊 close 路徑仍保留");
-assert(MANIFEST_PLAN_SYSTEM.includes("3 到 6 個具體步驟") || MANIFEST_PLAN_SYSTEM.includes("3 到 6"), "CASE I：新 07 拆步驟");
-assert(MANIFEST_PLAN_SYSTEM.includes("不要再問問題") || MANIFEST_PLAN_SYSTEM.includes("不要問問題"), "CASE I：07 不再問句");
-assert(app.includes("generateManifestPlan"), "CASE I：正式 07 走 plan 流程");
-assert(html.includes("幫我拆成可以做到的步驟"), "CASE I：07 CTA 已改");
-assert(app.includes("priorThinkAwareContext(journal)"), "CASE I：07 可讀前面已完成資料");
+assert(MANIFEST_PLAN_SYSTEM.includes("3 到 6 個具體步驟") || MANIFEST_PLAN_SYSTEM.includes("3 到 6"), "CASE I：舊 plan prompt 仍保留相容");
+assert(app.includes("generateManifestPlan"), "CASE I：舊 generateManifestPlan 仍保留");
+assert(app.includes("function dailyManifestUiEnabled"), "CASE I：每日 07 UI 已停用開關");
+assert(/function dailyManifestUiEnabled\(\) \{\s*return false;/.test(app), "CASE I：每日 07 UI 關閉");
+assert(!html.includes("guide-07"), "CASE I：使用說明不再有 07");
+assert(app.includes("priorThinkAwareContext(journal)"), "CASE I：舊 07 runtime 仍可讀前面資料");
 
 assert(app.includes('"④ 深度思考"'), "CASE J：歷史 04 是深度思考");
 assert(app.includes('"⑤ 覺察力"'), "CASE J：歷史 05 是覺察力");
 assert(app.includes('"⑥ 執行力"'), "CASE J：歷史 06 是執行力");
+assert(app.includes('"顯化紀錄"'), "CASE J：舊顯化改標顯化紀錄，不再當 07");
+assert(!app.includes('"⑦ 顯化力"'), "CASE J：歷史不再編號 07");
+assert(app.includes("function journalHasManifestHistory"), "CASE J：新資料沒有 manifest 就不渲染空 07");
 assert(app.includes("historyDeepThinkingView") || app.includes("renderHistoryDeepThinking"), "CASE K：舊深度 fallback 仍在");
 assert(app.includes("isCompactAwarenessResult") && app.includes("我可能忽略的地方"), "CASE L：舊四層 awareness 仍 fallback");
 

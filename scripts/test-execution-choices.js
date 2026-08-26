@@ -204,10 +204,10 @@ assert(!/UPDATE\s+reviews/i.test(app), "CASE U：沒有批次 UPDATE 舊 reviews
 assert(app.includes("executionPrompts"), "CASE U：舊 executionPrompts key 仍在");
 assert(app.includes("smallestStep"), "CASE U：smallestStep key 仍在");
 
-/* CASE V：07 沒被破壞 */
-assert(MANIFEST_PROMPTS_SYSTEM.includes("06 執行力") || app.includes("section-manifest"), "CASE V：07 仍在");
-assert(app.includes("priorThinkAwareContext(journal)"), "CASE V：07 仍可讀前面資料");
-assert(html.includes("guide-07"), "CASE V：使用說明 07 仍在");
+/* CASE V：06 不承擔顯化；07 已退出正式流程 */
+assert(app.includes("section-manifest"), "CASE V：舊 07 DOM／runtime 相容仍在");
+assert(app.includes("priorThinkAwareContext(journal)"), "CASE V：舊 07 runtime 仍可讀前面資料");
+assert(!html.includes("guide-07"), "CASE V：使用說明不再有 07");
 assert(EXECUTION_CHOICES_SYSTEM.includes("那些是 07 顯化力"), "CASE V：06 明確不寫願景");
 
 /* Analytics 仍認 action card，並能辨識新事件 */
@@ -221,7 +221,7 @@ assert(analyticsServer.includes("action_card_created"), "server 完成率事件�
 assert(choicesKind({ kind: "execution-choices" }) === "execution", "choicesKind 認得 execution");
 assert(hasMeaningfulExecutionChoices(emptyExecutionChoiceBag()) === false, "空 bag 不算有內容");
 
-assert(html.includes("把今天的覺察變成明天做得到的一小步"), "使用說明已改成選行動，不是回答問題");
+assert(html.includes("把覺察變成下一步，不求做很多，只留下明天真正做得到的行動。"), "使用說明 06 是行動，不是問答");
 assert(!html.includes("AI 會依今天的內容問你 1 題"), "使用說明不再寫舊問答");
 
 console.log("execution choices tests passed");

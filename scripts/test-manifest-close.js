@@ -74,10 +74,14 @@ assert(app.includes("我正在靠近的生活"), "CASE M：舊 close history 仍
 
 assert(css.includes(".journal-split--manifest"), "CASE N：07 單欄");
 assert(css.includes("#section-manifest") && css.includes("overflow-x: hidden"), "CASE N：無橫向溢出");
+assert(/#section-manifest\s*\{[^}]*display:\s*none\s*!important/.test(css), "CASE N：正式流程隱藏 07");
 assert(!/#section-manifest[\s\S]{0,500}-webkit-line-clamp/.test(css), "CASE N：07 不 clamp");
 assert(css.includes("max-width: 800px"), "CASE O：Desktop lib 仍約 800");
 
-assert(html.includes('id="section-thanks"') && html.includes('id="section-exec"'), "CASE P：01～06 DOM 仍在");
+assert(app.includes("function dailyManifestUiEnabled"), "每日 07 UI 已停用");
+assert(/if \(!dailyManifestUiEnabled\(\)\) return;/.test(app), "generate／新寫入會被 dailyManifestUiEnabled 擋住");
+assert(!html.includes("guide-07"), "使用說明不再有 07");
+assert(!html.includes('data-page="manifest" href="#vision"'), "Sidebar 不再有顯化力入口");
 assert(app.includes("selectedIds") && app.includes("可以選 1～3 件") || html.includes("1～3"), "CASE Q：06 多選文案仍在");
 assert(html.includes('id="page-sfm"'), "CASE R：Sidebar 執行力頁仍在");
 assert(app.includes("renderCombinedHighlightedText"), "CASE S：AI highlight 仍在");

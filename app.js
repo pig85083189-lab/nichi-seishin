@@ -4122,7 +4122,7 @@ const HASH_PAGE = {
   reports: "report",
   actions: "next",
   me: "sfm",
-  vision: "manifest",
+  vision: "today",
   history: "history",
   guide: "guide",
 };
@@ -4227,6 +4227,11 @@ function backToHistoryList() {
 
 function applyAppLocation() {
   if (state.historyHashSync) return;
+  const raw = String(location.hash || "").replace(/^#/, "").trim();
+  if (raw === "vision") {
+    switchPage("today", { replaceHash: true });
+    return;
+  }
   const loc = parseAppHash();
   if (!loc.page) return;
   if (loc.page === "history" && loc.date) {
@@ -4244,6 +4249,7 @@ function applyAppLocation() {
 
 function switchPage(page, options = {}) {
   if (!page) return;
+  if (page === "manifest") page = "today";
   if (page !== "history" || !options.keepDetail) {
     state.historyDetailDate = "";
     state.historyOpen = "";
@@ -4309,7 +4315,7 @@ function tourSteps() {
     {
       popover: {
         title: "歡迎來到日精進",
-        description: "這是一份互動式導覽。接下來會帶你走過日期切換、01 到 07 的復盤與洞察，再到側邊欄各頁。完整文字手冊在「使用說明」。隨時可以按「略過導覽」。",
+        description: "這是一份互動式導覽。接下來會帶你走過日期切換、01 到 06 的復盤與洞察，再到側邊欄各頁。完整文字手冊在「使用說明」。隨時可以按「略過導覽」。",
         side: "over",
         align: "center",
       },
@@ -4397,20 +4403,11 @@ function tourSteps() {
       },
     },
     {
-      element: "#section-manifest",
-      tourPage: "today",
-      popover: {
-        title: "07 顯化力",
-        description: "寫下真正想靠近的生活，再拆成可以一步一步做到的步驟。完成的步驟會留在側邊欄「顯化力」。",
-        side: "top",
-      },
-    },
-    {
       element: "#journalFooter",
       tourPage: "today",
       popover: {
         title: "完成今日復盤",
-        description: "寫完、勾完就按這裡。草稿可先儲存；完成後，勾選的覺察、行動與顯化步驟會同步到側邊欄。",
+        description: "寫完、勾完就按這裡。草稿可先儲存；完成後，勾選的覺察與行動會同步到側邊欄。",
         side: "top",
       },
     },
@@ -4420,7 +4417,7 @@ function tourSteps() {
       tourSidebar: true,
       popover: {
         title: "今日復盤",
-        description: "每天從這裡開始。側邊欄這一項會帶你回到剛才走完的 01 到 07。",
+        description: "每天從這裡開始。側邊欄這一項會帶你回到剛才走完的 01 到 06。",
         side: "right",
       },
     },
@@ -4451,16 +4448,6 @@ function tourSteps() {
       popover: {
         title: "執行力",
         description: "復盤裡打勾的行動卡會匯集到這裡。可用進行中、待辦、已完成來整理，還沒想做的就移到待辦。",
-        side: "right",
-      },
-    },
-    {
-      element: '.side-item[data-page="manifest"]',
-      tourPage: "manifest",
-      tourSidebar: true,
-      popover: {
-        title: "顯化力",
-        description: "復盤裡勾選的顯化目標會匯集到這裡。可用進行中、待辦、已完成來整理，還沒想推進的就移到待辦。",
         side: "right",
       },
     },
@@ -4803,6 +4790,10 @@ function renderThanksFields(journalOrValues) {
   field.value = thanksItemsFrom(journalOrValues).join("\n");
 }
 
+function dailyManifestUiEnabled() {
+  return false;
+}
+
 function emptyQuickModules() {
   return { body: false, aware: false, exec: false, manifest: false };
 }
@@ -4839,13 +4830,13 @@ function syncQuickModules(mods = state.quickModules) {
 }
 
 function toggleQuickModule(key) {
-  if (state.journalMode !== "quick" || !["body", "aware", "exec", "manifest"].includes(key)) return;
+  if (state.journalMode !== "quick" || !["body", "aware", "exec"].includes(key)) return;
   const next = { ...normalizeQuickModules(state.quickModules), [key]: !state.quickModules?.[key] };
   syncQuickModules(next);
   persistJournalQuietly();
   const journal = collectJournal();
   if (next[key]) {
-    const sectionId = { body: "section-body", aware: "section-aware", exec: "section-exec", manifest: "section-manifest" }[key];
+    const sectionId = { body: "section-body", aware: "section-aware", exec: "section-exec" }[key];
     setJournalFoldOpen(sectionId, true, { manual: true });
   } else {
     if (key === "aware") state.awareFoldPinned = false;
@@ -4853,7 +4844,6 @@ function toggleQuickModule(key) {
   }
   if (next.aware || next.exec) maybeAutoGenerateCorePrompts(journal);
   if (next.body) maybeAutoGenerateBodyCoach(journal);
-  if (next.manifest) maybeAutoGenerateManifest(journal);
   maybeAutoGenerateInsight(journal);
 }
 
@@ -6504,6 +6494,7 @@ async function generateJournalChecklist(kind, options = {}) {
   if (kind === "execution") setJournalFoldOpen("section-exec", true, { manual: true });
   if (kind === "awareness") pinAwareFold();
   if (kind === "manifest") {
+    if (!dailyManifestUiEnabled()) return;
     await generateManifestClose(options);
     return;
   }
@@ -7311,10 +7302,13 @@ function persistManifestPlan(plan, sig) {
   }
   renderJournalManifestResult();
   persistJournalQuietly();
-  upsertManifestPlanToSidebar(currentIso(), { manifest: journalFieldValue("manifestVision"), manifestPlan: next });
+  if (dailyManifestUiEnabled()) {
+    upsertManifestPlanToSidebar(currentIso(), { manifest: journalFieldValue("manifestVision"), manifestPlan: next });
+  }
 }
 
 async function generateManifestPlan(options = {}) {
+  if (!dailyManifestUiEnabled()) return;
   if (!options.auto) setJournalFoldOpen("section-manifest", true, { manual: true });
   if (state.manifestPromptsBusy && !options.force) {
     if (!options.auto) showToast("還在整理可以靠近的步驟，請稍候。");
@@ -7379,6 +7373,7 @@ async function generateManifestPlan(options = {}) {
 }
 
 function toggleManifestPlanStep(stepId, completed) {
+  if (!dailyManifestUiEnabled()) return;
   const plan = normalizeManifestPlan(state.journalManifestPlan);
   const next = {
     ...plan,
@@ -7388,6 +7383,7 @@ function toggleManifestPlanStep(stepId, completed) {
 }
 
 function addManifestStepToExec(stepId) {
+  if (!dailyManifestUiEnabled()) return;
   const plan = normalizeManifestPlan(state.journalManifestPlan);
   const step = plan.steps.find((item) => item.id === stepId);
   if (!step) return;
@@ -7422,6 +7418,7 @@ async function generateManifestClose(options = {}) {
 }
 
 function addManifestApproachToExec() {
+  if (!dailyManifestUiEnabled()) return;
   const close = normalizeManifestCloseBag(state.journalManifestClose);
   const title = String(close.approachStep || "").trim();
   if (!title) return;
@@ -7448,6 +7445,7 @@ function addManifestApproachToExec() {
 }
 
 function acceptManifestClose() {
+  if (!dailyManifestUiEnabled()) return;
   const close = normalizeManifestCloseBag(state.journalManifestClose);
   if (!hasManifestCloseContent(close)) {
     showToast("先看見正在靠近的未來，再收下今天的顯化。");
@@ -10743,7 +10741,6 @@ const JOURNAL_FOLD_IDS = [
   "section-deep",
   "section-aware",
   "section-exec",
-  "section-manifest",
   "section-quick-insight",
 ];
 
@@ -10758,7 +10755,7 @@ function journalFoldIsActive(id) {
   if (id === "section-body") return Boolean(state.quickModules?.body);
   if (id === "section-aware") return Boolean(state.quickModules?.aware);
   if (id === "section-exec") return Boolean(state.quickModules?.exec);
-  if (id === "section-manifest") return Boolean(state.quickModules?.manifest);
+  if (id === "section-manifest") return false;
   return true;
 }
 
@@ -11000,7 +10997,8 @@ function applyJournalFolds() {
   const prefs = journalFoldPrefs();
   const visible = JOURNAL_FOLD_IDS.filter(journalFoldIsActive);
   const editingId = editingJournalFoldId();
-  let openId = visible.includes(prefs.open) ? prefs.open : "";
+  const preferred = prefs.open === "section-manifest" ? "section-exec" : prefs.open;
+  let openId = visible.includes(preferred) ? preferred : "";
   if (editingId && visible.includes(editingId)) openId = editingId;
   if (state.awareFoldPinned && visible.includes("section-aware")) openId = "section-aware";
   JOURNAL_FOLD_IDS.forEach((id) => {
@@ -13401,6 +13399,17 @@ function renderHistoryDeepThinking(review) {
   return html;
 }
 
+function journalHasManifestHistory(journal) {
+  if (!journal || typeof journal !== "object") return false;
+  if (journalUsesManifestPlan(journal) || journalUsesManifestClose(journal)) return true;
+  if (String(journal.manifest || "").trim()) return true;
+  if (String(journal.manifestSentence || "").trim()) return true;
+  if ((journal.manifestThink || []).some((item) => String(item || "").trim())) return true;
+  if ((journal.manifestChecks || []).some((item) => String(item || "").trim())) return true;
+  if (normalizeManifestPathItems(journal.manifestCheckItems).some((item) => String(item && item.title || "").trim())) return true;
+  return false;
+}
+
 function historyManifestBlocks(journal, historyIso) {
   if (journalUsesManifestPlan(journal)) {
     const plan = normalizeManifestPlan(journal.manifestPlan);
@@ -13681,11 +13690,9 @@ function renderHistoryJournal(review) {
           : "",
       ],
     ],
-    [
-      "⑦ 顯化力",
-      "manifest",
-      historyManifestBlocks(journal, historyIso),
-    ],
+    ...(journalHasManifestHistory(journal)
+      ? [["顯化紀錄", "manifest", historyManifestBlocks(journal, historyIso)]]
+      : []),
   ], historyIso);
 
   if (!parts) {

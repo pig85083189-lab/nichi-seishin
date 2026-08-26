@@ -110,8 +110,8 @@ assert(app.includes("userMark") || html.includes("lib/user-mark.js"), "CASE L：
 const fn = integrity.slice(integrity.indexOf("function splitTitleDetail"), integrity.indexOf("return {", integrity.indexOf("function splitTitleDetail")));
 assert(!/\.slice\(\s*0\s*,\s*\d+\s*\)/.test(fn), "CASE O：parser 沒有硬截字數");
 assert(!/\.substring\(\s*0\s*,\s*\d+\s*\)/.test(fn), "CASE O：沒有 substring 硬切");
-assert(app.includes("selectedIds") && html.includes("可以選 1～3 件"), "CASE P：06 多選文案仍在");
-assert(html.includes("id=\"section-manifest\"") && app.includes("generateManifestPlan"), "CASE Q：07 仍在");
+assert(app.includes("selectedIds") && app.includes("可以選 1～3 件"), "CASE P：06 多選文案仍在");
+assert(html.includes("id=\"section-manifest\"") && app.includes("generateManifestPlan"), "CASE Q：舊 07 相容層仍在");
 assert(html.includes('id="page-sfm"') && app.includes("function renderTasks()"), "CASE R：Sidebar 執行力未改入口");
 assert(!app.includes("CREATE TABLE") && !app.includes("ALTER TABLE"), "CASE S：無 schema migration");
 assert(review.includes("splitTitleDetail"), "API splitChecklistTitle 改走同一套 parser");
@@ -119,7 +119,7 @@ assert(!/function splitTaskText\([\s\S]{0,180}search\(\/\[：:\]\/\)/.test(app),
 assert(!/function splitChecklistTitle\([\s\S]{0,180}search\(\/\[：:\]\/\)/.test(review), "API 不再用第一個冒號硬拆");
 assert(css.includes("overflow-wrap: anywhere"), "CASE N：長句可換行");
 assert(html.includes("lib/text-integrity.js?v=5"), "cache：text-integrity v=5");
-assert(html.includes("app.js?v=217"), "cache：app.js v=217");
+assert(html.includes("app.js?v=218"), "cache：app.js v=218");
 
 function blobOf(parts) {
   return `${parts.title}${parts.detail || ""}`;
@@ -178,7 +178,7 @@ assert(app.includes("historyExecChecksHtml") && app.includes("execRawSourcesFrom
 assert(app.includes("taskDisplayParts(task)"), "CASE J：Sidebar 顯示走 display repair");
 assert(app.includes("function renderTasks()"), "CASE L：Sidebar 執行力入口未刪");
 assert(html.includes("id=\"page-sfm\""), "CASE L：#page-sfm 仍在");
-assert(html.includes("id=\"section-manifest\"") && app.includes("generateManifestPlan"), "CASE M：07 仍在");
+assert(html.includes("id=\"section-manifest\"") && app.includes("generateManifestPlan"), "CASE M：舊 07 相容層仍在");
 assert(!app.includes("CREATE TABLE") && !app.includes("ALTER TABLE") && !/UPDATE\s+reviews/i.test(app), "CASE N：無 schema / 無 UPDATE reviews");
 assert(app.includes("if (state.journalHydrating) return") && app.includes("function persistJournalQuietly"), "hydrate 期間不因 render 自動 persist");
 
