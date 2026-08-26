@@ -11880,11 +11880,20 @@ function taskGroupDateLabel(iso) {
   return parts.length >= 3 ? `${parts[1]} / ${parts[2]}` : day;
 }
 
+function libraryFullDateLabel(iso) {
+  const day = String(iso || "").slice(0, 10);
+  const [y, m, d] = day.split("-");
+  if (!y || !m || !d) return "";
+  return `${y} / ${m} / ${d}`;
+}
+
 function librarySourceMeta(item) {
   const src = String((item && item.source) || "").trim();
-  if (!src) return "";
-  const md = libraryMonthDay(item && (item.date || item.createdAt));
-  return md ? `來自 ${md} ${src}` : `來自 ${src}`;
+  const full = libraryFullDateLabel(item && (item.date || item.createdAt));
+  if (full && src) return `來自 ${full} ${src}`;
+  if (full) return `來自 ${full}`;
+  if (src) return `來自 ${src}`;
+  return "";
 }
 
 function taskSidebarDetail(task) {
@@ -11902,7 +11911,7 @@ function renderTaskMoveAction(task) {
   if (task.status === "done") {
     return `<button class="lib-act__move" data-task-status="${id}" data-to="doing" type="button">重新開始</button>`;
   }
-  return `<button class="lib-act__move" data-task-status="${id}" data-to="later" type="button">移到待開始</button>`;
+  return `<button class="lib-act__move" data-task-status="${id}" data-to="later" type="button">移到待辦</button>`;
 }
 
 function syncTaskFilterCounts(doingN, laterN, doneN) {
@@ -11951,15 +11960,15 @@ function renderTaskItem(task) {
         <span class="lib-dot" aria-hidden="true"></span>
       </label>
       <div class="lib-act__main">
-        <p class="lib-act__title">${escapeHtml(title)}</p>
-        ${detail ? `<p class="lib-act__detail">${escapeHtml(detail)}</p>` : ""}
-        <div class="lib-act__foot">
-          ${meta ? `<span class="lib-act__meta">${escapeHtml(meta)}</span>` : `<span class="lib-act__meta"></span>`}
+        <div class="lib-act__top">
+          <p class="lib-act__title">${escapeHtml(title)}</p>
           <div class="lib-act__ops" role="group" aria-label="行動操作">
             ${renderTaskMoveAction(task)}
-            <button class="lib-act__del" data-task-delete="${id}" type="button">刪除</button>
+            <button class="lib-act__del" data-task-delete="${id}" type="button" aria-label="刪除這項行動">×</button>
           </div>
         </div>
+        ${detail ? `<p class="lib-act__detail">${escapeHtml(detail)}</p>` : ""}
+        ${meta ? `<p class="lib-act__meta">${escapeHtml(meta)}</p>` : ""}
       </div>
     </article>
   `;
