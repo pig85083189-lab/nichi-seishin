@@ -111,9 +111,16 @@ assert(EXECUTION_PROMPTS_SYSTEM.includes("最多 2 輪"), "CASE H：舊 executio
 assert(app.includes("const EXECUTION_PROMPT_MAX = 2"), "CASE H：runtime 最多 2 題");
 assert(app.includes("function generateExecutionChoices"), "新版 06 走 executionChoices，不再預設出題");
 
-assert(MANIFEST_PROMPTS_SYSTEM.includes("最多 2 題"), "CASE I：07 最多 2 題");
+assert(MANIFEST_PROMPTS_SYSTEM.includes("最多 2 題"), "CASE I：舊 07 prompts 路徑仍最多 2 題");
 assert(MANIFEST_PATHS_SYSTEM.includes("06 執行力"), "CASE I：07 不再把執行力叫 05");
+assert(MANIFEST_PATHS_SYSTEM.includes("futureVision"), "CASE I：新 07 輸出 futureVision");
+assert(MANIFEST_PATHS_SYSTEM.includes("approachStep"), "CASE I：新 07 輸出 approachStep");
+assert(MANIFEST_PATHS_SYSTEM.includes("manifestationStatement"), "CASE I：新 07 輸出顯化句");
+assert(MANIFEST_PATHS_SYSTEM.includes("不要產生 executionChoices"), "CASE I：07 不複製 06 多選");
 assert(app.includes("priorThinkAwareContext(journal)"), "CASE I：07 可讀前面已完成資料");
+assert(app.includes("generateManifestClose"), "CASE I：正式 07 走 close 流程");
+assert(html.includes("看見我正在靠近的未來"), "CASE I：07 CTA 已改");
+assert(!html.includes("✦ 看看這個願望"), "CASE I：不再用看看這個願望");
 
 assert(app.includes('"④ 深度思考"'), "CASE J：歷史 04 是深度思考");
 assert(app.includes('"⑤ 覺察力"'), "CASE J：歷史 05 是覺察力");

@@ -124,6 +124,7 @@ const state = {
   journalUserMarks: { items: [], updatedAt: "" },
   journalManifestSentence: "",
   journalManifestHighlights: {},
+  journalManifestClose: { futureVision: "", approachStep: "", manifestationStatement: "", accepted: false, addedToExec: false },
   manifestPrompts: [],
   manifestPromptsBusy: false,
   manifestPromptsToken: 0,
@@ -729,7 +730,7 @@ function saveManifests(items) {
   saveJson(cloudStoreKey("manifests"), items);
 }
 
-function addManifest({ key, title, vision, date }) {
+function addManifest({ key, title, vision, date, futureVision, approachStep, manifestationStatement }) {
   const text = String(title || "").trim();
   if (!text) return { added: false };
   const items = getManifests();
@@ -742,6 +743,9 @@ function addManifest({ key, title, vision, date }) {
     id: uid(),
     title: text,
     vision: String(vision || "").trim(),
+    futureVision: String(futureVision || "").trim(),
+    approachStep: String(approachStep || "").trim(),
+    manifestationStatement: String(manifestationStatement || "").trim(),
     date: iso,
     status: "doing",
     source: "今日復盤",
@@ -881,6 +885,21 @@ function syncJournalLibraries(iso, journal) {
     });
   }
   const vision = String(data.manifest || "").trim();
+  const close = normalizeManifestCloseBag(data.manifestClose);
+  if (hasManifestCloseContent(close)) {
+    if (close.accepted) {
+      addManifest({
+        key: `manifest-close:${iso}`,
+        title: close.approachStep || close.manifestationStatement || vision,
+        vision,
+        futureVision: close.futureVision,
+        approachStep: close.approachStep,
+        manifestationStatement: close.manifestationStatement || String(data.manifestSentence || "").trim(),
+        date: iso,
+      });
+    }
+    return;
+  }
   (data.manifestChecks || []).forEach((label) => {
     addManifest({
       key: `manifest:${iso}:${label}`,
@@ -2191,6 +2210,7 @@ function reviewContentScore(review) {
     journal.smallestStep,
     journal.manifest,
     journal.manifestSentence,
+    journal.manifestClose ? JSON.stringify(journal.manifestClose) : "",
     journal.deep ? JSON.stringify(journal.deep) : "",
     journal.awareness ? JSON.stringify(journal.awareness) : "",
     journal.awarenessChoices ? JSON.stringify(journal.awarenessChoices) : "",
@@ -4754,6 +4774,10 @@ function toggleQuickModule(key) {
   maybeAutoGenerateInsight(journal);
 }
 
+function emptyManifestClose() {
+  return { futureVision: "", approachStep: "", manifestationStatement: "", accepted: false, addedToExec: false };
+}
+
 function emptyJournal() {
   return {
     thanks: "",
@@ -4787,6 +4811,7 @@ function emptyJournal() {
     manifestThink: ["", ""],
     manifestPrompts: [],
     manifestSentence: "",
+    manifestClose: emptyManifestClose(),
     manifestChecks: [],
     manifestCheckItems: [],
     manifestAi: false,
@@ -5226,6 +5251,7 @@ function journalHasContent(journal) {
     journal.manifest,
     journal.manifestSentence,
   ];
+  if (journal.manifestClose && (journal.manifestClose.futureVision || journal.manifestClose.approachStep || journal.manifestClose.manifestationStatement)) return true;
   if (textBits.some((item) => String(item || "").trim())) return true;
   if (hasMeaningfulChoices(journal.awarenessChoices) || hasMeaningfulChoices(journal.thinkChoices) || hasMeaningfulExecutionChoices(journal.executionChoices)) return true;
   if (deepHasContent(journal.deep) || hasMeaningfulValue(journal.deepPrompts)) return true;
@@ -6203,6 +6229,7 @@ function refreshJournalChecklists(journal, options = {}) {
   if (!options.skipManifest) {
     renderChecklist("manifestChecks", manifestItems, manifestChecked);
     renderManifestSentence(data.manifestSentence || state.journalManifestSentence, data.manifestHighlights || state.journalManifestHighlights);
+    renderManifestCloseResult(data.manifestClose || state.journalManifestClose);
   }
 }
 
@@ -6376,7 +6403,7 @@ async function generateJournalChecklist(kind, options = {}) {
   if (kind === "execution") setJournalFoldOpen("section-exec", true, { manual: true });
   if (kind === "awareness") pinAwareFold();
   if (kind === "manifest") {
-    await generateManifestChecklist(options);
+    await generateManifestClose(options);
     return;
   }
   const isAware = kind === "awareness";
@@ -6697,6 +6724,76 @@ const MANIFEST_KIND_META = {
   limit: "目前最值得突破的一個限制",
 };
 
+const MANIFEST_CLOSE_PROMPTS = [
+  { question: "如果這已經成真，那時候的你會是什麼感覺？", placeholder: "那時候的感覺是…" },
+  { question: "那個已經做到的你，會怎麼生活／怎麼選擇？", placeholder: "那時候會怎麼過日子…" },
+];
+
+function normalizeManifestCloseBag(raw, extras = {}) {
+  const data = raw && typeof raw === "object" ? raw : {};
+  return {
+    futureVision: String(data.futureVision || extras.futureVision || "").trim(),
+    approachStep: String(data.approachStep || extras.approachStep || "").trim(),
+    manifestationStatement: String(data.manifestationStatement || extras.manifestationStatement || extras.sentence || "").trim(),
+    accepted: Boolean(data.accepted || extras.accepted),
+    addedToExec: Boolean(data.addedToExec || extras.addedToExec),
+  };
+}
+
+function hasManifestCloseContent(close) {
+  const data = normalizeManifestCloseBag(close);
+  return Boolean(data.futureVision || data.approachStep || data.manifestationStatement);
+}
+
+function journalUsesManifestClose(journal) {
+  if (hasManifestCloseContent(journal)) return true;
+  return hasManifestCloseContent(journal && journal.manifestClose);
+}
+
+function hydrateManifestClose(data) {
+  const fromNew = normalizeManifestCloseBag(data && data.manifestClose);
+  if (hasManifestCloseContent(fromNew) || fromNew.accepted) return fromNew;
+  const sentence = String((data && data.manifestSentence) || "").trim();
+  const paths = normalizeManifestPathItems(data && data.manifestCheckItems);
+  if (!sentence && !paths.length) return emptyManifestClose();
+  return normalizeManifestCloseBag({
+    futureVision: "",
+    approachStep: paths[0] ? paths[0].title : "",
+    manifestationStatement: sentence,
+    accepted: false,
+    addedToExec: false,
+  });
+}
+
+function manifestApproachTaskKey(title, iso) {
+  const heading = String(title || "").trim();
+  if (!heading) return "";
+  return `manifest-approach:${iso || currentIso()}:${heading}`;
+}
+
+function manifestCloseTaskExists(close, iso) {
+  const title = String(close && close.approachStep || "").trim();
+  if (!title) return false;
+  const key = manifestApproachTaskKey(title, iso);
+  return getTasks().some((task) => task.sourceKey === key);
+}
+
+function buildManifestCloseFallback(journal) {
+  const vision = String(journal.manifest || "").trim();
+  const feel = String((journal.manifestThink || [])[0] || "").trim();
+  const live = String((journal.manifestThink || [])[1] || "").trim();
+  const bit = vision.slice(0, 18) || "這件事";
+  return normalizeManifestCloseBag({
+    futureVision: feel || live
+      ? [feel, live].filter(Boolean).join("\n")
+      : `我慢慢把「${bit}」變成日常的一部分，不再只是想一想。`,
+    approachStep: feel
+      ? `今天先把這件事放在心上一次：${feel.replace(/\s+/g, " ").slice(0, 42)}`
+      : `今天先花 1 分鐘，寫下「${bit}」對我真正意味著什麼。`,
+    manifestationStatement: `我正在慢慢走進一個更靠近「${bit}」的生活。`,
+  });
+}
+
 function manifestPromptFallbacks(vision) {
   const bit = String(vision || "").trim().slice(0, 10) || "這件事";
   return [
@@ -6726,21 +6823,17 @@ function normalizeManifestPrompts(list) {
 }
 
 function collectManifestThinkAnswers() {
-  const prompts = normalizeManifestPrompts(state.manifestPrompts);
   const prev = getReview(currentIso())?.journal?.manifestThink || [];
-  const count = Math.max(prompts.length, 1);
-  return Array.from({ length: count }, (_, index) => {
-    const el = document.getElementById(`manifestThink${index + 1}`);
+  return [1, 2].map((index) => {
+    const el = document.getElementById(`manifestThink${index}`);
     if (el) return String(el.value || "");
-    return String(prev[index] || "");
+    return String(prev[index - 1] || "");
   });
 }
 
 function manifestThinkReady(answers) {
-  const prompts = normalizeManifestPrompts(state.manifestPrompts);
-  const list = Array.isArray(answers) ? answers : [];
-  if (!prompts.length) return false;
-  return prompts.every((_, index) => String(list[index] || "").trim());
+  const list = Array.isArray(answers) ? answers : collectManifestThinkAnswers();
+  return list.length >= 2 && list.every((item) => String(item || "").trim());
 }
 
 function normalizeManifestPathItem(item) {
@@ -6808,27 +6901,15 @@ function buildManifestSentence(journal) {
 }
 
 function renderManifestQuestions(prompts, options = {}) {
-  const root = document.getElementById("manifestQuestions");
   const pathsBtn = document.getElementById("btnManifestPaths");
-  const items = normalizeManifestPrompts(prompts);
-  if (!root) return;
-  if (!items.length) {
-    root.innerHTML = "";
-    if (pathsBtn) pathsBtn.hidden = true;
-    return;
-  }
+  if (pathsBtn) pathsBtn.hidden = true;
   const saved = Array.isArray(options.answers) ? options.answers : collectManifestThinkAnswers();
-  root.innerHTML = items
-    .map(
-      (item, index) => `
-        <div class="aware-q exec-q">
-          ${markableP(item.question, `manifest.prompt.${index}.question`, "journal-core-q")}
-          <textarea class="textarea" id="manifestThink${index + 1}" rows="3" placeholder="${escapeHtml(item.placeholder || "我想的是…")}">${escapeHtml(String(saved[index] || ""))}</textarea>
-        </div>
-      `
-    )
-    .join("");
-  if (pathsBtn) pathsBtn.hidden = false;
+  ["manifestThink1", "manifestThink2"].forEach((id, index) => {
+    const el = document.getElementById(id);
+    if (el && saved[index] != null && el.value !== String(saved[index] || "")) el.value = String(saved[index] || "");
+  });
+  const root = document.getElementById("manifestQuestions");
+  if (root) root.hidden = true;
 }
 
 function renderManifestPathCard(item, index, done) {
@@ -6850,6 +6931,7 @@ function renderManifestPathCard(item, index, done) {
 function renderManifestPaths(items, checked) {
   const root = document.getElementById("manifestChecks");
   if (!root) return;
+  root.hidden = true;
   const normalized = normalizeManifestPathItems(items);
   if (!normalized.length) {
     root.innerHTML = "";
@@ -6888,20 +6970,59 @@ function renderManifestPaths(items, checked) {
   `;
 }
 
-function renderManifestSentence(text, highlights) {
-  const root = document.getElementById("manifestSentence");
+function renderManifestCloseResult(close) {
+  const root = document.getElementById("manifestClose");
   if (!root) return;
-  const sentence = String(text || "").trim();
-  if (!sentence) {
+  const data = normalizeManifestCloseBag(close || state.journalManifestClose);
+  if (!hasManifestCloseContent(data)) {
     root.hidden = true;
     root.innerHTML = "";
     return;
   }
+  const iso = currentIso();
+  const added = Boolean(data.addedToExec) || manifestCloseTaskExists(data, iso);
+  const highlights = state.journalManifestHighlights || {};
   root.hidden = false;
   root.innerHTML = `
-    <p class="exec-focus__kicker">我的顯化句</p>
-    <p class="exec-focus__title">「${markableSpan(sentence.replace(/^[「」]+|[「」]+$/g, ""), "manifest.sentence", "", "", fieldHighlightsOf(highlights, "sentence"))}」</p>
+    ${
+      data.futureVision
+        ? `<article class="manifest-close-block">
+            <p class="manifest-close-kicker">我正在靠近的生活</p>
+            ${markableP(data.futureVision, "manifest.close.futureVision", "manifest-close-vision")}
+          </article>`
+        : ""
+    }
+    ${
+      data.approachStep
+        ? `<article class="manifest-close-near">
+            <p class="journal-label">今天，我可以先靠近一點</p>
+            ${markableP(data.approachStep, "manifest.close.approachStep", "manifest-close-step")}
+            <button class="manifest-exec-btn${added ? " is-on" : ""}" id="btnManifestToExec" type="button"${added ? " disabled" : ""}>${added ? "✓ 已放進執行力" : "＋ 放進執行力"}</button>
+          </article>`
+        : ""
+    }
+    ${
+      data.manifestationStatement
+        ? `<article class="manifest-close-line">
+            <p class="journal-label">我的顯化句</p>
+            <p class="manifest-close-quote">「${markableSpan(data.manifestationStatement.replace(/^[「」]+|[「」]+$/g, ""), "manifest.sentence", "", "", fieldHighlightsOf(highlights, "sentence"))}」</p>
+            <p class="manifest-close-note">把這句話，留給正在靠近它的自己。</p>
+          </article>`
+        : ""
+    }
+    <button class="ai-check-btn" id="btnManifestAccept" type="button"${data.accepted ? " hidden" : ""}>✦ 收下今天的顯化</button>
+    <p class="manifest-close-done" id="manifestAccepted"${data.accepted ? "" : " hidden"}>✓ 今天的顯化已留下</p>
   `;
+}
+
+function renderManifestSentence(text, highlights) {
+  const root = document.getElementById("manifestSentence");
+  if (root) {
+    root.hidden = true;
+    root.innerHTML = "";
+  }
+  void text;
+  void highlights;
 }
 
 function setManifestPromptsLoading(loading) {
@@ -6909,9 +7030,11 @@ function setManifestPromptsLoading(loading) {
   const btn = document.getElementById("btnManifestAi");
   const loader = document.getElementById("manifestPromptLoading");
   if (btn) {
-    btn.disabled = loading;
-    btn.textContent = loading ? "正在看看這個願望…" : "✦ 看看這個願望";
-    btn.classList.toggle("is-busy", loading);
+    btn.hidden = loading;
+    btn.disabled = false;
+    btn.textContent = "✦ 看見我正在靠近的未來";
+    btn.classList.toggle("is-busy", false);
+    btn.setAttribute("aria-busy", "false");
   }
   if (loader) loader.hidden = !loading;
 }
@@ -6922,115 +7045,144 @@ function applyGeneratedManifestPrompts(prompts, answers) {
   persistJournalQuietly();
 }
 
+function applyGeneratedManifestClose(close, sig) {
+  const prev = normalizeManifestCloseBag(state.journalManifestClose);
+  const next = normalizeManifestCloseBag(close);
+  next.accepted = prev.accepted;
+  next.addedToExec =
+    (prev.addedToExec && prev.approachStep === next.approachStep) || manifestCloseTaskExists(next);
+  state.journalManifestClose = next;
+  state.journalManifestSentence = next.manifestationStatement;
+  state.journalMeta.manifestAi = true;
+  state.journalMeta.manifestAiSig = sig || state.journalMeta.manifestAiSig || "";
+  renderManifestCloseResult(next);
+  persistJournalQuietly();
+}
+
 async function generateManifestPrompts(options = {}) {
-  if (!options.auto) setJournalFoldOpen("section-manifest", true, { manual: true });
-  if (state.manifestPromptsBusy && !options.force) return;
-  const journal = collectJournal();
-  const vision = String(journal.manifest || "").trim();
-  if (vision.length < 4) {
-    if (!options.auto) showToast("先寫下一件你真正想讓它慢慢成為現實的事。");
-    return;
-  }
-  const token = (state.manifestPromptsToken || 0) + 1;
-  state.manifestPromptsToken = token;
-  setManifestPromptsLoading(true);
-  const fallback = manifestPromptFallbacks(vision);
-  try {
-    if (!state.user) throw new Error("請先登入，才能使用雲端出題。");
-    const remote = await postReview({
-      mode: "manifest",
-      step: "prompts",
-      date: currentIso(),
-      vision,
-      text: vision,
-      context: {
-        event: journal.event,
-        mood: journal.mood,
-        bodyTags: journal.bodyTags,
-        bodyNote: journal.bodyNote,
-        bodyCheck: journal.bodyCheck,
-        ...priorThinkAwareContext(journal),
-      },
-    });
-    if (state.manifestPromptsToken !== token) return;
-    const questions = normalizeManifestPrompts(remote.questions || remote.items);
-    if (questions.length < 1) throw new Error("雲端回傳格式不完整");
-    state.journalMeta.manifestPromptsAi = true;
-    state.journalMeta.manifestPromptsSig = vision;
-    applyGeneratedManifestPrompts(questions, ["", ""]);
-    if (!options.auto) showToast("先看看這個願望會怎麼改變生活。");
-  } catch (error) {
-    if (state.manifestPromptsToken !== token) return;
-    state.journalMeta.manifestPromptsAi = true;
-    state.journalMeta.manifestPromptsSig = vision;
-    applyGeneratedManifestPrompts(fallback, ["", ""]);
-    if (!options.auto) showToast(`雲端顯化題還沒好：${formatApiError(error)}，先用本地題目。`);
-  } finally {
-    if (state.manifestPromptsToken === token) setManifestPromptsLoading(false);
-  }
+  await generateManifestClose(options);
 }
 
 async function generateManifestChecklist(options = {}) {
+  await generateManifestClose(options);
+}
+
+async function generateManifestClose(options = {}) {
   if (!options.auto) setJournalFoldOpen("section-manifest", true, { manual: true });
-  if (state.checklistBusy.manifest && !options.auto) return;
+  if (state.manifestPromptsBusy && !options.force) {
+    if (!options.auto) showToast("還在替你整理正在靠近的生活，請稍候。");
+    return;
+  }
   const journal = collectJournal();
   const vision = String(journal.manifest || "").trim();
   if (vision.length < 4) {
-    if (!options.auto) showToast("先寫下一件你真正想讓它慢慢成為現實的事。");
+    if (!options.auto) showToast("先寫下你真正想靠近的是什麼。");
     return;
   }
   if (!manifestThinkReady(journal.manifestThink)) {
-    if (!options.auto) showToast("先回答顯化思考題，再讓願望靠近現實。");
+    if (!options.auto) showToast("先寫完兩題，再看見正在靠近的未來。");
     return;
   }
   const sig = [vision, ...(journal.manifestThink || [])].join("\n");
-  if (options.auto && state.journalMeta.manifestAiSig === sig) return;
+  if (options.auto && state.journalMeta.manifestAiSig === sig && hasManifestCloseContent(state.journalManifestClose)) return;
 
-  const token = (state.checklistToken.manifest || 0) + 1;
-  state.checklistToken.manifest = token;
-  setChecklistLoading("manifest", true);
-  const fallback = buildManifestPathItems(journal);
-  const fallbackSentence = buildManifestSentence(journal);
+  const token = (state.manifestPromptsToken || 0) + 1;
+  state.manifestPromptsToken = token;
+  state.checklistToken.manifest = (state.checklistToken.manifest || 0) + 1;
+  setManifestPromptsLoading(true);
+  const fallback = buildManifestCloseFallback(journal);
 
   try {
     if (!state.user) throw new Error("請先登入，才能使用雲端分析。");
     const remote = await postReview({
       mode: "manifest",
-      step: "paths",
+      step: "close",
       date: currentIso(),
       vision,
       text: vision,
-      questions: (state.manifestPrompts || []).map((item) => item.question),
+      questions: MANIFEST_CLOSE_PROMPTS.map((item) => item.question),
       answers: journal.manifestThink,
       context: {
         event: journal.event,
         mood: journal.mood,
         bodyTags: journal.bodyTags,
         bodyNote: journal.bodyNote,
+        smallestStep: journal.smallestStep,
+        openActions: selectedExecutionChoiceActions(journal.executionChoices).map((item) => item.text),
         ...priorThinkAwareContext(journal),
       },
     });
-    if (state.checklistToken.manifest !== token) return;
-    const items = normalizeManifestPathItems(remote.items);
-    if (items.length < 2) throw new Error("雲端回傳格式不完整");
-    const sentence = String(remote.sentence || fallbackSentence).trim() || fallbackSentence;
-    state.journalManifestSentence = sentence;
+    if (state.manifestPromptsToken !== token) return;
+    const close = normalizeManifestCloseBag({
+      futureVision: remote.futureVision,
+      approachStep: remote.approachStep,
+      manifestationStatement: remote.manifestationStatement || remote.sentence,
+    });
+    if (!hasManifestCloseContent(close)) throw new Error("雲端回傳格式不完整");
     state.journalManifestHighlights = remote.highlights && typeof remote.highlights === "object" ? remote.highlights : {};
-    applyGeneratedChecklist("manifest", items, sig);
-    renderManifestSentence(sentence, state.journalManifestHighlights);
-    persistJournalQuietly();
-    showToast("已經整理出靠近現實的方向。");
+    applyGeneratedManifestClose(close, sig);
+    if (!options.auto) showToast("已經整理出正在靠近的生活。");
   } catch (error) {
-    if (state.checklistToken.manifest !== token) return;
-    state.journalManifestSentence = fallbackSentence;
+    if (state.manifestPromptsToken !== token) return;
     state.journalManifestHighlights = {};
-    applyGeneratedChecklist("manifest", fallback, sig);
-    renderManifestSentence(fallbackSentence);
-    persistJournalQuietly();
-    showToast(`雲端整理失敗：${formatApiError(error)}，先用本地方向。`);
+    applyGeneratedManifestClose(fallback, sig);
+    if (!options.auto) showToast(`雲端整理失敗：${formatApiError(error)}，先用本地整理。`);
   } finally {
-    if (state.checklistToken.manifest === token) setChecklistLoading("manifest", false);
+    if (state.manifestPromptsToken === token) setManifestPromptsLoading(false);
   }
+}
+
+function addManifestApproachToExec() {
+  const close = normalizeManifestCloseBag(state.journalManifestClose);
+  const title = String(close.approachStep || "").trim();
+  if (!title) return;
+  if (close.addedToExec || manifestCloseTaskExists(close)) {
+    close.addedToExec = true;
+    state.journalManifestClose = close;
+    renderManifestCloseResult(close);
+    persistJournalQuietly();
+    showToast("這項已在『執行力』");
+    return;
+  }
+  const result = addTaskFromGuide({
+    key: manifestApproachTaskKey(title),
+    label: title,
+    source: "顯化力",
+    date: currentIso(),
+  });
+  close.addedToExec = Boolean(result.added || result.exists);
+  state.journalManifestClose = close;
+  renderManifestCloseResult(close);
+  persistJournalQuietly();
+  if (result.added) showToast("已放進側邊欄『執行力』");
+  else if (result.exists) showToast("這項已在『執行力』");
+}
+
+function acceptManifestClose() {
+  const close = normalizeManifestCloseBag(state.journalManifestClose);
+  if (!hasManifestCloseContent(close)) {
+    showToast("先看見正在靠近的未來，再收下今天的顯化。");
+    return;
+  }
+  const vision = journalFieldValue("manifestVision");
+  const result = addManifest({
+    key: `manifest-close:${currentIso()}`,
+    title: close.approachStep || close.manifestationStatement || vision,
+    vision,
+    futureVision: close.futureVision,
+    approachStep: close.approachStep,
+    manifestationStatement: close.manifestationStatement,
+    date: currentIso(),
+  });
+  const already = close.accepted;
+  close.accepted = true;
+  state.journalManifestClose = close;
+  state.journalManifestSentence = close.manifestationStatement;
+  renderManifestCloseResult(close);
+  persistJournalQuietly();
+  if (!already) trackProduct("manifestation_created", { source: "journal", mode: state.journalMode === "quick" ? "quick" : "deep" });
+  showToast("今天的顯化已留下");
+  void result;
 }
 
 function maybeAutoGenerateManifest() {
@@ -10054,12 +10206,20 @@ function collectJournal() {
     awarenessQuoteGenCount: awarenessQuoteGenCount(),
     manifest: journalFieldValue("manifestVision"),
     manifestThink: collectManifestThinkAnswers(),
-    manifestPrompts: normalizeManifestPrompts(state.manifestPrompts),
-    manifestSentence: String(state.journalManifestSentence || "").trim(),
+    manifestPrompts: journalUsesManifestClose(state.journalManifestClose)
+      ? MANIFEST_CLOSE_PROMPTS.map((item) => ({ question: item.question, placeholder: item.placeholder }))
+      : normalizeManifestPrompts(state.manifestPrompts),
+    manifestSentence: String(
+      (state.journalManifestClose && state.journalManifestClose.manifestationStatement) || state.journalManifestSentence || ""
+    ).trim(),
+    manifestClose: normalizeManifestCloseBag(state.journalManifestClose),
     manifestChecks: checkedValues("manifestChecks"),
     manifestCheckItems: (() => {
       const collected = collectManifestPathItems();
-      return collected.length ? collected : normalizeManifestPathItems(checklistItems("manifestChecks"));
+      if (collected.length) return collected;
+      const fromChecks = normalizeManifestPathItems(checklistItems("manifestChecks"));
+      if (fromChecks.length) return fromChecks;
+      return normalizeManifestPathItems(getReview(currentIso())?.journal?.manifestCheckItems);
     })(),
     manifestAi: Boolean(state.journalMeta.manifestAi),
     manifestAiSig: state.journalMeta.manifestAiSig || "",
@@ -10189,17 +10349,36 @@ function composeJournalRawText(journal) {
   const execLines = execCheckHistoryLines(journal);
   if (execLines.length) lines.push(`我的行動卡：${execLines.join("、")}`);
   if (journal.executionFocus?.title) lines.push(`${execFocusKicker(journal.executionFocus.when)}：${journal.executionFocus.title}`);
-  if (String(journal.manifest || "").trim()) lines.push(`我想顯化的事情：${journal.manifest.trim()}`);
-  const manifestPrompts = normalizeManifestPrompts(journal.manifestPrompts || state.manifestPrompts);
-  const manifestThink = Array.isArray(journal.manifestThink) ? journal.manifestThink : [];
-  manifestPrompts.forEach((item, index) => {
-    const answer = String(manifestThink[index] || "").trim();
-    if (answer) lines.push(`${item.question} ${answer}`);
-  });
-  const manifestPaths = normalizeManifestPathItems(journal.manifestCheckItems);
-  if (manifestPaths.length) lines.push(`讓願望靠近現實：${manifestPaths.map((item) => item.title).join("、")}`);
-  else if ((journal.manifestChecks || []).length) lines.push(`讓願望靠近現實：${journal.manifestChecks.join("、")}`);
-  if (String(journal.manifestSentence || "").trim()) lines.push(`我的顯化句：${String(journal.manifestSentence).trim()}`);
+  if (String(journal.manifest || "").trim()) {
+    lines.push(journalUsesManifestClose(journal) ? `我真正想靠近的是什麼：${journal.manifest.trim()}` : `我想顯化的事情：${journal.manifest.trim()}`);
+  }
+  const manifestClose = normalizeManifestCloseBag(journal.manifestClose);
+  if (journalUsesManifestClose(journal)) {
+    MANIFEST_CLOSE_PROMPTS.forEach((item, index) => {
+      const answer = String((Array.isArray(journal.manifestThink) ? journal.manifestThink : [])[index] || "").trim();
+      if (answer) lines.push(`${item.question} ${answer}`);
+    });
+    if (manifestClose.futureVision) {
+      lines.push("我正在靠近的生活");
+      lines.push(manifestClose.futureVision);
+    }
+    if (manifestClose.approachStep) {
+      lines.push("今天，我可以先靠近一點");
+      lines.push(manifestClose.approachStep);
+    }
+    if (manifestClose.manifestationStatement) lines.push(`我的顯化句：${manifestClose.manifestationStatement}`);
+  } else {
+    const manifestPrompts = normalizeManifestPrompts(journal.manifestPrompts || state.manifestPrompts);
+    const manifestThink = Array.isArray(journal.manifestThink) ? journal.manifestThink : [];
+    manifestPrompts.forEach((item, index) => {
+      const answer = String(manifestThink[index] || "").trim();
+      if (answer) lines.push(`${item.question} ${answer}`);
+    });
+    const manifestPaths = normalizeManifestPathItems(journal.manifestCheckItems);
+    if (manifestPaths.length) lines.push(`讓願望靠近現實：${manifestPaths.map((item) => item.title).join("、")}`);
+    else if ((journal.manifestChecks || []).length) lines.push(`讓願望靠近現實：${journal.manifestChecks.join("、")}`);
+    if (String(journal.manifestSentence || "").trim()) lines.push(`我的顯化句：${String(journal.manifestSentence).trim()}`);
+  }
   const deepQs = (journal.deepPrompts || state.deepPrompts || []).map((item) => item.title || item.question || item);
   normalizeDeep(journal.deep).forEach((item, index) => {
     const plain = String(item.plain || "").trim();
@@ -10570,9 +10749,17 @@ function fillJournal(journal) {
   state.thinkChoices = normalizeChoiceBag(data.thinkChoices);
   state.executionChoices = normalizeExecutionChoiceBag(data.executionChoices);
   state.journalUserMarks = userMarkBag(data.userMarks);
-  state.journalManifestSentence = String(data.manifestSentence || "").trim();
+  state.journalManifestSentence = String(
+    (data.manifestClose && data.manifestClose.manifestationStatement) || data.manifestSentence || ""
+  ).trim();
   state.journalManifestHighlights = data.manifestHighlights && typeof data.manifestHighlights === "object" ? data.manifestHighlights : {};
-  state.manifestPrompts = normalizeManifestPrompts(data.manifestPrompts);
+  state.journalManifestClose = normalizeManifestCloseBag(data.manifestClose);
+  if (state.journalManifestClose.manifestationStatement && !state.journalManifestSentence) {
+    state.journalManifestSentence = state.journalManifestClose.manifestationStatement;
+  }
+  state.manifestPrompts = journalUsesManifestClose(state.journalManifestClose)
+    ? MANIFEST_CLOSE_PROMPTS.map((item) => ({ question: item.question, placeholder: item.placeholder }))
+    : normalizeManifestPrompts(data.manifestPrompts);
   state.awarenessPrompts = hydrateAwarenessPrompts(data);
   state.executionPrompts = hydrateExecutionPrompts(data);
   state.execQuestionTab = normalizeExecQuestionTab(data.executionQuestionTab);
@@ -10592,6 +10779,7 @@ function fillJournal(journal) {
   if (manifestVision) manifestVision.value = data.manifest || "";
   renderManifestQuestions(state.manifestPrompts, { answers: data.manifestThink });
   renderManifestSentence(state.journalManifestSentence, state.journalManifestHighlights);
+  renderManifestCloseResult(state.journalManifestClose);
   renderAwarenessQuestions(state.awarenessPrompts, { answers: data.awareness });
   renderAwarenessChoices(state.awarenessChoices);
   renderExecutionQuestions(state.executionPrompts, { answers: data.execution });
@@ -12875,6 +13063,89 @@ function renderHistoryDeepThinking(review) {
   return html;
 }
 
+function historyManifestBlocks(journal, historyIso) {
+  if (journalUsesManifestClose(journal)) {
+    const close = normalizeManifestCloseBag(journal.manifestClose);
+    const statement = close.manifestationStatement || String(journal.manifestSentence || "").trim();
+    return [
+      String(journal.manifest || "").trim()
+        ? historyBlock("我真正想靠近的是什麼", markableP(journal.manifest, "manifest.vision", "history-journal__text", historyIso))
+        : "",
+      close.futureVision
+        ? historyBlock("我正在靠近的生活", markableP(close.futureVision, "manifest.close.futureVision", "history-journal__text", historyIso))
+        : "",
+      close.approachStep
+        ? historyBlock("今天，我可以先靠近一點", markableP(close.approachStep, "manifest.close.approachStep", "history-journal__text", historyIso))
+        : "",
+      statement
+        ? historyBlock(
+            "我的顯化句",
+            markableP(
+              statement,
+              "manifest.sentence",
+              "history-journal__headline",
+              historyIso,
+              fieldHighlightsOf(journal.manifestHighlights, "sentence")
+            )
+          )
+        : "",
+    ];
+  }
+  return [
+    String(journal.manifest || "").trim()
+      ? historyBlock("我想顯化的事情", markableP(journal.manifest, "manifest.vision", "history-journal__text", historyIso))
+      : "",
+    ...normalizeManifestPrompts(journal.manifestPrompts).map((item, index) =>
+      historyQaHtml(
+        item.question,
+        `manifest.prompt.${index}.question`,
+        (journal.manifestThink || [])[index],
+        `manifest.prompt.${index}.answer`,
+        historyIso
+      )
+    ),
+    historyBlock(
+      "讓願望靠近現實",
+      historyMarkedItemsHtml(
+        (normalizeManifestPathItems(journal.manifestCheckItems).some((item) => item.title)
+          ? normalizeManifestPathItems(journal.manifestCheckItems)
+          : (journal.manifestChecks || []).map((title) => ({ title }))
+        ).flatMap((item, index) => {
+          const rows = [
+            {
+              text: item.title,
+              field: `manifest.path.${index}.title`,
+              date: historyIso,
+              highlights: nestedHighlights(item.highlights, "title"),
+            },
+          ];
+          if (item.detail) {
+            rows.push({
+              text: item.detail,
+              field: `manifest.path.${index}.detail`,
+              date: historyIso,
+              highlights: nestedHighlights(item.highlights, "detail"),
+            });
+          }
+          return rows;
+        })
+      )
+    ),
+    journal.manifestSentence
+      ? historyBlock(
+          "我的顯化句",
+          markableP(
+            journal.manifestSentence,
+            "manifest.sentence",
+            "history-journal__headline",
+            historyIso,
+            fieldHighlightsOf(journal.manifestHighlights, "sentence")
+          )
+        )
+      : "",
+  ];
+}
+
 function renderHistoryJournal(review) {
   const parsedGuide = historyGuideFromReview(review);
   console.log("[history-debug] date", review && review.date);
@@ -13056,59 +13327,7 @@ function renderHistoryJournal(review) {
     [
       "⑦ 顯化力",
       "manifest",
-      [
-        String(journal.manifest || "").trim()
-          ? historyBlock("我想顯化的事情", markableP(journal.manifest, "manifest.vision", "history-journal__text", historyIso))
-          : "",
-        ...normalizeManifestPrompts(journal.manifestPrompts).map((item, index) =>
-          historyQaHtml(
-            item.question,
-            `manifest.prompt.${index}.question`,
-            (journal.manifestThink || [])[index],
-            `manifest.prompt.${index}.answer`,
-            historyIso
-          )
-        ),
-        historyBlock(
-          "讓願望靠近現實",
-          historyMarkedItemsHtml(
-            (normalizeManifestPathItems(journal.manifestCheckItems).some((item) => item.title)
-              ? normalizeManifestPathItems(journal.manifestCheckItems)
-              : (journal.manifestChecks || []).map((title) => ({ title }))
-            ).flatMap((item, index) => {
-              const rows = [
-                {
-                  text: item.title,
-                  field: `manifest.path.${index}.title`,
-                  date: historyIso,
-                  highlights: nestedHighlights(item.highlights, "title"),
-                },
-              ];
-              if (item.detail) {
-                rows.push({
-                  text: item.detail,
-                  field: `manifest.path.${index}.detail`,
-                  date: historyIso,
-                  highlights: nestedHighlights(item.highlights, "detail"),
-                });
-              }
-              return rows;
-            })
-          )
-        ),
-        journal.manifestSentence
-          ? historyBlock(
-              "我的顯化句",
-              markableP(
-                journal.manifestSentence,
-                "manifest.sentence",
-                "history-journal__headline",
-                historyIso,
-                fieldHighlightsOf(journal.manifestHighlights, "sentence")
-              )
-            )
-          : "",
-      ],
+      historyManifestBlocks(journal, historyIso),
     ],
   ], historyIso);
 
@@ -13411,12 +13630,22 @@ function handleTodayPointerClick(event) {
   }
   if (node.closest("#btnManifestAi")) {
     handled();
-    catchAsync(() => generateManifestPrompts({ force: true }), "顯化思考題還沒準備好");
+    catchAsync(() => generateManifestClose({ force: true }), "正在靠近的生活還沒整理好");
     return true;
   }
   if (node.closest("#btnManifestPaths")) {
     handled();
-    catchAsync(() => generateManifestChecklist(), "靠近現實的方向還沒整理好");
+    catchAsync(() => generateManifestClose({ force: true }), "正在靠近的生活還沒整理好");
+    return true;
+  }
+  if (node.closest("#btnManifestToExec")) {
+    handled();
+    addManifestApproachToExec();
+    return true;
+  }
+  if (node.closest("#btnManifestAccept")) {
+    handled();
+    acceptManifestClose();
     return true;
   }
   if (node.closest("#btnBodyCoach")) {
@@ -13656,6 +13885,7 @@ function refreshUserMarkSurfaces(date) {
     renderManifestQuestions(state.manifestPrompts, { answers: journal.manifestThink });
     renderManifestPaths(journal.manifestCheckItems, journal.manifestChecks);
     renderManifestSentence(state.journalManifestSentence);
+    renderManifestCloseResult(state.journalManifestClose);
     renderDeepThemes(state.deepPrompts, { deep: journal.deep });
   }
   if (state.page === "history") renderHistory();

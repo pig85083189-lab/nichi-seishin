@@ -287,52 +287,48 @@ placeholder 8-24 字，像「生活裡會先鬆開的是…」
 questions 長度必須是 1 或 2。
 繁體中文`;
 
-const MANIFEST_PATHS_SYSTEM = `你是「日精進」的顯化整理者。不要把它變成 06 執行力的待辦清單。
+const MANIFEST_CLOSE_SYSTEM = `你是「日精進」的顯化整理者。04 把事情想清楚，05 看見自己，06 執行力處理明天要做什麼（使用者可能已選 1～3 件明日行動）。你只處理 07：我正在往哪一種生活／哪一個自己靠近。
 
-06 問「明天／現在具體要做什麼」。
-你問「我想去哪裡？我要慢慢成為什麼樣的人？」
+不要複製 06 的待辦。不要產生 executionChoices。不要給 3 個 Todo。不要叫使用者再選 01／02／03。不要拆很多思考題。
 
-請讀取願望、兩道思考題的回答，整理成「讓願望靠近現實」的 2～3 個方向，以及一句「我的顯化句」。
+請根據使用者真實輸入（想靠近的是什麼、成真時的感覺、那個自己會怎麼生活），以及今日前面復盤 context（若有），整理三個欄位。
 
-【方向 2～3 個，不要硬湊】
-1. start｜今天可以開始的一小步：一個能開始靠近的方向，不是明天幾點的任務
-2. habit｜需要慢慢建立的一個習慣：長期累積
-3. limit｜目前最值得突破的一個限制：看見會讓自己停下來的地方
-某類不適用就省略，不要湊滿。
+1. futureVision
+2～4 句。有畫面的未來生活狀態。像已經逐漸成為日常的樣子。
+必須根據使用者真實內容，不要空泛雞湯。
+禁止：你值得擁有美好的人生／相信自己一定可以做到／宇宙會安排。
 
-【不要這樣寫】
-找3個賺錢機會／聯絡一個客戶／明天打電話／今天做30分鐘／明天完成3項工作
-宇宙會回應你／願望一定會實現／相信就會發生／頻率對了就會吸引／你注定會得到／只要想像就能得到
+2. approachStep
+只給一件今天／現在做得到的小事。一句到兩句。
+不是明天的計畫，不是龐大目標，不要跟 06 的明日行動重複定位。
 
-【要這樣寫】
-start：「寫下目前最有可能帶來收入的1項服務，想出下一個曝光方式。」
-habit：「每週固定一次回顧收入來源與有效曝光方式。」
-limit：「確認最容易讓自己停下來的，是曝光不足、產品不清楚，還是不敢主動邀請。」
-
-title 18-42 字，就是方向本身。detail 可空，或一句更短的補充（最多 22 字）。
-視角要比執行力高一層：累積什麼、成為什麼，不是明天幾點做完。
-
-【我的顯化句】
-1～2 句。身份認同＋正在前進。
-合格：我正在成為一個能持續創造價值，也有能力承接更多收入的人。
-不合格：我一定會成功。／我一定會賺到100萬。／宇宙正在把100萬送給我。
+3. manifestationStatement
+第一人稱。自然。grounded。偏「我正在成為／我正在走向／我正在練習」。
+禁止：我一定會成功／宇宙會把一切帶給我／我已經擁有所有想要的東西／吸引力法則保證。
+不要保證結果。不要雞湯。
 
 只輸出 JSON：
 {
-  "items": [
-    { "kind": "start", "title": "...", "detail": "...", "highlights": { "title": [], "detail": [] } }
-  ],
-  "sentence": "我正在……",
+  "futureVision": "...",
+  "approachStep": "...",
+  "manifestationStatement": "...",
   "highlights": {
-    "sentence": [{ "text": "必須原樣出現在 sentence 裡的短句", "color": "sage" }]
+    "sentence": [{ "text": "必須原樣出現在 manifestationStatement 裡的短句", "color": "sage" }]
   }
 }
 ${HIGHLIGHT_RULE}
 繁體中文`;
 
+const MANIFEST_PATHS_SYSTEM = MANIFEST_CLOSE_SYSTEM;
+
 function isManifestPromptsRequest(body) {
   const step = String(body?.step || body?.kind || "").trim().toLowerCase();
   return step === "prompts" || step === "questions" || step === "think";
+}
+
+function isManifestCloseRequest(body) {
+  const step = String(body?.step || body?.kind || "").trim().toLowerCase();
+  return step === "close" || step === "paths" || step === "vision" || !step;
 }
 
 function mysticManifestText(text) {
@@ -467,27 +463,57 @@ function manifestPromptsUserPrompt(body) {
 05 我看見了：${thinkAware.seen || "未寫"}`;
 }
 
-function manifestPathsUserPrompt(body) {
+function normalizeManifestClose(raw, vision) {
+  const data = raw && typeof raw === "object" ? raw : {};
+  const firstItem = Array.isArray(data.items) && data.items[0]
+    ? String(data.items[0].title || data.items[0].label || data.items[0].text || data.items[0] || "").trim()
+    : "";
+  const futureVision = textIntegrity.retainCompleteText(
+    String(data.futureVision || data.life || data.visionText || "").trim(),
+    { source: "api/review.normalizeManifestClose", field: "futureVision" }
+  ) || "";
+  const approachStep = textIntegrity.retainCompleteText(
+    String(data.approachStep || data.near || firstItem || "").trim(),
+    { source: "api/review.normalizeManifestClose", field: "approachStep" }
+  ) || "";
+  const manifestationStatement =
+    normalizeManifestSentence(data.manifestationStatement || data.sentence || data, vision);
+  const fallbackBit = compactLine(vision, 8) || "這件事";
+  return {
+    futureVision: mysticManifestText(futureVision) ? "" : futureVision,
+    approachStep: mysticManifestText(approachStep) || looksLikeExecTaskManifest(approachStep) ? "" : approachStep,
+    manifestationStatement: manifestationStatement || `我正在慢慢走進一個更靠近「${fallbackBit}」的生活。`,
+  };
+}
+
+function hasManifestCloseContent(close) {
+  return Boolean(
+    String(close && close.futureVision || "").trim() ||
+    String(close && close.approachStep || "").trim() ||
+    String(close && close.manifestationStatement || "").trim()
+  );
+}
+
+function manifestCloseUserPrompt(body) {
   const vision = String(body.vision || body.text || "").trim();
   const ctx = body.context && typeof body.context === "object" ? body.context : {};
-  const questions = Array.isArray(body.questions) ? body.questions : [];
   const answers = Array.isArray(body.answers) ? body.answers : [];
-  const labeled = questions.length
-    ? questions
-        .map((question, index) => `${index + 1}. ${question}\n回答：${answers[index] || "（未填）"}`)
-        .join("\n\n")
-    : `思考回答：${answers.filter(Boolean).join("\n") || "（未填）"}`;
-  return `請整理 2 到 3 個「讓願望靠近現實」的方向，以及一句顯化句。不要變成明天幾點的待辦。
+  return `請整理 futureVision、approachStep、manifestationStatement。不要給 Todo 清單。
 
-我想顯化的事情：${vision || "（未寫）"}
-
-${labeled}
+我真正想靠近的是什麼：${vision || "（未寫）"}
+如果這已經成真，那時候的感覺：${String(answers[0] || "").trim() || "（未填）"}
+那個已經做到的你，會怎麼生活／怎麼選擇：${String(answers[1] || "").trim() || "（未填）"}
 
 今日心情：${ctx.mood || "未選"}
 今日事件：${compactLine(ctx.event, 220) || "未寫"}
+06 明天的小行動：${Array.isArray(ctx.openActions) ? ctx.openActions.filter(Boolean).slice(0, 3).join("／") : compactLine(ctx.smallestStep, 80) || "未寫"}
 04 深度看見：${[ctx.thinkCloseAwareness, ctx.thinkCloseSelfSeen, ctx.thinkCloseTakeaway].filter(Boolean).join("／") || "未寫"}
 05 核心覺察：${String(ctx.awarenessLine || "").trim() || "未寫"}
 05 我看見了：${String(ctx.awarenessSeen || "").trim() || "未寫"}`;
+}
+
+function manifestPathsUserPrompt(body) {
+  return manifestCloseUserPrompt(body);
 }
 
 const CHECKLIST_EXECUTION_SYSTEM = `你是「日精進」的行動整理者。你的工作不是列待辦清單，而是把使用者今天說想做、卻還太大或太模糊的事，收成明天（或今晚）真的做得到的一小步。
@@ -3139,8 +3165,8 @@ module.exports = async function handler(req, res) {
     } else if (mode === "manifest") {
       const prompts = isManifestPromptsRequest(body);
       messages = [
-        { role: "system", content: withCompleteRule(prompts ? MANIFEST_PROMPTS_SYSTEM : MANIFEST_PATHS_SYSTEM) },
-        { role: "user", content: prompts ? manifestPromptsUserPrompt(body) : manifestPathsUserPrompt(body) },
+        { role: "system", content: withCompleteRule(prompts ? MANIFEST_PROMPTS_SYSTEM : MANIFEST_CLOSE_SYSTEM) },
+        { role: "user", content: prompts ? manifestPromptsUserPrompt(body) : manifestCloseUserPrompt(body) },
       ];
     } else if (mode === "bodycoach") {
       messages = [
@@ -3401,25 +3427,24 @@ module.exports = async function handler(req, res) {
       const vision = String(body.vision || body.text || "").trim();
       if (isManifestPromptsRequest(body)) {
         const questions = normalizeManifestPromptItems(data, vision);
-        if (questions.length < 2) {
+        if (questions.length < 1) {
           res.status(502).json({ ok: false, error: "今天的顯化思考題還沒準備好，請再試一次" });
           return;
         }
         res.status(200).json({ ok: true, source: getProvider(), data: { questions, kind: "manifest" } });
         return;
       }
-      const items = normalizeManifestPathItems(data);
-      if (items.length < 2) {
-        res.status(502).json({ ok: false, error: "靠近現實的方向還沒整理好，請再試一次" });
+      const close = normalizeManifestClose(data, vision);
+      if (!hasManifestCloseContent(close)) {
+        res.status(502).json({ ok: false, error: "正在靠近的生活還沒整理好，請再試一次" });
         return;
       }
-      const sentence = normalizeManifestSentence(data, vision);
       res.status(200).json({
         ok: true,
         source: getProvider(),
         data: {
-          items: items.slice(0, 3),
-          sentence,
+          ...close,
+          sentence: close.manifestationStatement,
           highlights: {
             sentence: insightHighlight.fieldHighlights(data.highlights, "sentence"),
           },
@@ -3477,3 +3502,5 @@ module.exports.EXECUTION_CHOICES_SYSTEM = EXECUTION_CHOICES_SYSTEM;
 module.exports.EXECUTION_PROMPTS_SYSTEM = EXECUTION_PROMPTS_SYSTEM;
 module.exports.MANIFEST_PROMPTS_SYSTEM = MANIFEST_PROMPTS_SYSTEM;
 module.exports.MANIFEST_PATHS_SYSTEM = MANIFEST_PATHS_SYSTEM;
+module.exports.MANIFEST_CLOSE_SYSTEM = MANIFEST_CLOSE_SYSTEM;
+module.exports.normalizeManifestClose = normalizeManifestClose;
