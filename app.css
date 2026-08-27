@@ -3124,6 +3124,21 @@ body.nav-closed .auth-pay {
   color: #fff;
 }
 
+.pricing-card__cta--interest {
+  background: var(--header);
+  color: #fff;
+  border-color: var(--header);
+}
+
+.pricing-card__cta--interest:hover {
+  background: var(--accent-hover);
+  color: #fff;
+}
+
+.pricing-card__cta--interest[hidden] {
+  display: none;
+}
+
 .pricing-card__cta:disabled {
   opacity: 0.55;
   cursor: default;

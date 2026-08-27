@@ -12,7 +12,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="../app.css?v=149" />
-    <link rel="stylesheet" href="analytics.css?v=2" />
+    <link rel="stylesheet" href="analytics.css?v=3" />
   </head>
   <body class="admin-analytics">
     <header class="admin-head">
@@ -53,6 +53,12 @@
             <div class="admin-chart-wrap admin-chart-wrap--short"><canvas id="retentionChart"></canvas></div>
             <ul class="admin-windows" id="windowList"></ul>
           </section>
+        </section>
+
+        <section class="admin-section">
+          <h2>PLUS 轉換</h2>
+          <p class="admin-note">以 unique users 為主，同一人同一 session 重複開關不重複計人。Internal 帳號已排除。付款尚未開放。</p>
+          <ol class="admin-funnel admin-plus-funnel" id="plusFunnelList"></ol>
         </section>
 
         <section class="admin-section">
@@ -103,6 +109,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
     <script src="../auth/pkce-storage.js?v=2"></script>
-    <script src="analytics.js?v=1"></script>
+    <script src="analytics.js?v=2"></script>
   </body>
 </html>

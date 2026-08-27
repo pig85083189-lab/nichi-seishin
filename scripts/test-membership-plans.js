@@ -1,4 +1,5 @@
 const {
+  TRIAL_DAYS,
   isTrialActive,
   isPaid,
   isEntitled,
@@ -45,6 +46,7 @@ const paid = {
   next_charge_at: "2026-09-01",
 };
 
+assert(TRIAL_DAYS === 7, "新建立 trial 為 7 天");
 assert(isTrialActive(trialing) === true, "試用中 isTrialActive");
 assert(plusTrialActive(trialing) === true, "試用中 plusTrialActive");
 assert(productPlanFromRow(trialing) === "free", "註冊帳號 product plan 仍是 free");
@@ -59,6 +61,17 @@ assert(effectivePlanFromRow(expired) === "free", "到期後 effective_plan = fre
 assert(isEntitled(expired) === false, "到期未付費不是 PLUS");
 assert(isPaid(expired) === false, "到期未付費不是 paid");
 assert(plusTrialUsed(expired) === true, "舊帳號試用已用過，不可重置");
+assert(effectivePlanFromRow(expired) === "free", "過期 trial 不重送 7 天");
+
+const legacyThirty = {
+  status: "trialing",
+  plan: "monthly",
+  is_paid: false,
+  trial_started_at: new Date(Date.now() - 10 * 86400000).toISOString(),
+  trial_ends_at: new Date(Date.now() + 20 * 86400000).toISOString(),
+};
+assert(isTrialActive(legacyThirty) === true, "既有 30 天 trial_ends_at 仍有效");
+assert(effectivePlanFromRow(legacyThirty) === "plus", "舊 30 天 trial 不因程式改 7 天被縮短");
 
 assert(isPaid(paid) === true, "付費帳號 isPaid");
 assert(effectivePlanFromRow(paid) === "plus", "付費帳號 effective plus");
@@ -142,9 +155,11 @@ assert(app.includes("status === \"internal\""), "前端也認 status=internal");
 assert(app.includes("ING PLUS｜內部帳號"), "側欄／方案頁內部文案");
 assert(!app.includes(".from(\"nichi_internal_users\")"), "前端不讀寫內部表");
 assert(!/INTERNAL_PLUS_EMAILS|internalEmails|INTERNAL_EMAILS/.test(app), "前端沒有 email allowlist");
-assert(html.includes("analytics.js?v=3"), "analytics cache 已升版");
+assert(html.includes("analytics.js?v=4"), "analytics cache 已升版");
+assert(html.includes("pricingInterestCta") && html.includes("我想升級 PLUS"), "方案頁有升級意願 CTA");
 const supabaseSrc = fs.readFileSync(path.join(root, "lib/supabase.js"), "utf8");
-assert(supabaseSrc.includes("TRIAL_DAYS = 30"), "一般使用者仍是 30 天 trial");
+assert(supabaseSrc.includes("TRIAL_DAYS = 7"), "一般新使用者是 7 天 trial");
+assert(supabaseSrc.includes("既有列的 trial_ends_at 不重算"), "既有 trial 日期不重算");
 assert(supabaseSrc.includes("nichi_internal_users"), "後端用獨立內部表");
 assert(supabaseSrc.includes("NICHI_INTERNAL_USER_IDS"), "PostgREST cache miss 時有 server allowlist");
 assert(supabaseSrc.includes("lookupInternalViaPgQuery"), "嘗試繞過 PostgREST schema cache");
@@ -159,6 +174,19 @@ assert(migration.includes("nichi_user_data"), "migration 註明不改日記資�
 assert(!/on public\.analytics_events/.test(migration), "internal migration 不對 analytics_events 建 policy");
 const analyticsClient = fs.readFileSync(path.join(root, "analytics.js"), "utf8");
 assert(analyticsClient.includes("getIsInternal"), "前端追蹤略過 internal");
+assert(analyticsClient.includes("plus_offer_viewed") && analyticsClient.includes("plus_plan_viewed") && analyticsClient.includes("plus_interest_clicked"), "PLUS 轉換事件");
+assert(app.includes("plus_offer_viewed") && app.includes("plus_plan_viewed") && app.includes("plus_interest_clicked"), "前端會送 PLUS 轉換事件");
+assert(app.includes("daysLeft: 5"), "localhost trial 模擬剩餘 1～7 天");
+assert(app.includes("onPlusInterestClick"), "方案頁意願 CTA 不走付款");
+const interestFn = app.slice(app.indexOf("function onPlusInterestClick"), app.indexOf("function startNewebPay"));
+assert(interestFn.includes("plus_interest_clicked"), "點擊記錄 plus_interest_clicked");
+assert(!interestFn.includes("startNewebPay") && !interestFn.includes("NEWEBPAY"), "意願 CTA 不進藍新");
+const plusMigration = fs.readFileSync(path.join(root, "supabase/migrations/20260827_plus_conversion_events.sql"), "utf8");
+assert(plusMigration.includes("plus_offer_viewed") && plusMigration.includes("to_regclass('public.analytics_events')"), "PLUS 事件 migration 僅在表存在時改 CHECK");
+const adminHtml = fs.readFileSync(path.join(root, "admin/analytics.html"), "utf8");
+assert(adminHtml.includes("PLUS 轉換") && adminHtml.includes("plusFunnelList"), "後台有 PLUS 轉換區塊");
+const adminJs = fs.readFileSync(path.join(root, "admin/analytics.js"), "utf8");
+assert(adminJs.includes("renderPlusConversion") && adminJs.includes("plusConversion"), "後台渲染 unique users 漏斗");
 const payCreate = fs.readFileSync(path.join(root, "api/pay/create.js"), "utf8");
 assert(payCreate.includes("isInternal") && payCreate.includes("內部帳號無需付款"), "internal 不走付款");
 const meApi = fs.readFileSync(path.join(root, "api/auth/me.js"), "utf8");

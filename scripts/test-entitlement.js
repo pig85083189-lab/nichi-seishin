@@ -14,10 +14,10 @@ function assert(cond, message) {
   if (!cond) throw new Error(message);
 }
 
-function trialRow(day) {
+function trialRow(day, durationDays = 7) {
   const elapsed = (day - 1) * 86400000 + 60 * 1000;
   const started = Date.now() - elapsed;
-  const ends = started + 30 * 86400000;
+  const ends = started + durationDays * 86400000;
   const active = Date.now() < ends;
   return {
     status: active ? "trialing" : "expired",
@@ -48,16 +48,20 @@ plusFeatures.forEach((feature) => {
   assert(canUseFeature("plus", feature) === true, `CASE 1：plus 可使用 ${feature}`);
 });
 
-const day29 = trialRow(29);
-assert(effectivePlanFromRow(day29) === "plus", "CASE 2：trial Day 29 effective plus");
+const day7 = trialRow(7);
+assert(effectivePlanFromRow(day7) === "plus", "CASE 2：新 trial Day 7 仍是 plus");
 plusFeatures.forEach((feature) => {
-  assert(canUseFeature(effectivePlanFromRow(day29), feature) === true, `CASE 2：Day 29 可使用 ${feature}`);
+  assert(canUseFeature(effectivePlanFromRow(day7), feature) === true, `CASE 2：Day 7 可使用 ${feature}`);
 });
 
-const day31 = trialRow(31);
-assert(effectivePlanFromRow(day31) === "free", "CASE 3：trial Day 31 unpaid → free");
+const day8 = trialRow(8);
+assert(effectivePlanFromRow(day8) === "free", "CASE 3：新 trial Day 8 unpaid → free");
 assert(canUseFeature("free", "think_ai") === false, "CASE 3：FREE 不能用 PLUS AI");
 assert(canUseFeature("free", "unknown_free_feature") === true, "CASE 3：未列為 PLUS 的功能仍可用");
+
+const legacyDay29 = trialRow(29, 30);
+assert(effectivePlanFromRow(legacyDay29) === "plus", "既有 30 天 trial Day 29 仍 plus，不因程式改 7 天而縮短");
+assert(plusTrialActive(legacyDay29), "既有 30 天 trial_ends_at 仍有效");
 
 const payload = plusRequiredPayload("think_ai");
 assert(payload.error === "plus_required", "CASE 3／8：權限狀態是 plus_required");
@@ -133,7 +137,8 @@ assert(!app.includes("你沒有權限"), "不要顯示生硬權限文字");
 assert(html.includes("每日快速復盤") && html.includes("基礎週報"), "方案頁 FREE 功能");
 assert(html.includes("完整週報與月報") && html.includes("長期個人模式與歷史洞察"), "方案頁 PLUS 功能");
 assert(html.includes("NT$149") && html.includes("NT$1,290"), "價格保留");
-assert(html.includes("30 天 ING PLUS 完整體驗"), "30 天體驗文案保留");
+assert(html.includes("7 天 ING PLUS 完整體驗"), "7 天體驗文案");
+assert(html.includes("我想升級 PLUS") && html.includes("pricingInterestCta"), "Beta 升級意願 CTA");
 
 assert(review.includes("enforcePlusEntitlement") && review.includes("featureForReviewRequest"), "CASE 8：review API 後端檢查");
 assert(chat.includes("enforcePlusEntitlement") && chat.includes("think_ai"), "CASE 8：chat API 後端檢查");

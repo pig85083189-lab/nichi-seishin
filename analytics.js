@@ -27,9 +27,12 @@
     trial_started: "billing",
     trial_expired: "billing",
     subscription_started: "billing",
+    plus_offer_viewed: "billing",
+    plus_plan_viewed: "billing",
+    plus_interest_clicked: "billing",
   };
   const META_KEYS = { mode: 1, source: 1, step: 1, kind: 1, type: 1, period: 1, plan: 1, status: 1, feature: 1, round: 1 };
-  const ONCE = { auth_signup_completed: 1, trial_started: 1, trial_expired: 1, subscription_started: 1 };
+  const ONCE = { auth_signup_completed: 1, trial_started: 1, trial_expired: 1, subscription_started: 1, plus_interest_clicked: 1 };
   const recent = new Map();
   let deps = { getClient: null, getUser: null };
 
@@ -98,6 +101,7 @@
     if (now - last < 2000) return false;
     recent.set(stamp, now);
     if (name === "app_open" && storageGet(sessionStorage, "nichi.analytics.app_open")) return false;
+    if ((name === "plus_offer_viewed" || name === "plus_plan_viewed") && storageGet(sessionStorage, `nichi.analytics.sess.${name}`)) return false;
     try {
       const client = deps.getClient ? await deps.getClient() : null;
       if (!client) return false;
@@ -111,6 +115,7 @@
       if (error) return false;
       if (ONCE[name]) storageSet(localStorage, onceKey(name, user.id), "1");
       if (name === "app_open") storageSet(sessionStorage, "nichi.analytics.app_open", "1");
+      if (name === "plus_offer_viewed" || name === "plus_plan_viewed") storageSet(sessionStorage, `nichi.analytics.sess.${name}`, "1");
       return true;
     } catch {
       return false;
@@ -120,8 +125,10 @@
   function trackOnceSession(eventName, metadata, key) {
     const flag = `nichi.analytics.sess.${key || eventName}`;
     if (storageGet(sessionStorage, flag)) return Promise.resolve(false);
-    storageSet(sessionStorage, flag, "1");
-    return trackEvent(eventName, metadata);
+    return trackEvent(eventName, metadata).then((ok) => {
+      if (ok) storageSet(sessionStorage, flag, "1");
+      return ok;
+    });
   }
 
   root.NichiAnalytics = {

@@ -155,6 +155,10 @@ html.admin-analytics-page body.admin-analytics {
   font-size: 13px;
 }
 
+.admin-plus-funnel li:first-child em {
+  display: none;
+}
+
 .admin-chart-wrap {
   position: relative;
   height: 240px;

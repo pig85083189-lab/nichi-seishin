@@ -168,6 +168,16 @@ function trackProduct(eventName, metadata) {
   }
 }
 
+function trackProductOnceSession(eventName, metadata, key) {
+  try {
+    if (window.NichiAnalytics && typeof window.NichiAnalytics.trackOnceSession === "function") {
+      window.NichiAnalytics.trackOnceSession(eventName, metadata, key);
+    }
+  } catch {
+    /* analytics 不可影響主功能 */
+  }
+}
+
 function bindAnalytics() {
   if (!window.NichiAnalytics || !window.NichiAnalytics.bind) return;
   window.NichiAnalytics.bind({
@@ -1174,7 +1184,7 @@ function formatApiError(error) {
   }
   if (/file:|本機 HTML/.test(message)) return message;
   if (/401|請先使用 Google|未登入|未授權/i.test(message)) {
-    return "請先使用 Google 登入。新加入進行式，即享 30 天 ING PLUS 完整體驗。";
+    return "請先使用 Google 登入。新加入進行式，即享 7 天 ING PLUS 完整體驗。";
   }
   if (error?.code === "membership_check_failed" || /membership_check_failed/i.test(message)) {
     return "目前暫時無法確認會員狀態，請稍後再試。";
@@ -2923,7 +2933,7 @@ function renderAuth() {
         <span>使用 Google 帳號登入</span>
       </button>
       <p class="auth-form__error" id="authError" hidden></p>
-      <p class="auth-hint">Google 登入後，新加入進行式即享 30 天 ING PLUS 完整體驗。</p>
+      <p class="auth-hint">Google 登入後，新加入進行式即享 7 天 ING PLUS 完整體驗。</p>
     `;
     if (lastAuthError) setAuthError(lastAuthError);
     applyAccessLock();
@@ -3383,7 +3393,7 @@ function isAccessLocked() {
 }
 
 function accessLockMessage() {
-  return "請先使用 Google 登入。新加入進行式，即享 30 天 ING PLUS 完整體驗。";
+  return "請先使用 Google 登入。新加入進行式，即享 7 天 ING PLUS 完整體驗。";
 }
 
 function entitlementApi() {
@@ -3486,8 +3496,8 @@ function membershipFromDevPlan(mode, base) {
       effectivePlan: "plus",
       plusTrialActive: true,
       plusTrialUsed: true,
-      daysLeft: 12,
-      trialEndsAt: new Date(now + 12 * 86400000).toISOString(),
+      daysLeft: 5,
+      trialEndsAt: new Date(now + 5 * 86400000).toISOString(),
       subscriptionStatus: "none",
       isInternal: false,
       accessType: "standard",
@@ -3550,6 +3560,7 @@ function openPlusUpgradeModal() {
   } else {
     modal.setAttribute("open", "");
   }
+  trackProduct("plus_offer_viewed", { source: "upgrade_modal" });
 }
 
 function closePlusUpgradeModal() {
@@ -3645,6 +3656,7 @@ function openPlusEndedModal() {
   } else {
     modal.setAttribute("open", "");
   }
+  trackProduct("plus_offer_viewed", { source: "trial_ended" });
 }
 
 function maybeShowPlusEndedNotice() {
@@ -3694,6 +3706,11 @@ function bindSubscribeButton() {
     btn.dataset.bound = "1";
     btn.addEventListener("click", onSubscribeClick);
   });
+  const interestCta = document.getElementById("pricingInterestCta");
+  if (interestCta && interestCta.dataset.bound !== "1") {
+    interestCta.dataset.bound = "1";
+    interestCta.addEventListener("click", onPlusInterestClick);
+  }
 }
 
 function onSubscribeClick(event) {
@@ -3707,6 +3724,17 @@ function onSubscribeClick(event) {
   startNewebPay(plan && plan.dataset.plan);
 }
 
+function onPlusInterestClick(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  const membership = state.membership || {};
+  if (isInternalMembership(membership) || membership.paid || membership.isPaid) return;
+  trackProduct("plus_interest_clicked", { source: "pricing" });
+  showToast("收到 🤍 ING PLUS 正在準備開放，我們會把你的升級意願記錄下來。");
+}
+
 function startNewebPay(planId) {
   if (!NEWEBPAY_CHECKOUT_ENABLED) {
     showToast("ING PLUS 方案準備中，新價格尚未開放扣款。");
@@ -3714,7 +3742,7 @@ function startNewebPay(planId) {
   }
   if (!state.user) {
     closePricingModal();
-    showToast("請先用 Google 登入。新加入進行式，即享 30 天 ING PLUS 完整體驗。");
+    showToast("請先用 Google 登入。新加入進行式，即享 7 天 ING PLUS 完整體驗。");
     signInWithGoogle();
     return;
   }
@@ -3733,6 +3761,7 @@ function openPricingModal() {
     modal.setAttribute("open", "");
   }
   if (window.NichiAnalytics) window.NichiAnalytics.trackOnceSession("subscription_page_viewed", { source: "pricing" }, "pricing");
+  trackProductOnceSession("plus_plan_viewed", { source: "pricing" }, "plus_plan_viewed");
 }
 
 function closePricingModal() {
@@ -3797,6 +3826,11 @@ function syncPricingModal() {
     }
     btn.textContent = plan === "yearly" ? "升級 PLUS · 年繳" : "升級 PLUS";
   });
+  const interestCta = document.getElementById("pricingInterestCta");
+  if (interestCta) {
+    interestCta.hidden = internal || paid;
+    interestCta.disabled = internal || paid;
+  }
 }
 
 function rowsToReviewMap(rows) {
@@ -3964,7 +3998,7 @@ function handleAuthQuery() {
       storedAuthError = "";
     }
     if (!auth && !pay && !oauthError && !storedAuthError) return;
-    if (auth === "ok") showToast("已登入，30 天 ING PLUS 完整體驗已開始。");
+    if (auth === "ok") showToast("已登入，7 天 ING PLUS 完整體驗已開始。");
     if (auth === "out") showToast("已登出。本機草稿仍在這台裝置上。");
     if (auth === "error" || oauthError || storedAuthError) {
       const raw = storedAuthError || oauthError || params.get("reason") || "請再試一次";

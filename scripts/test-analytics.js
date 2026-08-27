@@ -18,6 +18,7 @@ const empty = buildDashboard({
 });
 assert(empty.kpis.signups === 0, "空資料註冊應為 0");
 assert(empty.funnel.every((item) => item.count === 0), "空漏斗應為 0");
+assert(empty.plusConversion.every((item) => item.users === 0), "空 PLUS 轉換應為 0");
 assert(empty.users.length === 0, "空使用者列表");
 
 const day0 = addDays(taipeiDate(new Date()), -7);
@@ -85,5 +86,41 @@ const founderOnly = buildDashboard({
 }, { cohort: "founder-batch-01" });
 assert(founderOnly.kpis.signups === 1, "Founder Cohort 排除 internal");
 assert(!founderOnly.users.some((item) => item.userId === internalId), "cohort 成員不含 internal");
+
+const viewerId = "33333333-3333-3333-3333-333333333333";
+const plusFunnel = buildDashboard({
+  events: [
+    { user_id: userId, event_name: "plus_offer_viewed", created_at: `${day0}T02:00:00+08:00` },
+    { user_id: userId, event_name: "plus_offer_viewed", created_at: `${day0}T03:00:00+08:00` },
+    { user_id: userId, event_name: "plus_plan_viewed", created_at: `${day0}T04:00:00+08:00` },
+    { user_id: viewerId, event_name: "plus_offer_viewed", created_at: `${day0}T02:00:00+08:00` },
+    { user_id: viewerId, event_name: "plus_plan_viewed", created_at: `${day0}T04:00:00+08:00` },
+    { user_id: viewerId, event_name: "plus_interest_clicked", created_at: `${day0}T05:00:00+08:00` },
+    { user_id: internalId, event_name: "plus_offer_viewed", created_at: `${day0}T02:00:00+08:00` },
+    { user_id: internalId, event_name: "plus_plan_viewed", created_at: `${day0}T04:00:00+08:00` },
+    { user_id: internalId, event_name: "plus_interest_clicked", created_at: `${day0}T05:00:00+08:00` },
+  ],
+  profiles: [
+    { id: userId, email: "founder@example.com", created_at: `${day0}T01:00:00+08:00` },
+    { id: viewerId, email: "viewer@example.com", created_at: `${day0}T01:00:00+08:00` },
+    { id: internalId, email: "internal@example.com", created_at: `${day0}T01:00:00+08:00` },
+  ],
+  subscriptions: [
+    { user_id: userId, email: "founder@example.com", status: "trialing", trial_started_at: `${day0}T01:00:00+08:00`, updated_at: `${day0}T01:00:00+08:00` },
+    { user_id: viewerId, email: "viewer@example.com", status: "expired", trial_started_at: `${day0}T01:00:00+08:00`, updated_at: `${day0}T01:00:00+08:00` },
+    { user_id: internalId, email: "internal@example.com", status: "active", is_paid: true, updated_at: `${day0}T01:00:00+08:00` },
+  ],
+  cohorts: [],
+  members: [],
+  internalUserIds: [internalId],
+});
+assert(plusFunnel.plusConversion[0].label === "看到 PLUS", "PLUS 轉換第一層");
+assert(plusFunnel.plusConversion[0].users === 2, "看到 PLUS 以 unique users，不含 internal");
+assert(plusFunnel.plusConversion[0].events === 3, "可保留 event count");
+assert(plusFunnel.plusConversion[1].users === 2, "查看 PLUS unique users");
+assert(plusFunnel.plusConversion[1].fromPrev === 1, "查看 PLUS 轉換率");
+assert(plusFunnel.plusConversion[2].users === 1, "我想升級 unique users 不含 internal");
+assert(plusFunnel.plusConversion[2].fromPrev === 0.5, "我想升級轉換率");
+assert(!plusFunnel.users.some((item) => item.userId === internalId), "PLUS 轉換資料也排除 internal");
 
 console.log("analytics tests passed");

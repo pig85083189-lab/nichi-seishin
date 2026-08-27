@@ -63,6 +63,9 @@ created_at timestamptz
 | `trial_started` | `ensureTrial` / membership | 每人一次 |
 | `trial_expired` | 試用到期且未付費 | 每人一次 |
 | `subscription_started` | NewebPay 開通成功，或 membership 已付費 | 可靠來源才寫 |
+| `plus_offer_viewed` | 使用者真正看到 Upgrade Modal 或 PLUS 升級提示 | 同一 session 一次；漏斗以 unique users |
+| `plus_plan_viewed` | 點「查看 ING PLUS」並進入方案頁 | 同一 session 一次 |
+| `plus_interest_clicked` | 方案頁點「我想升級 PLUS」（Beta 意願，不付款） | 每人一次 |
 
 ## 4. Meaningful Active User
 
@@ -87,6 +90,8 @@ Day 0 = `trial_started` 日；沒有則用註冊日（Taipei 日曆日）。
 註冊 → 完成第一次復盤 → D3 → D7 → D14 → D30 → 開始訂閱。
 
 每一層顯示人數、相對上一層 %、相對總註冊 %。沒有資料就是 0。
+
+另外有獨立的 **PLUS 轉換**（unique users）：看到 PLUS → 查看 PLUS → 我想升級。每一層顯示人數與上一層轉換率。Beta 的「我想升級 PLUS」只記意願，不建立 subscription、不扣款。
 
 ## 7. Cohort
 
@@ -138,7 +143,7 @@ on conflict do nothing;
 
 1. 在 `lib/analytics.js` 的 `EVENT_NAMES` 加上名稱。
 2. 在 `analytics.js` 的 `EVENT_NAMES` 加上同一名稱。
-3. 同步更新 `supabase/migrations/20260822_analytics.sql` 的 `analytics_events_event_name_chk` allowlist（或另開 migration 改 CHECK）。沒有加入 allowlist 的名稱，資料庫會拒絕 INSERT。
+3. 同步更新 `analytics_events_event_name_chk` allowlist（另開 migration，且僅在表已存在時 ALTER）。沒有加入 allowlist 的名稱，資料庫會拒絕 INSERT。
 4. 只在「真正完成」的地方呼叫 `trackEvent(name, { mode, source })`。
 5. metadata 只能是短列舉，不要塞使用者輸入。
 6. 更新本文件 Event Dictionary。
@@ -169,9 +174,11 @@ on conflict do nothing;
 
 空 cohort 會顯示 0，不會壞掉。
 
-## 14. 如何判斷 30 天試用是否足夠
+## 14. 如何判斷 7 天試用是否足夠
 
-產品試用是 30 天。D7 / D30 Retention、近 7 日／近 30 日活躍仍是分析指標，不要和試用天數混在一起。
+產品試用現在是 **7 天**（只套用在修改後新建立的 trial）。已經存在的 `trial_started_at` / `trial_ends_at` 不重算。
+
+**D7 / D30 Retention、近 7 日／近 30 日活躍仍是分析視窗，不要和試用天數混在一起。** 近 30 日活躍維持 30 天。
 
 不要只看「有沒有登入」。看：
 
@@ -187,7 +194,7 @@ on conflict do nothing;
 
 `nichi_internal_users` 裡的帳號是內部永久 PLUS，不是付費轉換。後台 KPI、漏斗、Founder Cohort、PLUS conversion **預設排除**這些 user_id。
 
-排除發生在應用層：前端 `trackEvent` 不送、後端 `insertAnalyticsEvent` 直接略過、dashboard 依 `internalUserIds` 過濾。Internal PLUS migration 不依賴 `analytics_events`。舊事件若已在表裡，讀取時仍會排除，不計入留存與付費人數。
+排除發生在應用層：前端 `trackEvent` 不送、後端 `insertAnalyticsEvent` 直接略過、dashboard 依 `internalUserIds` 過濾。Active users、D7 / D30、Founder Cohort、功能使用率、PLUS offer / plan / interest 都不計入 Internal。Internal 自己的日記與既有 event 列不刪除。
 
 指定內部帳號請用 SQL insert `nichi_internal_users`，不要改 `nichi_user_data`，也不要把 `is_paid` 設成 true。
 

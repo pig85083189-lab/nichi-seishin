@@ -96,6 +96,17 @@ function renderFunnel(funnel) {
     .join("");
 }
 
+function renderPlusConversion(layers) {
+  const el = document.getElementById("plusFunnelList");
+  if (!el) return;
+  el.innerHTML = (layers || [])
+    .map((layer, index) => {
+      const extra = index === 0 ? "" : `<em>↓ 上一層轉換 ${pct(layer.fromPrev)}</em>`;
+      return `<li><div><strong>${layer.users || 0}</strong> 人　${layer.label}</div>${extra}</li>`;
+    })
+    .join("");
+}
+
 function renderFeatures(features) {
   document.getElementById("featureList").innerHTML = (features || [])
     .map((item) => `
@@ -182,6 +193,7 @@ function renderDashboard(data) {
   const kpis = current.kpis || {};
   renderKpis(kpis);
   renderFunnel(current.funnel || []);
+  renderPlusConversion(current.plusConversion || []);
   renderFeatures(current.features || []);
   renderWindows((current.retention && current.retention.activeWindows) || []);
   renderUsers(current.users || []);
