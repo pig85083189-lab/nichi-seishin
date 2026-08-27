@@ -1,6 +1,7 @@
 const { callOpenAI, getProvider } = require("../lib/openai");
 const { requireUser } = require("../lib/auth");
 const { buildGrowthStats, formatStatsPrompt } = require("../lib/report-stats");
+const { canUseFeature, plusRequiredPayload, featureForReportType, enforcePlusEntitlement } = require("../lib/entitlement");
 const {
   kvConfigured,
   listUsers,
@@ -12,7 +13,7 @@ const {
   listArchivedReports,
   archiveUserReport,
 } = require("../lib/store");
-const { ensureTrial, isEntitled, getSubscription, supabaseAdminConfigured } = require("../lib/supabase");
+const { ensureTrial, getSubscription, effectivePlanFromRow, supabaseAdminConfigured } = require("../lib/supabase");
 
 const REPORT_SYSTEM = `你是「日精進」溫暖且具建設性的成長教練。使用者會給你一段期間內的復盤摘要，以及覺察力、執行力、顯化力的勾選量與完成頻率。
 
@@ -311,15 +312,6 @@ async function handler(req, res, forced = {}) {
       const users = await listUsers();
       const results = [];
       for (const account of users) {
-        try {
-          const sub = await getSubscription(account.id);
-          if (sub && !isEntitled(sub)) {
-            results.push({ userId: account.id, skipped: true, reason: "not entitled" });
-            continue;
-          }
-        } catch {
-          /* 沒有訂閱資料就仍嘗試產報 */
-        }
         const bundle = await loadUserData(account.id);
         const entries = reviewsInRange(bundle.reviews || {}, range.fromIso, range.toIso);
         const stats = buildGrowthStats({
@@ -332,6 +324,16 @@ async function handler(req, res, forced = {}) {
         });
         if (!entries.length && !(stats.totals && stats.totals.checked)) {
           results.push({ userId: account.id, skipped: true });
+          continue;
+        }
+        let plan = "free";
+        try {
+          plan = effectivePlanFromRow(await getSubscription(account.id));
+        } catch {
+          plan = "free";
+        }
+        if (!canUseFeature(plan, featureForReportType(kind))) {
+          results.push({ userId: account.id, skipped: true, reason: "plus_required" });
           continue;
         }
         const report = await buildAiReport({
@@ -365,18 +367,10 @@ async function handler(req, res, forced = {}) {
     if (!user) return;
     if (supabaseAdminConfigured()) {
       try {
-        const sub = await ensureTrial(user);
-        if (sub && !isEntitled(sub)) {
-          res.status(402).json({ ok: false, error: "您的免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限", paywall: true });
-          return;
-        }
+        await ensureTrial(user);
       } catch (error) {
         console.error("ensureTrial in generate-report:", error && error.message ? error.message : error);
       }
-    }
-
-    if (req.method === "POST" && Array.isArray(body.reviews) && body.reviews.length) {
-      await mergeReviews(user.id, compactMap(body.reviews));
     }
 
     if (listOnly) {
@@ -391,6 +385,19 @@ async function handler(req, res, forced = {}) {
       if (!stored && wantLatest) stored = await loadLatestReport(user.id, kind);
       res.status(200).json({ ok: true, stored: Boolean(stored), data: stored || null, kv: kvConfigured(), userId: user.id });
       return;
+    }
+
+    const reportFeature = featureForReportType(kind);
+    const allowed = await enforcePlusEntitlement({
+      feature: reportFeature,
+      res,
+      supabaseReady: supabaseAdminConfigured(),
+      loadPlan: async () => effectivePlanFromRow(await ensureTrial(user)),
+    });
+    if (!allowed) return;
+
+    if (req.method === "POST" && Array.isArray(body.reviews) && body.reviews.length) {
+      await mergeReviews(user.id, compactMap(body.reviews));
     }
 
     const bundle = await loadUserData(user.id);

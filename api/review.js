@@ -1,5 +1,6 @@
 const { requireUser, bearerToken } = require("../lib/auth");
-const { ensureTrial, isEntitled, supabaseAdminConfigured } = require("../lib/supabase");
+const { ensureTrial, effectivePlanFromRow, supabaseAdminConfigured } = require("../lib/supabase");
+const { featureForReviewRequest, enforcePlusEntitlement } = require("../lib/entitlement");
 const { getApiKey, getModel, getProvider, usesClaude, callOpenAI } = require("../lib/openai");
 const textIntegrity = require("../lib/text-integrity");
 const bodyCoachInsight = require("../lib/body-coach-insight");
@@ -3066,22 +3067,19 @@ module.exports = async function handler(req, res) {
   const user = await requireUser(req, res);
   if (!user) return;
 
-  if (supabaseAdminConfigured()) {
-    try {
-      const sub = await ensureTrial(user);
-      if (sub && !isEntitled(sub)) {
-        res.status(402).json({ ok: false, error: "您的免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限", paywall: true });
-        return;
-      }
-    } catch (error) {
-      console.error("ensureTrial in review:", error && error.message ? error.message : error);
-    }
-  }
+  const body = readJsonBody(req);
+  delete body.user_id;
+  delete body.userId;
+
+  const allowed = await enforcePlusEntitlement({
+    feature: featureForReviewRequest(body),
+    res,
+    supabaseReady: supabaseAdminConfigured(),
+    loadPlan: async () => effectivePlanFromRow(await ensureTrial(user)),
+  });
+  if (!allowed) return;
 
   try {
-    const body = readJsonBody(req);
-    delete body.user_id;
-    delete body.userId;
     if (body.mode === "checklist" || body.mode === "prompts" || body.mode === "choices") {
       await attachCloudAwarenessHistory(user, body, {
         userToken: bearerToken(req, body),

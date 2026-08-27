@@ -15,6 +15,7 @@ const STORAGE_KEYS = {
   journalMode: "nichi.journalMode",
   journalFolds: "nichi.journalFolds",
   userMarkHint: "nichi.userMarkHint",
+  plusTrialEndedNotice: "nichi.plusTrialEndedNotice",
 };
 
 const CLOUD_STORE_NAMES = ["reviews", "tasks", "sfm", "insights", "manifests", "reports"];
@@ -22,16 +23,17 @@ const CLOUD_STORE_NAMES = ["reviews", "tasks", "sfm", "insights", "manifests", "
 const REVIEW_API = "/api/review";
 const CHAT_API = "/api/chat";
 const NEWEBPAY_EPG_URL = "https://core.newebpay.com/EPG/HTC109030010100/QLBIYc";
+const NEWEBPAY_CHECKOUT_ENABLED = false;
 const NEWEBPAY_PLANS = {
   monthly: {
     id: "monthly",
-    amount: 599,
+    amount: 149,
     url: NEWEBPAY_EPG_URL,
   },
-  quarter: {
-    id: "quarter",
-    amount: 1197,
-    url: "https://core.newebpay.com/EPG/SinSpa/1gbSo9",
+  yearly: {
+    id: "yearly",
+    amount: 1290,
+    url: NEWEBPAY_EPG_URL,
   },
 };
 
@@ -1162,10 +1164,16 @@ function formatApiError(error) {
   }
   if (/file:|本機 HTML/.test(message)) return message;
   if (/401|請先使用 Google|未登入|未授權/i.test(message)) {
-    return "請先使用 Google 登入，即可解鎖 30 天完整免費試用";
+    return "請先使用 Google 登入。新加入進行式，即享 30 天 ING PLUS 完整體驗。";
+  }
+  if (error?.code === "membership_check_failed" || /membership_check_failed/i.test(message)) {
+    return "目前暫時無法確認會員狀態，請稍後再試。";
+  }
+  if (error?.code === "plus_required" || /plus_required|This feature requires ING PLUS/i.test(message)) {
+    return "";
   }
   if (/402|試用已結束|免費體驗已結束|paywall/i.test(message)) {
-    return "您的免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限";
+    return "PLUS 體驗已結束。你仍可繼續使用 ING FREE，過去紀錄都會保留。若想看完整洞察，可隨時升級 PLUS。";
   }
   if (/404|Failed to fetch|fetch 失敗|NetworkError/i.test(message)) {
     return "找不到後端 API。請用本機 http://localhost:3000（npm run dev）或 Vercel 網址開啟。";
@@ -1259,6 +1267,18 @@ async function postAiApi(url, body, timeoutMs = 28000) {
   );
   const payload = await response.json().catch(() => ({}));
   console.log("[日精進 API] 回應", response.status, payload && payload.ok, payload && payload.error);
+  if (payload && payload.error === "membership_check_failed") {
+    const err = new Error("membership_check_failed");
+    err.code = "membership_check_failed";
+    throw err;
+  }
+  if (payload && payload.error === "plus_required") {
+    openPlusUpgradeModal();
+    const err = new Error("plus_required");
+    err.code = "plus_required";
+    err.feature = payload.feature || "";
+    throw err;
+  }
   if (applyPaywallFromPayload(response, payload) || !response.ok || payload.ok === false) {
     throw new Error(payload.error || `HTTP ${response.status}`);
   }
@@ -1269,6 +1289,7 @@ async function postAiApi(url, body, timeoutMs = 28000) {
 }
 
 async function generateReview(rawText) {
+  if (!ensurePlusFeature("insight_ai")) return null;
   const remote = await postReview({
     mode: "organize",
     date: currentIso(),
@@ -1281,6 +1302,7 @@ async function generateReview(rawText) {
 }
 
 async function generateThink(rawText, organize, round, actions, reply) {
+  if (!ensurePlusFeature("think_ai")) return null;
   const remote = await postChat({
     mode: "think",
     date: currentIso(),
@@ -1417,9 +1439,11 @@ async function maybeEnhanceWithApi(rawText, token) {
     showToast("本地草稿已出。登入後才能使用雲端分析與同步備份。");
     return;
   }
+  if (!canUsePlusFeature("insight_ai")) return;
   showToast("正在連線雲端…");
   try {
     const remote = await generateReview(rawText);
+    if (!remote) return;
     if (runOrganize._token !== token) {
       console.log("[日精進 API] 回應已過期（使用者又按了一次整理），丟棄這次結果。");
       return;
@@ -1432,9 +1456,10 @@ async function maybeEnhanceWithApi(rawText, token) {
     console.log("[日精進 API] 雲端復盤已套用", remote.themeTitle);
     showToast("雲端復盤已套用。");
   } catch (error) {
+    if (isPlusRequiredError(error)) return;
     const reason = formatApiError(error);
     console.error("[日精進 API] 雲端呼叫失敗，畫面維持本地結果。真正原因：", reason, error);
-    showToast(`雲端分析失敗：${reason}`);
+    if (reason) showToast(`雲端分析失敗：${reason}`);
   }
 }
 
@@ -1755,6 +1780,11 @@ async function fetchStoredCloudReport(type, period, latest) {
 
 async function generateCloudReport(type, fromIso, toIso, period, options = {}) {
   if (!state.user) return null;
+  const feature = type === "month" ? "monthly_report_full" : "weekly_report_full";
+  if (!canUsePlusFeature(feature)) {
+    if (options.promptUpgrade) openPlusUpgradeModal();
+    return null;
+  }
   if (isAccessLocked()) {
     applyAccessLock();
     throw new Error(accessLockMessage());
@@ -1783,6 +1813,13 @@ async function generateCloudReport(type, fromIso, toIso, period, options = {}) {
     28000
   );
   const payload = await response.json().catch(() => ({}));
+  if (payload && payload.error === "membership_check_failed") {
+    throw Object.assign(new Error("membership_check_failed"), { code: "membership_check_failed" });
+  }
+  if (payload && payload.error === "plus_required") {
+    if (options.promptUpgrade) openPlusUpgradeModal();
+    return null;
+  }
   if (applyPaywallFromPayload(response, payload) || !response.ok || payload.ok === false) {
     throw new Error(payload.error || `HTTP ${response.status}`);
   }
@@ -2876,7 +2913,7 @@ function renderAuth() {
         <span>使用 Google 帳號登入</span>
       </button>
       <p class="auth-form__error" id="authError" hidden></p>
-      <p class="auth-hint">Google 登入後享有 30 天完整功能免費試用。</p>
+      <p class="auth-hint">Google 登入後，新加入進行式即享 30 天 ING PLUS 完整體驗。</p>
     `;
     if (lastAuthError) setAuthError(lastAuthError);
     applyAccessLock();
@@ -2887,18 +2924,16 @@ function renderAuth() {
     ? `<img src="${escapeHtml(user.picture)}" alt="" referrerpolicy="no-referrer" />`
     : `<span class="auth-avatar">${initial}</span>`;
   const membership = state.membership || {};
-  const status = membership.status || "";
-  const entitled = Boolean(membership.entitled || membership.paid || membership.isPaid);
-  const payBtn = entitled && (membership.paid || membership.isPaid || status === "active")
-    ? `<button class="auth-pay is-paid" type="button" disabled><span>已解鎖無限暢用</span></button>`
-    : `<button class="auth-pay" id="btnNewebPay" type="button" data-open-pricing><span>${status === "trialing" || status === "pending" ? "選擇方案升級" : "選擇方案解鎖"}</span></button>`;
-  const trialHint = membership.trialEndsAt && (status === "trialing" || entitled && !membership.paid && !membership.isPaid)
-    ? `<p class="auth-hint">免費試用至 ${escapeHtml(formatTrialDate(membership.trialEndsAt))}${membership.daysLeft != null ? `，還有 ${membership.daysLeft} 天` : ""}。</p>`
-    : entitled && (status === "active" || membership.paid || membership.isPaid)
-      ? `<p class="auth-hint">一次付清已完成，功能已全部解鎖。</p>`
-      : status === "expired" || status === "cancelled" || status === "past_due" || (!entitled && status)
-        ? `<p class="auth-hint">免費體驗已結束，可選月繳 $599 或季繳 $1,197 解鎖暢用。</p>`
-        : `<p class="auth-hint">登入後享有 30 天完整功能免費試用。</p>`;
+  const paid = Boolean(membership.paid || membership.isPaid || membership.status === "active");
+  const trialActive = Boolean(membership.plusTrialActive || (!paid && isMembershipLive(membership)));
+  const payBtn = paid
+    ? `<button class="auth-pay is-paid" type="button" disabled><span>目前是 ING PLUS</span></button>`
+    : `<button class="auth-pay" id="btnNewebPay" type="button" data-open-pricing><span>${trialActive ? "查看 PLUS" : "升級 PLUS"}</span></button>`;
+  const trialHint = paid
+    ? `<p class="auth-hint">你正在使用 ING PLUS。隨時可從方案頁查看內容。</p>`
+    : trialActive
+      ? `<p class="auth-hint">PLUS 體驗中，至 ${escapeHtml(formatTrialDate(membership.trialEndsAt))}${membership.daysLeft != null ? `，還有 ${membership.daysLeft} 天` : ""}。</p>`
+      : `<p class="auth-hint">你目前是 ING FREE。過去紀錄都在，可隨時升級 PLUS。</p>`;
   side.innerHTML = `
     <div class="auth-user">
       ${avatar}
@@ -3323,10 +3358,10 @@ function isMembershipLive(membership) {
 }
 
 function accessLockMode() {
+  if (readDevPlanOverride()) return "";
   if (!state.user) return "guest";
   if (state.membership == null && !state.authReady) return "pending";
-  if (!state.membership) return "";
-  return isMembershipLive(state.membership) ? "" : "expired";
+  return "";
 }
 
 function isAccessLocked() {
@@ -3334,24 +3369,274 @@ function isAccessLocked() {
 }
 
 function accessLockMessage() {
-  return accessLockMode() === "expired"
-    ? "您的免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限"
-    : "請先使用 Google 登入，即可解鎖 30 天完整免費試用";
+  return "請先使用 Google 登入。新加入進行式，即享 30 天 ING PLUS 完整體驗。";
+}
+
+function entitlementApi() {
+  return typeof window !== "undefined" ? window.NichiEntitlement : null;
+}
+
+function currentEffectivePlan() {
+  const membership = state.membership || {};
+  const plan = String(membership.effectivePlan || "").trim().toLowerCase();
+  if (plan === "plus" || plan === "free") return plan;
+  if (membership.paid || membership.isPaid || membership.plusTrialActive) return "plus";
+  if (membership.entitled && isMembershipLive(membership)) return "plus";
+  return "free";
+}
+
+function isBrowserLocalHost() {
+  const api = entitlementApi();
+  const host = typeof location !== "undefined" ? String(location.hostname || "") : "";
+  if (api && typeof api.isBrowserLocalHost === "function") return api.isBrowserLocalHost(host);
+  return /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(host);
+}
+
+function readDevPlanOverride() {
+  if (!isBrowserLocalHost()) return "";
+  try {
+    const params = new URLSearchParams(location.search);
+    if (params.get("ingResetNotice") === "1") {
+      try {
+        localStorage.removeItem(plusEndedNoticeKey("dev-preview"));
+        if (state.user && state.user.id) localStorage.removeItem(plusEndedNoticeKey(state.user.id));
+      } catch {
+        /* ignore */
+      }
+    }
+    const raw = String(params.get("ingPlan") || "").trim().toLowerCase();
+    if (raw === "free" || raw === "trial" || raw === "plus" || raw === "expired") {
+      sessionStorage.setItem("nichi.devPlan", raw);
+      return raw;
+    }
+    if (params.has("ingPlan")) {
+      sessionStorage.removeItem("nichi.devPlan");
+      return "";
+    }
+    const stored = String(sessionStorage.getItem("nichi.devPlan") || "").trim().toLowerCase();
+    if (stored === "free" || stored === "trial" || stored === "plus" || stored === "expired") return stored;
+  } catch {
+    return "";
+  }
+  return "";
+}
+
+function membershipFromDevPlan(mode, base) {
+  const now = Date.now();
+  const prev = base && typeof base === "object" ? base : {};
+  if (mode === "free") {
+    return {
+      ...prev,
+      status: "none",
+      entitled: false,
+      paid: false,
+      isPaid: false,
+      plan: "free",
+      effectivePlan: "free",
+      plusTrialActive: false,
+      plusTrialUsed: true,
+      daysLeft: 0,
+      trialEndsAt: "",
+      subscriptionStatus: "none",
+    };
+  }
+  if (mode === "expired") {
+    return {
+      ...prev,
+      status: "expired",
+      entitled: false,
+      paid: false,
+      isPaid: false,
+      plan: "free",
+      effectivePlan: "free",
+      plusTrialActive: false,
+      plusTrialUsed: true,
+      daysLeft: 0,
+      trialEndsAt: new Date(now - 2 * 3600000).toISOString(),
+      subscriptionStatus: "expired",
+    };
+  }
+  if (mode === "trial") {
+    return {
+      ...prev,
+      status: "trialing",
+      entitled: true,
+      paid: false,
+      isPaid: false,
+      plan: "free",
+      effectivePlan: "plus",
+      plusTrialActive: true,
+      plusTrialUsed: true,
+      daysLeft: 12,
+      trialEndsAt: new Date(now + 12 * 86400000).toISOString(),
+      subscriptionStatus: "none",
+    };
+  }
+  if (mode === "plus") {
+    return {
+      ...prev,
+      status: "active",
+      entitled: true,
+      paid: true,
+      isPaid: true,
+      plan: "plus",
+      effectivePlan: "plus",
+      billingInterval: "monthly",
+      plusTrialActive: false,
+      plusTrialUsed: true,
+      daysLeft: null,
+      subscriptionStatus: "active",
+    };
+  }
+  return prev;
+}
+
+function applyDevPlanOverrideToState() {
+  const mode = readDevPlanOverride();
+  if (!mode) return false;
+  if (!state.user) state.user = { id: "dev-preview", email: "dev@localhost" };
+  state.authReady = true;
+  state.membership = membershipFromDevPlan(mode, state.membership);
+  return true;
+}
+
+function isDevPreviewUser() {
+  return Boolean(readDevPlanOverride() && state.user && state.user.id === "dev-preview");
+}
+
+function canUsePlusFeature(feature) {
+  const api = entitlementApi();
+  if (api && typeof api.canUseFeature === "function") {
+    return api.canUseFeature(currentEffectivePlan(), feature);
+  }
+  return currentEffectivePlan() === "plus";
+}
+
+function isPlusRequiredError(error) {
+  if (!error) return false;
+  if (error.code === "plus_required" || error.error === "plus_required") return true;
+  return /plus_required|This feature requires ING PLUS/i.test(String(error.message || error || ""));
+}
+
+function openPlusUpgradeModal() {
+  if (currentEffectivePlan() === "plus") return;
+  const modal = document.getElementById("plusUpgradeModal");
+  if (!modal) return;
+  if (typeof modal.showModal === "function") {
+    if (!modal.open) modal.showModal();
+  } else {
+    modal.setAttribute("open", "");
+  }
+}
+
+function closePlusUpgradeModal() {
+  const modal = document.getElementById("plusUpgradeModal");
+  if (!modal) return;
+  if (typeof modal.close === "function") {
+    if (modal.open) modal.close();
+  } else {
+    modal.removeAttribute("open");
+  }
+}
+
+function ensurePlusFeature(feature, options = {}) {
+  if (canUsePlusFeature(feature)) return true;
+  if (!options.auto && !options.silent) openPlusUpgradeModal();
+  return false;
+}
+
+function syncPlanUi() {
+  if (state.user && (state.membership || state.authReady)) {
+    document.body.dataset.plan = currentEffectivePlan();
+  } else {
+    delete document.body.dataset.plan;
+  }
+}
+
+function journalHasPlusContent(data) {
+  const journal = data && typeof data === "object" ? data : null;
+  if (journal && typeof deepHasContent === "function" && deepHasContent(journal.deep)) return true;
+  if (journal && ((journal.awarenessChecks || []).length || (journal.executionChecks || []).length)) return true;
+  const insight = state.journalInsight;
+  if (insight && insight.guide && Array.isArray(insight.guide.rounds) && insight.guide.rounds.length) return true;
+  if (insight && String(insight.conclusion || insight.title || "").trim()) return true;
+  if (state.thinkChoices && Array.isArray(state.thinkChoices.options) && state.thinkChoices.options.length) return true;
+  if (state.awarenessChoices && Array.isArray(state.awarenessChoices.options) && state.awarenessChoices.options.length) return true;
+  if (state.executionChoices && Array.isArray(state.executionChoices.options) && state.executionChoices.options.length) return true;
+  if (state.journalBodyCoach && (state.journalBodyCoach.analysis || state.journalBodyCoach.title)) return true;
+  if (state.think && Array.isArray(state.think.history) && state.think.history.length) return true;
+  return false;
+}
+
+function maybeConstrainJournalModeForPlan() {
+  if (!state.user || canUsePlusFeature("deep_journal")) return;
+  if (state.journalHydrating) return;
+  if (state.journalMode === "deep" && !journalHasPlusContent()) {
+    applyJournalMode("quick", { silent: true });
+  }
+}
+
+function plusEndedNoticeKey(userId) {
+  const id = String(userId || (state.user && state.user.id) || "").trim();
+  return id ? `nichi.u.${id}.plusTrialEndedNotice` : STORAGE_KEYS.plusTrialEndedNotice;
+}
+
+function hasDismissedPlusEndedNotice() {
+  try {
+    return localStorage.getItem(plusEndedNoticeKey()) === "1" || localStorage.getItem(STORAGE_KEYS.plusTrialEndedNotice) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function dismissPlusEndedNotice() {
+  try {
+    localStorage.setItem(plusEndedNoticeKey(), "1");
+    localStorage.setItem(STORAGE_KEYS.plusTrialEndedNotice, "1");
+  } catch {
+    /* ignore quota */
+  }
+}
+
+function shouldShowPlusEndedNotice(membership = state.membership) {
+  if (!state.user || !membership) return false;
+  if (membership.paid || membership.isPaid || membership.status === "active") return false;
+  if (membership.plusTrialActive || isMembershipLive(membership)) return false;
+  if (!membership.trialEndsAt && membership.subscriptionStatus !== "expired" && membership.status !== "expired") return false;
+  return !hasDismissedPlusEndedNotice();
+}
+
+function closePlusEndedModal() {
+  const modal = document.getElementById("plusEndedModal");
+  if (!modal) return;
+  if (typeof modal.close === "function" && modal.open) modal.close();
+  else modal.removeAttribute("open");
+}
+
+function openPlusEndedModal() {
+  const modal = document.getElementById("plusEndedModal");
+  if (!modal) return;
+  if (typeof modal.showModal === "function") {
+    if (!modal.open) modal.showModal();
+  } else {
+    modal.setAttribute("open", "");
+  }
+}
+
+function maybeShowPlusEndedNotice() {
+  if (!shouldShowPlusEndedNotice()) return;
+  openPlusEndedModal();
 }
 
 function applyPaywallFromPayload(response, payload) {
+  if (payload && payload.error === "membership_check_failed") return true;
+  if (payload && payload.error === "plus_required") {
+    openPlusUpgradeModal();
+    return true;
+  }
   if (!(response && (response.status === 402 || (payload && payload.paywall)))) return false;
-  const current = state.membership || {};
-  state.membership = {
-    ...current,
-    entitled: false,
-    paid: false,
-    isPaid: false,
-    status: current.status === "active" || current.status === "past_due" ? current.status : "expired",
-  };
-  applyAccessLock();
-  renderAuth();
-  return true;
+  maybeShowPlusEndedNotice();
+  return false;
 }
 
 function applyAccessLock() {
@@ -3376,6 +3661,7 @@ function applyAccessLock() {
   }
   bindSubscribeButton();
   syncPricingModal();
+  syncPlanUi();
 }
 
 function bindSubscribeButton() {
@@ -3398,13 +3684,17 @@ function onSubscribeClick(event) {
 }
 
 function startNewebPay(planId) {
+  if (!NEWEBPAY_CHECKOUT_ENABLED) {
+    showToast("ING PLUS 方案準備中，新價格尚未開放扣款。");
+    return;
+  }
   if (!state.user) {
     closePricingModal();
-    showToast("請先用 Google 登入，即可享有 30 天完整試用。");
+    showToast("請先用 Google 登入。新加入進行式，即享 30 天 ING PLUS 完整體驗。");
     signInWithGoogle();
     return;
   }
-  const plan = NEWEBPAY_PLANS[planId] || NEWEBPAY_PLANS.quarter;
+  const plan = NEWEBPAY_PLANS[planId] || NEWEBPAY_PLANS.monthly;
   window.location.assign(plan.url || NEWEBPAY_EPG_URL);
 }
 
@@ -3432,23 +3722,47 @@ function syncPricingModal() {
   const membership = state.membership || {};
   const paid = Boolean(membership.paid || membership.isPaid || membership.status === "active");
   const loggedIn = Boolean(state.user);
+  const trialActive = Boolean(membership.plusTrialActive || (!paid && isMembershipLive(membership)));
+  const freeCta = document.getElementById("pricingFreeCta");
+  if (freeCta) {
+    freeCta.disabled = true;
+    freeCta.textContent = paid || trialActive ? "免費方案" : "目前方案";
+  }
+  const trialStatus = document.getElementById("plusTrialStatus");
+  if (trialStatus) {
+    if (trialActive && membership.daysLeft != null) {
+      trialStatus.hidden = false;
+      trialStatus.textContent = `PLUS 體驗中 · 剩餘 ${membership.daysLeft} 天`;
+    } else if (trialActive) {
+      trialStatus.hidden = false;
+      trialStatus.textContent = "PLUS 體驗中";
+    } else {
+      trialStatus.hidden = true;
+      trialStatus.textContent = "";
+    }
+  }
   document.querySelectorAll("[data-plan-cta]").forEach((btn) => {
     const plan = btn.dataset.plan;
     if (paid) {
       btn.disabled = true;
-      btn.textContent = "已解鎖暢用";
+      btn.textContent = "目前方案";
+      return;
+    }
+    if (!NEWEBPAY_CHECKOUT_ENABLED) {
+      btn.disabled = true;
+      btn.textContent = "方案準備中";
       return;
     }
     btn.disabled = false;
     if (!loggedIn) {
-      btn.textContent = plan === "quarter" ? "登入並立即升級" : "登入開始試用";
+      btn.textContent = plan === "yearly" ? "登入並升級 PLUS · 年繳" : "登入並升級 PLUS";
       return;
     }
-    if (isAccessLocked()) {
-      btn.textContent = "立即升級";
+    if (trialActive) {
+      btn.textContent = plan === "yearly" ? "升級 PLUS · 年繳" : "升級 PLUS";
       return;
     }
-    btn.textContent = plan === "quarter" ? "立即升級" : "開始試用";
+    btn.textContent = plan === "yearly" ? "升級 PLUS · 年繳" : "升級 PLUS";
   });
 }
 
@@ -3567,16 +3881,23 @@ async function refreshAuth(options = {}) {
       if (payload.membershipError) setAuthError(payload.membershipError);
       if (!state.user && payload.user) state.user = payload.user;
     }
+    const preview = applyDevPlanOverrideToState();
     state.authReady = true;
     renderAuth();
     applyAccessLock();
     trackMembershipSignals(state.membership);
-    if (state.user) trackProduct("app_open", { source: "auth" });
+    syncPlanUi();
+    maybeConstrainJournalModeForPlan();
+    if (state.user && !preview) trackProduct("app_open", { source: "auth" });
+    maybeShowPlusEndedNotice();
     probeAdminAnalyticsLink();
-    if (state.user && !options.skipCloud) await syncAccountCloud();
+    if (preview) {
+      stopCloudLiveSync();
+    } else if (state.user && !options.skipCloud) await syncAccountCloud();
     else if (state.user) startCloudLiveSync();
     else stopCloudLiveSync();
   } catch {
+    applyDevPlanOverrideToState();
     state.authReady = true;
     renderAuth();
     applyAccessLock();
@@ -3610,7 +3931,7 @@ function handleAuthQuery() {
       storedAuthError = "";
     }
     if (!auth && !pay && !oauthError && !storedAuthError) return;
-    if (auth === "ok") showToast("已登入，30 天完整免費試用已開始。");
+    if (auth === "ok") showToast("已登入，30 天 ING PLUS 完整體驗已開始。");
     if (auth === "out") showToast("已登出。本機草稿仍在這台裝置上。");
     if (auth === "error" || oauthError || storedAuthError) {
       const raw = storedAuthError || oauthError || params.get("reason") || "請再試一次";
@@ -3842,6 +4163,149 @@ function renderChartCard(stats, prefix = "report") {
   `;
 }
 
+function reportHasAiContent(report) {
+  if (!report || typeof report !== "object") return false;
+  if (String(report.summary || report.analysis || report.reflection || report.title || "").trim()) return true;
+  if ((report.highlights || []).length || (report.patterns || []).length || (report.insights || []).length) return true;
+  return Boolean(report.source && report.source !== "local");
+}
+
+function journalHasBodyRecord(journal) {
+  if (!journal || typeof journal !== "object") return false;
+  if (Array.isArray(journal.bodyTags) && journal.bodyTags.length) return true;
+  if (String(journal.bodyNote || "").trim()) return true;
+  const check = journal.bodyCheck && typeof journal.bodyCheck === "object" ? journal.bodyCheck : {};
+  return ["mood", "body", "sleep"].some((key) => {
+    const item = check[key];
+    if (!item || typeof item !== "object") return false;
+    if (Array.isArray(item.flags) && item.flags.length) return true;
+    return Boolean(item.none || item.duration || item.other || item.reason);
+  });
+}
+
+function buildFreeReportSummaryFromReviews(fromIso, toIso) {
+  const reviews = getReviews();
+  const days = [];
+  if (fromIso && toIso && fromIso <= toIso) {
+    let cursor = fromIso;
+    let guard = 0;
+    while (cursor <= toIso && guard < 62) {
+      days.push(cursor);
+      const [year, month, day] = cursor.split("-").map(Number);
+      const next = new Date(Date.UTC(year, month - 1, day + 1));
+      cursor = `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-${String(next.getUTCDate()).padStart(2, "0")}`;
+      guard += 1;
+    }
+  }
+  let recordedDays = 0;
+  let completedDays = 0;
+  let thanksItems = 0;
+  let moodRecords = 0;
+  let bodyRecords = 0;
+  const moodCounts = {};
+  days.forEach((iso) => {
+    const review = reviews[iso];
+    if (!review) return;
+    const journal = review.journal && typeof review.journal === "object" ? review.journal : {};
+    const thanks = thanksItemsFrom(thanksTextFrom(journal)).length;
+    const mood = String(journal.mood || "").trim();
+    const body = journalHasBodyRecord(journal);
+    const hasText = Boolean(String(review.rawText || journal.event || journal.thanksText || "").trim());
+    if (!thanks && !mood && !body && !hasText && !review.completedAt) return;
+    recordedDays += 1;
+    if (reviewIsComplete(review)) completedDays += 1;
+    thanksItems += thanks;
+    if (mood) {
+      moodRecords += 1;
+      moodCounts[mood] = (moodCounts[mood] || 0) + 1;
+    }
+    if (body) bodyRecords += 1;
+  });
+  const topMood = Object.keys(moodCounts).sort((a, b) => moodCounts[b] - moodCounts[a])[0] || "";
+  return { recordedDays, completedDays, thanksItems, moodRecords, bodyRecords, topMood };
+}
+
+function safeCount(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function renderFreeReportFacts(type, report) {
+  const summary = buildFreeReportSummaryFromReviews(report.fromIso, report.toIso);
+  const recordedDays = safeCount(summary.recordedDays);
+  const completedDays = safeCount(summary.completedDays);
+  const thanksItems = safeCount(summary.thanksItems);
+  const moodRecords = safeCount(summary.moodRecords);
+  const bodyRecords = safeCount(summary.bodyRecords);
+  const topMood = String(summary.topMood || "").trim();
+  if (type === "month") {
+    return `
+      <article class="report-card">
+        <h3>本月紀錄</h3>
+        <p class="report-range">本月已記錄 ${recordedDays} 天</p>
+        ${recordedDays ? "" : `<p class="report-empty">這個月還沒有紀錄。寫下第一篇後，這裡會出現本月天數。</p>`}
+      </article>
+    `;
+  }
+  return `
+    <article class="report-card">
+      <h3>本週基礎週報</h3>
+      ${
+        recordedDays || completedDays || thanksItems || moodRecords || bodyRecords
+          ? ""
+          : `<p class="report-empty">這個區間還沒有紀錄。寫下第一篇後，這裡會出現本週統計。</p>`
+      }
+      <div class="stats" style="margin:16px 0 0">
+        <article class="stat-card">
+          <p class="stat-card__value">${recordedDays}</p>
+          <p class="stat-card__label">記錄天數</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-card__value">${completedDays}</p>
+          <p class="stat-card__label">完成復盤</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-card__value">${thanksItems}</p>
+          <p class="stat-card__label">寫下感謝</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-card__value">${moodRecords}</p>
+          <p class="stat-card__label">心情紀錄</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-card__value">${bodyRecords}</p>
+          <p class="stat-card__label">身體覺察</p>
+        </article>
+        ${
+          topMood
+            ? `<article class="stat-card">
+          <p class="stat-card__value">${escapeHtml(topMood)}</p>
+          <p class="stat-card__label">最常選擇的心情</p>
+        </article>`
+            : ""
+        }
+      </div>
+    </article>
+  `;
+}
+
+function renderPlusReportLocks(type) {
+  const week = type !== "month";
+  const items = week
+    ? ["這週反覆出現的模式", "情緒與行動之間的關聯", "進行式看見的一個提醒"]
+    : ["本月反覆出現的模式", "情緒與行動之間的關聯", "進行式看見的一個提醒"];
+  const cta = week ? "解鎖完整週報" : "解鎖完整月報";
+  return `
+    <article class="report-card report-plus-lock">
+      <h3>${week ? "完整週報" : "完整月報"} <span class="plus-lock-badge">PLUS</span></h3>
+      <ul class="review-list">
+        ${items.map((item) => `<li>✦ ${escapeHtml(item)}</li>`).join("")}
+      </ul>
+      <button class="btn report-plus-lock__cta" type="button" data-plus-upgrade>${escapeHtml(cta)}</button>
+    </article>
+  `;
+}
+
 function renderAiReportBlock(ai, status) {
   if (status === "loading") {
     return `
@@ -3961,26 +4425,35 @@ function renderHistoryReportList(items) {
 async function hydrateAiReport(type, local, token) {
   const root = document.getElementById("reportAi");
   if (!root) return;
+  const plusOn = canUsePlusFeature(type === "month" ? "monthly_report_full" : "weekly_report_full");
   const period = local.period || (type === "month" ? local.fromIso.slice(0, 7) : local.fromIso);
-  const cached = readCachedReport(type, period) || readLatestCachedReport(type);
+  const cachedRaw = readCachedReport(type, period) || readLatestCachedReport(type);
+  const cached = reportHasAiContent(cachedRaw) ? cachedRaw : null;
   if (cached) root.innerHTML = renderAiReportBlock(cached);
+  else if (!plusOn) root.innerHTML = renderPlusReportLocks(type);
   else root.innerHTML = renderAiReportBlock(null, "loading");
 
   try {
     let report = await fetchStoredCloudReport(type, period);
     if (!report) report = await fetchStoredCloudReport(type, period, true);
-    if (!report && (local.filledDays || local.stats?.totals?.checked)) {
+    if (!reportHasAiContent(report) && plusOn && (local.filledDays || local.stats?.totals?.checked)) {
       report = await generateCloudReport(type, local.fromIso, local.toIso, period, { stats: local.stats });
     }
     if (token !== renderReport._token) return;
-    if (report) {
+    if (reportHasAiContent(report)) {
       writeCachedReport(type, report.period || period, report);
       root.innerHTML = renderAiReportBlock(report);
+    } else if (!plusOn) {
+      root.innerHTML = renderPlusReportLocks(type);
     } else if (!cached) {
       root.innerHTML = renderAiReportBlock("這段期間的復盤還不夠，先寫幾天再回來看綜合報告。", "error");
     }
   } catch (error) {
     if (token !== renderReport._token) return;
+    if (isPlusRequiredError(error)) {
+      root.innerHTML = cached ? renderAiReportBlock(cached) : renderPlusReportLocks(type);
+      return;
+    }
     if (!cached) root.innerHTML = renderAiReportBlock(formatApiError(error), "error");
   }
 }
@@ -4010,7 +4483,7 @@ async function ensurePreviousMonthArchive() {
     generatedAt: new Date().toISOString(),
   };
   writeCachedReport("month", prev.period, snapshot);
-  if (!state.user) return;
+  if (!state.user || !canUsePlusFeature("monthly_report_full")) return;
   try {
     const report = await generateCloudReport("month", prev.fromIso, prev.toIso, prev.period, {
       stats: local.stats,
@@ -4026,6 +4499,13 @@ function renderReportBody(report, options = {}) {
   const rate = report.days ? Math.round((report.filledDays / report.days) * 100) : 0;
   const cachedAi = options.ai;
   const chartPrefix = options.chartPrefix || "report";
+  const plusOn = canUsePlusFeature(options.type === "month" || report.type === "month" ? "monthly_report_full" : "weekly_report_full");
+  const freeFacts = plusOn ? "" : renderFreeReportFacts(options.type || report.type, report);
+  const initialAi = reportHasAiContent(cachedAi)
+    ? renderAiReportBlock(cachedAi)
+    : plusOn
+      ? renderAiReportBlock(cachedAi, cachedAi ? undefined : "loading")
+      : renderPlusReportLocks(options.type || report.type);
   return `
     <article class="report-card">
       <h3>${escapeHtml(report.label || "本區間")}完成摘要</h3>
@@ -4050,8 +4530,9 @@ function renderReportBody(report, options = {}) {
       </div>
       <p class="report-rhythm" style="margin-top:16px">${escapeHtml(formatFrequencyLabel(report.days, report.filledDays))}。一共留下 ${formatCharCount(report.totalChars)}。</p>
     </article>
+    ${freeFacts}
     ${renderChartCard(report.stats, chartPrefix)}
-    <div id="${options.aiId || "reportAi"}">${renderAiReportBlock(cachedAi, cachedAi ? undefined : "loading")}</div>
+    <div id="${options.aiId || "reportAi"}">${initialAi}</div>
     <article class="report-card">
       <h3>逐日回顧</h3>
       ${
@@ -6532,6 +7013,7 @@ async function generateJournalChecklist(kind, options = {}) {
     }
     return;
   }
+  if (!ensurePlusFeature(isAware ? "awareness_ai" : "execution_ai", options)) return;
   if (!isAware && usingExecChoices) {
     /* new 06: no follow-up Q&A after a selected action */
   } else if (!isAware && !options.skipFollow) {
@@ -6660,6 +7142,7 @@ async function generateJournalChecklist(kind, options = {}) {
     }
   } catch (error) {
     if (state.checklistToken[kind] !== token) return;
+    if (isPlusRequiredError(error)) return;
     if (isAware) {
       const previous = hasAwarenessResult(state.journalAwarenessResult)
         ? normalizeAwarenessResult(state.journalAwarenessResult, { keepSource: true })
@@ -6735,6 +7218,7 @@ async function generateExecutionFollowup(options = {}) {
     if (!options.auto) showToast("先回答這一題，再把它問得更具體。");
     return;
   }
+  if (!ensurePlusFeature("execution_ai", options)) return;
   if (!isAbstractExecAnswer(lastAnswer) && !options.force) {
     if (options.fromCards) {
       await generateJournalChecklist("execution", { skipFollow: true });
@@ -6791,6 +7275,7 @@ async function generateExecutionFollowup(options = {}) {
     showToast("這一步還有點抽象，先把它說具體一點。");
   } catch (error) {
     if (state.corePromptsToken !== token) return;
+    if (isPlusRequiredError(error)) return;
     const answers = collectExecutionAnswers();
     state.executionPrompts = [...current, { ...fallback, parked: false }].slice(0, EXECUTION_PROMPT_MAX);
     renderExecutionQuestions(state.executionPrompts, { answers });
@@ -7325,6 +7810,7 @@ async function generateManifestPlan(options = {}) {
     if (!options.auto) showToast("先寫下你想顯化的是什麼。");
     return;
   }
+  if (!ensurePlusFeature("manifest_ai", options)) return;
   const sig = vision;
   if (options.auto && state.journalMeta.manifestAiSig === sig && hasManifestPlan(current)) return;
 
@@ -7365,6 +7851,7 @@ async function generateManifestPlan(options = {}) {
     }
   } catch (error) {
     if (state.manifestPromptsToken !== token) return;
+    if (isPlusRequiredError(error)) return;
     persistManifestPlan({ id: current.id || uid(), steps: fallback.steps }, sig);
     if (!options.auto) showToast(`雲端整理失敗：${formatApiError(error)}，先用本地步驟。`);
   } finally {
@@ -8040,6 +8527,7 @@ function recoverStaleBusy(flag, startedAt, clearFn, limitMs = 32000) {
 
 async function generateThinkGuideAsk(options = {}) {
   if (!options.auto) setJournalFoldOpen(thinkGuideFoldId(), true, { manual: true });
+  if (!ensurePlusFeature("think_ai", options)) return false;
   if (recoverStaleBusy(state.insightBusy, state.insightBusyAt, () => setInsightLoading(false))) {
     if (!options.auto) showToast("還在為你想下一問，請稍候。");
     return false;
@@ -8094,6 +8582,7 @@ async function generateThinkGuideAsk(options = {}) {
     return true;
   } catch (error) {
     if (state.insightToken !== token) return false;
+    if (isPlusRequiredError(error)) return false;
     const asked = { ...localThinkGuideAsk(journal, nextRound, guide), answer: "" };
     applyThinkGuideInsight({ ...guide, round: nextRound, rounds: [...guide.rounds, asked] }, sig);
     if (!options.auto) showToast(`雲端提問失敗：${formatApiError(error)}，先用本地引導。`);
@@ -8117,6 +8606,7 @@ async function generateThinkGuideClose(options = {}) {
     if (!options.auto) showToast("請先寫完三輪深度思考。");
     return false;
   }
+  if (!ensurePlusFeature("think_ai", options)) return false;
   const sig = insightSignature(journal);
   const token = (state.insightToken || 0) + 1;
   state.insightToken = token;
@@ -8157,6 +8647,7 @@ async function generateThinkGuideClose(options = {}) {
     return true;
   } catch (error) {
     if (state.insightToken !== token) return false;
+    if (isPlusRequiredError(error)) return false;
     const fallback = localThinkGuideClose(journal, guide);
     applyThinkGuideInsight({ ...guide, round: 4, ...fallback }, sig);
     if (!options.fromComplete) showToast(`雲端總結失敗：${formatApiError(error)}，先留下本地思考。`);
@@ -8293,6 +8784,7 @@ async function generateBodyCoach(options = {}) {
     if (!options.auto) showToast("請先勾選今天有出現的狀況。");
     return;
   }
+  if (!ensurePlusFeature("body_ai", options)) return;
   const sig = bodyCoachSignature(journal);
   if (options.auto && state.journalMeta.bodyCoachSig === sig) return;
 
@@ -8330,6 +8822,7 @@ async function generateBodyCoach(options = {}) {
     trackProduct("body_awareness_completed", { source: "coach", mode: state.journalMode === "quick" ? "quick" : "deep" });
   } catch (error) {
     if (state.bodyCoachToken !== token) return;
+    if (isPlusRequiredError(error)) return;
     const fallback = localBodyCoachFallback(journal);
     state.journalBodyCoach = fallback;
     state.journalMeta.bodyCoachSig = sig;
@@ -8344,6 +8837,7 @@ async function generateBodyCoach(options = {}) {
 
 function maybeAutoGenerateBodyCoach(journal) {
   if (state.journalHydrating) return;
+  if (!canUsePlusFeature("body_ai")) return;
   if (state.journalMode === "quick" && !state.quickModules?.body) return;
   if (bodyCoachReady(journal, { auto: true }) && state.journalMeta.bodyCoachSig !== bodyCoachSignature(journal)) {
     generateBodyCoach({ auto: true });
@@ -9257,6 +9751,7 @@ function choicesContext(journal, extra = {}) {
 
 async function generateAwarenessChoices(options = {}) {
   pinAwareFold();
+  if (!ensurePlusFeature("awareness_ai", options)) return;
   if (state.choicesBusy?.awareness) {
     if (!options.auto) showToast("還在為你整理今天的覺察選項，請稍候。");
     return;
@@ -9306,6 +9801,7 @@ async function generateAwarenessChoices(options = {}) {
     if (!options.auto) showToast("今天的覺察選項已經準備好了。");
   } catch (error) {
     if (state.choicesToken.awareness !== token) return;
+    if (isPlusRequiredError(error)) return;
     if (fallback.length >= 3) {
       state.awarenessChoices = serializeChoiceBag({
         sourceSig: `${thanksTextFrom(journal)}\n${journal.event}\n${journal.mood}`,
@@ -9326,6 +9822,7 @@ async function generateAwarenessChoices(options = {}) {
 
 async function generateThinkChoices(options = {}) {
   setJournalFoldOpen("section-deep", true, { manual: true });
+  if (!ensurePlusFeature("think_ai", options)) return;
   if (state.choicesBusy?.think) {
     if (!options.auto) showToast("還在為你整理今天的深度選項，請稍候。");
     return;
@@ -9363,6 +9860,7 @@ async function generateThinkChoices(options = {}) {
     if (!options.auto) showToast("今天的深度選項已經準備好了。");
   } catch (error) {
     if (state.choicesToken.think !== token) return;
+    if (isPlusRequiredError(error)) return;
     if (fallback.length >= 3) {
       state.thinkChoices = serializeChoiceBag({
         sourceSig: `${thanksTextFrom(journal)}\n${journal.event}\n${journal.mood}`,
@@ -9388,6 +9886,7 @@ async function generateThinkChoicesClose(options = {}) {
     if (!options.auto) showToast("先產生今天的深度選項。");
     return;
   }
+  if (!ensurePlusFeature("think_ai", options)) return;
   if (state.choicesBusy?.thinkClose) {
     if (!options.auto) showToast("還在為你整理今天的深度看見，請稍候。");
     return;
@@ -9423,6 +9922,7 @@ async function generateThinkChoicesClose(options = {}) {
     if (!options.auto) showToast("今天的深度看見，已經整理好了。");
   } catch (error) {
     if (state.choicesToken.thinkClose !== token) return;
+    if (isPlusRequiredError(error)) return;
     applyThinkChoicesClose(localThinkChoicesClose(journal, bag));
     if (!options.auto) showToast(`雲端整理失敗：${formatApiError(error)}，先用本地整理。`);
   } finally {
@@ -9502,6 +10002,7 @@ function localExecutionChoiceFallbacks(journal) {
 
 async function generateExecutionChoices(options = {}) {
   setJournalFoldOpen("section-exec", true, { manual: true });
+  if (!ensurePlusFeature("execution_ai", options)) return;
   if (state.choicesBusy?.execution) {
     if (!options.auto) showToast("還在為你整理明天的小行動，請稍候。");
     return;
@@ -9571,6 +10072,7 @@ async function generateExecutionChoices(options = {}) {
     if (!options.auto) showToast("明天的小行動已經準備好了。");
   } catch (error) {
     if (state.choicesToken.execution !== token) return;
+    if (isPlusRequiredError(error)) return;
     if (!enough && !alreadyFollowed) {
       state.executionChoices = serializeExecutionChoiceBag({
         sourceSig: `${thanksTextFrom(journal)}\n${journal.event}\n${journal.mood}`,
@@ -9954,6 +10456,7 @@ async function generateAwarenessFollowup(options = {}) {
     if (!options.auto) showToast("先回答這一題，再繼續下一層。");
     return;
   }
+  if (!ensurePlusFeature("awareness_ai", options)) return;
   const token = (state.corePromptsToken || 0) + 1;
   state.corePromptsToken = token;
   setCorePromptsLoading(true, "awareness-follow");
@@ -9975,6 +10478,7 @@ async function generateAwarenessFollowup(options = {}) {
     revealAwareQuestion(state.awarenessPrompts.length - 1);
   } catch (error) {
     if (state.corePromptsToken !== token) return;
+    if (isPlusRequiredError(error)) return;
     if (!options.auto) showToast("這次覺察沒有完整生成，請再試一次。");
   } finally {
     clearTimeout(watchdog);
@@ -9985,6 +10489,7 @@ async function generateAwarenessFollowup(options = {}) {
 async function generateCorePrompts(options = {}) {
   const scope =
     options.scope === "execution" ? "execution" : options.scope === "core" ? "core" : "awareness";
+  if (!ensurePlusFeature(scope === "execution" ? "execution_ai" : "awareness_ai", options)) return;
   if (scope === "awareness") {
     await generateAwarenessChoices(options);
     return;
@@ -10113,6 +10618,7 @@ async function generateCorePrompts(options = {}) {
     if (!options.auto) showToast("今天的第一題覺察已經準備好了。");
   } catch (error) {
     if (state.corePromptsToken !== token) return;
+    if (isPlusRequiredError(error)) return;
     if (scope === "execution") applyGeneratedCorePrompts(null, fallback.execution, sig, true, { resetExecutionAnswers: Boolean(options.force) });
     else if (scope === "core") applyGeneratedCorePrompts(null, fallback.execution, sig, true);
     if (options.auto) state.corePromptsFailedSig = sig;
@@ -10174,6 +10680,7 @@ async function generateJournalPrompts(options = {}) {
     if (!options.auto) showToast("請先寫下今日事件、選擇心情，並標出身體狀況，才會生成今天的題目。");
     return;
   }
+  if (!ensurePlusFeature("think_ai", options)) return;
   if (options.force && deepHasContent(journal.deep)) {
     showToast("你已經開始作答深度思考了。想換題的話，先清空這幾題的回答。");
     return;
@@ -10215,6 +10722,7 @@ async function generateJournalPrompts(options = {}) {
     showToast("今天的深度思考主題已生成。");
   } catch (error) {
     if (state.promptsToken !== token) return;
+    if (isPlusRequiredError(error)) return;
     applyGeneratedPrompts([], localDeepPrompts(journal), [], sig, false, scope);
     showToast(`雲端出題失敗：${formatApiError(error)}，先用今天的本地題目。`);
   } finally {
@@ -10295,6 +10803,7 @@ async function generateDeepFollow(index) {
     showToast("先在這個主題寫下一點，再往下挖。");
     return;
   }
+  if (!ensurePlusFeature("think_ai")) return;
   const details = document.querySelector(`#deep${slotIndex}plain`)?.closest("details");
   if (details) details.open = true;
 
@@ -10326,6 +10835,7 @@ async function generateDeepFollow(index) {
     showToast("已生出 3 個更深的追問。");
   } catch (error) {
     if (state.deepFollowToken[slotIndex - 1] !== token) return;
+    if (isPlusRequiredError(error)) return;
     renderDeepFollow(slotIndex, fallback, slot.notes);
     showToast(`雲端分析失敗：${formatApiError(error)}，先用本地追問。`);
   } finally {
@@ -10369,6 +10879,15 @@ function toggleModeGuide() {
 
 function applyJournalMode(mode, options = {}) {
   const next = mode === "quick" ? "quick" : "deep";
+  if (
+    next === "deep" &&
+    !options.silent &&
+    !canUsePlusFeature("deep_journal") &&
+    !journalHasPlusContent()
+  ) {
+    openPlusUpgradeModal();
+    return;
+  }
   state.journalMode = next;
   document.body.dataset.journalMode = next;
   document.querySelectorAll("[data-journal-mode]").forEach((btn) => {
@@ -11112,6 +11631,7 @@ function fillJournal(journal) {
   renderBodyCoachCard(state.journalBodyCoach);
   syncCorePromptGate();
   state.journalHydrating = false;
+  maybeConstrainJournalModeForPlan();
   applyJournalFolds();
 }
 
@@ -12089,6 +12609,7 @@ function applyThinkResult(raw, nextRound, options = {}) {
 
 function runThink(replyText = "") {
   try {
+    if (!ensurePlusFeature("think_ai")) return;
     if (!state.organize) {
       showToast("請先按「開始整理」。");
       return;
@@ -12130,13 +12651,16 @@ async function enhanceThinkWithApi(nextRound, selected, reply, token) {
     showToast("登入後，深度思考才會走到雲端。");
     return;
   }
+  if (!canUsePlusFeature("think_ai")) return;
   showToast("正在往下深挖…");
   try {
     const remote = await generateThink(state.rawText, state.organize, nextRound, selected, reply);
     if (state.thinkToken !== token) return;
+    if (!remote) return;
     applyThinkResult(remote, nextRound, { silent: true, replace: true });
     showToast("雲端深度思考已套用。");
   } catch (error) {
+    if (isPlusRequiredError(error)) return;
     console.error("[日精進 API] 深度思考雲端失敗，維持本地結果。", formatApiError(error), error);
     showToast(`雲端思考失敗：${formatApiError(error)}`);
   }
@@ -12307,13 +12831,18 @@ function renderReport() {
   const hasData = report.filledDays || (report.stats?.totals?.checked || 0);
 
   if (!hasData) {
+    const plusOn = canUsePlusFeature(state.reportType === "month" ? "monthly_report_full" : "weekly_report_full");
     root.innerHTML = `
-      <article class="report-card">
+      ${
+        plusOn
+          ? `<article class="report-card">
         <div class="empty">
           <p class="empty__title">這個區間還沒有復盤</p>
           <p class="report-empty">寫下第一篇、勾選覺察／執行／顯化之後，這裡會出現圖表與深度思考。</p>
         </div>
-      </article>
+      </article>`
+          : `${renderFreeReportFacts(state.reportType, report)}${renderPlusReportLocks(state.reportType)}`
+      }
       <div id="reportAi"></div>
       <article class="report-card" id="reportHistoryCard">
         <h3>歷史報告列表</h3>
@@ -12414,7 +12943,7 @@ async function openArchivedMonth(period, options = {}) {
   if (state.user && (!cached || cached.source === "local")) {
     try {
       let report = await fetchStoredCloudReport("month", period);
-      if (!report) {
+      if (!reportHasAiContent(report) && canUsePlusFeature("monthly_report_full")) {
         report = await generateCloudReport("month", range.fromIso, range.toIso, period, {
           stats: buildGrowthStats(range.fromIso, range.toIso),
           archive: true,
@@ -13916,11 +14445,17 @@ function catchAsync(run, fallbackMessage) {
     const result = run();
     if (result && typeof result.catch === "function") {
       result.catch((error) => {
-        showToast(`${fallbackMessage}：${formatApiError(error)}`);
+        if (isPlusRequiredError(error)) return;
+        const text = formatApiError(error);
+        if (!text) return;
+        showToast(`${fallbackMessage}：${text}`);
       });
     }
   } catch (error) {
-    showToast(`${fallbackMessage}：${formatApiError(error)}`);
+    if (isPlusRequiredError(error)) return;
+    const text = formatApiError(error);
+    if (!text) return;
+    showToast(`${fallbackMessage}：${text}`);
   }
 }
 
@@ -14484,6 +15019,11 @@ function bindEvents() {
         signOutUser();
         return;
       }
+      if (target.closest("[data-plus-upgrade]")) {
+        event.preventDefault();
+        openPlusUpgradeModal();
+        return;
+      }
       if (target.closest("#btnNewebPay") || target.closest(".auth-pay:not(:disabled)") || target.closest("[data-open-pricing]")) {
         console.log("Pricing modal opened");
         event.preventDefault();
@@ -14493,7 +15033,9 @@ function bindEvents() {
       handleTodayPointerClick(event);
     } catch (error) {
       console.error(error);
-      showToast(formatApiError(error));
+      if (isPlusRequiredError(error)) return;
+      const text = formatApiError(error);
+      if (text) showToast(text);
     }
   });
 
@@ -14541,6 +15083,30 @@ function bindEvents() {
   });
   document.getElementById("pricingModal")?.addEventListener("click", (event) => {
     if (event.target === event.currentTarget) closePricingModal();
+  });
+  document.getElementById("pricingFreeCta")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    closePricingModal();
+  });
+  document.getElementById("plusUpgradeForm")?.addEventListener("submit", (event) => {
+    const action = event.submitter && event.submitter.id === "plusUpgradeView" ? "plus" : "later";
+    closePlusUpgradeModal();
+    if (action === "plus") {
+      event.preventDefault();
+      openPricingModal();
+    }
+  });
+  document.getElementById("plusEndedForm")?.addEventListener("submit", (event) => {
+    const action = event.submitter && event.submitter.id === "plusEndedViewPlus" ? "plus" : "continue";
+    dismissPlusEndedNotice();
+    closePlusEndedModal();
+    if (action === "plus") {
+      event.preventDefault();
+      openPricingModal();
+    }
+  });
+  document.getElementById("plusEndedModal")?.addEventListener("close", () => {
+    dismissPlusEndedNotice();
   });
 
   const promptChips = document.getElementById("promptChips");
@@ -15039,6 +15605,7 @@ function init() {
     console.error(error);
   }
   try {
+    applyDevPlanOverrideToState();
     applyAccessLock();
   } catch (error) {
     console.error(error);
@@ -15080,6 +15647,7 @@ function init() {
     initReminder();
     setInterval(tickReminder, 20000);
     probeReviewApi();
+    applyDevPlanOverrideToState();
     applyAccessLock();
     bindCloudLiveSync();
     refreshAuth();

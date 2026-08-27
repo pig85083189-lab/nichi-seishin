@@ -1,6 +1,7 @@
 const reviewHandler = require("./review");
 const { requireUser } = require("../lib/auth");
-const { ensureTrial, isEntitled, supabaseAdminConfigured } = require("../lib/supabase");
+const { ensureTrial, effectivePlanFromRow, supabaseAdminConfigured } = require("../lib/supabase");
+const { enforcePlusEntitlement } = require("../lib/entitlement");
 const { getApiKey, getModel, getProvider, usesClaude, callOpenAI } = require("../lib/openai");
 
 function readJsonBody(req) {
@@ -70,21 +71,13 @@ module.exports = async function handler(req, res) {
   const user = await requireUser(req, res);
   if (!user) return;
 
-  if (supabaseAdminConfigured()) {
-    try {
-      const sub = await ensureTrial(user);
-      if (sub && !isEntitled(sub)) {
-        res.status(402).json({
-          ok: false,
-          error: "您的免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限",
-          paywall: true,
-        });
-        return;
-      }
-    } catch (error) {
-      console.error("ensureTrial in chat:", error && error.message ? error.message : error);
-    }
-  }
+  const allowed = await enforcePlusEntitlement({
+    feature: "think_ai",
+    res,
+    supabaseReady: supabaseAdminConfigured(),
+    loadPlan: async () => effectivePlanFromRow(await ensureTrial(user)),
+  });
+  if (!allowed) return;
 
   const messages = Array.isArray(body.messages) ? body.messages : [];
   if (!messages.length) {

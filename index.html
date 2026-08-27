@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=187" />
+    <link rel="stylesheet" href="app.css?v=190" />
     <style>
       .splash {
         position: fixed;
@@ -179,7 +179,7 @@
             <span>使用 Google 帳號登入</span>
           </button>
           <p class="auth-form__error" id="authError" hidden></p>
-          <p class="auth-hint">Google 登入後享有 30 天完整功能免費試用。</p>
+          <p class="auth-hint">Google 登入後，新加入進行式即享 30 天 ING PLUS 完整體驗。</p>
         </div>
       </nav>
 
@@ -235,7 +235,7 @@
                     </button>
                     <button class="mode-guide__card is-on" data-journal-mode="deep" type="button" aria-pressed="true" tabindex="-1">
                       <span class="mode-guide__icon" aria-hidden="true">🌙</span>
-                      <span class="mode-guide__tag">全面覺察 · 靈魂對話 · 突破盲點</span>
+                      <span class="mode-guide__tag">全面覺察 · 靈魂對話 · 突破盲點 <span class="plus-lock-badge">PLUS</span></span>
                       <strong>深度復盤</strong>
                       <span class="mode-guide__when">週末、心力充沛時，或今天情緒波動、卡點需要好好梳理。</span>
                       <span class="mode-guide__points">
@@ -257,7 +257,7 @@
                 <span>3–5 分鐘 · 感謝、事件與心情，可加選模組</span>
               </button>
               <button class="journal-mode__btn is-on" data-journal-mode="deep" type="button" role="tab" aria-selected="true">
-                <strong>🌙 深度復盤</strong>
+                <strong>🌙 深度復盤 <span class="plus-lock-badge">PLUS</span></strong>
                 <span>10–15 分鐘 · 完整 01～06</span>
               </button>
             </div>
@@ -377,8 +377,8 @@
             <p class="journal-guide">預設保持極簡。想加強哪一塊，再勾選展開；取消就會收合。</p>
             <div class="quick-modules__list" role="group" aria-label="快速復盤選配模組">
               <button class="quick-mod" data-quick-mod="body" type="button" aria-pressed="false">身體覺察</button>
-              <button class="quick-mod" data-quick-mod="aware" type="button" aria-pressed="false">覺察力</button>
-              <button class="quick-mod" data-quick-mod="exec" type="button" aria-pressed="false">執行力</button>
+              <button class="quick-mod" data-quick-mod="aware" type="button" aria-pressed="false">覺察力 <span class="plus-lock-badge">PLUS</span></button>
+              <button class="quick-mod" data-quick-mod="exec" type="button" aria-pressed="false">執行力 <span class="plus-lock-badge">PLUS</span></button>
             </div>
               </div>
             </div>
@@ -491,7 +491,7 @@
                   <h3 class="body-coach__title">今日身心小結</h3>
                   <p class="body-coach__lead">看完今天的心情、身體與睡眠後，幫你整理現在的身心狀態，以及今晚可以怎麼照顧自己。</p>
                 </header>
-                <button class="ai-check-btn ai-check-btn--label" id="btnBodyCoach" type="button">✦ 看看今天的身心建議</button>
+                <button class="ai-check-btn ai-check-btn--label" id="btnBodyCoach" type="button">✦ 看看今天的身心建議 <span class="plus-lock-badge">PLUS</span></button>
                 <div class="check-loading" id="bodyCoachLoading" hidden>
                   <p class="check-loading__label">正在為你整理今天的身心建議…</p>
                   <div class="ai-thinking__bar"><i></i></div>
@@ -526,7 +526,7 @@
             </button>
             <div class="journal-fold__panel" id="insightFoldPanel" inert aria-hidden="true">
               <div class="journal-fold__inner">
-            <button class="ai-check-btn" id="btnInsightAi" type="button">開始深度思考</button>
+            <button class="ai-check-btn" id="btnInsightAi" type="button">開始深度思考 <span class="plus-lock-badge">PLUS</span></button>
             <div class="check-loading" id="insightLoading" hidden>
               <p class="check-loading__label">正在為你想下一問…</p>
               <div class="ai-thinking__bar"><i></i></div>
@@ -541,7 +541,7 @@
           <section class="journal-card journal-fold" id="section-deep">
             <button class="journal-fold__toggle" type="button" data-journal-fold aria-expanded="false" aria-controls="deepFoldPanel">
               <span class="journal-fold__copy">
-                <h2 class="journal-card__title"><span>04</span> 深度思考</h2>
+                <h2 class="journal-card__title"><span>04</span> 深度思考 <span class="plus-lock-badge">PLUS</span></h2>
                 <p class="journal-fold__summary">看見這件事背後代表什麼。勾選即可，不必再打字。</p>
               </span>
               <span class="journal-fold__chevron" aria-hidden="true"></span>
@@ -554,7 +554,7 @@
               <div class="ai-thinking__bar"><i></i></div>
             </div>
             <p class="deep-empty" id="thinkEmpty">寫完今日感謝與事件後，再開始今天的深度思考。</p>
-            <button class="ai-check-btn ai-check-btn--label" id="btnThinkChoices" type="button">✦ 開始今天的深度思考</button>
+            <button class="ai-check-btn ai-check-btn--label" id="btnThinkChoices" type="button">✦ 開始今天的深度思考 <span class="plus-lock-badge">PLUS</span></button>
             <div id="thinkQuestions"></div>
             <div class="check-loading" id="thinkCloseLoading" hidden>
               <p class="check-loading__label">正在整理今天的深度看見…</p>
@@ -571,8 +571,8 @@
           <section class="journal-card journal-card--aware journal-fold" id="section-aware">
             <button class="journal-fold__toggle" type="button" data-journal-fold aria-expanded="false" aria-controls="awareFoldPanel">
               <span class="journal-fold__copy">
-                <h2 class="journal-card__title js-quick-only"><span>03</span> 今日覺察</h2>
-                <h2 class="journal-card__title js-deep-only"><span>05</span> 覺察力</h2>
+                <h2 class="journal-card__title js-quick-only"><span>03</span> 今日覺察 <span class="plus-lock-badge">PLUS</span></h2>
+                <h2 class="journal-card__title js-deep-only"><span>05</span> 覺察力 <span class="plus-lock-badge">PLUS</span></h2>
                 <p class="journal-fold__summary js-quick-only">從今天的內容長出幾個「我現在怎麼了」的選項。勾選即可。</p>
                 <p class="journal-fold__summary js-deep-only">經過今天這些事情，我看見了自己什麼。勾選即可，不必再打字。</p>
               </span>
@@ -588,7 +588,7 @@
                   <div class="ai-thinking__bar"><i></i></div>
                 </div>
                 <p class="deep-empty" id="awareEmpty">完成「今日感謝」與「今日事件」後，會依照你今天寫下的內容，產生專屬於你的覺察選項。</p>
-                <button class="ai-check-btn ai-check-btn--label" id="btnAwarePrompts" type="button">✦ 開始今天的覺察</button>
+                <button class="ai-check-btn ai-check-btn--label" id="btnAwarePrompts" type="button">✦ 開始今天的覺察 <span class="plus-lock-badge">PLUS</span></button>
                 <div id="awareQuestions"></div>
               </div>
               <div class="journal-col aware-col aware-col--quotes js-deep-only">
@@ -599,7 +599,7 @@
                   <div class="ai-thinking__bar"><i></i></div>
                 </div>
                 <div class="check-list" id="awareChecks"></div>
-                <button class="ai-check-btn ai-check-btn--label" id="btnAwareAi" type="button" hidden>✦ 看見今天的覺察</button>
+                <button class="ai-check-btn ai-check-btn--label" id="btnAwareAi" type="button" hidden>✦ 看見今天的覺察 <span class="plus-lock-badge">PLUS</span></button>
                 <p class="aware-quote-limit" id="awareQuoteLimitHint" hidden></p>
               </div>
             </div>
@@ -611,7 +611,7 @@
             <button class="journal-fold__toggle" id="execFoldToggle" type="button" data-journal-fold aria-expanded="false" aria-controls="execFoldPanel">
               <span class="journal-fold__copy">
                 <h2 class="journal-card__title js-quick-only"><span>04</span> 今日最小行動</h2>
-                <h2 class="journal-card__title js-deep-only"><span>06</span> 執行力</h2>
+                <h2 class="journal-card__title js-deep-only"><span>06</span> 執行力 <span class="plus-lock-badge">PLUS</span></h2>
                 <p class="journal-fold__summary js-quick-only">明天只要一件 5 分鐘內能完成的小事。點開後可寫下，並同步到側邊欄。</p>
                 <p class="journal-fold__summary js-deep-only">把今天已經看見的，收成明天做得到的一小步。完成會同步到側邊欄。</p>
               </span>
@@ -629,7 +629,7 @@
                     <div class="ai-thinking__bar"><i></i></div>
                   </div>
                   <p class="deep-empty" id="execEmpty">寫完前面的看見後，再開始整理明天的一小步。</p>
-                  <button class="ai-check-btn" id="btnExecPrompts" type="button">✦ 開始今天的行動整理</button>
+                  <button class="ai-check-btn" id="btnExecPrompts" type="button">✦ 開始今天的行動整理 <span class="plus-lock-badge">PLUS</span></button>
                   <div id="execQuestions"></div>
                 </div>
                 <div class="exec-next">
@@ -639,7 +639,7 @@
                   <textarea class="textarea" id="execNext" rows="3" placeholder="例如：早餐後寫下3件小事／22:30放下手機／下午3點換上運動服"></textarea>
                 </div>
                 <div class="js-deep-only">
-                  <button class="ai-check-btn" id="btnExecAi" type="button" hidden>收下我的行動卡</button>
+                  <button class="ai-check-btn" id="btnExecAi" type="button" hidden>收下我的行動卡 <span class="plus-lock-badge">PLUS</span></button>
                 </div>
               </div>
               <div class="journal-col js-deep-only">
@@ -719,7 +719,7 @@
             </button>
             <div class="journal-fold__panel" id="quickInsightFoldPanel" inert aria-hidden="true">
               <div class="journal-fold__inner">
-            <button class="ai-check-btn" id="btnQuickInsight" type="button">開始深度思考</button>
+            <button class="ai-check-btn" id="btnQuickInsight" type="button">開始深度思考 <span class="plus-lock-badge">PLUS</span></button>
             <div class="check-loading" id="quickInsightLoading" hidden>
               <p class="check-loading__label">正在為你想下一問…</p>
               <div class="ai-thinking__bar"><i></i></div>
@@ -1029,39 +1029,76 @@
       <div class="pricing-modal__card">
         <button class="pricing-modal__close" id="pricingClose" type="button" aria-label="關閉方案視窗">×</button>
         <header class="pricing-modal__head">
-          <p class="pricing-modal__kicker">進行式ING方案</p>
+          <p class="pricing-modal__kicker">進行式 ING 方案</p>
           <h2 class="pricing-modal__title" id="pricingTitle">選擇適合你的節奏</h2>
-          <p class="pricing-modal__lead">Google 登入後享有 30 天完整功能免費試用。到期後可月繳或一次訂滿一季，隨時都能升級。</p>
+          <p class="pricing-modal__lead">新加入進行式，即享 30 天 ING PLUS 完整體驗。到期後自動回到 ING FREE，過去的紀錄都會保留，之後仍可隨時升級。</p>
         </header>
         <div class="pricing-grid">
-          <article class="pricing-card" data-plan-card="monthly">
-            <p class="pricing-card__name">標準版</p>
-            <h3 class="pricing-card__plan">月訂閱</h3>
-            <p class="pricing-card__price"><span>$599</span> <small>/ 月</small></p>
-            <p class="pricing-card__desc">不綁約，隨時可取消，享有 30 天免費完整體驗。</p>
+          <article class="pricing-card" data-plan-card="free">
+            <p class="pricing-card__name">ING FREE</p>
+            <p class="pricing-card__price"><span>NT$0</span> <small>永久免費</small></p>
+            <h3 class="pricing-card__plan">每天，留一點時間給自己。</h3>
+            <p class="pricing-card__desc">適合想開始記錄生活、建立每日覺察習慣的你。</p>
             <ul class="pricing-card__list">
-              <li>每日復盤無限暢用</li>
-              <li>動態生成（覺察力、執行力）</li>
-              <li>週月報與個人資料庫</li>
+              <li>幫你留下今天。</li>
+              <li>每日快速復盤</li>
+              <li>今日感謝</li>
+              <li>基本身體覺察</li>
+              <li>歷史紀錄</li>
+              <li>收藏與自己的重點</li>
+              <li>基礎週報</li>
             </ul>
-            <button class="pricing-card__cta" type="button" data-plan="monthly" data-plan-cta>開始試用</button>
+            <button class="pricing-card__cta" type="button" id="pricingFreeCta" data-free-cta>目前方案</button>
           </article>
-          <article class="pricing-card pricing-card--featured" data-plan-card="quarter">
-            <p class="pricing-card__badge">超值省本 · 最多人選</p>
-            <p class="pricing-card__name">進階超值版</p>
-            <h3 class="pricing-card__plan">季訂閱</h3>
-            <p class="pricing-card__price"><span>$1,197</span> <small>/ 季</small></p>
-            <p class="pricing-card__eq">相當於每月 $399，比月繳省 $600</p>
-            <p class="pricing-card__desc">一次訂閱三個月，深度扎根成長習慣。</p>
+          <article class="pricing-card pricing-card--featured" data-plan-card="plus">
+            <p class="pricing-card__name">ING PLUS</p>
+            <div class="pricing-card__prices">
+              <p class="pricing-card__price"><span>NT$149</span> <small>／月</small></p>
+              <p class="pricing-card__price pricing-card__price--year">
+                <span>NT$1,290</span> <small>／年</small>
+                <em class="pricing-card__badge">最推薦</em>
+              </p>
+            </div>
+            <h3 class="pricing-card__plan">陪你看懂一路走來的自己。</h3>
+            <p class="pricing-card__desc">透過更完整的 AI 覺察、週月整理與長期紀錄，慢慢看見自己反覆出現的模式與改變。</p>
+            <p class="pricing-card__status" id="plusTrialStatus" hidden></p>
             <ul class="pricing-card__list">
-              <li>標準版全部功能</li>
-              <li>優先享有新功能體驗權</li>
-              <li>週月報與個人資料庫無限暢用</li>
+              <li>深度復盤</li>
+              <li>AI 深度思考</li>
+              <li>完整身心解析</li>
+              <li>覺察力／執行力／顯化力 AI</li>
+              <li>完整週報與月報</li>
+              <li>長期個人模式與歷史洞察</li>
             </ul>
-            <button class="pricing-card__cta pricing-card__cta--primary" type="button" data-plan="quarter" data-plan-cta>立即升級</button>
+            <div class="pricing-card__actions">
+              <button class="pricing-card__cta" type="button" data-plan="monthly" data-plan-cta disabled>方案準備中</button>
+              <button class="pricing-card__cta pricing-card__cta--primary" type="button" data-plan="yearly" data-plan-cta disabled>方案準備中</button>
+            </div>
           </article>
         </div>
       </div>
+    </dialog>
+
+    <dialog class="modal plus-ended-modal" id="plusUpgradeModal" aria-labelledby="plusUpgradeTitle">
+      <form method="dialog" class="modal__card plus-ended-modal__card" id="plusUpgradeForm">
+        <h3 class="modal__title" id="plusUpgradeTitle">這是 ING PLUS 的深度覺察功能 ✦</h3>
+        <p class="modal__desc">FREE 可以陪你每天留下自己；PLUS 則會透過更完整的 AI 覺察與長期整理，陪你慢慢看懂一路走來的自己。</p>
+        <div class="form-actions">
+          <button class="btn btn--outline" id="plusUpgradeLater" value="later" type="submit">先繼續記錄</button>
+          <button class="btn" id="plusUpgradeView" value="plus" type="submit">查看 ING PLUS</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="modal plus-ended-modal" id="plusEndedModal" aria-labelledby="plusEndedTitle">
+      <form method="dialog" class="modal__card plus-ended-modal__card" id="plusEndedForm">
+        <h3 class="modal__title" id="plusEndedTitle">PLUS 體驗已結束，但你的進行式還在 🤍</h3>
+        <p class="modal__desc">你仍然可以繼續使用 ING FREE，過去留下的所有紀錄也都會保留。如果想繼續使用完整 AI 深度覺察與長期洞察，可以隨時升級 ING PLUS。</p>
+        <div class="form-actions">
+          <button class="btn" id="plusEndedContinue" value="continue" type="submit">繼續使用 FREE</button>
+          <button class="btn btn--outline" id="plusEndedViewPlus" value="plus" type="submit">查看 PLUS</button>
+        </div>
+      </form>
     </dialog>
 
     <dialog class="modal" id="reminderModal">
@@ -1094,18 +1131,14 @@
 
     <div class="paywall" id="paywall" hidden data-mode="guest">
       <div class="paywall__banner js-lock-guest" role="status">
-        <p>請先使用 Google 登入，即可解鎖 30 天完整免費試用</p>
+        <p>請先使用 Google 登入。新加入進行式，即享 30 天 ING PLUS 完整體驗。</p>
         <button class="paywall__btn" type="button" data-google-login>Google 登入</button>
-      </div>
-      <div class="paywall__banner js-lock-expired" role="status">
-        <p>您的免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限</p>
-        <button class="paywall__btn" id="paywallBannerPay" type="button" data-open-pricing>選擇方案</button>
       </div>
       <div class="paywall__veil">
         <div class="paywall__card js-lock-guest" role="dialog" aria-labelledby="paywallGuestTitle" aria-modal="true">
-          <p class="paywall__kicker">30 天完整免費試用</p>
+          <p class="paywall__kicker">ING FREE + 30 天 PLUS 體驗</p>
           <h2 class="paywall__title" id="paywallGuestTitle">先登入，再把日子寫下來</h2>
-          <p class="paywall__copy">請先使用 Google 登入，即可解鎖 30 天完整免費試用。今日感謝、事件、深度思考、覺察與執行都會為你打開。</p>
+          <p class="paywall__copy">請先使用 Google 登入。新加入進行式，即享 30 天 ING PLUS 完整體驗。今日感謝、事件、深度思考、覺察與執行都會為你打開。</p>
           <button class="paywall__btn paywall__btn--primary paywall__btn--google" type="button" data-google-login>
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
               <path fill="#4285F4" d="M22.6 12.25c0-.8-.07-1.57-.2-2.31H12v4.37h5.95a5.08 5.08 0 0 1-2.2 3.34v2.77h3.56c2.08-1.92 3.29-4.75 3.29-8.17Z" />
@@ -1116,26 +1149,10 @@
             <span>使用 Google 帳號登入</span>
           </button>
         </div>
-        <div class="paywall__card js-lock-expired" role="dialog" aria-labelledby="paywallTitle" aria-modal="true">
-          <p class="paywall__kicker">免費體驗已結束</p>
-          <h2 class="paywall__title" id="paywallTitle">升級即可無限暢用</h2>
-          <p class="paywall__copy">您的免費體驗已結束，升級訂閱即可解鎖完整無限暢用權限</p>
-          <div class="paywall__plans">
-            <button class="paywall__plan" type="button" data-plan="monthly" data-plan-cta>
-              <span>月繳</span>
-              <strong>$599</strong>
-            </button>
-            <button class="paywall__plan paywall__plan--featured" type="button" data-plan="quarter" data-plan-cta>
-              <span>季繳 · 最多人選</span>
-              <strong>$1,197</strong>
-            </button>
-          </div>
-          <button class="paywall__btn paywall__btn--primary" id="paywallCardPay" type="button" data-open-pricing>比較方案並解鎖</button>
-        </div>
         <div class="paywall__card js-lock-pending" role="status">
-          <p class="paywall__kicker">會員權限確認中</p>
-          <h2 class="paywall__title">正在為你解鎖試用</h2>
-          <p class="paywall__copy">稍候一下，我們正在確認你的登入與 30 天免費試用狀態。</p>
+          <p class="paywall__kicker">登入確認中</p>
+          <h2 class="paywall__title">正在為你打開進行式</h2>
+          <p class="paywall__copy">稍候一下，我們正在確認你的登入與方案狀態。</p>
         </div>
       </div>
     </div>
@@ -1170,9 +1187,10 @@
     <script src="lib/text-integrity.js?v=5"></script>
     <script src="lib/body-coach-insight.js?v=1"></script>
     <script src="lib/review-merge.js?v=6"></script>
+    <script src="lib/entitlement.js?v=2"></script>
     <script src="lib/history-summary.js?v=5"></script>
     <script src="lib/insight-highlight.js?v=5"></script>
     <script src="lib/user-mark.js?v=6"></script>
-    <script src="app.js?v=218"></script>
+    <script src="app.js?v=222"></script>
   </body>
 </html>
