@@ -136,6 +136,8 @@ assert(app.includes("openPlusUpgradeModal"), "前端收到 plus_required 開 mod
 assert(!app.includes("你沒有權限"), "不要顯示生硬權限文字");
 assert(html.includes("每日快速復盤") && html.includes("基礎週報"), "方案頁 FREE 功能");
 assert(html.includes("完整週報與月報") && html.includes("長期個人模式與歷史洞察"), "方案頁 PLUS 功能");
+assert(html.includes("覺察力／執行力 AI"), "方案頁 PLUS 為覺察力／執行力 AI");
+assert(!html.includes("覺察力／執行力／顯化力 AI"), "方案頁不再介紹已下架的顯化力");
 assert(html.includes("NT$149") && html.includes("NT$1,290"), "價格保留");
 assert(html.includes("7 天 ING PLUS 完整體驗"), "7 天體驗文案");
 assert(html.includes("我想升級 PLUS") && html.includes("pricingInterestCta"), "Beta 升級意願 CTA");

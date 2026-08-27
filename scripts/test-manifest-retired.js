@@ -114,6 +114,8 @@ assert(app.includes("trackProduct(\"manifestation_created\"") || app.includes('t
 
 assert(html.includes("data-quick-mod=\"body\"") && html.includes("data-quick-mod=\"exec\""), "快速模組仍有身體／覺察／執行");
 assert(!html.includes("data-quick-mod=\"manifest\""), "快速模組不再有顯化力");
+assert(!html.includes("覺察力／執行力／顯化力 AI"), "方案頁不再介紹顯化力");
+assert(html.includes("覺察力／執行力 AI"), "方案頁改為覺察力／執行力 AI");
 assert(app.includes("function addTaskFromGuide"), "CASE N：06 寫入執行力路徑未改");
 assert(reviewApi.includes("那些是 07 顯化力"), "CASE L：06 prompt 仍不承擔顯化");
 
