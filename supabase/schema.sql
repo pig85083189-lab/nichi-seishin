@@ -162,3 +162,11 @@ create table if not exists public.nichi_internal_users (
 alter table public.nichi_internal_users enable row level security;
 revoke all on public.nichi_internal_users from public, anon, authenticated;
 grant all on public.nichi_internal_users to service_role;
+
+drop policy if exists "nichi_internal_users_service_all" on public.nichi_internal_users;
+create policy "nichi_internal_users_service_all"
+  on public.nichi_internal_users
+  for all
+  to service_role
+  using (true)
+  with check (true);

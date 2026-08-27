@@ -1,5 +1,5 @@
 const { getSession, publicUser, authConfigured } = require("../../lib/auth");
-const { supabaseConfigured, ensureTrial, publicMembership } = require("../../lib/supabase");
+const { supabaseConfigured, ensureTrial, publicMembership, isInternalUser, decorateInternalAccess } = require("../../lib/supabase");
 const { newebpayConfigured } = require("../../lib/newebpay");
 const { insertAnalyticsEvent } = require("../../lib/analytics");
 
@@ -14,7 +14,16 @@ module.exports = async function handler(req, res) {
   if (user) {
     try {
       const row = await ensureTrial(user);
-      membership = publicMembership(row);
+      const internal = Boolean((row && String(row.access_type || "").toLowerCase() === "internal") || (await isInternalUser(user.id, user.email)));
+      membership = publicMembership(decorateInternalAccess(row, user.id, internal));
+      console.log("auth/me membership", {
+        userId: user.id,
+        isInternal: Boolean(membership && membership.isInternal),
+        accessType: membership && membership.accessType,
+        plusTrialActive: Boolean(membership && membership.plusTrialActive),
+        effectivePlan: membership && membership.effectivePlan,
+        status: membership && membership.status,
+      });
       if (!membership || !membership.isInternal) {
         insertAnalyticsEvent({
           userId: user.id,

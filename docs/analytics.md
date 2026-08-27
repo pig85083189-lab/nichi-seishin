@@ -187,7 +187,7 @@ on conflict do nothing;
 
 `nichi_internal_users` 裡的帳號是內部永久 PLUS，不是付費轉換。後台 KPI、漏斗、Founder Cohort、PLUS conversion **預設排除**這些 user_id。
 
-排除發生在三層：前端 `trackEvent` 不送、後端 `insertAnalyticsEvent` 直接略過、RLS 禁止 internal 帳號 INSERT。舊事件若已在表裡，dashboard 讀取時仍會依 `internalUserIds` 過濾，不計入留存與付費人數。
+排除發生在應用層：前端 `trackEvent` 不送、後端 `insertAnalyticsEvent` 直接略過、dashboard 依 `internalUserIds` 過濾。Internal PLUS migration 不依賴 `analytics_events`。舊事件若已在表裡，讀取時仍會排除，不計入留存與付費人數。
 
 指定內部帳號請用 SQL insert `nichi_internal_users`，不要改 `nichi_user_data`，也不要把 `is_paid` 設成 true。
 

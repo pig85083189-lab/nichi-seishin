@@ -179,7 +179,11 @@ function bindAnalytics() {
 
 function isInternalMembership(membership = state.membership) {
   if (!membership) return false;
-  return Boolean(membership.isInternal || String(membership.accessType || "").toLowerCase() === "internal");
+  if (membership.isInternal === true || membership.is_internal === true) return true;
+  const access = String(membership.accessType || membership.access_type || "").trim().toLowerCase();
+  if (access === "internal") return true;
+  const status = String(membership.status || membership.subscriptionStatus || "").trim().toLowerCase();
+  return status === "internal";
 }
 
 function trackMembershipSignals(membership) {
