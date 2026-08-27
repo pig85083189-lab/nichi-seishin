@@ -2529,13 +2529,13 @@ body.nav-closed .auth-pay {
   font-size: 16px;
   font-weight: 600;
   line-height: 1.55;
+  max-width: 100%;
   white-space: normal;
-  overflow: hidden;
-  text-overflow: initial;
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  overflow: visible;
+  text-overflow: unset;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  display: block;
 }
 
 .history-card__excerpt {
@@ -2556,7 +2556,6 @@ body.nav-closed .auth-pay {
   }
 
   .history-card__title {
-    -webkit-line-clamp: 2;
     font-size: 17px;
   }
 }

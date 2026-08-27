@@ -1,5 +1,6 @@
 const {
   isCompleteSentence,
+  isFinishedThought,
   hasCompleteThought,
   pickCompleteSentence,
   finalizeGeneratedQuestion,
@@ -77,6 +78,9 @@ const mergedMaps = mergeReviewMaps(
 assert(mergedMaps["2026-08-22"].journal.awarenessResult.seen === fullSeen, "CASE J：cloud merge 後文字完全一致");
 
 assert(isCompleteSentence("被愛的感受不只來自別人的惦記，也來自你願意為自己倒一杯溫") === false, "CASE K：一杯溫 必須判定不完整");
+assert(isFinishedThought("我想好好表達自己的想法，但因為有求於人就委屈了") === false, "就委屈了 語意未完成");
+assert(isFinishedThought("我想好好表達自己的想法，但因為有求於人，就委屈了自己") === true, "完整句含自己算完成");
+assert(isFinishedThought("我想把話說清楚，但是") === false, "不可停在但是");
 assert(pickCompleteSentence("被愛的感受不只來自別人的惦記，也來自你願意為自己倒一杯溫暖的茶。", 28) === "", "CASE K：不可為了 28 字把完整句切成一杯溫");
 assert(finalizeGeneratedQuestion(caseD) === caseD, "完整問題 finalize 後仍完整");
 

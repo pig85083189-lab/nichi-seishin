@@ -118,7 +118,7 @@ assert(review.includes("splitTitleDetail"), "API splitChecklistTitle 改走同�
 assert(!/function splitTaskText\([\s\S]{0,180}search\(\/\[：:\]\/\)/.test(app), "client 不再用第一個冒號硬拆");
 assert(!/function splitChecklistTitle\([\s\S]{0,180}search\(\/\[：:\]\/\)/.test(review), "API 不再用第一個冒號硬拆");
 assert(css.includes("overflow-wrap: anywhere"), "CASE N：長句可換行");
-assert(html.includes("lib/text-integrity.js?v=5"), "cache：text-integrity v=5");
+assert(html.includes("lib/text-integrity.js?v=6"), "cache：text-integrity v=6");
 assert(html.includes("app.js?v=225"), "cache：app.js v=225");
 
 function blobOf(parts) {

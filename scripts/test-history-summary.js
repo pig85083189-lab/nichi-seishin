@@ -134,7 +134,7 @@ const longTitle = buildHistoryDisplayTitle({
 assert(!/平$/.test(longTitle.replace(/\s+/g, "")), "CASE 3／4：不可在「平衡」中間硬切");
 assert(!longTitle.includes("…"), "不可用省略號硬切半句");
 assert(longTitle.includes("平衡") || longTitle.includes("接納"), "長標題要留下完整子句");
-assert(longTitle.length <= 40, "顯示標題不可整段貼上");
+assert(longTitle.replace(/\s+/g, "").length <= 80, "超長時仍用完整句，不硬切半句");
 
 const longConclusion = buildHistoryDisplayTitle({
   journal: {
@@ -221,5 +221,62 @@ const compactAwareTitle = buildHistoryDisplayTitle({
   },
 });
 assert(compactAwareTitle === "我需要的不是完美，而是進展感", "新 04 compact 列表摘要應優先用核心覺察");
+
+const shortHappy = buildHistoryDisplayTitle({
+  journal: { insight: { guide: { takeaway: "我今天很開心。" } } },
+});
+assert(shortHappy.replace(/[。\s]/g, "") === "我今天很開心", "CASE A：短句完整保留");
+
+const full委屈 = "我想好好表達自己的想法，但因為有求於人，就委屈了自己。";
+const cut委屈 = "我想好好表達自己的想法，但因為有求於人就委屈了";
+const titleFromFull委屈 = buildHistoryDisplayTitle({
+  journal: { insight: { guide: { takeaway: full委屈 } } },
+});
+assert(titleFromFull委屈.includes("委屈了自己"), "CASE B：完整句不可變成「…就委屈了」");
+assert(!/就委屈了$/.test(titleFromFull委屈.replace(/[。\s]/g, "")), "CASE B：不可停在就委屈了");
+
+const titleFromCut委屈 = buildHistoryDisplayTitle({
+  journal: { insight: { guide: { takeaway: cut委屈 } } },
+});
+assert(titleFromCut委屈 !== cut委屈, "CASE G：不完整舊 takeaway 不可當標題");
+assert(titleFromCut委屈 !== "我想好好表達自己的想法，但因為有求於人，就委屈了自己", "CASE G：不可猜字補自己");
+
+const repairedFromEvent = buildHistoryDisplayTitle({
+  journal: {
+    event: full委屈,
+    insight: { guide: { takeaway: cut委屈 } },
+  },
+});
+assert(repairedFromEvent.includes("委屈了自己"), "既有完整原文可重產 title，不猜字");
+assert(repairedFromEvent !== cut委屈, "截斷 takeaway 讓路給完整原文");
+
+const becauseTitle = buildHistoryDisplayTitle({
+  journal: {
+    insight: {
+      guide: {
+        takeaway: "我想把話說清楚，但是因為現場氣氛很緊，所以最後還是先把情緒收起來。",
+      },
+    },
+  },
+});
+assert(!/但是$/.test(becauseTitle.replace(/\s+/g, "")), "CASE C：不可切在但是");
+assert(!/因為$/.test(becauseTitle.replace(/\s+/g, "")), "CASE C：不可切在因為");
+assert(!/所以$/.test(becauseTitle.replace(/\s+/g, "")), "CASE C：不可切在所以");
+assert(becauseTitle.includes("收起來") || becauseTitle.includes("把話說清楚"), "CASE C：保留完整語意單位");
+
+const fs = require("fs");
+const path = require("path");
+const css = fs.readFileSync(path.join(__dirname, "..", "app.css"), "utf8");
+const titleCss = css.slice(css.indexOf(".history-card__title {"), css.indexOf(".history-card__excerpt"));
+assert(!titleCss.includes("-webkit-line-clamp"), "CASE D／E／F：History 標題不 line-clamp");
+assert(!titleCss.includes("ellipsis"), "CASE D／E／F：History 標題不加省略號裁切");
+assert(/overflow:\s*visible/.test(titleCss), "CASE D：overflow visible，不裁字");
+assert(titleCss.includes("overflow-wrap"), "CASE D／E：可自然換行");
+assert(titleCss.includes("white-space: normal"), "CASE D：可換行");
+
+const oldReview = { date: "2026-08-27", journal: { insight: { guide: { takeaway: cut委屈 } } } };
+const beforeOld = oldReview.journal.insight.guide.takeaway;
+getHistoryDailySummary(oldReview);
+assert(oldReview.journal.insight.guide.takeaway === beforeOld, "CASE G：不改寫舊 journal");
 
 console.log("history summary tests passed");
