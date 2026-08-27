@@ -9,6 +9,7 @@ const {
   subscriptionStatusFromRow,
   billingIntervalFromRow,
   publicMembership,
+  isInternalAllowlisted,
 } = require("../lib/supabase");
 
 function assert(cond, message) {
@@ -103,6 +104,14 @@ assert(isPaid(internalPaid) === true, "真的付過款的 internal 仍可讀 is_
 assert(publicMembership(internalPaid).paid === true, "不把真實付款改成 false");
 assert(subscriptionStatusFromRow(internalPaid) === "active", "付費 internal 仍是 active subscription");
 
+process.env.NICHI_INTERNAL_USER_IDS = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+process.env.NICHI_INTERNAL_EMAILS = "internal@example.com";
+assert(isInternalAllowlisted("AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA") === true, "server allowlist 認 uuid");
+assert(isInternalAllowlisted("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb") === false, "不在 allowlist 不是 internal");
+assert(isInternalAllowlisted("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "internal@example.com") === true, "server allowlist 認 email");
+delete process.env.NICHI_INTERNAL_USER_IDS;
+delete process.env.NICHI_INTERNAL_EMAILS;
+
 const fs = require("fs");
 const path = require("path");
 const root = path.join(__dirname, "..");
@@ -137,7 +146,8 @@ assert(html.includes("analytics.js?v=3"), "analytics cache 已升版");
 const supabaseSrc = fs.readFileSync(path.join(root, "lib/supabase.js"), "utf8");
 assert(supabaseSrc.includes("TRIAL_DAYS = 30"), "一般使用者仍是 30 天 trial");
 assert(supabaseSrc.includes("nichi_internal_users"), "後端用獨立內部表");
-assert(supabaseSrc.includes("nichi_is_internal_user"), "後端有 RPC fallback");
+assert(supabaseSrc.includes("NICHI_INTERNAL_USER_IDS"), "PostgREST cache miss 時有 server allowlist");
+assert(supabaseSrc.includes("lookupInternalViaPgQuery"), "嘗試繞過 PostgREST schema cache");
 assert(supabaseSrc.includes(".from(INTERNAL_TABLE)"), "後端直接查 nichi_internal_users");
 assert(!/access_type:\s*"internal"[\s\S]{0,80}is_paid:\s*true/.test(supabaseSrc), "internal overlay 不寫 is_paid");
 const migration = fs.readFileSync(path.join(root, "supabase/migrations/20260827_internal_plus.sql"), "utf8");
