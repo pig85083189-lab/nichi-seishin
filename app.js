@@ -173,11 +173,17 @@ function bindAnalytics() {
   window.NichiAnalytics.bind({
     getClient: getSupabase,
     getUser: () => state.user,
+    getIsInternal: () => isInternalMembership(state.membership),
   });
 }
 
+function isInternalMembership(membership = state.membership) {
+  if (!membership) return false;
+  return Boolean(membership.isInternal || String(membership.accessType || "").toLowerCase() === "internal");
+}
+
 function trackMembershipSignals(membership) {
-  if (!membership) return;
+  if (!membership || isInternalMembership(membership)) return;
   if (membership.trialStartedAt) trackProduct("trial_started", { source: "membership" });
   if ((membership.status === "expired" || membership.status === "cancelled") && !membership.paid && !membership.isPaid) {
     trackProduct("trial_expired", { source: "membership" });
@@ -2924,12 +2930,15 @@ function renderAuth() {
     ? `<img src="${escapeHtml(user.picture)}" alt="" referrerpolicy="no-referrer" />`
     : `<span class="auth-avatar">${initial}</span>`;
   const membership = state.membership || {};
+  const internal = isInternalMembership(membership);
   const paid = Boolean(membership.paid || membership.isPaid || membership.status === "active");
-  const trialActive = Boolean(membership.plusTrialActive || (!paid && isMembershipLive(membership)));
-  const payBtn = paid
-    ? `<button class="auth-pay is-paid" type="button" disabled><span>目前是 ING PLUS</span></button>`
+  const trialActive = !internal && Boolean(membership.plusTrialActive || (!paid && isMembershipLive(membership)));
+  const payBtn = internal || paid
+    ? `<button class="auth-pay is-paid" type="button" disabled><span>${internal ? "ING PLUS｜內部帳號" : "目前是 ING PLUS"}</span></button>`
     : `<button class="auth-pay" id="btnNewebPay" type="button" data-open-pricing><span>${trialActive ? "查看 PLUS" : "升級 PLUS"}</span></button>`;
-  const trialHint = paid
+  const trialHint = internal
+    ? `<p class="auth-hint">ING PLUS｜內部帳號。功能已永久解鎖，無需付款。</p>`
+    : paid
     ? `<p class="auth-hint">你正在使用 ING PLUS。隨時可從方案頁查看內容。</p>`
     : trialActive
       ? `<p class="auth-hint">PLUS 體驗中，至 ${escapeHtml(formatTrialDate(membership.trialEndsAt))}${membership.daysLeft != null ? `，還有 ${membership.daysLeft} 天` : ""}。</p>`
@@ -3351,6 +3360,7 @@ function submitNewebPayForm(gateway, fields) {
 
 function isMembershipLive(membership) {
   if (!membership) return false;
+  if (isInternalMembership(membership)) return true;
   if (membership.paid || membership.isPaid) return true;
   const ends = Date.parse(membership.trialEndsAt || "");
   if (Number.isFinite(ends)) return Date.now() < ends;
@@ -3378,6 +3388,7 @@ function entitlementApi() {
 
 function currentEffectivePlan() {
   const membership = state.membership || {};
+  if (isInternalMembership(membership)) return "plus";
   const plan = String(membership.effectivePlan || "").trim().toLowerCase();
   if (plan === "plus" || plan === "free") return plan;
   if (membership.paid || membership.isPaid || membership.plusTrialActive) return "plus";
@@ -3438,6 +3449,8 @@ function membershipFromDevPlan(mode, base) {
       daysLeft: 0,
       trialEndsAt: "",
       subscriptionStatus: "none",
+      isInternal: false,
+      accessType: "standard",
     };
   }
   if (mode === "expired") {
@@ -3454,6 +3467,8 @@ function membershipFromDevPlan(mode, base) {
       daysLeft: 0,
       trialEndsAt: new Date(now - 2 * 3600000).toISOString(),
       subscriptionStatus: "expired",
+      isInternal: false,
+      accessType: "standard",
     };
   }
   if (mode === "trial") {
@@ -3470,6 +3485,8 @@ function membershipFromDevPlan(mode, base) {
       daysLeft: 12,
       trialEndsAt: new Date(now + 12 * 86400000).toISOString(),
       subscriptionStatus: "none",
+      isInternal: false,
+      accessType: "standard",
     };
   }
   if (mode === "plus") {
@@ -3486,6 +3503,8 @@ function membershipFromDevPlan(mode, base) {
       plusTrialUsed: true,
       daysLeft: null,
       subscriptionStatus: "active",
+      isInternal: false,
+      accessType: "standard",
     };
   }
   return prev;
@@ -3600,6 +3619,7 @@ function dismissPlusEndedNotice() {
 
 function shouldShowPlusEndedNotice(membership = state.membership) {
   if (!state.user || !membership) return false;
+  if (isInternalMembership(membership)) return false;
   if (membership.paid || membership.isPaid || membership.status === "active") return false;
   if (membership.plusTrialActive || isMembershipLive(membership)) return false;
   if (!membership.trialEndsAt && membership.subscriptionStatus !== "expired" && membership.status !== "expired") return false;
@@ -3720,17 +3740,21 @@ function closePricingModal() {
 
 function syncPricingModal() {
   const membership = state.membership || {};
+  const internal = isInternalMembership(membership);
   const paid = Boolean(membership.paid || membership.isPaid || membership.status === "active");
   const loggedIn = Boolean(state.user);
-  const trialActive = Boolean(membership.plusTrialActive || (!paid && isMembershipLive(membership)));
+  const trialActive = !internal && Boolean(membership.plusTrialActive || (!paid && isMembershipLive(membership)));
   const freeCta = document.getElementById("pricingFreeCta");
   if (freeCta) {
     freeCta.disabled = true;
-    freeCta.textContent = paid || trialActive ? "免費方案" : "目前方案";
+    freeCta.textContent = paid || trialActive || internal ? "免費方案" : "目前方案";
   }
   const trialStatus = document.getElementById("plusTrialStatus");
   if (trialStatus) {
-    if (trialActive && membership.daysLeft != null) {
+    if (internal) {
+      trialStatus.hidden = false;
+      trialStatus.textContent = "ING PLUS｜內部帳號";
+    } else if (trialActive && membership.daysLeft != null) {
       trialStatus.hidden = false;
       trialStatus.textContent = `PLUS 體驗中 · 剩餘 ${membership.daysLeft} 天`;
     } else if (trialActive) {
@@ -3743,6 +3767,11 @@ function syncPricingModal() {
   }
   document.querySelectorAll("[data-plan-cta]").forEach((btn) => {
     const plan = btn.dataset.plan;
+    if (internal) {
+      btn.disabled = true;
+      btn.textContent = "內部帳號";
+      return;
+    }
     if (paid) {
       btn.disabled = true;
       btn.textContent = "目前方案";

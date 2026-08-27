@@ -183,7 +183,15 @@ on conflict do nothing;
 
 若很多人 D1 就消失，問題在首次體驗，不是方案天數。若 D3–D7 還在、到期才掉，才比較像試用天數或付費摩擦。
 
-## 15. 哪些數據不能過度解讀
+## 15. 內部帳號預設排除
+
+`nichi_internal_users` 裡的帳號是內部永久 PLUS，不是付費轉換。後台 KPI、漏斗、Founder Cohort、PLUS conversion **預設排除**這些 user_id。
+
+排除發生在三層：前端 `trackEvent` 不送、後端 `insertAnalyticsEvent` 直接略過、RLS 禁止 internal 帳號 INSERT。舊事件若已在表裡，dashboard 讀取時仍會依 `internalUserIds` 過濾，不計入留存與付費人數。
+
+指定內部帳號請用 SQL insert `nichi_internal_users`，不要改 `nichi_user_data`，也不要把 `is_paid` 設成 true。
+
+## 16. 哪些數據不能過度解讀
 
 - 舊使用者在 migration 之前的「深度思考完成 / 週月報被打開」**沒有歷史**，會偏低。
 - `app_open` 不是活躍。

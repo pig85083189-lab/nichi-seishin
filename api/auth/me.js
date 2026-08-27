@@ -15,26 +15,28 @@ module.exports = async function handler(req, res) {
     try {
       const row = await ensureTrial(user);
       membership = publicMembership(row);
-      insertAnalyticsEvent({
-        userId: user.id,
-        eventName: "trial_started",
-        metadata: { source: "auth" },
-        uniqueOnce: true,
-      }).catch(() => {});
-      if (membership && (membership.paid || membership.isPaid)) {
+      if (!membership || !membership.isInternal) {
         insertAnalyticsEvent({
           userId: user.id,
-          eventName: "subscription_started",
+          eventName: "trial_started",
           metadata: { source: "auth" },
           uniqueOnce: true,
         }).catch(() => {});
-      } else if (membership && membership.status === "expired") {
-        insertAnalyticsEvent({
-          userId: user.id,
-          eventName: "trial_expired",
-          metadata: { source: "auth" },
-          uniqueOnce: true,
-        }).catch(() => {});
+        if (membership && (membership.paid || membership.isPaid)) {
+          insertAnalyticsEvent({
+            userId: user.id,
+            eventName: "subscription_started",
+            metadata: { source: "auth" },
+            uniqueOnce: true,
+          }).catch(() => {});
+        } else if (membership && membership.status === "expired") {
+          insertAnalyticsEvent({
+            userId: user.id,
+            eventName: "trial_expired",
+            metadata: { source: "auth" },
+            uniqueOnce: true,
+          }).catch(() => {});
+        }
       }
     } catch (error) {
       membershipError = String(error && error.message ? error.message : error);

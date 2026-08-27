@@ -13,7 +13,7 @@ const {
   listArchivedReports,
   archiveUserReport,
 } = require("../lib/store");
-const { ensureTrial, getSubscription, effectivePlanFromRow, supabaseAdminConfigured } = require("../lib/supabase");
+const { ensureTrial, getSubscription, withInternalAccess, effectivePlanFromRow, supabaseAdminConfigured } = require("../lib/supabase");
 
 const REPORT_SYSTEM = `你是「日精進」溫暖且具建設性的成長教練。使用者會給你一段期間內的復盤摘要，以及覺察力、執行力、顯化力的勾選量與完成頻率。
 
@@ -328,7 +328,7 @@ async function handler(req, res, forced = {}) {
         }
         let plan = "free";
         try {
-          plan = effectivePlanFromRow(await getSubscription(account.id));
+          plan = effectivePlanFromRow(await withInternalAccess(await getSubscription(account.id), account.id));
         } catch {
           plan = "free";
         }

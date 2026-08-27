@@ -77,6 +77,19 @@ assert(effectivePlanFromRow(yearly) === "plus", "CASE 6：年繳 PLUS");
 assert(effectivePlanFromRow(quarter) === "plus", "CASE 7：舊季繳仍是 PLUS");
 assert(isPlusPlan("plus") && !isPlusPlan("free"), "plan 正規化");
 
+const internalExpired = {
+  status: "expired",
+  plan: "monthly",
+  is_paid: false,
+  trial_ends_at: new Date(Date.now() - 2 * 86400000).toISOString(),
+  access_type: "internal",
+};
+assert(effectivePlanFromRow(internalExpired) === "plus", "internal 到期 trial 仍是 plus");
+assert(plusTrialActive(internalExpired) === false, "internal 不走 trial");
+plusFeatures.forEach((feature) => {
+  assert(canUseFeature(effectivePlanFromRow(internalExpired), feature) === true, `internal 可使用 ${feature}`);
+});
+
 assert(featureForReviewRequest({ mode: "bodycoach" }) === "body_ai", "bodycoach → body_ai");
 assert(featureForReviewRequest({ mode: "choices", kind: "awareness" }) === "awareness_ai", "awareness choices");
 assert(featureForReviewRequest({ mode: "choices", kind: "execution" }) === "execution_ai", "execution choices");

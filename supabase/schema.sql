@@ -147,3 +147,18 @@ drop policy if exists "nichi_subscriptions_select_own" on public.nichi_subscript
 create policy "nichi_subscriptions_select_own"
   on public.nichi_subscriptions for select
   using (auth.uid() = user_id);
+
+-- 內部永久 PLUS。與訂閱／付款分開，使用者不可自行寫入。
+-- 指定帳號只 insert 此表，不改 nichi_user_data、不寫 is_paid、不建立假付款紀錄。
+create table if not exists public.nichi_internal_users (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  access_type text not null default 'internal',
+  note text,
+  created_at timestamptz not null default now(),
+  constraint nichi_internal_users_access_type_chk
+    check (access_type = 'internal')
+);
+
+alter table public.nichi_internal_users enable row level security;
+revoke all on public.nichi_internal_users from public, anon, authenticated;
+grant all on public.nichi_internal_users to service_role;

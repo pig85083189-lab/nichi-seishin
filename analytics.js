@@ -89,6 +89,7 @@
     if (!EVENT_NAMES[name]) return false;
     const user = deps.getUser ? deps.getUser() : null;
     if (!user || !user.id) return false;
+    if (deps.getIsInternal && deps.getIsInternal()) return false;
     if (ONCE[name] && storageGet(localStorage, onceKey(name, user.id))) return false;
     const meta = sanitizeMeta(metadata);
     const stamp = `${name}:${JSON.stringify(meta)}`;
