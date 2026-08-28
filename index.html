@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=202" />
+    <link rel="stylesheet" href="app.css?v=203" />
     <style>
       html.is-booting,
       html.is-booting body {
@@ -47,46 +47,55 @@
         min-height: 100%;
         min-height: 100dvh;
         min-height: 100svh;
-        padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) 10vh env(safe-area-inset-left, 0px);
+        padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
         background: radial-gradient(ellipse at center, #3a322c 0%, #1a1613 52%, #110e0c 100%);
         pointer-events: none;
         overflow: hidden;
       }
-      .splash__stage {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        max-width: 100%;
+      .splash__mark {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 72vw;
+        max-width: 510px;
+      }
+      .splash__mark::before {
+        content: "";
+        position: absolute;
+        inset: -6% -10%;
+        background: radial-gradient(circle, rgba(156, 136, 121, 0.24), transparent 72%);
+        filter: blur(32px);
+        pointer-events: none;
+        animation: splashGlowIn 1050ms ease-out 1 forwards;
       }
       .splash__logo {
-        width: min(62vw, 365px);
+        position: relative;
+        display: block;
+        width: 72vw;
+        max-width: 510px;
         height: auto;
-        max-height: min(24vh, 190px);
         object-fit: contain;
         mix-blend-mode: lighten;
-        animation: splashLogoIn 700ms ease-out forwards;
-      }
-      .splash__tagline {
-        margin: 30px 0 0;
-        color: #c4b4a6;
-        font-size: 15px;
-        font-weight: 400;
-        line-height: 1.55;
-        letter-spacing: 0.06em;
-        opacity: 0;
-        animation: splashTaglineIn 700ms ease-out 220ms forwards;
+        animation: splashLogoIn 1050ms ease-out 1 forwards;
       }
       @keyframes splashLogoIn {
-        from { opacity: 0; transform: scale(0.97); }
-        to { opacity: 1; transform: scale(1); }
+        0% { opacity: 0; transform: scale(0.96); filter: brightness(1); }
+        48% { opacity: 1; transform: scale(1); filter: brightness(1); }
+        72% { opacity: 1; transform: scale(1); filter: brightness(1.18); }
+        100% { opacity: 1; transform: scale(1); filter: brightness(1); }
       }
-      @keyframes splashTaglineIn {
-        from { opacity: 0; transform: translateY(3px); }
-        to { opacity: 0.7; transform: translateY(0); }
+      @keyframes splashGlowIn {
+        0%, 48% { opacity: 0.7; }
+        72% { opacity: 1; }
+        100% { opacity: 0.75; }
       }
       @media (prefers-reduced-motion: reduce) {
-        .splash__logo { animation: none; opacity: 1; transform: none; }
-        .splash__tagline { animation: none; opacity: 0.7; transform: none; }
+        .splash__logo { animation: splashLogoFade 400ms ease-out forwards; transform: none; filter: none; }
+        .splash__mark::before { animation: none; opacity: 0.75; }
+      }
+      @keyframes splashLogoFade {
+        from { opacity: 0; }
+        to { opacity: 1; }
       }
     </style>
   </head>
@@ -101,11 +110,8 @@
     </script>
 
     <div class="splash" id="splash" role="status" aria-label="進行式ING">
-      <div class="splash__stage">
-        <div class="splash__mark">
-          <img class="splash__logo" src="logo.png?v=3" alt="進行式ING" width="720" height="240" />
-        </div>
-        <p class="splash__tagline">每天，看見自己一點。</p>
+      <div class="splash__mark">
+        <img class="splash__logo" src="logo.png?v=3" alt="進行式ING" width="720" height="240" />
       </div>
     </div>
 
@@ -1252,6 +1258,6 @@
     <script src="lib/insight-highlight.js?v=5"></script>
     <script src="lib/user-mark.js?v=6"></script>
     <script src="lib/task-sidebar.js?v=1"></script>
-    <script src="app.js?v=235"></script>
+    <script src="app.js?v=236"></script>
   </body>
 </html>
