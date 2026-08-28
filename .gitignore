@@ -14,8 +14,9 @@ Thumbs.db
 # Node
 node_modules/
 
-# Local splash source (production uses ing-splash.mp4)
+# Local splash sources (production uses ing-splash-v2.mp4)
 _splash-source.mp4
+_splash-source-v2.mp4
 
 
 .vercel

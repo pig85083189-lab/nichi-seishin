@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=206" />
+    <link rel="stylesheet" href="app.css?v=207" />
     <style>
       html.is-booting,
       html.is-booting body {
@@ -55,8 +55,8 @@
       .splash__video,
       .splash__still {
         display: block;
-        width: min(92vw, 720px);
-        max-width: 720px;
+        width: min(100%, 860px);
+        max-width: 860px;
         height: auto;
         object-fit: contain;
       }
@@ -100,8 +100,8 @@
       <video
         class="splash__video"
         id="splashVideo"
-        src="ing-splash.mp4?v=1"
-        poster="ing-splash-poster.jpg?v=1"
+        src="ing-splash-v2.mp4?v=1"
+        poster="ing-splash-v2-poster.jpg?v=1"
         muted
         autoplay
         playsinline
@@ -110,7 +110,7 @@
         disablepictureinpicture
         controlslist="nodownload nofullscreen noremoteplayback"
       ></video>
-      <img class="splash__still" id="splashStill" src="ing-splash-poster.jpg?v=1" alt="進行式ING" width="1920" height="962" />
+      <img class="splash__still" id="splashStill" src="ing-splash-v2-poster.jpg?v=1" alt="進行式ING" width="1920" height="962" />
       <img class="splash__logo" id="splashFallback" src="logo.png?v=3" alt="進行式ING" width="720" height="240" />
     </div>
 
@@ -1257,6 +1257,6 @@
     <script src="lib/insight-highlight.js?v=5"></script>
     <script src="lib/user-mark.js?v=6"></script>
     <script src="lib/task-sidebar.js?v=1"></script>
-    <script src="app.js?v=239"></script>
+    <script src="app.js?v=240"></script>
   </body>
 </html>

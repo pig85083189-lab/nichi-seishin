@@ -16269,7 +16269,7 @@ function dismissSplash() {
   splash.classList.add("is-leaving");
   splash.setAttribute("aria-hidden", "true");
   const reduced = splashMotionReduced();
-  const leaveMs = reduced ? 120 : 500;
+  const leaveMs = reduced ? 120 : 350;
   const finish = () => {
     if (splash.parentNode) splash.remove();
     clearBootingChrome();
@@ -16283,7 +16283,7 @@ function dismissSplash() {
 function tryDismissSplash() {
   if (state.splashDismissed) return;
   const reduced = splashMotionReduced();
-  const minMs = reduced ? 400 : 3500;
+  const minMs = reduced ? 400 : 5000;
   const maxMs = reduced ? 600 : 8000;
   const elapsed = Date.now() - (state.splashStartedAt || Date.now());
   if (elapsed < minMs) return;
@@ -16324,7 +16324,7 @@ function initSplash() {
       showSplashFallback(splash);
     }
   }
-  window.setTimeout(tryDismissSplash, reduced ? 400 : 3500);
+  window.setTimeout(tryDismissSplash, reduced ? 400 : 5000);
   window.setTimeout(tryDismissSplash, reduced ? 600 : 8000);
 }
 

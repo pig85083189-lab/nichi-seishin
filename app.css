@@ -87,8 +87,8 @@ html.is-booting body {
 .splash__video,
 .splash__still {
   display: block;
-  width: min(92vw, 720px);
-  max-width: 720px;
+  width: min(100%, 860px);
+  max-width: 860px;
   height: auto;
   object-fit: contain;
 }
@@ -123,7 +123,7 @@ html.is-booting body {
 }
 
 .splash.is-leaving {
-  animation: splashLeave 500ms ease-out forwards;
+  animation: splashLeave 350ms ease-out forwards;
 }
 
 .splash.is-gone {
