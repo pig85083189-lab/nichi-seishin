@@ -14,7 +14,7 @@ Thumbs.db
 # Node
 node_modules/
 
-# Local splash sources (production uses ing-splash-v2.mp4)
+# Local splash sources (not used in production)
 _splash-source.mp4
 _splash-source-v2.mp4
 

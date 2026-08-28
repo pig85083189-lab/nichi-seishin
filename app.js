@@ -76,7 +76,6 @@ const state = {
   historyHashSync: false,
   historyOpenSections: {},
   splashGateReady: false,
-  splashStartedAt: 0,
   splashDismissed: false,
   journalMode: "deep",
   quickModules: { body: false, aware: false, exec: false, manifest: false },
@@ -16193,71 +16192,6 @@ function clearBootingChrome() {
   if (document.body) document.body.classList.remove("is-booting");
 }
 
-function freezeSplashVideo(video) {
-  if (!video || video.dataset.frozen === "1") return;
-  video.dataset.frozen = "1";
-  const duration = video.duration;
-  if (Number.isFinite(duration) && duration > 0) {
-    try {
-      video.currentTime = Math.max(0, duration - 0.05);
-    } catch (_) {}
-  }
-  try {
-    video.pause();
-  } catch (_) {}
-}
-
-function showSplashFallback(splash) {
-  if (!splash || splash.classList.contains("is-fallback")) return;
-  splash.classList.add("is-fallback");
-  splash.classList.remove("is-static");
-  const video = document.getElementById("splashVideo");
-  if (video) {
-    try {
-      video.pause();
-    } catch (_) {}
-    video.removeAttribute("autoplay");
-  }
-}
-
-function bindSplashVideo(splash) {
-  const video = document.getElementById("splashVideo");
-  if (!video) {
-    showSplashFallback(splash);
-    return;
-  }
-  video.muted = true;
-  video.defaultMuted = true;
-  video.playsInline = true;
-  video.setAttribute("playsinline", "");
-  video.setAttribute("webkit-playsinline", "");
-  video.disablePictureInPicture = true;
-
-  const onFail = () => showSplashFallback(splash);
-  video.addEventListener("error", onFail);
-  video.addEventListener("ended", () => freezeSplashVideo(video));
-  video.addEventListener("timeupdate", () => {
-    if (video.dataset.frozen === "1") return;
-    const duration = video.duration;
-    if (Number.isFinite(duration) && duration > 0 && video.currentTime >= duration - 0.08) {
-      freezeSplashVideo(video);
-    }
-  });
-
-  const tryPlay = () => {
-    const play = video.play();
-    if (play && typeof play.catch === "function") play.catch(onFail);
-  };
-  if (video.readyState >= 2) tryPlay();
-  else video.addEventListener("canplay", tryPlay, { once: true });
-
-  window.setTimeout(() => {
-    if (!splash.isConnected) return;
-    if (splash.classList.contains("is-fallback") || splash.classList.contains("is-static")) return;
-    if (video.paused && video.currentTime < 0.05) onFail();
-  }, 900);
-}
-
 function dismissSplash() {
   const splash = document.getElementById("splash");
   if (!splash) {
@@ -16268,8 +16202,7 @@ function dismissSplash() {
   splash.dataset.leaving = "1";
   splash.classList.add("is-leaving");
   splash.setAttribute("aria-hidden", "true");
-  const reduced = splashMotionReduced();
-  const leaveMs = reduced ? 120 : 350;
+  const leaveMs = splashMotionReduced() ? 120 : 200;
   const finish = () => {
     if (splash.parentNode) splash.remove();
     clearBootingChrome();
@@ -16282,12 +16215,7 @@ function dismissSplash() {
 
 function tryDismissSplash() {
   if (state.splashDismissed) return;
-  const reduced = splashMotionReduced();
-  const minMs = reduced ? 400 : 5000;
-  const maxMs = reduced ? 600 : 8000;
-  const elapsed = Date.now() - (state.splashStartedAt || Date.now());
-  if (elapsed < minMs) return;
-  if (!state.splashGateReady && elapsed < maxMs) return;
+  if (!state.splashGateReady) return;
   state.splashDismissed = true;
   dismissSplash();
 }
@@ -16306,26 +16234,6 @@ function initSplash() {
     clearBootingChrome();
     return;
   }
-  state.splashStartedAt = Date.now();
-  const reduced = splashMotionReduced();
-  if (reduced) {
-    splash.classList.add("is-static");
-    const video = document.getElementById("splashVideo");
-    if (video) {
-      video.removeAttribute("autoplay");
-      try {
-        video.pause();
-      } catch (_) {}
-    }
-  } else {
-    try {
-      bindSplashVideo(splash);
-    } catch (error) {
-      showSplashFallback(splash);
-    }
-  }
-  window.setTimeout(tryDismissSplash, reduced ? 400 : 5000);
-  window.setTimeout(tryDismissSplash, reduced ? 600 : 8000);
 }
 
 function init() {

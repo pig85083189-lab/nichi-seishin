@@ -84,30 +84,25 @@ html.is-booting body {
   overflow: hidden;
 }
 
-.splash__video,
-.splash__still {
-  display: block;
-  width: min(100%, 860px);
-  max-width: 860px;
-  height: auto;
-  object-fit: contain;
+.splash__mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 72vw;
+  max-width: 510px;
 }
 
-.splash__still,
+.splash__mark::before {
+  content: "";
+  position: absolute;
+  inset: -6% -10%;
+  background: radial-gradient(circle, rgba(156, 136, 121, 0.24), transparent 72%);
+  filter: blur(32px);
+  pointer-events: none;
+}
+
 .splash__logo {
-  display: none;
-}
-
-.splash.is-static .splash__video,
-.splash.is-fallback .splash__video {
-  display: none;
-}
-
-.splash.is-static .splash__still {
-  display: block;
-}
-
-.splash.is-fallback .splash__logo {
+  position: relative;
   display: block;
   width: 72vw;
   max-width: 510px;
@@ -116,14 +111,8 @@ html.is-booting body {
   mix-blend-mode: lighten;
 }
 
-.splash__video::-webkit-media-controls,
-.splash__video::-webkit-media-controls-start-playback-button {
-  display: none !important;
-  -webkit-appearance: none;
-}
-
 .splash.is-leaving {
-  animation: splashLeave 350ms ease-out forwards;
+  animation: splashLeave 200ms ease-out forwards;
 }
 
 .splash.is-gone {
