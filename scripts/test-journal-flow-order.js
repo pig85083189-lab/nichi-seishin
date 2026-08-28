@@ -164,6 +164,24 @@ const merged = mergeJournalObjects(
 assert(merged.thinkChoices.selectedIds[0] === "t1", "CASE S：空 thinkChoices 不覆蓋");
 assert(merged.awarenessChoices.selectedIds[0] === "a1", "CASE S：空 awarenessChoices 不覆蓋");
 
+const thanksFold = html.slice(html.indexOf("id=\"section-thanks\""), html.indexOf("id=\"thanksFoldPanel\""));
+const eventFold = html.slice(html.indexOf("id=\"section-event\""), html.indexOf("id=\"eventFoldPanel\""));
+const bodyFold = html.slice(html.indexOf("id=\"section-body\""), html.indexOf("id=\"bodyFoldPanel\""));
+const deepFold = html.slice(html.indexOf("id=\"section-deep\""), html.indexOf("id=\"deepFoldPanel\""));
+const awareFold = html.slice(html.indexOf("id=\"section-aware\""), html.indexOf("id=\"awareFoldPanel\""));
+const execFold = html.slice(html.indexOf("id=\"section-exec\""), html.indexOf("id=\"execFoldPanel\""));
+assert(thanksFold.includes("把今天值得感謝的人、事、物留下來。"), "01 收合說明是意義不是操作");
+assert(eventFold.includes("寫下今天真正碰到你的那件事與感受。"), "02 收合說明");
+assert(bodyFold.includes("快速看看今天的心情、身體與睡眠狀態。"), "03 收合說明");
+assert(deepFold.includes("看看這件事背後，對你真正代表什麼。"), "04 收合說明：理解這件事");
+assert(!deepFold.includes("勾選即可"), "04 收合不混操作說明");
+assert(awareFold.includes("經過今天這些事情，我看見了自己什麼。"), "05 收合說明：看見自己");
+assert(!awareFold.includes("勾選即可"), "05 收合不混操作說明");
+assert(execFold.includes("把今天的看見，變成明天真正做得到的一小步。"), "06 收合說明");
+assert(!execFold.includes("完成會同步到側邊欄"), "06 收合不寫系統同步");
+assert(app.includes("選出最有感的 1～2 個就好。"), "04／05 勾選區上方輕提示");
+assert(app.includes("function choiceListHtml") && app.slice(app.indexOf("function choiceListHtml"), app.indexOf("function renderAwarenessChoices")).includes("選出最有感的 1～2 個就好。"), "輕提示只在 04／05 choice list");
+
 assert((html.match(/打字或用麥克風說都可以/g) || []).length >= 4, "語音提示：01／02／03／06 靜態輸入區有提示");
 assert(html.includes("id=\"thanksText\"") && html.slice(html.indexOf("id=\"thanksText\""), html.indexOf("id=\"thanksText\"") + 400).includes("打字或用麥克風說都可以"), "01 感謝 textarea 旁有語音提示");
 assert(html.includes("id=\"eventText\"") && html.slice(html.indexOf("id=\"eventText\""), html.indexOf("id=\"moodRow\"")).includes("打字或用麥克風說都可以"), "02 事件 textarea 旁有語音提示");

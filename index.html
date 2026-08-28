@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=197" />
+    <link rel="stylesheet" href="app.css?v=198" />
     <style>
       .splash {
         position: fixed;
@@ -270,7 +270,7 @@
             <button class="journal-fold__toggle" type="button" data-journal-fold aria-expanded="true" aria-controls="thanksFoldPanel">
               <span class="journal-fold__copy">
                 <h2 class="journal-card__title"><span>01</span> 今日感謝</h2>
-                <p class="journal-fold__summary">把今天想感謝的人、事、物寫下來。</p>
+                <p class="journal-fold__summary">把今天值得感謝的人、事、物留下來。</p>
               </span>
               <span class="journal-fold__chevron" aria-hidden="true"></span>
             </button>
@@ -294,8 +294,7 @@
               <span class="journal-fold__copy">
                 <h2 class="journal-card__title js-quick-only"><span>02</span> 今日事件與心情</h2>
                 <h2 class="journal-card__title js-deep-only"><span>02</span> 今日事件</h2>
-                <p class="journal-fold__summary js-quick-only">寫下今天真正被碰到的事，再點選心情。</p>
-                <p class="journal-fold__summary js-deep-only">先把開心、生氣、難過的那件事寫下來。</p>
+                <p class="journal-fold__summary">寫下今天真正碰到你的那件事與感受。</p>
               </span>
               <span class="journal-fold__chevron" aria-hidden="true"></span>
             </button>
@@ -390,7 +389,7 @@
             <button class="journal-fold__toggle" type="button" data-journal-fold aria-expanded="false" aria-controls="bodyFoldPanel">
               <span class="journal-fold__copy">
                 <h2 class="journal-card__title"><span>03</span> 身體覺察</h2>
-                <p class="journal-fold__summary">用三個檢核，把心情、身體與睡眠放在一起看。</p>
+                <p class="journal-fold__summary">快速看看今天的心情、身體與睡眠狀態。</p>
               </span>
               <span class="journal-fold__chevron" aria-hidden="true"></span>
             </button>
@@ -547,13 +546,13 @@
             <button class="journal-fold__toggle" type="button" data-journal-fold aria-expanded="false" aria-controls="deepFoldPanel">
               <span class="journal-fold__copy">
                 <h2 class="journal-card__title"><span>04</span> 深度思考 <span class="plus-lock-badge">PLUS</span></h2>
-                <p class="journal-fold__summary">看見這件事背後代表什麼。勾選即可，不必再打字。</p>
+                <p class="journal-fold__summary">看看這件事背後，對你真正代表什麼。</p>
               </span>
               <span class="journal-fold__chevron" aria-hidden="true"></span>
             </button>
             <div class="journal-fold__panel" id="deepFoldPanel" inert aria-hidden="true">
               <div class="journal-fold__inner">
-            <p class="journal-guide">先理解這件事更深一層的意義：價值、模式、真正在意的是什麼。<br />從今天的感謝、事件與身體紀錄長出幾個選項，最多勾 2 個，也可以都不勾。</p>
+            <p class="journal-guide">先理解這件事更深一層的意義：價值、模式、真正在意的是什麼。</p>
             <div class="check-loading" id="deepPromptLoading" hidden>
               <p class="check-loading__label">正在整理今天的深度選項…</p>
               <div class="ai-thinking__bar"><i></i></div>
@@ -578,14 +577,13 @@
               <span class="journal-fold__copy">
                 <h2 class="journal-card__title js-quick-only"><span>03</span> 今日覺察 <span class="plus-lock-badge">PLUS</span></h2>
                 <h2 class="journal-card__title js-deep-only"><span>05</span> 覺察力 <span class="plus-lock-badge">PLUS</span></h2>
-                <p class="journal-fold__summary js-quick-only">從今天的內容長出幾個「我現在怎麼了」的選項。勾選即可。</p>
-                <p class="journal-fold__summary js-deep-only">經過今天這些事情，我看見了自己什麼。勾選即可，不必再打字。</p>
+                <p class="journal-fold__summary">經過今天這些事情，我看見了自己什麼。</p>
               </span>
               <span class="journal-fold__chevron" aria-hidden="true"></span>
             </button>
             <div class="journal-fold__panel" id="awareFoldPanel" inert aria-hidden="true">
               <div class="journal-fold__inner">
-            <p class="journal-guide">今天也許藏著一些你還沒發現的自己。<br />這裡只問「我看見了自己什麼」：需要、反應、習慣、情緒。勾選最貼近的 1～2 句，也可以都不勾。</p>
+            <p class="journal-guide">今天也許藏著一些你還沒發現的自己。<br />這裡只問「我看見了自己什麼」：需要、反應、習慣、情緒。</p>
             <div class="journal-split journal-split--aware">
               <div class="journal-col aware-col aware-col--quiz">
                 <div class="check-loading" id="awarePromptLoading" hidden>
@@ -617,8 +615,7 @@
               <span class="journal-fold__copy">
                 <h2 class="journal-card__title js-quick-only"><span>04</span> 今日最小行動</h2>
                 <h2 class="journal-card__title js-deep-only"><span>06</span> 執行力 <span class="plus-lock-badge">PLUS</span></h2>
-                <p class="journal-fold__summary js-quick-only">明天只要一件 5 分鐘內能完成的小事。點開後可寫下，並同步到側邊欄。</p>
-                <p class="journal-fold__summary js-deep-only">把今天已經看見的，收成明天做得到的一小步。完成會同步到側邊欄。</p>
+                <p class="journal-fold__summary">把今天的看見，變成明天真正做得到的一小步。</p>
               </span>
               <span class="journal-fold__chevron" aria-hidden="true"></span>
             </button>
@@ -1213,6 +1210,6 @@
     <script src="lib/insight-highlight.js?v=5"></script>
     <script src="lib/user-mark.js?v=6"></script>
     <script src="lib/task-sidebar.js?v=1"></script>
-    <script src="app.js?v=230"></script>
+    <script src="app.js?v=231"></script>
   </body>
 </html>

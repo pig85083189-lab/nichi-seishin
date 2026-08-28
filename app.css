@@ -4939,6 +4939,10 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   line-height: 1.5;
 }
 
+.choice-list > .choice-hint:first-child {
+  margin: 0 0 8px;
+}
+
 #thinkChoiceResult {
   min-width: 0;
 }
@@ -5066,6 +5070,8 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   color: var(--muted);
   font-size: 13px;
   line-height: 1.7;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .journal-fold.is-open .journal-fold__summary {

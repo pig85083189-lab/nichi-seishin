@@ -9415,6 +9415,7 @@ function choiceListHtml(bag, kind) {
   const options = data.options.concat([{ id: noneId, text: choiceNoneText(), none: true }]);
   return `
     <div class="choice-list" data-choice-kind="${escapeHtml(kind)}" role="group" aria-label="${kind === "think" ? "深度思考選項" : "覺察選項"}">
+      <p class="choice-hint">選出最有感的 1～2 個就好。</p>
       ${options
         .map((item) => {
           const on = item.none ? noneOn : selected.has(item.id);
@@ -9428,7 +9429,6 @@ function choiceListHtml(bag, kind) {
           `;
         })
         .join("")}
-      <p class="choice-hint">最多選 2 個，也可以都不選。</p>
     </div>
   `;
 }
