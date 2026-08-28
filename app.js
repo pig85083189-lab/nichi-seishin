@@ -3882,6 +3882,12 @@ function rowsToReviewMap(rows) {
     if (rating >= 1 && rating <= 5) out[iso].historyRating = Math.round(rating);
     const shortTitle = String(row.historyShortTitle || row.history_short_title || "").trim();
     if (shortTitle) out[iso].historyShortTitle = shortTitle;
+    const metaRaw = row.historyMeta || row.history_meta;
+    if (metaRaw && typeof metaRaw === "object") {
+      const important = metaRaw.important === true;
+      const updatedAt = String(metaRaw.updatedAt || metaRaw.updated_at || "").trim();
+      if (important || updatedAt) out[iso].historyMeta = { important, updatedAt };
+    }
   });
   return out;
 }
@@ -10775,6 +10781,26 @@ function captureReviewPatch() {
   };
 }
 
+function persistArchivedHistoryImportant(iso, important) {
+  const day = iso || state.historyDetailDate;
+  const prev = getReview(day) || {};
+  if (!reviewIsFinalized(prev) && !reviewIsComplete(prev)) return null;
+  const now = new Date().toISOString();
+  return upsertReview(day, {
+    historyMeta: { important: Boolean(important), updatedAt: now },
+    completedAt: prev.completedAt,
+    updatedAt: now,
+  });
+}
+
+function toggleHistoryImportant(iso) {
+  const day = historyDetailIso(iso) || iso;
+  const prev = getReview(day);
+  if (!prev || !reviewIsComplete(prev)) return;
+  persistArchivedHistoryImportant(day, !reviewIsHistoryImportant(prev));
+  if (state.historyDetailDate === day) renderHistoryDetail(day);
+}
+
 function persistArchivedUserMarks(iso) {
   const day = iso || currentIso();
   const prev = getReview(day) || {};
@@ -13796,8 +13822,22 @@ function historyMatchesTag(review, tag) {
   const api = historySummaryApi();
   if (typeof api.historyMatchesTag === "function") return api.historyMatchesTag(review, tag);
   if (tag === "all") return true;
-  if (tag === "important") return normalizeHistoryRating(review && review.historyRating) >= 4;
+  if (tag === "important") return reviewIsHistoryImportant(review);
   return getHistoryDailySummary(review).tags.includes(tag);
+}
+
+function historyMatchesQuery(review, query) {
+  const api = historySummaryApi();
+  if (typeof api.historyMatchesQuery === "function") return api.historyMatchesQuery(review, query);
+  const needle = String(query || "").trim().toLowerCase();
+  if (!needle) return true;
+  return reviewSearchText(review).toLowerCase().includes(needle);
+}
+
+function reviewIsHistoryImportant(review) {
+  const api = reviewMergeApi();
+  if (typeof api.reviewIsHistoryImportant === "function") return api.reviewIsHistoryImportant(review);
+  return Boolean(review && review.historyMeta && review.historyMeta.important === true);
 }
 
 function normalizeHistoryRating(value) {
@@ -14772,9 +14812,8 @@ function renderHistory(options = {}) {
         if (!historyMatchesTag(review, state.historyTag)) return false;
       }
       if (!query) return true;
-      const summary = getHistoryDailySummary(review);
-      const hay = `${iso} ${formatDisplayDate(iso)} ${formatHistoryListDate(iso)} ${reviewSearchText(review)} ${summary.title} ${summary.listTitle || ""} ${(summary.tags || []).join(" ")} ${(summary.keywords || []).join(" ")}`.toLowerCase();
-      return hay.includes(query);
+      const isoHay = `${iso} ${formatDisplayDate(iso)} ${formatHistoryListDate(iso)}`;
+      return historyMatchesQuery(review, query) || isoHay.toLowerCase().includes(query);
     });
 
   if (!Object.values(getReviews()).some(reviewIsComplete)) {
@@ -14783,7 +14822,7 @@ function renderHistory(options = {}) {
     return;
   }
   if (!entries.length) {
-    list.innerHTML = `<div class="empty">沒有符合搜尋或標籤的紀錄。</div>`;
+    list.innerHTML = `<div class="empty empty--quiet"><p class="empty__title">沒有找到相關紀錄。</p>換個關鍵字試試看。</div>`;
     restoreHistoryScroll(scroll);
     return;
   }
@@ -14839,6 +14878,7 @@ function renderHistoryDetail(iso) {
   const summary = getHistoryDailySummary(historyReview);
   const stars = historyListStars(historyReview);
   const cats = (summary.categories || summary.tags || []).slice(0, 2);
+  const saved = reviewIsHistoryImportant(historyReview);
   root.innerHTML = `
     <button class="history-detail__back" data-history-back type="button">← 返回歷史紀錄</button>
     <article class="history-detail-sheet">
@@ -14847,6 +14887,9 @@ function renderHistoryDetail(iso) {
         <p class="history-detail__date">${escapeHtml(formatHistoryListDate(date))}${
           stars ? `<span class="history-card__stars">${escapeHtml(stars)}</span>` : ""
         }</p>
+        <button class="history-detail__save${saved ? " is-on" : ""}" data-history-important="${escapeHtml(date)}" type="button" aria-pressed="${saved ? "true" : "false"}">${
+          saved ? "★ 已收藏" : "☆ 收藏這天"
+        }</button>
         ${cats.length ? `<p class="history-detail__tags">${escapeHtml(cats.join("　"))}</p>` : ""}
       </header>
       ${renderHistoryJournal(historyReview)}
@@ -16082,6 +16125,13 @@ function bindEvents() {
     setHistorySectionOpen(iso, "archive", details.open);
   }, true);
   document.getElementById("page-history")?.addEventListener("click", (event) => {
+    const saveBtn = event.target.closest("[data-history-important]");
+    if (saveBtn) {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleHistoryImportant(saveBtn.getAttribute("data-history-important"));
+      return;
+    }
     const back = event.target.closest("[data-history-back]");
     if (!back) return;
     event.preventDefault();

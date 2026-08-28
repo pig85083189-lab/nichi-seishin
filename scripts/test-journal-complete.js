@@ -50,9 +50,9 @@ assert(app.includes("NichiTaskSidebar") && html.includes("lib/task-sidebar.js"),
 assert(css.includes("complete-confirm-actions"), "CASE AC：confirm 按鈕排版");
 assert(!app.includes("CREATE TABLE") && !app.includes("ALTER TABLE"), "CASE AE：無 schema");
 assert(!html.includes("billing") || app.includes("function trackProduct"), "CASE AF：billing 路徑未當這次主改");
-assert(html.includes("app.js?v=233"), "cache app.js v=233");
-assert(html.includes("app.css?v=200"), "cache app.css v=200");
-assert(html.includes("lib/review-merge.js?v=8"), "cache review-merge v=8");
+assert(html.includes("app.js?v=234"), "cache app.js v=234");
+assert(html.includes("app.css?v=201"), "cache app.css v=201");
+assert(html.includes("lib/review-merge.js?v=9"), "cache review-merge v=9");
 
 assert(reviewIsFinalized({ completedAt: "2026-08-01T10:00:00.000Z" }) === true, "CASE X：有 completedAt 即完成");
 assert(reviewIsFinalized({ organize: { themeTitle: "舊整理" } }) === true, "CASE X：舊 organize 視為完成");
