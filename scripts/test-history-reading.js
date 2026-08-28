@@ -20,8 +20,9 @@ const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const css = fs.readFileSync(path.join(root, "app.css"), "utf8");
 const reviewApi = fs.readFileSync(path.join(root, "api/review.js"), "utf8");
 
-assert(html.includes("lib/history-reading.js?v=1"), "History reading mapper 已載入");
+assert(html.includes("lib/history-reading.js?v=2"), "History reading mapper 已載入");
 assert(app.includes('"① 今天發生了什麼"'), "主閱讀流有①");
+assert(app.includes('"⑤ 今日帶走的一句話"'), "主閱讀流有⑤");
 assert(app.includes("查看完整深度思考"), "深度思考可展開");
 assert(app.includes("markableP(reading.stuck.text, reading.stuck.field"), "② 走既有 field + markableP");
 assert(app.includes("markableP(reading.seen.text, reading.seen.field"), "③ 走既有 field + markableP");

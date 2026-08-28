@@ -69,6 +69,7 @@ const state = {
   sfmFilter: "all",
   historyQuery: "",
   historyTag: "all",
+  pendingHistoryRating: 3,
   historyOpen: "",
   historyDetailDate: "",
   historyListScroll: null,
@@ -1136,6 +1137,7 @@ function reviewSearchText(review) {
   if (!review) return "";
   const ai = review.organize || {};
   return [
+    review.historyShortTitle,
     review.rawText,
     review.gratitude,
     review.journal && JSON.stringify(review.journal),
@@ -3876,6 +3878,10 @@ function rowsToReviewMap(rows) {
       completedAt: row.completed_at || row.completedAt || "",
       userId: row.user_id || state.user?.id || "",
     };
+    const rating = Number(row.historyRating || row.history_rating);
+    if (rating >= 1 && rating <= 5) out[iso].historyRating = Math.round(rating);
+    const shortTitle = String(row.historyShortTitle || row.history_short_title || "").trim();
+    if (shortTitle) out[iso].historyShortTitle = shortTitle;
   });
   return out;
 }
@@ -12914,6 +12920,7 @@ async function completeToday() {
   }
   const modal = document.getElementById("completeConfirmModal");
   if (modal && typeof modal.showModal === "function") {
+    setPendingHistoryRating(3);
     modal.showModal();
     return;
   }
@@ -12978,13 +12985,24 @@ async function finishTodayReview() {
   const gratitude = document.getElementById("gratitudeInput")?.value.trim() || state.gratitude;
   const organize = state.organize;
   const patch = captureReviewPatch();
+  const historyJournal = collected.journal || patch.journal || getReview(iso)?.journal || emptyJournal();
+  const historyRating = normalizeHistoryRating(state.pendingHistoryRating) || 3;
+  const historyShortTitle = buildHistoryListTitleForReview({
+    ...patch,
+    date: iso,
+    journal: historyJournal,
+    organize,
+    rawText: rawText || patch.rawText,
+  });
 
   upsertReview(iso, {
     ...patch,
     rawText: rawText || patch.rawText,
-    journal: collected.journal || patch.journal || getReview(iso)?.journal || emptyJournal(),
+    journal: historyJournal,
     organize,
     gratitude: gratitude || patch.gratitude,
+    historyRating,
+    historyShortTitle,
     completedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });
@@ -13765,7 +13783,40 @@ function historySummaryApi() {
 function getHistoryDailySummary(review) {
   const api = historySummaryApi();
   if (typeof api.getHistoryDailySummary === "function") return api.getHistoryDailySummary(review);
-  return { title: "看看這一天留下的紀錄", tags: [] };
+  return { title: "看看這一天留下的紀錄", listTitle: "看看這一天留下的紀錄", tags: [], keywords: [], rating: 0 };
+}
+
+function buildHistoryListTitleForReview(review) {
+  const api = historySummaryApi();
+  if (typeof api.buildHistoryListTitle === "function") return api.buildHistoryListTitle(review);
+  return getHistoryDailySummary(review).listTitle || getHistoryDailySummary(review).title || "";
+}
+
+function historyMatchesTag(review, tag) {
+  const api = historySummaryApi();
+  if (typeof api.historyMatchesTag === "function") return api.historyMatchesTag(review, tag);
+  if (tag === "all") return true;
+  if (tag === "important") return normalizeHistoryRating(review && review.historyRating) >= 4;
+  return getHistoryDailySummary(review).tags.includes(tag);
+}
+
+function normalizeHistoryRating(value) {
+  const api = reviewMergeApi();
+  if (typeof api.normalizeHistoryRating === "function") return api.normalizeHistoryRating(value);
+  const n = Math.round(Number(value));
+  return n >= 1 && n <= 5 ? n : 0;
+}
+
+function setPendingHistoryRating(value) {
+  const n = normalizeHistoryRating(value) || 3;
+  state.pendingHistoryRating = n;
+  document.querySelectorAll("#completeRatingStars [data-history-rating]").forEach((btn) => {
+    const star = Number(btn.dataset.historyRating);
+    const on = star <= n;
+    btn.classList.toggle("is-on", on);
+    btn.setAttribute("aria-pressed", star === n ? "true" : "false");
+    btn.textContent = on ? "★" : "☆";
+  });
 }
 
 function formatHistoryListDate(iso) {
@@ -13775,9 +13826,9 @@ function formatHistoryListDate(iso) {
 }
 
 function historyListStars(review) {
-  const n = Number(review && review.organize && review.organize.themeStars);
-  if (!Number.isFinite(n) || n < 1) return "";
-  return starsText(n);
+  const n = normalizeHistoryRating(review && review.historyRating);
+  if (!n) return "";
+  return "★".repeat(n);
 }
 
 function historyHighlight(review) {
@@ -14534,16 +14585,6 @@ function historyArchiveHtml(review, reading, journal, date) {
 }
 
 function renderHistoryJournal(review) {
-  const parsedGuide = historyGuideFromReview(review);
-  console.log("[history-debug] date", review && review.date);
-  console.log("[history-debug] review keys", review && Object.keys(review));
-  console.log("[history-debug] review", review);
-  console.log("[history-debug] journal", review && review.journal);
-  console.log("[history-debug] insight", review && review.journal && review.journal.insight);
-  console.log("[history-debug] guide", review && review.journal && review.journal.insight && review.journal.insight.guide);
-  console.log("[history-debug] rounds", parsedGuide.rounds);
-  console.log("[history-debug] thinkHistory", review && review.thinkHistory);
-  console.log("[history-debug] deep", review && review.journal && review.journal.deep);
   const journal = review?.journal && typeof review.journal === "object" ? review.journal : emptyJournal();
   const historyIso = String((review && review.date) || "");
   const reading = buildHistoryReadingForReview(review);
@@ -14565,14 +14606,13 @@ function renderHistoryJournal(review) {
       )}</aside>`
     : "";
   const archiveHtml = historyArchiveHtml(review, reading, journal, historyIso);
-  console.log("[history-debug] rendered html length", String((happenedHtml || "") + (stuckHtml || "") + (seenHtml || "") + (actionHtml || "") + (quoteHtml || "") + (archiveHtml || "")).length);
   const parts = historySectionsHtml(
     [
       ["① 今天發生了什麼", "happened", happenedHtml],
       ["② 我今天真正卡住的是什麼", "stuck", stuckHtml],
       ["③ 我今天看見了自己什麼", "seen", seenHtml],
       ["④ 我接下來要怎麼做", "action", actionHtml],
-      ["今日帶走的一句話", "quote", quoteHtml],
+      ["⑤ 今日帶走的一句話", "quote", quoteHtml],
       ...(journalHasManifestHistory(journal) ? [["顯化紀錄", "manifest", historyManifestBlocks(journal, historyIso)]] : []),
     ],
     historyIso
@@ -14606,13 +14646,11 @@ function renderHistory(options = {}) {
     .sort((a, b) => b[0].localeCompare(a[0]))
     .filter(([iso, review]) => {
       if (state.historyTag !== "all") {
-        const summaryTags = getHistoryDailySummary(review).tags;
-        const organizeTags = review.organize?.tags || (review.organize?.themeCategory ? [review.organize.themeCategory] : []);
-        if (![...summaryTags, ...organizeTags].includes(state.historyTag)) return false;
+        if (!historyMatchesTag(review, state.historyTag)) return false;
       }
       if (!query) return true;
       const summary = getHistoryDailySummary(review);
-      const hay = `${iso} ${formatDisplayDate(iso)} ${formatHistoryListDate(iso)} ${reviewSearchText(review)} ${summary.title} ${(summary.tags || []).join(" ")}`.toLowerCase();
+      const hay = `${iso} ${formatDisplayDate(iso)} ${formatHistoryListDate(iso)} ${reviewSearchText(review)} ${summary.title} ${summary.listTitle || ""} ${(summary.tags || []).join(" ")} ${(summary.keywords || []).join(" ")}`.toLowerCase();
       return hay.includes(query);
     });
 
@@ -14632,18 +14670,16 @@ function renderHistory(options = {}) {
       const historyReview = { ...review, date: (review && review.date) || iso };
       const summary = getHistoryDailySummary(historyReview);
       const stars = historyListStars(historyReview);
-      const tags = (summary.tags || [])
-        .map((tag) => `<span class="tag tag--ai">${escapeHtml(tag)}</span>`)
-        .join("");
+      const cats = (summary.categories || summary.tags || []).slice(0, 2);
       return `
         <article class="history-card" data-history-iso="${escapeHtml(iso)}">
           <button class="history-card__summary" data-history-open="${iso}" type="button" aria-label="開啟 ${escapeHtml(formatHistoryListDate(iso))} 完整紀錄">
             <span class="history-card__content">
-              <span class="history-card__title">${escapeHtml(summary.title)}</span>
+              <span class="history-card__title">${escapeHtml(summary.listTitle || summary.title)}</span>
               <span class="history-card__date">${escapeHtml(formatHistoryListDate(iso))}${
                 stars ? `<span class="history-card__stars">${escapeHtml(stars)}</span>` : ""
               }</span>
-              ${tags ? `<span class="history-card__tags">${tags}</span>` : ""}
+              ${cats.length ? `<span class="history-card__cats">${escapeHtml(cats.join("　"))}</span>` : ""}
             </span>
           </button>
         </article>
@@ -14679,16 +14715,16 @@ function renderHistoryDetail(iso) {
   const historyReview = { ...review, date: (review && review.date) || date };
   const summary = getHistoryDailySummary(historyReview);
   const stars = historyListStars(historyReview);
-  const tags = (summary.tags || []).filter(Boolean);
+  const cats = (summary.categories || summary.tags || []).slice(0, 2);
   root.innerHTML = `
     <button class="history-detail__back" data-history-back type="button">← 返回歷史紀錄</button>
     <article class="history-detail-sheet">
       <header class="history-detail__head">
-        <h1 class="history-detail__title">${escapeHtml(summary.title)}</h1>
+        <h1 class="history-detail__title">${escapeHtml(summary.listTitle || summary.title)}</h1>
         <p class="history-detail__date">${escapeHtml(formatHistoryListDate(date))}${
           stars ? `<span class="history-card__stars">${escapeHtml(stars)}</span>` : ""
         }</p>
-        ${tags.length ? `<p class="history-detail__tags">${escapeHtml(tags.join(" / "))}</p>` : ""}
+        ${cats.length ? `<p class="history-detail__tags">${escapeHtml(cats.join("　"))}</p>` : ""}
       </header>
       ${renderHistoryJournal(historyReview)}
     </article>
@@ -15515,6 +15551,11 @@ function bindEvents() {
   });
   document.getElementById("btnConfirmComplete")?.addEventListener("click", () => {
     confirmCompleteToday();
+  });
+  document.getElementById("completeRatingStars")?.addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-history-rating]");
+    if (!btn) return;
+    setPendingHistoryRating(btn.dataset.historyRating);
   });
   document.getElementById("completeConfirmForm")?.addEventListener("submit", () => {
     closeCompleteConfirmModal();

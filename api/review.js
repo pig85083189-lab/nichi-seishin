@@ -886,6 +886,13 @@ awareness、selfSeen、takeaway 必須一層比一層推進。禁止三次摘要
 每一欄都必須提供新的事實、新的理解、新的自我覺察，或新的行動，至少一種。
 若只是把前一欄換句話說，不要輸出。
 
+分層：
+- awareness = ② 今天真正卡住的核心矛盾。只留 1 個矛盾，1 到 2 小段。不要重述事件，不要列 3～5 個洞察。
+- selfSeen = ③ 經過今天，我比早上更了解自己什麼。必須比 awareness 更深一層。若 awareness 已說「我渴望被看見」，selfSeen 不可只是「我發現自己需要被看見」；要往下到習慣／防衛／自我說詞。
+- takeaway = ⑤ 今日帶走的一句話。記憶句，不是重新分析，也不要再講一次矛盾。
+
+禁止同一個洞察在 awareness / selfSeen / takeaway 換句話說重複三次。
+
 規則：
 - 只輸出 JSON：
 {
@@ -944,7 +951,10 @@ ${extras.join("\n")}`;
 ${formatThinkGuideRounds(rounds)}`;
   const tone = inferThinkGuideTone(ctx, rounds);
   if (thinkGuideStep(body) === "close") {
-    return `請根據下面全部上下文，寫出精短收束。不要再提問。同一個洞察只說一次。awareness 回答「真正卡住的矛盾」，1 到 2 段、約 80-160 字，不要重述事件。selfSeen 必須比 awareness 更深一層的自我理解，一句第一人稱。takeaway 是收束的一句話，15-35 字，不要再次摘要。
+    return `請根據下面全部上下文，寫出精短收束。不要再提問。同一個洞察只說一次。
+awareness＝真正卡住的 1 個矛盾，不要重述事件。
+selfSeen＝比 awareness 更深一層的自我理解；若前面已說渴望被看見，這裡必須往下到習慣或自我說詞。
+takeaway＝記憶句，不是重新分析。禁止三欄換句話說同一件事。
 
 ${thinkGuideToneHint(tone)}
 

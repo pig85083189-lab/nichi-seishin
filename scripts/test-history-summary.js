@@ -25,7 +25,8 @@ const case1 = getHistoryDailySummary({
   },
 });
 assert(case1.title.includes("被看見") || case1.title.includes("休息"), "CASE 1：新版完整 review 要有 title");
-assert(case1.tags.length >= 1 && case1.tags.length <= 3, "CASE 1：tags 最多 3 個");
+assert(case1.tags.length >= 1 && case1.tags.length <= 2, "CASE 1：列表主分類最多 2 個");
+assert(case1.listTitle && case1.listTitle.replace(/\s+/g, "").length <= 40, "列表 short title 存在");
 
 const case2 = getHistoryDailySummary({
   journal: {

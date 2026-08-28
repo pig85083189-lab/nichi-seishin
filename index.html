@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=198" />
+    <link rel="stylesheet" href="app.css?v=199" />
     <style>
       .splash {
         position: fixed;
@@ -843,7 +843,7 @@
           <div id="historyListView">
           <header class="page__header">
             <h2 class="page__title">歷史紀錄</h2>
-            <p class="page__subtitle">先看這一天真正看見了什麼，點開再讀完整復盤。</p>
+            <p class="page__subtitle">濃縮過的一天，讓未來的你快速回來找答案。</p>
           </header>
 
           <div class="history-toolbar">
@@ -862,6 +862,7 @@
               <button class="chip" data-tag="人際關係" type="button">人際關係</button>
               <button class="chip" data-tag="感恩" type="button">感恩</button>
               <button class="chip" data-tag="行動力" type="button">行動力</button>
+              <button class="chip" data-tag="important" type="button">重要紀錄</button>
             </div>
           </div>
 
@@ -1111,6 +1112,16 @@
       <form method="dialog" class="modal__card" id="completeConfirmForm">
         <h3 class="modal__title" id="completeConfirmTitle">完成今天的復盤？</h3>
         <p class="modal__desc">完成後會收進歷史紀錄，今天的內容將無法再修改。</p>
+        <div class="complete-rating" id="completeRating">
+          <p class="complete-rating__label" id="completeRatingLabel">這一天，你想留幾顆星給未來的自己？</p>
+          <div class="complete-rating__stars" id="completeRatingStars" role="radiogroup" aria-labelledby="completeRatingLabel">
+            <button class="complete-rating__star" type="button" data-history-rating="1" aria-label="1 星">☆</button>
+            <button class="complete-rating__star" type="button" data-history-rating="2" aria-label="2 星">☆</button>
+            <button class="complete-rating__star" type="button" data-history-rating="3" aria-label="3 星">☆</button>
+            <button class="complete-rating__star" type="button" data-history-rating="4" aria-label="4 星">☆</button>
+            <button class="complete-rating__star" type="button" data-history-rating="5" aria-label="5 星">☆</button>
+          </div>
+        </div>
         <div class="form-actions complete-confirm-actions">
           <button class="btn btn--ghost" id="btnCompleteReviewAgain" value="cancel" type="submit">再檢查看看</button>
           <button class="btn" id="btnConfirmComplete" value="confirm" type="button">確認完成</button>
@@ -1203,13 +1214,13 @@
     <script src="analytics.js?v=4"></script>
     <script src="lib/text-integrity.js?v=6"></script>
     <script src="lib/body-coach-insight.js?v=1"></script>
-    <script src="lib/review-merge.js?v=7"></script>
+    <script src="lib/review-merge.js?v=8"></script>
     <script src="lib/entitlement.js?v=2"></script>
-    <script src="lib/history-reading.js?v=1"></script>
-    <script src="lib/history-summary.js?v=6"></script>
+    <script src="lib/history-reading.js?v=2"></script>
+    <script src="lib/history-summary.js?v=7"></script>
     <script src="lib/insight-highlight.js?v=5"></script>
     <script src="lib/user-mark.js?v=6"></script>
     <script src="lib/task-sidebar.js?v=1"></script>
-    <script src="app.js?v=231"></script>
+    <script src="app.js?v=232"></script>
   </body>
 </html>

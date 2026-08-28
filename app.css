@@ -2473,13 +2473,23 @@ body.nav-closed .auth-pay {
   color: var(--muted);
   font-weight: 500;
   font-family: var(--sans);
-  font-size: 12px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
 }
 
 .history-card__stars {
   color: #bca58f;
+  letter-spacing: 0.12em;
+}
+
+.history-card__cats {
+  margin: 0;
+  color: #9a8878;
+  font-size: 12px;
+  line-height: 1.5;
   letter-spacing: 0.04em;
+  overflow-wrap: anywhere;
 }
 
 .history-card__summary {
@@ -7794,6 +7804,45 @@ summary [data-user-mark-field] {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 10px;
+}
+
+.complete-rating {
+  margin: 4px 0 18px;
+}
+
+.complete-rating__label {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.complete-rating__stars {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.complete-rating__star {
+  margin: 0;
+  padding: 4px 6px;
+  border: 0;
+  appearance: none;
+  background: transparent;
+  color: #c4b4a5;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.complete-rating__star.is-on {
+  color: #9c8879;
+}
+
+.complete-rating__star:focus-visible {
+  outline: 2px solid var(--blush);
+  outline-offset: 2px;
+  border-radius: 6px;
 }
 
 .complete-confirm-actions .btn,

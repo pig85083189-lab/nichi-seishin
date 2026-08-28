@@ -20,6 +20,8 @@ assert(html.includes("完成後會收進歷史紀錄，今天的內容將無法�
 assert(html.includes("再檢查看看"), "CASE I：再檢查看看");
 assert(html.includes("確認完成"), "CASE J：確認完成");
 assert(html.includes("id=\"completeConfirmModal\""), "CASE H：confirm 用 App modal");
+assert(html.includes("這一天，你想留幾顆星給未來的自己？"), "完成 modal 有重要程度");
+assert(html.includes("data-history-rating=\"5\""), "可選 1～5 星");
 assert(!/function completeToday[\s\S]{0,800}window\.confirm/.test(app), "CASE H：完成流程不用原生 confirm");
 assert(html.includes("✓ 今天的復盤完成了。"), "CASE Q：完成主文");
 assert(html.includes("看見自己，也留下明天真正做得到的一步。"), "CASE Q：完成副文");
@@ -48,9 +50,9 @@ assert(app.includes("NichiTaskSidebar") && html.includes("lib/task-sidebar.js"),
 assert(css.includes("complete-confirm-actions"), "CASE AC：confirm 按鈕排版");
 assert(!app.includes("CREATE TABLE") && !app.includes("ALTER TABLE"), "CASE AE：無 schema");
 assert(!html.includes("billing") || app.includes("function trackProduct"), "CASE AF：billing 路徑未當這次主改");
-assert(html.includes("app.js?v=231"), "cache app.js v=231");
-assert(html.includes("app.css?v=198"), "cache app.css v=198");
-assert(html.includes("lib/review-merge.js?v=7"), "cache review-merge v=7");
+assert(html.includes("app.js?v=232"), "cache app.js v=232");
+assert(html.includes("app.css?v=199"), "cache app.css v=199");
+assert(html.includes("lib/review-merge.js?v=8"), "cache review-merge v=8");
 
 assert(reviewIsFinalized({ completedAt: "2026-08-01T10:00:00.000Z" }) === true, "CASE X：有 completedAt 即完成");
 assert(reviewIsFinalized({ organize: { themeTitle: "舊整理" } }) === true, "CASE X：舊 organize 視為完成");
