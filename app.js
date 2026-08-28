@@ -16218,7 +16218,7 @@ function dismissSplash() {
 function tryDismissSplash() {
   if (state.splashDismissed) return;
   const reduced = splashMotionReduced();
-  const minMs = reduced ? 80 : 1050;
+  const minMs = reduced ? 80 : 1200;
   const maxMs = reduced ? 600 : 8000;
   const elapsed = Date.now() - (state.splashStartedAt || Date.now());
   if (elapsed < minMs) return;
@@ -16243,7 +16243,7 @@ function initSplash() {
   }
   state.splashStartedAt = Date.now();
   const reduced = splashMotionReduced();
-  window.setTimeout(tryDismissSplash, reduced ? 80 : 1050);
+  window.setTimeout(tryDismissSplash, reduced ? 80 : 1200);
   window.setTimeout(tryDismissSplash, reduced ? 600 : 8000);
 }
 

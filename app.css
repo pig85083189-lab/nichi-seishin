@@ -99,7 +99,15 @@ html.is-booting body {
   background: radial-gradient(circle, rgba(156, 136, 121, 0.24), transparent 72%);
   filter: blur(32px);
   pointer-events: none;
-  animation: splashGlowIn 1050ms ease-out 1 forwards;
+  opacity: 0.75;
+}
+
+.splash__fx {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 72vw;
+  max-width: 510px;
 }
 
 .splash__logo {
@@ -111,7 +119,78 @@ html.is-booting body {
   object-fit: contain;
   mix-blend-mode: lighten;
   transform-origin: center center;
-  animation: splashLogoIn 1050ms ease-out 1 forwards;
+  animation: splashLogoIn 400ms ease-out 1 forwards, splashLogoSheen 750ms ease-in-out 350ms 1 forwards;
+}
+
+.splash__shine-clip {
+  position: absolute;
+  inset: -12% -6%;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.splash__shine {
+  position: absolute;
+  top: -35%;
+  left: -25%;
+  width: 16%;
+  height: 170%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 235, 190, 0.15) 35%,
+    rgba(255, 245, 215, 0.9) 50%,
+    rgba(255, 235, 190, 0.18) 65%,
+    transparent 100%
+  );
+  filter: blur(3px);
+  transform: skewX(-18deg);
+  mix-blend-mode: screen;
+  opacity: 0;
+  animation: splashShine 750ms cubic-bezier(0.45, 0.05, 0.55, 0.95) 320ms 1 forwards;
+}
+
+.splash__sparkle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.splash__sparkle::before,
+.splash__sparkle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: #fff3d6;
+  border-radius: 1px;
+  box-shadow: 0 0 5px 1px rgba(255, 243, 214, 0.45);
+}
+
+.splash__sparkle::before {
+  width: 11px;
+  height: 1.5px;
+  transform: translate(-50%, -50%);
+}
+
+.splash__sparkle::after {
+  width: 1.5px;
+  height: 11px;
+  transform: translate(-50%, -50%);
+}
+
+.splash__sparkle--a {
+  top: 14%;
+  left: 9%;
+  animation: splashSparkle 240ms ease-out 500ms 1 forwards;
+}
+
+.splash__sparkle--b {
+  top: 40%;
+  left: 70%;
+  animation: splashSparkle 260ms ease-out 800ms 1 forwards;
 }
 
 .splash.is-leaving {
@@ -123,38 +202,57 @@ html.is-booting body {
 }
 
 @keyframes splashLogoIn {
-  0% {
+  from {
     opacity: 0;
-    transform: scale(0.96);
-    filter: brightness(1);
+    transform: scale(0.97);
   }
-  48% {
+  to {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+@keyframes splashLogoSheen {
+  0% {
     filter: brightness(1);
   }
-  72% {
-    opacity: 1;
-    transform: scale(1);
-    filter: brightness(1.18);
+  42% {
+    filter: brightness(1.15);
   }
   100% {
-    opacity: 1;
-    transform: scale(1);
     filter: brightness(1);
   }
 }
 
-@keyframes splashGlowIn {
-  0%,
-  48% {
-    opacity: 0.7;
+@keyframes splashShine {
+  0% {
+    left: -25%;
+    opacity: 0;
   }
-  72% {
+  12% {
+    opacity: 1;
+  }
+  88% {
     opacity: 1;
   }
   100% {
-    opacity: 0.75;
+    left: 110%;
+    opacity: 0;
+  }
+}
+
+@keyframes splashSparkle {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  45% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.7);
   }
 }
 
@@ -174,9 +272,10 @@ html.is-booting body {
     filter: none;
   }
 
-  .splash__mark::before {
+  .splash__shine,
+  .splash__sparkle {
     animation: none;
-    opacity: 0.75;
+    opacity: 0;
   }
 
   .splash.is-leaving {
