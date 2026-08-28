@@ -75,6 +75,9 @@ const state = {
   historyListScroll: null,
   historyHashSync: false,
   historyOpenSections: {},
+  splashGateReady: false,
+  splashStartedAt: 0,
+  splashDismissed: false,
   journalMode: "deep",
   quickModules: { body: false, aware: false, exec: false, manifest: false },
   deepExpanded: false,
@@ -5063,6 +5066,8 @@ function startOnboardingTour() {
   }
   const splash = document.getElementById("splash");
   if (splash) splash.remove();
+  document.documentElement.classList.remove("is-booting");
+  document.body.classList.remove("is-booting");
   switchPage("today");
 
   const tour = createDriver({
@@ -16179,20 +16184,67 @@ function bindEvents() {
   bindUserMarkUi();
 }
 
-function initSplash() {
+function splashMotionReduced() {
+  return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function clearBootingChrome() {
+  document.documentElement.classList.remove("is-booting");
+  if (document.body) document.body.classList.remove("is-booting");
+}
+
+function dismissSplash() {
   const splash = document.getElementById("splash");
-  if (!splash) return;
+  if (!splash) {
+    clearBootingChrome();
+    return;
+  }
+  if (splash.dataset.leaving === "1") return;
+  splash.dataset.leaving = "1";
+  splash.classList.add("is-leaving");
+  splash.setAttribute("aria-hidden", "true");
+  const reduced = splashMotionReduced();
+  const leaveMs = reduced ? 120 : 300;
   const finish = () => {
-    if (!splash.parentNode) return;
-    splash.classList.add("is-gone");
-    splash.setAttribute("aria-hidden", "true");
-    splash.remove();
+    if (splash.parentNode) splash.remove();
+    clearBootingChrome();
   };
   splash.addEventListener("animationend", (event) => {
-    if (event.target === splash && event.animationName === "splashOut") finish();
+    if (event.target === splash) finish();
   });
-  const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
-  window.setTimeout(finish, reduced ? 1000 : 2400);
+  window.setTimeout(finish, leaveMs + 80);
+}
+
+function tryDismissSplash() {
+  if (state.splashDismissed) return;
+  const reduced = splashMotionReduced();
+  const minMs = reduced ? 80 : 900;
+  const maxMs = reduced ? 600 : 8000;
+  const elapsed = Date.now() - (state.splashStartedAt || Date.now());
+  if (elapsed < minMs) return;
+  if (!state.splashGateReady && elapsed < maxMs) return;
+  state.splashDismissed = true;
+  dismissSplash();
+}
+
+function markSplashGateReady() {
+  state.splashGateReady = true;
+  tryDismissSplash();
+}
+
+function initSplash() {
+  const splash = document.getElementById("splash");
+  document.documentElement.classList.add("is-booting");
+  if (document.body) document.body.classList.add("is-booting");
+  if (!splash) {
+    state.splashGateReady = true;
+    clearBootingChrome();
+    return;
+  }
+  state.splashStartedAt = Date.now();
+  const reduced = splashMotionReduced();
+  window.setTimeout(tryDismissSplash, reduced ? 80 : 900);
+  window.setTimeout(tryDismissSplash, reduced ? 600 : 8000);
 }
 
 function init() {
@@ -16237,8 +16289,12 @@ function init() {
       if (toggle) toggle.setAttribute("aria-expanded", "false");
     }
     renderPromptChips();
-    if (!hasStoredAuthSession()) loadReviewForDate(currentIso());
-    else setSyncStatus("pulling");
+    if (!hasStoredAuthSession()) {
+      loadReviewForDate(currentIso());
+      markSplashGateReady();
+    } else {
+      setSyncStatus("pulling");
+    }
     backfillLibrariesFromReviews();
     updateStats();
     initReminder();
@@ -16247,14 +16303,14 @@ function init() {
     applyDevPlanOverrideToState();
     applyAccessLock();
     bindCloudLiveSync();
-    refreshAuth();
+    refreshAuth().finally(() => markSplashGateReady());
     handleAuthQuery();
     applyAppLocation();
     setInterval(() => {
       if (state.user) applyAccessLock();
     }, 30000);
   } catch {
-    /* 其餘初始化失敗也不擋「開始整理」 */
+    markSplashGateReady();
   }
 }
 
