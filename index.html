@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=194" />
+    <link rel="stylesheet" href="app.css?v=195" />
     <style>
       .splash {
         position: fixed;
@@ -209,11 +209,11 @@
           </header>
 
           <div class="journal-mode-block">
-            <section class="mode-guide" aria-labelledby="modeGuideTitle">
+            <section class="mode-guide mode-guide--hint" aria-labelledby="modeGuideTitle">
               <button class="mode-guide__toggle" id="modeGuideToggle" type="button" aria-expanded="false" aria-controls="modeGuidePanel" data-mode-guide-toggle>
                 <span class="mode-guide__toggle-copy">
                   <span class="mode-guide__kicker">怎麼選</span>
-                  <span class="mode-guide__title" id="modeGuideTitle">💡 點擊查看：快速復盤與深度復盤的差別與選擇指南</span>
+                  <span class="mode-guide__title" id="modeGuideTitle">點擊查看：快速復盤與深度復盤的差別與選擇指南</span>
                 </span>
                 <span class="mode-guide__chevron" aria-hidden="true"></span>
               </button>
@@ -732,12 +732,14 @@
           </section>
 
           <div class="journal-footer" id="journalFooter">
-            <div class="journal-footer__actions">
+            <p class="journal-footer__save" id="journalAutosaveHint" hidden>已自動儲存</p>
+            <div class="journal-footer__actions" id="journalFooterActions">
               <button class="btn btn--wide" id="btnCompleteToday" type="button">完成今日復盤</button>
-              <button class="btn btn--outline" id="btnSaveDraft" type="button">儲存草稿</button>
             </div>
-            <p class="journal-footer__done">今天的復盤完成了。</p>
-            <p class="journal-footer__note">看見自己，也留下明天真正做得到的一步。</p>
+            <div class="journal-footer__complete" id="journalFooterComplete" hidden>
+              <p class="journal-footer__done">✓ 今天的復盤完成了。</p>
+              <p class="journal-footer__note">看見自己，也留下明天真正做得到的一步。</p>
+            </div>
           </div>
 
           <section class="ai-stage" id="aiStage" aria-live="polite"></section>
@@ -1102,6 +1104,17 @@
       </form>
     </dialog>
 
+    <dialog class="modal" id="completeConfirmModal" aria-labelledby="completeConfirmTitle">
+      <form method="dialog" class="modal__card" id="completeConfirmForm">
+        <h3 class="modal__title" id="completeConfirmTitle">完成今天的復盤？</h3>
+        <p class="modal__desc">完成後會收進歷史紀錄，今天的內容將無法再修改。</p>
+        <div class="form-actions complete-confirm-actions">
+          <button class="btn btn--ghost" id="btnCompleteReviewAgain" value="cancel" type="submit">再檢查看看</button>
+          <button class="btn" id="btnConfirmComplete" value="confirm" type="button">確認完成</button>
+        </div>
+      </form>
+    </dialog>
+
     <dialog class="modal" id="reminderModal">
       <form method="dialog" class="modal__card" id="reminderForm">
         <h3 class="modal__title">設定復盤提醒</h3>
@@ -1187,13 +1200,13 @@
     <script src="analytics.js?v=4"></script>
     <script src="lib/text-integrity.js?v=6"></script>
     <script src="lib/body-coach-insight.js?v=1"></script>
-    <script src="lib/review-merge.js?v=6"></script>
+    <script src="lib/review-merge.js?v=7"></script>
     <script src="lib/entitlement.js?v=2"></script>
     <script src="lib/history-reading.js?v=1"></script>
     <script src="lib/history-summary.js?v=6"></script>
     <script src="lib/insight-highlight.js?v=5"></script>
     <script src="lib/user-mark.js?v=6"></script>
     <script src="lib/task-sidebar.js?v=1"></script>
-    <script src="app.js?v=227"></script>
+    <script src="app.js?v=228"></script>
   </body>
 </html>

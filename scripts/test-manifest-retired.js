@@ -33,7 +33,8 @@ assert(!app.includes('.side-item[data-page="manifest"]'), "CASE E：tour 不再�
 assert(html.includes("完成今日復盤"), "CASE C：完成今日復盤 CTA 仍在");
 assert(html.includes("今天的復盤完成了。"), "CASE C：收尾主文");
 assert(html.includes("看見自己，也留下明天真正做得到的一步。"), "CASE C：收尾副文");
-assert(/function reviewIsComplete\(review\) \{[\s\S]{0,280}journalHasContent/.test(app), "CASE D：完成條件不要求 07");
+assert(/function reviewIsComplete\(review\) \{[\s\S]{0,80}return reviewIsFinalized/.test(app), "CASE D：完成改以 finalized 為準");
+assert(/function reviewIsFinalized\(review\) \{[\s\S]{0,500}completedAt/.test(app), "CASE D：finalized 讀 completedAt");
 assert(!/reviewIsComplete[\s\S]{0,400}manifest/.test(app), "CASE D：reviewIsComplete 不讀 manifest");
 
 assert(app.includes('vision: "today"'), "CASE F：#vision 映射今日復盤");
@@ -105,7 +106,7 @@ assert(oldStats.samples.manifestation.length >= 0, "CASE R：舊 manifest 仍可
 assert(formatStatsPrompt(oldStats).includes("顯化"), "CASE R：舊資料仍進週月報摘句路徑");
 
 assert(css.includes("@media (max-width: 430px)") || css.includes("max-width: 390") || css.includes("overflow-wrap: anywhere"), "CASE S：窄螢幕可換行");
-assert(html.includes("app.css?v=194") && html.includes("app.js?v=227"), "CASE T：cache 已升版");
+assert(html.includes("app.css?v=195") && html.includes("app.js?v=228"), "CASE T：cache 已升版");
 
 assert(!html.includes("CREATE TABLE") && !app.includes("ALTER TABLE"), "CASE U：無 Supabase schema diff");
 assert(!/UPDATE\s+reviews/i.test(app) && !/UPDATE\s+reviews/i.test(reviewApi), "CASE X：沒有批次 UPDATE 舊 reviews");

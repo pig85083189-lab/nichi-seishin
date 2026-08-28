@@ -1116,15 +1116,20 @@ function syncGuideToSfm(kind, index, checked) {
   else if (result.kept) showToast("這則已在『執行力』，改由你手動刪除");
 }
 
+function reviewIsFinalized(review) {
+  const api = reviewMergeApi();
+  if (typeof api.reviewIsFinalized === "function") return api.reviewIsFinalized(review);
+  if (!review || typeof review !== "object") return false;
+  if (String(review.completedAt || "").trim()) return true;
+  return Boolean(review.organize && typeof review.organize === "object" && hasMeaningfulValue(review.organize));
+}
+
 function reviewIsComplete(review) {
-  return Boolean(
-    review &&
-      (review.completedAt ||
-        review.organize ||
-        String(review.rawText || "").trim() ||
-        journalHasContent(review.journal) ||
-        hasMeaningfulThinkHistory(review.thinkHistory))
-  );
+  return reviewIsFinalized(review);
+}
+
+function isCurrentJournalArchived() {
+  return reviewIsFinalized(getReview(currentIso()));
 }
 
 function reviewSearchText(review) {
@@ -1971,6 +1976,7 @@ async function waitForCloudIdle(timeoutMs = 15000) {
 
 async function flushCloudNow(options = {}) {
   try {
+    flushJournalAutosave();
     persistJournalQuietly();
   } catch (error) {
     console.error("[進行式 ING] 寫入本機暫存失敗", error);
@@ -2720,9 +2726,12 @@ function mergeCloudBundle(cloud) {
 
 function refreshCloudViews(options = {}) {
   try {
-    const skipForm = options.skipForm || (options.quiet && isActivelyEditingJournal());
+    const archived = isCurrentJournalArchived();
+    const skipForm = !archived && (options.skipForm || (options.quiet && isActivelyEditingJournal()));
     if (!skipForm) {
       loadReviewForDate(currentIso());
+    } else {
+      applyJournalArchiveLock();
     }
     backfillLibrariesFromReviews();
     updateStats();
@@ -2837,6 +2846,7 @@ function bindCloudLiveSync() {
     if (document.visibilityState === "visible" && state.user) flushUnsyncedCloud();
     if (document.visibilityState === "hidden" && state.user) {
       try {
+        flushJournalAutosave();
         persistJournalQuietly();
       } catch {
         /* ignore */
@@ -2855,6 +2865,7 @@ function bindCloudLiveSync() {
   });
   window.addEventListener("pagehide", () => {
     try {
+      flushJournalAutosave();
       persistJournalQuietly();
     } catch {
       /* ignore */
@@ -3331,6 +3342,7 @@ function clearJournalMemory() {
 async function signOutUser() {
   stopCloudLiveSync();
   try {
+    flushJournalAutosave();
     persistJournalQuietly();
   } catch {
     /* ignore */
@@ -3861,7 +3873,7 @@ function rowsToReviewMap(rows) {
       think: row.think || null,
       gratitude: row.gratitude || "",
       journal: row.journal || null,
-      completedAt: row.completed_at || row.completedAt || row.updated_at || "",
+      completedAt: row.completed_at || row.completedAt || "",
       userId: row.user_id || state.user?.id || "",
     };
   });
@@ -5393,6 +5405,7 @@ function syncQuickModules(mods = state.quickModules) {
 }
 
 function toggleQuickModule(key) {
+  if (rejectArchivedJournalWrite()) return;
   if (state.journalMode !== "quick" || !["body", "aware", "exec"].includes(key)) return;
   const next = { ...normalizeQuickModules(state.quickModules), [key]: !state.quickModules?.[key] };
   syncQuickModules(next);
@@ -5485,7 +5498,7 @@ function emptyDeep() {
 }
 
 function emptyThinkGuide() {
-  return { round: 0, rounds: [], summary: "", awareness: "", selfSeen: "", takeaway: "", actions: [], title: "", highlights: {} };
+  return { round: 0, rounds: [], summary: "", awareness: "", selfSeen: "", takeaway: "", actions: [], title: "", highlights: {}, draftAnswer: "" };
 }
 
 function emptyInsight() {
@@ -5817,6 +5830,7 @@ function normalizeThinkGuide(raw) {
     actions: normalizeInsightList(data.actions, 2),
     title: String(data.title || "").trim(),
     highlights: data.highlights && typeof data.highlights === "object" ? data.highlights : {},
+    draftAnswer: String(data.draftAnswer || "").trim(),
   };
 }
 
@@ -8249,7 +8263,7 @@ function renderThinkGuideHtml(insight) {
             : active
               ? `<label class="think-guide__field">
                   <span class="sr-only">這一輪的回答</span>
-                  <textarea class="textarea think-guide-answer" rows="4" placeholder="用一句話，把此刻真正想到的寫下來…"></textarea>
+                  <textarea class="textarea think-guide-answer" rows="4" placeholder="用一句話，把此刻真正想到的寫下來…">${escapeHtml(guide.draftAnswer || "")}</textarea>
                   <button class="ai-check-btn" data-think-guide-next type="button">${index === 2 ? "完成三輪，生成總結" : "送出，進入下一輪"}</button>
                 </label>`
               : ""
@@ -8608,6 +8622,7 @@ function recoverStaleBusy(flag, startedAt, clearFn, limitMs = 32000) {
 }
 
 async function generateThinkGuideAsk(options = {}) {
+  if (rejectArchivedJournalWrite(options)) return false;
   if (!options.auto) setJournalFoldOpen(thinkGuideFoldId(), true, { manual: true });
   if (!ensurePlusFeature("think_ai", options)) return false;
   if (recoverStaleBusy(state.insightBusy, state.insightBusyAt, () => setInsightLoading(false))) {
@@ -8676,6 +8691,7 @@ async function generateThinkGuideAsk(options = {}) {
 }
 
 async function generateThinkGuideClose(options = {}) {
+  if (rejectArchivedJournalWrite(options)) return false;
   if (!options.auto) setJournalFoldOpen(thinkGuideFoldId(), true, { manual: true });
   if (recoverStaleBusy(state.insightBusy, state.insightBusyAt, () => setInsightLoading(false))) {
     if (!options.auto) showToast("還在為你整理今日覺察總結，請稍候。");
@@ -8743,6 +8759,7 @@ async function generateThinkGuideClose(options = {}) {
 }
 
 async function submitThinkGuideRound() {
+  if (rejectArchivedJournalWrite()) return;
   if (recoverStaleBusy(state.insightBusy, state.insightBusyAt, () => setInsightLoading(false))) {
     showToast("還在為你想下一問，請稍候。");
     return;
@@ -8859,6 +8876,7 @@ function localBodyCoachFallback(journal) {
 }
 
 async function generateBodyCoach(options = {}) {
+  if (rejectArchivedJournalWrite(options)) return;
   if (!options.auto) setJournalFoldOpen("section-body", true, { manual: true });
   if (state.bodyCoachBusy) return;
   const journal = collectJournal();
@@ -8918,7 +8936,7 @@ async function generateBodyCoach(options = {}) {
 }
 
 function maybeAutoGenerateBodyCoach(journal) {
-  if (state.journalHydrating) return;
+  if (state.journalHydrating || rejectArchivedJournalWrite({ auto: true })) return;
   if (!canUsePlusFeature("body_ai")) return;
   if (state.journalMode === "quick" && !state.quickModules?.body) return;
   if (bodyCoachReady(journal, { auto: true }) && state.journalMeta.bodyCoachSig !== bodyCoachSignature(journal)) {
@@ -9632,6 +9650,7 @@ function renderExecutionChoices(bag) {
 }
 
 function toggleJournalChoice(kind, id) {
+  if (rejectArchivedJournalWrite()) return kind === "execution" ? normalizeExecutionChoiceBag(state.executionChoices) : normalizeChoiceBag(state[kind === "think" ? "thinkChoices" : "awarenessChoices"]);
   if (kind === "execution") {
     const bag = normalizeExecutionChoiceBag(state.executionChoices);
     const customId = execChoiceCustomId();
@@ -9832,6 +9851,7 @@ function choicesContext(journal, extra = {}) {
 }
 
 async function generateAwarenessChoices(options = {}) {
+  if (rejectArchivedJournalWrite(options)) return;
   pinAwareFold();
   if (!ensurePlusFeature("awareness_ai", options)) return;
   if (state.choicesBusy?.awareness) {
@@ -9903,6 +9923,7 @@ async function generateAwarenessChoices(options = {}) {
 }
 
 async function generateThinkChoices(options = {}) {
+  if (rejectArchivedJournalWrite(options)) return;
   setJournalFoldOpen("section-deep", true, { manual: true });
   if (!ensurePlusFeature("think_ai", options)) return;
   if (state.choicesBusy?.think) {
@@ -9962,6 +9983,7 @@ async function generateThinkChoices(options = {}) {
 }
 
 async function generateThinkChoicesClose(options = {}) {
+  if (rejectArchivedJournalWrite(options)) return;
   setJournalFoldOpen("section-deep", true, { manual: true });
   const bag = normalizeChoiceBag(state.thinkChoices);
   if (!bag.options.length) {
@@ -10083,6 +10105,7 @@ function localExecutionChoiceFallbacks(journal) {
 }
 
 async function generateExecutionChoices(options = {}) {
+  if (rejectArchivedJournalWrite(options)) return;
   setJournalFoldOpen("section-exec", true, { manual: true });
   if (!ensurePlusFeature("execution_ai", options)) return;
   if (state.choicesBusy?.execution) {
@@ -10740,21 +10763,123 @@ function captureReviewPatch() {
   };
 }
 
-function persistJournalQuietly() {
+function persistArchivedUserMarks(iso) {
+  const day = iso || currentIso();
+  const prev = getReview(day) || {};
+  if (!reviewIsFinalized(prev)) return;
+  const bag = userMarkBag(day === currentIso() ? state.journalUserMarks : prev.journal && prev.journal.userMarks);
+  const prevBag = userMarkBag(prev.journal && prev.journal.userMarks);
+  if (JSON.stringify(bag) === JSON.stringify(prevBag)) return;
+  upsertReview(day, {
+    journal: { ...(prev.journal && typeof prev.journal === "object" ? prev.journal : {}), userMarks: bag },
+    completedAt: prev.completedAt,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+function persistJournalQuietly(options = {}) {
   try {
+    const iso = currentIso();
+    const prev = getReview(iso) || {};
+    if (reviewIsFinalized(prev)) {
+      persistArchivedUserMarks(iso);
+      return;
+    }
     const patch = captureReviewPatch();
     const incomingEmpty = !journalHasContent(patch.journal) && !String(patch.rawText || "").trim() && !patch.organize;
     if (incomingEmpty) return;
-    upsertReview(currentIso(), patch);
+    upsertReview(iso, patch);
+    if (options.showHint) showJournalAutosaveHint();
     if (journalHasContent(patch.journal) && window.NichiAnalytics) {
-      window.NichiAnalytics.trackOnceSession("review_started", { mode: state.journalMode === "quick" ? "quick" : "deep", source: "autosave" }, `review-start:${currentIso()}`);
+      window.NichiAnalytics.trackOnceSession("review_started", { mode: state.journalMode === "quick" ? "quick" : "deep", source: "autosave" }, `review-start:${iso}`);
     }
   } catch (error) {
     console.error("[進行式 ING] 本機暫存復盤失敗", error && error.message ? error.message : error);
   }
 }
 
+function showJournalAutosaveHint() {
+  if (isCurrentJournalArchived()) return;
+  const hint = document.getElementById("journalAutosaveHint");
+  if (!hint) return;
+  hint.hidden = false;
+  hint.classList.add("is-on");
+  hint.textContent = "已自動儲存";
+  clearTimeout(showJournalAutosaveHint.timer);
+  showJournalAutosaveHint.timer = setTimeout(() => {
+    hint.classList.remove("is-on");
+    showJournalAutosaveHint.hideTimer = setTimeout(() => {
+      if (!hint.classList.contains("is-on")) hint.hidden = true;
+    }, 400);
+  }, 2200);
+}
+
+function persistJournalNow(options = {}) {
+  clearTimeout(scheduleJournalAutosave.timer);
+  scheduleJournalAutosave.timer = 0;
+  persistJournalQuietly({ showHint: options.showHint !== false });
+}
+
+function scheduleJournalAutosave() {
+  if (state.journalHydrating || isCurrentJournalArchived()) return;
+  clearTimeout(scheduleJournalAutosave.timer);
+  scheduleJournalAutosave.timer = setTimeout(() => {
+    persistJournalNow();
+  }, 900);
+}
+
+function flushJournalAutosave() {
+  if (!scheduleJournalAutosave.timer) return;
+  clearTimeout(scheduleJournalAutosave.timer);
+  scheduleJournalAutosave.timer = 0;
+  persistJournalQuietly();
+}
+
+function isJournalAutosaveField(el) {
+  if (!el) return false;
+  if (el.classList && el.classList.contains("think-guide-answer")) return true;
+  const id = String(el.id || "");
+  return /^(thanksText|thanks\d+|aware\d+|exec\d+|execNext|execFollowup|eventText|bodyNote|bodyOtherNote|body(Mood|Body|Sleep)Reason|manifestVision|manifestThink\d+|deep\d)/.test(id);
+}
+
+function withThinkGuideDraft(insight) {
+  const next = normalizeInsight(insight);
+  const ta = thinkGuideBodyEl()?.querySelector(".think-guide-answer");
+  if (!ta) return next;
+  const guide = { ...(next.guide || emptyThinkGuide()), draftAnswer: String(ta.value || "").trim() };
+  return { ...next, guide };
+}
+
+function syncJournalFooter() {
+  const footer = document.getElementById("journalFooter");
+  const actions = document.getElementById("journalFooterActions");
+  const complete = document.getElementById("journalFooterComplete");
+  const hint = document.getElementById("journalAutosaveHint");
+  const archived = isCurrentJournalArchived();
+  if (footer) footer.classList.toggle("is-complete", archived);
+  if (actions) actions.hidden = archived;
+  if (complete) complete.hidden = !archived;
+  if (hint && archived) {
+    hint.hidden = true;
+    hint.classList.remove("is-on");
+  }
+  syncCompleteButtonLabel();
+}
+
+function applyJournalArchiveLock() {
+  const page = document.getElementById("page-today");
+  const archived = isCurrentJournalArchived();
+  if (page) page.classList.toggle("is-archived", archived);
+  syncJournalFooter();
+}
+
+function rejectArchivedJournalWrite(options = {}) {
+  if (options.fromComplete || options.allowWhenArchived) return false;
+  return isCurrentJournalArchived();
+}
+
 async function generateJournalPrompts(options = {}) {
+  if (rejectArchivedJournalWrite(options)) return;
   if (state.promptsBusy) return;
   const scope = options.scope || "all";
   const journal = collectJournal();
@@ -10878,6 +11003,7 @@ function localDeepFollowFallback(index, slot) {
 }
 
 async function generateDeepFollow(index) {
+  if (rejectArchivedJournalWrite()) return;
   const slotIndex = Number(index);
   if (slotIndex < 1 || slotIndex > 4 || state.deepFollowBusy[slotIndex - 1]) return;
   const slot = collectDeepSlot(slotIndex);
@@ -10960,6 +11086,7 @@ function toggleModeGuide() {
 }
 
 function applyJournalMode(mode, options = {}) {
+  if (!options.silent && !state.journalHydrating && rejectArchivedJournalWrite()) return;
   const next = mode === "quick" ? "quick" : "deep";
   if (
     next === "deep" &&
@@ -11129,7 +11256,7 @@ function collectJournal() {
     manifestAiSig: state.journalMeta.manifestAiSig || "",
     manifestPromptsAi: Boolean(state.journalMeta.manifestPromptsAi),
     manifestPromptsSig: state.journalMeta.manifestPromptsSig || "",
-    insight: state.journalInsight || emptyInsight(),
+    insight: withThinkGuideDraft(state.journalInsight || emptyInsight()),
     deep: [1, 2, 3, 4].map(collectDeepSlot),
     awarenessPrompts: state.awarenessPrompts || [],
     executionPrompts: normalizeExecutionPrompts(state.executionPrompts),
@@ -11715,6 +11842,7 @@ function fillJournal(journal) {
   state.journalHydrating = false;
   maybeConstrainJournalModeForPlan();
   applyJournalFolds();
+  applyJournalArchiveLock();
 }
 
 function updateJournalDateLabel(iso) {
@@ -11724,17 +11852,8 @@ function updateJournalDateLabel(iso) {
 }
 
 async function saveJournalDraft() {
-  const patch = captureReviewPatch();
-  if (!patch.rawText && !journalHasContent(patch.journal) && !patch.organize) {
-    showToast("還沒有內容可以儲存。");
-    return;
-  }
-  upsertReview(currentIso(), patch);
-  updateStats();
-  flushCloudNow({ reason: "draft" }).catch((error) => {
-    console.error("[進行式 ING] 草稿背景同步失敗", error && error.message ? error.message : error);
-  });
-  showToast("草稿已儲存。");
+  flushJournalAutosave();
+  persistJournalNow({ showHint: true });
 }
 
 function resetAiSession() {
@@ -11769,9 +11888,12 @@ function loadReviewForDate(iso) {
     state.think.current = review.thinkHistory[review.thinkHistory.length - 1];
   }
   renderAiStage();
-  maybeAutoGenerateInsight(review?.journal || collectJournal());
-  maybeAutoGeneratePrompts(review?.journal || collectJournal());
-  maybeAutoGenerateCorePrompts(review?.journal || collectJournal());
+  if (!reviewIsFinalized(review)) {
+    maybeAutoGenerateInsight(review?.journal || collectJournal());
+    maybeAutoGeneratePrompts(review?.journal || collectJournal());
+    maybeAutoGenerateCorePrompts(review?.journal || collectJournal());
+  }
+  applyJournalArchiveLock();
 }
 
 function renderConclusionCallout(text, field, date, highlights, label) {
@@ -12750,7 +12872,38 @@ async function enhanceThinkWithApi(nextRound, selected, reply, token) {
 }
 
 async function completeToday() {
+  if (state.completeBusy || isCurrentJournalArchived()) return;
+  flushJournalAutosave();
+  if (state.journalMode === "quick") {
+    const journal = collectJournal();
+    if (!quickInsightReady(journal)) {
+      showToast("請先寫下今日感謝、事件，並選擇心情。");
+      document.getElementById("section-thanks")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+  }
+  const collected = document.getElementById("thanksText") ? syncHiddenReviewText() : { journal: null, rawText: "" };
+  const rawText = collected.rawText || document.getElementById("reviewText")?.value.trim() || state.rawText;
+  if (!rawText && !state.organize && !journalHasContent(collected.journal)) {
+    showToast("還沒有內容可以完成。");
+    return;
+  }
+  const modal = document.getElementById("completeConfirmModal");
+  if (modal && typeof modal.showModal === "function") {
+    modal.showModal();
+    return;
+  }
   await finishTodayReview();
+}
+
+function closeCompleteConfirmModal() {
+  const modal = document.getElementById("completeConfirmModal");
+  if (modal && typeof modal.close === "function" && modal.open) modal.close();
+}
+
+function confirmCompleteToday() {
+  closeCompleteConfirmModal();
+  catchAsync(() => finishTodayReview(), "完成今日復盤時發生問題");
 }
 
 function waitForInsightIdle(timeoutMs = 25000) {
@@ -12768,7 +12921,8 @@ function waitForInsightIdle(timeoutMs = 25000) {
 }
 
 async function finishTodayReview() {
-  if (state.completeBusy) return;
+  if (state.completeBusy || isCurrentJournalArchived()) return;
+  flushJournalAutosave();
   if (state.journalMode === "quick") {
     const journal = collectJournal();
     if (!quickInsightReady(journal)) {
@@ -12875,6 +13029,7 @@ async function finishTodayReview() {
   if (String(journal.manifest || "").trim().length >= 4) {
     trackProduct("manifestation_created", { source: "complete" });
   }
+  applyJournalArchiveLock();
 }
 
 function inferSfmType(text) {
@@ -14639,6 +14794,16 @@ function handleTodayPointerClick(event) {
   if (!node || typeof node.closest !== "function") return false;
   if (event._nichiTodayHandled) return false;
   if (!node.closest("#page-today")) return false;
+  if (isCurrentJournalArchived()) {
+    const keep = node.closest("[data-journal-fold], [data-mode-guide-toggle], #journalDateBtn, #reviewDate, [data-user-mark-field]");
+    if (!keep && node.closest("button, input, textarea, label, .mood-btn, .choice-opt, .body-flag-btn, .sleep-chip")) {
+      event.preventDefault();
+      event.stopPropagation();
+      event._nichiTodayHandled = true;
+      return true;
+    }
+    return false;
+  }
   const handled = () => {
     event.preventDefault();
     event.stopPropagation();
@@ -15293,6 +15458,7 @@ function bindEvents() {
   }
 
   document.getElementById("reviewDate")?.addEventListener("change", () => {
+    flushJournalAutosave();
     const iso = currentIso();
     loadReviewForDate(iso);
     updateStats();
@@ -15300,7 +15466,7 @@ function bindEvents() {
     pullCloudData({ quiet: true, skipViews: true })
       .then((cloud) => {
         if (!cloud) return;
-        if (!isActivelyEditingJournal()) loadReviewForDate(iso);
+        if (!isActivelyEditingJournal() || isCurrentJournalArchived()) loadReviewForDate(iso);
         renderHistory();
         updateStats();
       })
@@ -15325,8 +15491,11 @@ function bindEvents() {
   document.getElementById("btnCompleteToday")?.addEventListener("click", () => {
     catchAsync(() => completeToday(), "完成今日復盤時發生問題");
   });
-  document.getElementById("btnSaveDraft")?.addEventListener("click", () => {
-    catchAsync(() => saveJournalDraft(), "儲存草稿時發生問題");
+  document.getElementById("btnConfirmComplete")?.addEventListener("click", () => {
+    confirmCompleteToday();
+  });
+  document.getElementById("completeConfirmForm")?.addEventListener("submit", () => {
+    closeCompleteConfirmModal();
   });
   document.querySelector(".journal-mode-block")?.addEventListener("click", (event) => {
     const fold = event.target.closest("[data-mode-guide-toggle]");
@@ -15353,12 +15522,12 @@ function bindEvents() {
 
   document.getElementById("moodRow")?.addEventListener("click", (event) => {
     const btn = event.target.closest(".mood-btn");
-    if (!btn) return;
+    if (!btn || isCurrentJournalArchived()) return;
     const on = !btn.classList.contains("is-on");
     document.querySelectorAll("#moodRow .mood-btn").forEach((item) => item.classList.toggle("is-on", on && item === btn));
     refreshJournalChecklists();
     const journal = collectJournal();
-    persistJournalQuietly();
+    persistJournalNow();
     syncCorePromptGate();
     maybeAutoGenerateInsight(journal);
     maybeAutoGeneratePrompts(journal);
@@ -15366,6 +15535,7 @@ function bindEvents() {
   });
 
   document.getElementById("section-body")?.addEventListener("click", (event) => {
+    if (isCurrentJournalArchived()) return;
     const sleep = event.target.closest(".sleep-chip");
     if (sleep) {
       const field = sleep.dataset.sleepField;
@@ -15386,7 +15556,7 @@ function bindEvents() {
       }
     }
     syncBodyReasonVisibility();
-    persistJournalQuietly();
+    persistJournalNow();
     refreshJournalChecklists();
     const journal = collectJournal();
     maybeAutoGenerateInsight(journal);
@@ -15396,8 +15566,10 @@ function bindEvents() {
   });
 
   document.getElementById("page-today")?.addEventListener("input", (event) => {
-    const id = event.target && event.target.id;
-    if (/^thanksText$|^thanks\d+$|^(aware|exec)\d$|^execNext$|^execFollowup$|^eventText$|^bodyNote$|^bodyOtherNote$|^bodyMoodReason$|^bodyBodyReason$|^bodySleepReason$|^manifestVision$|^manifestThink\d$/.test(id || "")) {
+    if (isCurrentJournalArchived()) return;
+    const target = event.target;
+    const id = target && target.id;
+    if (isJournalAutosaveField(target) || /^thanksText$|^thanks\d+$|^(aware|exec)\d$|^execNext$|^execFollowup$|^eventText$|^bodyNote$|^bodyOtherNote$|^bodyMoodReason$|^bodyBodyReason$|^bodySleepReason$|^manifestVision$|^manifestThink\d$/.test(id || "")) {
       if (id === "execNext" && usesExecutionChoiceUi()) {
         const bag = normalizeExecutionChoiceBag(state.executionChoices);
         if (bag.selectedIds.includes(execChoiceCustomId())) {
@@ -15406,12 +15578,13 @@ function bindEvents() {
           syncExecStepUi();
         }
       }
-      if (/^thanksText$|^thanks\d+$|^(aware|exec)\d$|^execNext$|^eventText$|^bodyOtherNote$|^body(Mood|Body|Sleep)Reason$|^manifestVision$|^manifestThink\d$/.test(id || "")) persistJournalQuietly();
+      if (isJournalAutosaveField(target)) scheduleJournalAutosave();
       scheduleJournalChecklists();
     }
   });
 
   document.getElementById("page-today")?.addEventListener("change", (event) => {
+    if (isCurrentJournalArchived()) return;
     if (event.target && event.target.matches(".manifest-step__check")) {
       toggleManifestPlanStep(event.target.dataset.manifestStep, event.target.checked);
       return;
@@ -15425,7 +15598,7 @@ function bindEvents() {
             detail: String(execInput.closest(".exec-check")?.dataset.detail || "").trim(),
           }
         : null;
-      persistJournalQuietly();
+      persistJournalNow();
       if (execPayload) {
         const journal = collectJournal();
         renderExecChecklist(journal.executionCheckItems, journal.executionChecks);
