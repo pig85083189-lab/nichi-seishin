@@ -124,9 +124,14 @@ assert(/function dailyManifestUiEnabled\(\) \{\s*return false;/.test(app), "CASE
 assert(!html.includes("guide-07"), "CASE I：使用說明不再有 07");
 assert(app.includes("priorThinkAwareContext(journal)"), "CASE I：舊 07 runtime 仍可讀前面資料");
 
-assert(app.includes('"④ 深度思考"'), "CASE J：歷史 04 是深度思考");
-assert(app.includes('"⑤ 覺察力"'), "CASE J：歷史 05 是覺察力");
-assert(app.includes('"⑥ 執行力"'), "CASE J：歷史 06 是執行力");
+assert(app.includes('"① 今天發生了什麼"'), "CASE J：歷史 01 是今天發生了什麼");
+assert(app.includes('"② 我今天真正卡住的是什麼"'), "CASE J：歷史 02 是真正卡住的矛盾");
+assert(app.includes('"③ 我今天看見了自己什麼"'), "CASE J：歷史 03 是新的自我理解");
+assert(app.includes('"④ 我接下來要怎麼做"'), "CASE J：歷史 04 是行動");
+assert(app.includes('"今日帶走的一句話"'), "CASE J：歷史最後留一句話");
+assert(app.includes("查看完整深度思考"), "CASE J：深度思考原始對話可在 History 展開");
+assert(!app.includes('"⑤ 覺察力"'), "CASE J：歷史不再把覺察力當獨立大章");
+assert(!app.includes('"⑥ 執行力"'), "CASE J：歷史不再把執行力當獨立大章");
 assert(app.includes('"顯化紀錄"'), "CASE J：舊顯化改標顯化紀錄，不再當 07");
 assert(!app.includes('"⑦ 顯化力"'), "CASE J：歷史不再編號 07");
 assert(app.includes("function journalHasManifestHistory"), "CASE J：新資料沒有 manifest 就不渲染空 07");

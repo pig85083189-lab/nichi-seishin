@@ -11759,12 +11759,13 @@ function loadReviewForDate(iso) {
   maybeAutoGenerateCorePrompts(review?.journal || collectJournal());
 }
 
-function renderConclusionCallout(text, field, date, highlights) {
+function renderConclusionCallout(text, field, date, highlights, label) {
   const line = String(text || "").trim();
   if (!line) return "";
+  const heading = String(label || "核心結論").trim() || "核心結論";
   return `
     <aside class="conclusion-callout">
-      <p class="conclusion-callout__label">核心結論</p>
+      <p class="conclusion-callout__label">${escapeHtml(heading)}</p>
       ${field ? markableP(line, field, "conclusion-callout__text", date, highlights) : `<p class="conclusion-callout__text">${highlightedHtml(line, highlights)}</p>`}
     </aside>
   `;
@@ -13531,6 +13532,12 @@ function historyJournalIcon(name) {
     aware: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>`,
     exec: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h12M8 12h12M8 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg>`,
     insight: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 1 4 10c-.8.7-1 1.4-1 2H9c0-.6-.2-1.3-1-2A6 6 0 0 1 12 3z"/></svg>`,
+    happened: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 5h12v14H6z"/><path d="M9 9h6M9 13h4"/></svg>`,
+    stuck: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 1 4 10c-.8.7-1 1.4-1 2H9c0-.6-.2-1.3-1-2A6 6 0 0 1 12 3z"/></svg>`,
+    seen: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>`,
+    action: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h12M8 12h12M8 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg>`,
+    quote: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2 4 4 0 0 1 7 2c0 5.6-7 10-7 10z"/></svg>`,
+    archive: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v16l-5-2.4L7 20V4z"/></svg>`,
     manifest: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.2 6.6H21l-5.4 4 2.1 6.4L12 16.6 6.3 20l2.1-6.4L3 9.6h6.8z"/></svg>`,
     note: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v16l-5-2.4L7 20V4z"/></svg>`,
   };
@@ -13751,6 +13758,31 @@ function historyBodyCheckHtml(journal, date) {
   return `${historyMarkedItemsHtml(lines.map((item) => ({ ...item, date })))}${coachHtml}`;
 }
 
+function historyBodyCoachLongformHtml(journal, date, usedFields) {
+  const used = usedFields instanceof Set ? usedFields : new Set(usedFields || []);
+  const coach = normalizeBodyCoach(journal && journal.bodyCoach);
+  const title = String(coach.title || "").trim();
+  const titleLine = title ? (/[。！？]$/.test(title) ? title : `${title}。`) : "";
+  return [
+    titleLine && !used.has("bodyCoach.title")
+      ? renderConclusionCallout(titleLine, "bodyCoach.title", date, fieldHighlightsOf(coach.highlights, "title"))
+      : "",
+    coach.analysis && !used.has("bodyCoach.analysis")
+      ? historyBlock("今天的身心訊號", markableP(coach.analysis, "bodyCoach.analysis", "history-journal__text", date, fieldHighlightsOf(coach.highlights, "analysis")))
+      : "",
+    coach.notice && !used.has("bodyCoach.notice")
+      ? historyBlock("值得留意", markableP(coach.notice, "bodyCoach.notice", "history-journal__text", date, fieldHighlightsOf(coach.highlights, "notice")))
+      : "",
+    ...(coach.suggestions || []).map((item, index) => {
+      const text = String(item || "").trim();
+      const field = `bodyCoach.suggestion.${index}`;
+      return text && !used.has(field)
+        ? historyBlock(`今晚照顧 ${index + 1}`, markableP(text, field, "history-journal__text", date, fieldHighlightsOf(coach.highlights, "suggestions")))
+        : "";
+    }),
+  ].join("");
+}
+
 function historyTextMeaningful(value) {
   return String(value == null ? "" : value).trim().length > 0;
 }
@@ -13802,10 +13834,10 @@ function renderHistoryGuideCloseHtml(insight, guide, date) {
   ].join("");
 }
 
-function renderHistoryGuideHtml(insight, guide, date) {
+function renderHistoryGuideRoundsHtml(insight, guide, date) {
   const parsed = historyGuideFromReview({ journal: { insight: { ...(insight || {}), guide } } });
   const rounds = parsed.rounds.filter(historyRoundHasContent);
-  const roundBlocks = rounds
+  return rounds
     .map((item, index) => {
       const question = String(item.question || "").trim();
       const hint = String(item.hint || "").trim();
@@ -13822,24 +13854,14 @@ function renderHistoryGuideHtml(insight, guide, date) {
       );
     })
     .join("");
-  const closeBlocks = [
-    guide.title || insight.title
-      ? renderConclusionCallout(guide.title || insight.title, "think.title", date, fieldHighlightsOf(guide.highlights, "title"))
-      : "",
-    guide.awareness || guide.summary
-      ? historyBlock("今日覺察", markableP(guide.awareness || guide.summary, "think.awareness", "history-journal__text", date, fieldHighlightsOf(guide.highlights, "awareness")))
-      : "",
-    guide.selfSeen
-      ? historyBlock("今天我看見的自己", markableP(guide.selfSeen, "think.selfSeen", "history-journal__text", date, fieldHighlightsOf(guide.highlights, "selfSeen")))
-      : "",
-    guide.takeaway
-      ? historyBlock("今日帶走的一句話", markableP(guide.takeaway, "think.takeaway", "history-journal__headline", date, fieldHighlightsOf(guide.highlights, "takeaway")))
-      : "",
-    Array.isArray(guide.actions) && guide.actions.length
+}
+
+function renderHistoryGuideHtml(insight, guide, date) {
+  return `${renderHistoryGuideRoundsHtml(insight, guide, date)}${renderHistoryGuideCloseHtml(insight, guide, date)}${
+    Array.isArray(guide && guide.actions) && guide.actions.length
       ? historyBlock("兩件具體下一步", actionStepsHtml(guide.actions, { fieldPrefix: "think.action", date, highlights: fieldHighlightsOf(guide.highlights, "actions") }))
-      : "",
-  ].join("");
-  return `${roundBlocks}${closeBlocks}`;
+      : ""
+  }`;
 }
 
 function renderHistoryInsightBlocksHtml(insight, date) {
@@ -14108,6 +14130,149 @@ function historyManifestBlocks(journal, historyIso) {
   ];
 }
 
+function historyReadingApi() {
+  return (typeof window !== "undefined" && window.NichiHistoryReading) || {};
+}
+
+function buildHistoryReadingForReview(review) {
+  const api = historyReadingApi();
+  if (typeof api.buildHistoryReading === "function") return api.buildHistoryReading(review);
+  return {
+    happened: { thanks: [], event: "", mood: "", bodySignals: [] },
+    stuck: null,
+    seen: null,
+    actions: [],
+    quote: null,
+    usedFields: [],
+    archive: { hasDeepProcess: false, hasBodyCoach: false, hasAwareProcess: false, hasGuideRounds: false },
+  };
+}
+
+function historyReadingActionsHtml(actions, date) {
+  const list = (Array.isArray(actions) ? actions : []).filter((item) => item && String(item.text || "").trim());
+  if (!list.length) return "";
+  return `<div class="exec-step-list">${list
+    .map((item, index) => {
+      const text = String(item.text || "").trim();
+      const field = item.field || (index === 0 ? "exec.smallestStep" : `exec.selected.${index}`);
+      return `<div class="exec-step-list__item">
+        <span class="exec-step-list__num">${String(index + 1).padStart(2, "0")}</span>
+        ${markableP(text, field, "exec-step-list__text", date, item.highlights)}
+      </div>`;
+    })
+    .join("")}</div>`;
+}
+
+function historyHappenedHtml(reading, journal, date) {
+  const happened = reading && reading.happened ? reading.happened : {};
+  const thanks = historyMarkedItemsHtml(
+    thanksItemsFrom(happened.thanks && happened.thanks.length ? happened.thanks : journal.thanksText || journal.thanks).map((text, index) => ({
+      text,
+      field: `thanks.${index}`,
+      date,
+    }))
+  );
+  const eventText = String(happened.event || journal.event || "").trim();
+  const mood = String(happened.mood || journal.mood || "").trim();
+  const signals = Array.isArray(happened.bodySignals) ? happened.bodySignals : [];
+  return [
+    thanks ? historyBlock("感謝", thanks) : "",
+    eventText ? historyBlock("事件", markableP(eventText, "event", "history-journal__text", date)) : "",
+    mood ? historyBlock("心情", `<p class="history-journal__mood"><span class="tag">${escapeHtml(mood)}</span></p>`) : "",
+    signals.length
+      ? `<div class="history-journal__signals">${historyMarkedItemsHtml(signals.map((item) => ({ ...item, date })))}</div>`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("");
+}
+
+function historyExecProcessHtml(journal, date, usedFields) {
+  if (hasMeaningfulExecutionChoices(journal.executionChoices)) return "";
+  const used = usedFields instanceof Set ? usedFields : new Set(usedFields || []);
+  if ([...used].some((field) => String(field || "").startsWith("exec.prompt."))) return "";
+  const prompts = normalizeExecutionPrompts(journal.executionPrompts);
+  const answers = Array.isArray(journal.execution) ? journal.execution : [];
+  const count = Math.max(prompts.length, answers.length);
+  return Array.from({ length: count }, (_, index) => {
+    const prompt = prompts[index];
+    const answer = String(answers[index] || "").trim();
+    const question = prompt?.question || prompt?.title || prompt || `執行力 ${index + 1}`;
+    if (answer) return historyQaHtml(question, `exec.prompt.${index}.question`, answer, `exec.prompt.${index}.answer`, date);
+    if (prompt?.parked) return historyQaHtml(question, `exec.prompt.${index}.question`, "先放著", `exec.prompt.${index}.answer`, date);
+    return "";
+  })
+    .filter(Boolean)
+    .join("");
+}
+
+function historyAwareProcessHtml(journal, date, usedFields) {
+  const used = usedFields instanceof Set ? usedFields : new Set(usedFields || []);
+  const awareChoiceBag = normalizeChoiceBag(journal.awarenessChoices);
+  if (hasMeaningfulChoices(awareChoiceBag)) {
+    return [
+      ...selectedChoiceTexts(awareChoiceBag).map((text, index) => {
+        const field = `awareness.choice.${index}`;
+        return used.has(field) ? "" : markableP(text, field, "history-journal__text", date);
+      }),
+      awareChoiceBag.none && !used.has("awareness.choice.none")
+        ? markableP(choiceNoneText(), "awareness.choice.none", "history-journal__note", date)
+        : "",
+    ]
+      .filter(Boolean)
+      .join("");
+  }
+  return (
+    journal.awarenessPrompts && journal.awarenessPrompts.length ? journal.awarenessPrompts : AWARENESS_QUESTIONS
+  )
+    .map((item, index) => {
+      const answer = normalizeYesNo((journal.awareness || [])[index]) || String((journal.awareness || [])[index] || "").trim();
+      const question = item.question || item.title || item;
+      return answer
+        ? historyQaHtml(question, `awareness.prompt.${index}.question`, answer, `awareness.prompt.${index}.answer`, date)
+        : "";
+    })
+    .filter(Boolean)
+    .join("");
+}
+
+function historyArchiveHtml(review, reading, journal, date) {
+  const archive = reading && reading.archive ? reading.archive : {};
+  const used = new Set(reading && reading.usedFields ? reading.usedFields : []);
+  const parsed = historyGuideFromReview(review);
+  const blocks = [];
+  if (archive.hasGuideRounds) {
+    blocks.push(historyGroup("深度思考對話", renderHistoryGuideRoundsHtml(parsed.insight, parsed.guide, date)));
+  } else if (archive.hasDeepProcess) {
+    const helper =
+      typeof reviewMergeApi().historyDeepThinkingSource === "function"
+        ? reviewMergeApi().historyDeepThinkingSource(review)
+        : { kind: "none" };
+    if (helper.kind === "thinkHistory") blocks.push(historyGroup("深度思考對話", renderHistoryThinkHistoryHtml(helper.thinkHistory, review)));
+    else if (helper.kind === "deep") blocks.push(historyGroup("深度思考對話", renderHistoryDeepJournalHtml(helper.deep, helper.deepPrompts, date)));
+    else if (helper.kind === "blocks") blocks.push(historyGroup("深度思考對話", renderHistoryInsightBlocksHtml(helper.insight || {}, date)));
+    else if (Array.isArray(review && review.thinkHistory) && review.thinkHistory.length) {
+      blocks.push(historyGroup("深度思考對話", renderHistoryThinkHistoryHtml(review.thinkHistory, review)));
+    } else if (journal.deep || journal.deepPrompts) {
+      blocks.push(historyGroup("深度思考對話", renderHistoryDeepJournalHtml(journal.deep, journal.deepPrompts, date)));
+    }
+  }
+  if (archive.hasAwareProcess) {
+    const awareProcess = historyAwareProcessHtml(journal, date, used);
+    if (awareProcess) blocks.push(historyGroup("覺察作答", awareProcess));
+  }
+  const execProcess = historyExecProcessHtml(journal, date, used);
+  if (execProcess) blocks.push(historyGroup("執行力作答", execProcess));
+  if (archive.hasBodyCoach) {
+    const coachHtml = historyBodyCoachLongformHtml(journal, date, used);
+    if (coachHtml) blocks.push(historyGroup("身心覺察整理", coachHtml));
+  }
+  const body = blocks.filter(Boolean).join("");
+  if (!body.trim()) return "";
+  const label = archive.hasDeepProcess ? "查看完整深度思考" : archive.hasBodyCoach ? "查看當天的身心覺察整理" : "查看當天的探索過程";
+  return `<details class="history-archive"><summary>${escapeHtml(label)}</summary><div class="history-archive__body">${body}</div></details>`;
+}
+
 function renderHistoryJournal(review) {
   const parsedGuide = historyGuideFromReview(review);
   console.log("[history-debug] date", review && review.date);
@@ -14121,177 +14286,39 @@ function renderHistoryJournal(review) {
   console.log("[history-debug] deep", review && review.journal && review.journal.deep);
   const journal = review?.journal && typeof review.journal === "object" ? review.journal : emptyJournal();
   const historyIso = String((review && review.date) || "");
-  const thanks = historyMarkedItemsHtml(
-    thanksItemsFrom(journal.thanksText || journal.thanks).map((text, index) => ({
-      text,
-      field: `thanks.${index}`,
-      date: historyIso,
-    }))
-  );
-  const awareChoiceBag = normalizeChoiceBag(journal.awarenessChoices);
-  const useAwareChoices = hasMeaningfulChoices(awareChoiceBag);
-  const awareChoiceFields = useAwareChoices
-    ? [
-        ...selectedChoiceTexts(awareChoiceBag).map((text, index) =>
-          markableP(text, `awareness.choice.${index}`, "history-journal__text", historyIso)
-        ),
-        awareChoiceBag.none
-          ? markableP(choiceNoneText(), "awareness.choice.none", "history-journal__note", historyIso)
-          : "",
-      ]
-        .filter(Boolean)
-        .join("")
+  const reading = buildHistoryReadingForReview(review);
+  const happenedHtml = historyHappenedHtml(reading, journal, historyIso);
+  const stuckHtml = reading.stuck
+    ? historyBlock("", markableP(reading.stuck.text, reading.stuck.field, "history-journal__text", historyIso, reading.stuck.highlights))
     : "";
-  const awareFields = useAwareChoices
-    ? awareChoiceFields
-    : (
-    journal.awarenessPrompts && journal.awarenessPrompts.length ? journal.awarenessPrompts : AWARENESS_QUESTIONS
-  )
-    .map((item, index) => {
-      const answer = normalizeYesNo((journal.awareness || [])[index]) || String((journal.awareness || [])[index] || "").trim();
-      const question = item.question || item.title || item;
-      return answer
-        ? historyQaHtml(question, `awareness.prompt.${index}.question`, answer, `awareness.prompt.${index}.answer`, historyIso)
-        : "";
-    })
-    .filter(Boolean)
-    .join("");
-  const quotes = historyQuotesHtml(
-    normalizeAwarenessQuotes(journal.awarenessCheckItems).length
-      ? normalizeAwarenessQuotes(journal.awarenessCheckItems)
-      : journal.awarenessChecks,
+  const seenHtml = reading.seen
+    ? historyBlock("", markableP(reading.seen.text, reading.seen.field, "history-journal__text", historyIso, reading.seen.highlights))
+    : "";
+  const actionHtml = historyReadingActionsHtml(reading.actions, historyIso);
+  const quoteHtml = reading.quote
+    ? `<aside class="conclusion-callout conclusion-callout--quote">${markableP(
+        reading.quote.text,
+        reading.quote.field,
+        "conclusion-callout__text",
+        historyIso,
+        reading.quote.highlights
+      )}</aside>`
+    : "";
+  const archiveHtml = historyArchiveHtml(review, reading, journal, historyIso);
+  console.log("[history-debug] rendered html length", String((happenedHtml || "") + (stuckHtml || "") + (seenHtml || "") + (actionHtml || "") + (quoteHtml || "") + (archiveHtml || "")).length);
+  const parts = historySectionsHtml(
+    [
+      ["① 今天發生了什麼", "happened", happenedHtml],
+      ["② 我今天真正卡住的是什麼", "stuck", stuckHtml],
+      ["③ 我今天看見了自己什麼", "seen", seenHtml],
+      ["④ 我接下來要怎麼做", "action", actionHtml],
+      ["今日帶走的一句話", "quote", quoteHtml],
+      ...(journalHasManifestHistory(journal) ? [["顯化紀錄", "manifest", historyManifestBlocks(journal, historyIso)]] : []),
+    ],
     historyIso
   );
-  const awareResult = normalizeAwarenessResult(journal.awarenessResult, { keepSource: true });
-  const compactAware = isCompactAwarenessResult(awareResult);
-  const awareResultHtml = compactAware && awareResult.line && awareResult.seen
-    ? `<div class="aware-result aware-result--compact history-aware-compact">
-        <div class="aware-core">
-          <p class="aware-core__label">核心覺察</p>
-          ${markableP(awareResult.line, "awareness.line", "aware-core__quote", historyIso, fieldHighlightsOf(awareResult.highlights, "line"))}
-        </div>
-        <div class="aware-seen">
-          <p class="aware-seen__label">我看見了</p>
-          ${markableP(awareResult.seen, "awareness.seen", "aware-seen__text", historyIso, fieldHighlightsOf(awareResult.highlights, "seen"))}
-        </div>
-      </div>`
-    : awareResult.seen
-    ? [
-        historyBlock("今天，我看見了自己", markableP(awareResult.seen, "awareness.seen", "history-journal__text", historyIso, fieldHighlightsOf(awareResult.highlights, "seen"))),
-        awareResult.gap
-          ? historyBlock("我可能忽略的地方", markableP(awareResult.gap, "awareness.gap", "history-journal__text", historyIso, fieldHighlightsOf(awareResult.highlights, "gap")))
-          : "",
-        awareResult.question
-          ? historyBlock("今晚留給自己的一個問題", markableP(awareResult.question, "awareness.question", "history-journal__text", historyIso, fieldHighlightsOf(awareResult.highlights, "question")))
-          : "",
-        awareResult.echo
-          ? historyBlock("跨日覺察", markableP(awareResult.echo, "awareness.echo", "history-journal__note", historyIso))
-          : "",
-        awareResult.line ? historyBlock("今日一句話", markableP(awareResult.line, "awareness.line", "history-journal__headline", historyIso, fieldHighlightsOf(awareResult.highlights, "line"))) : "",
-      ].join("")
-    : "";
-  const execFields = (() => {
-    if (hasMeaningfulExecutionChoices(journal.executionChoices)) return [];
-    const prompts = normalizeExecutionPrompts(journal.executionPrompts);
-    const answers = Array.isArray(journal.execution) ? journal.execution : [];
-    const count = Math.max(prompts.length, answers.length);
-    return Array.from({ length: count }, (_, index) => {
-      const prompt = prompts[index];
-      const answer = String(answers[index] || "").trim();
-      const question = prompt?.question || prompt?.title || prompt || `執行力 ${index + 1}`;
-      if (answer) return historyQaHtml(question, `exec.prompt.${index}.question`, answer, `exec.prompt.${index}.answer`, historyIso);
-      if (prompt?.parked) return historyQaHtml(question, `exec.prompt.${index}.question`, "先放著", `exec.prompt.${index}.answer`, historyIso);
-      return "";
-    }).filter(Boolean);
-  })();
-  const execChoiceBag = normalizeExecutionChoiceBag(journal.executionChoices);
-  const execActions = selectedExecutionChoiceActions(execChoiceBag);
-  const execChosen = execActions.length
-    ? execActions[0].text
-    : String(journal.smallestStep || "").trim();
-  const execHasNewMulti = Array.isArray(journal.executionChoices && journal.executionChoices.selectedIds);
-  const execActionTexts = execHasNewMulti && execActions.length
-    ? execActions.map((item) => item.text)
-    : execChosen
-      ? [execChosen]
-      : [];
-  const skipExecFocus = execHasNewMulti || execActions.length > 0;
-  const insightHtml = renderHistoryDeepThinking(review);
-  console.log("[history-debug] rendered html length", String(insightHtml || "").length);
-  if (parsedGuide.rounds.some(historyRoundHasContent) && !hasMeaningfulChoices(journal.thinkChoices) && !String(insightHtml || "").trim()) {
-    console.error("[history-debug] GUIDE EXISTS BUT RENDER EMPTY", {
-      date: review && review.date,
-      roundsLength: parsedGuide.rounds.length,
-      htmlLength: String(insightHtml || "").length,
-    });
-  }
-  const parts = historySectionsHtml([
-    ["① 今日感謝", "thanks", historyBlock("", thanks)],
-    [
-      "② 今日事件與情緒",
-      "event",
-      [
-        String(journal.event || "").trim()
-          ? historyBlock("", markableP(String(journal.event).trim(), "event", "history-journal__text", historyIso))
-          : "",
-        journal.mood ? historyBlock("心情", `<p class="history-journal__mood"><span class="tag">${escapeHtml(journal.mood)}</span></p>`) : "",
-      ],
-    ],
-    [
-      "③ 身體覺察",
-      "body",
-      [historyGroup("身心檢核", historyBlock("", historyBodyCheckHtml(journal, historyIso)))],
-    ],
-    ["④ 深度思考", "insight", insightHtml],
-    [
-      "⑤ 覺察力",
-      "aware",
-      [
-        historyGroup(useAwareChoices ? "今日勾選" : "覺察作答", awareFields),
-        historyGroup("今日覺察", awareResultHtml || historyBlock("", quotes)),
-      ],
-    ],
-    [
-      "⑥ 執行力",
-      "exec",
-      [
-        ...execFields,
-        execHasNewMulti && execActionTexts.length
-          ? historyBlock("明天，我先做到這些", execStepActionsHtml(execActionTexts, historyIso))
-          : execChosen
-            ? historyBlock("明天最小的一步", markableP(execChosen, "exec.smallestStep", "history-journal__text", historyIso))
-            : "",
-        historyBlock("我的行動卡", historyExecChecksHtml(journal, historyIso)),
-        !skipExecFocus && journal.executionFocus?.title
-          ? historyBlock(
-              execFocusKicker(journal.executionFocus.when),
-              `${markableP(
-                execFocusTitleText(journal.executionFocus.title),
-                "exec.focus.title",
-                "history-journal__text",
-                historyIso,
-                nestedHighlights(journal.executionFocus.highlights, "title")
-              )}${
-                journal.executionFocus.detail
-                  ? markableP(
-                      journal.executionFocus.detail,
-                      "exec.focus.detail",
-                      "history-journal__text",
-                      historyIso,
-                      nestedHighlights(journal.executionFocus.highlights, "detail")
-                    )
-                  : ""
-              }`
-            )
-          : "",
-      ],
-    ],
-    ...(journalHasManifestHistory(journal)
-      ? [["顯化紀錄", "manifest", historyManifestBlocks(journal, historyIso)]]
-      : []),
-  ], historyIso);
 
-  if (!parts) {
+  if (!parts && !archiveHtml) {
     const fallback = String(review?.rawText || "").trim();
     const organize = review?.organize;
     if (organize) return `<div class="history-journal">${historySection("當天紀錄", "note", renderHistoryReport(review), true, historyIso)}</div>`;
@@ -14299,7 +14326,7 @@ function renderHistoryJournal(review) {
     return `<div class="history-journal"><p class="history-journal__empty">這天還沒有留下完整復盤內容。</p></div>`;
   }
 
-  return `<div class="history-journal">${parts}</div>`;
+  return `<div class="history-journal">${parts || ""}${archiveHtml || ""}</div>`;
 }
 
 function renderHistory(options = {}) {

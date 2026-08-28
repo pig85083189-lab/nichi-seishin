@@ -142,10 +142,10 @@ assert(app.includes("exec.focus.title"), "CASE J：focus field 不變");
 assert(html.includes("收下我的行動卡"), "CASE J：CTA 改收下");
 
 /* CASE K：新版歷史只顯示選中的 */
-assert(app.includes("if (hasMeaningfulExecutionChoices(journal.executionChoices)) return []"), "CASE K：新版不渲染未選 options／舊 Q&A");
-assert(app.includes("execChosen"), "CASE K：歷史仍能讀舊單選");
-assert(app.includes("execHasNewMulti"), "CASE K：歷史優先新多選");
-assert(app.includes("execStepActionsHtml"), "CASE K：新資料用編號 list");
+assert(app.includes("function historyReadingActionsHtml"), "CASE K：歷史行動走 presentation list");
+assert(fs.readFileSync(path.join(__dirname, "../lib/history-reading.js"), "utf8").includes("selectedExecutionChoiceActions"), "CASE K：優先已選 executionChoices");
+assert(!app.includes('"⑥ 執行力"'), "CASE K：歷史不再整章傾印執行力");
+assert(app.includes("exec-step-list"), "CASE K：行動仍用編號 list");
 
 /* CASE L：舊 Q&A fallback */
 assert(app.includes("historyQaHtml(question, `exec.prompt.${index}.question`"), "CASE L：舊問題／回答仍可顯示");

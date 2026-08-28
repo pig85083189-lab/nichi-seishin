@@ -2360,6 +2360,8 @@ body.nav-closed .auth-pay {
 
 .history-detail-sheet {
   min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
   padding: 21px 17px 22px;
   background: rgba(255, 255, 255, 0.5);
   border: 1px solid rgba(188, 165, 143, 0.35);
@@ -2799,6 +2801,47 @@ body.nav-closed .auth-pay {
   font-size: 16px;
   font-weight: 600;
   line-height: 1.75;
+}
+
+.history-journal__signals {
+  margin: 4px 0 0;
+  color: #8a7568;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.history-journal__signals .history-journal__text {
+  color: #8a7568;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.history-archive {
+  min-width: 0;
+  max-width: 100%;
+  margin: 8px 0 0;
+  padding: 18px 0 4px;
+  border-top: 1px solid #e8ddd0;
+}
+
+.history-archive > summary {
+  cursor: pointer;
+  color: #806d5e;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+  list-style: none;
+}
+
+.history-archive > summary::-webkit-details-marker {
+  display: none;
+}
+
+.history-archive__body {
+  min-width: 0;
+  max-width: 100%;
+  padding: 12px 0 4px;
 }
 
 .history-card__actions {
@@ -3932,8 +3975,8 @@ body[data-plan="free"] .plus-lock-badge {
   white-space: pre-wrap;
 }
 
-.history-journal .conclusion-callout {
-  margin: 22px 0;
+.history-journal .conclusion-callout--quote {
+  margin: 0;
 }
 
 .rv-card__conclusion {
