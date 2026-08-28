@@ -112,7 +112,7 @@ html.is-booting body {
 }
 
 .splash.is-leaving {
-  animation: splashLeave 200ms ease-out forwards;
+  animation: splashLeave 400ms ease-out forwards;
 }
 
 .splash.is-gone {

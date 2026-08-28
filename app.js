@@ -76,6 +76,7 @@ const state = {
   historyHashSync: false,
   historyOpenSections: {},
   splashGateReady: false,
+  splashStartedAt: 0,
   splashDismissed: false,
   journalMode: "deep",
   quickModules: { body: false, aware: false, exec: false, manifest: false },
@@ -16187,6 +16188,16 @@ function splashMotionReduced() {
   return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
+const SPLASH_MIN_DURATION = 4000;
+
+function splashLeaveMs() {
+  return splashMotionReduced() ? 120 : 400;
+}
+
+function splashHoldMs() {
+  return Math.max(0, SPLASH_MIN_DURATION - splashLeaveMs());
+}
+
 function clearBootingChrome() {
   document.documentElement.classList.remove("is-booting");
   if (document.body) document.body.classList.remove("is-booting");
@@ -16202,7 +16213,7 @@ function dismissSplash() {
   splash.dataset.leaving = "1";
   splash.classList.add("is-leaving");
   splash.setAttribute("aria-hidden", "true");
-  const leaveMs = splashMotionReduced() ? 120 : 200;
+  const leaveMs = splashLeaveMs();
   const finish = () => {
     if (splash.parentNode) splash.remove();
     clearBootingChrome();
@@ -16215,6 +16226,8 @@ function dismissSplash() {
 
 function tryDismissSplash() {
   if (state.splashDismissed) return;
+  const elapsed = Date.now() - (state.splashStartedAt || Date.now());
+  if (elapsed < splashHoldMs()) return;
   if (!state.splashGateReady) return;
   state.splashDismissed = true;
   dismissSplash();
@@ -16234,6 +16247,8 @@ function initSplash() {
     clearBootingChrome();
     return;
   }
+  state.splashStartedAt = Date.now();
+  window.setTimeout(tryDismissSplash, splashHoldMs());
 }
 
 function init() {
