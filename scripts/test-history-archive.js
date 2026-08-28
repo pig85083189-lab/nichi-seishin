@@ -129,7 +129,8 @@ assert(css.includes("overflow-x: hidden") && css.includes(".history-card__title"
 assert(css.includes("overflow-wrap") && css.includes(".history-card__cats"), "CASE V：分類可換行");
 assert(css.includes("@media (min-width: 720px)"), "CASE W：desktop title 樣式");
 assert(!html.includes("CREATE TABLE") && !app.includes("ALTER TABLE") && !mergeSrc.includes("ALTER TABLE"), "CASE X：無 schema");
-assert(html.includes("lib/review-merge.js?v=8") && html.includes("lib/history-summary.js?v=7"), "cache 升版");
+assert(html.includes("lib/review-merge.js?v=8") && html.includes("lib/history-summary.js?v=7") && html.includes("lib/history-reading.js?v=3"), "cache 升版");
+assert(app.includes("查看當天完整紀錄") && app.includes("historyArchiveTextIsRedundant"), "歷史詳情有分層完整紀錄入口");
 assert(app.includes("history-card__cats") && !/historyListStars[\s\S]{0,200}themeStars/.test(app), "列表星星不再用 AI themeStars");
 assert(historyMatchesTag(completed, "important") === true, "重要紀錄篩選 rating>=4");
 assert(historyMatchesTag({ historyRating: 3, journal: { event: "x" } }, "important") === false, "3 星不是重要紀錄");

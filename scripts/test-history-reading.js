@@ -3,6 +3,7 @@ const path = require("path");
 const {
   buildHistoryReading,
   hasInformationGain,
+  hasMemoryQuoteGain,
 } = require("../lib/history-reading");
 const { getHistoryDailySummary } = require("../lib/history-summary");
 
@@ -20,10 +21,13 @@ const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const css = fs.readFileSync(path.join(root, "app.css"), "utf8");
 const reviewApi = fs.readFileSync(path.join(root, "api/review.js"), "utf8");
 
-assert(html.includes("lib/history-reading.js?v=2"), "History reading mapper 已載入");
+assert(html.includes("lib/history-reading.js?v=3"), "History reading mapper 已載入");
 assert(app.includes('"① 今天發生了什麼"'), "主閱讀流有①");
 assert(app.includes('"⑤ 今日帶走的一句話"'), "主閱讀流有⑤");
-assert(app.includes("查看完整深度思考"), "深度思考可展開");
+assert(app.includes("查看當天完整紀錄"), "完整紀錄可展開");
+assert(!app.includes("查看完整深度思考"), "不再用舊 accordion 文案");
+assert(app.includes("historyArchiveTextIsRedundant"), "完整紀錄會略過摘要已講過的洞察");
+assert(app.includes("data-history-archive="), "accordion 可記住展開狀態");
 assert(app.includes("markableP(reading.stuck.text, reading.stuck.field"), "② 走既有 field + markableP");
 assert(app.includes("markableP(reading.seen.text, reading.seen.field"), "③ 走既有 field + markableP");
 assert(app.includes("renderCombinedHighlightedText"), "CASE I：combined renderer 仍在");
@@ -97,10 +101,17 @@ assert(caseA.stuck && caseA.stuck.field === "think.awareness", "CASE A：② 用
 assert(!caseA.seen, "CASE A：③ 若只是複述②就不要再寫");
 assert(caseA.actions.length === 1 && caseA.actions[0].text.includes("分享"), "CASE C：④ 是已選行動");
 assert(!/其實你|正在提醒/.test(caseA.actions[0].text), "CASE C：④ 不是心理分析");
-assert(caseA.quote && caseA.quote.text.includes("努力"), "CASE D：有一句帶走的話");
-assert(caseA.quote.field === "awareness.line" || caseA.quote.field === "think.takeaway", "CASE D：金句用既有欄位，不重產");
+assert(!caseA.quote || hasMemoryQuoteGain([caseA.stuck.text, caseA.seen && caseA.seen.text].filter(Boolean), caseA.quote.text), "CASE D：⑤ 不可只是複述②③");
+assert(!caseA.quote || caseA.quote.field === "awareness.line" || caseA.quote.field === "think.takeaway", "CASE D：金句若留下，仍用既有欄位");
 assert(caseA.archive.hasGuideRounds === true, "CASE F：五輪原始資料仍在");
 assert(caseA.archive.hasDeepProcess === true, "CASE F：深度思考可被展開");
+assert(
+  !hasInformationGain(
+    [caseA.stuck.text, caseA.seen && caseA.seen.text, caseA.quote && caseA.quote.text].filter(Boolean),
+    "努力被看見的渴望正在提醒你，身體也在說同一件事。"
+  ),
+  "CASE 2026/08/28：身心覺察整理不可再複述②③⑤"
+);
 
 const mainThemeCount = [caseA.stuck && caseA.stuck.text, caseA.seen && caseA.seen.text, caseA.quote && caseA.quote.text]
   .filter(Boolean)
@@ -167,5 +178,50 @@ assert(app.includes("function renderHistoryDeepThinking"), "CASE F：舊深度 r
 assert(app.includes("historyBodyCheckHtml"), "身體覺察原始 render 仍保留");
 assert(app.includes('"awareness.line"') && app.includes('"think.awareness"'), "CASE I／J：field identity 仍在");
 assert(app.includes("JOURNAL_FOLD_IDS") && /id="section-thanks"/.test(fs.readFileSync(path.join(root, "index.html"), "utf8")), "CASE N：01～06 DOM 未拆");
+
+const caseAug28 = buildHistoryReading({
+  date: "2026-08-28",
+  journal: {
+    thanksText: "寶貝今天幫我準備豆漿\n今天吃到很好吃的雞腿飯",
+    event: "其實我今天心裡面有一點難過，努力很多但覺得過程沒有被看見。",
+    mood: "難過",
+    insight: {
+      guide: {
+        awareness: "我以為自己只要夠相信自己，就可以承受努力不被看見；但今天我發現，我其實也很渴望重要的人看見我的努力。",
+        selfSeen: "我不是不需要別人的肯定，而是習慣告訴自己「我自己知道就好」。",
+        takeaway: "被看見的不只是結果，也包括過程中的自己。",
+        rounds: [{ question: "真正卡住的是什麼？", answer: "努力的過程沒被看見" }],
+      },
+    },
+    bodyCoach: {
+      title: "努力被看見的渴望正在提醒你",
+      analysis: "你其實希望努力被看見。",
+      notice: "被看見對你很重要。",
+    },
+    executionChoices: {
+      options: [{ id: "e1", text: "完成一件獨立任務後，主動告訴一個信任的人你花了多少時間。" }],
+      selectedIds: ["e1"],
+    },
+  },
+});
+assert(caseAug28.happened.thanks.join("").includes("豆漿"), "2026/08/28：① 保留感謝原文");
+assert(caseAug28.happened.event.includes("難過"), "2026/08/28：① 保留事件原文");
+assert(caseAug28.stuck && caseAug28.stuck.text.includes("渴望"), "2026/08/28：② 是核心矛盾");
+assert(caseAug28.seen && caseAug28.seen.text.includes("我自己知道就好"), "2026/08/28：③ 是更內一層");
+assert(caseAug28.actions.length === 1 && caseAug28.actions[0].text.includes("告訴"), "2026/08/28：④ 是可執行行動");
+assert(caseAug28.quote && caseAug28.quote.text.includes("過程中的自己"), "2026/08/28：⑤ 是記憶句");
+assert(
+  !hasInformationGain([caseAug28.stuck.text, caseAug28.seen.text, caseAug28.quote.text], "你其實希望努力被看見。"),
+  "2026/08/28：身心覺察整理不可再講一次想被看見"
+);
+
+const archiveSrc = app.slice(app.indexOf("function historyArchiveHtml"), app.indexOf("function renderHistoryJournal"));
+assert(!archiveSrc.includes("renderHistoryGuideCloseHtml"), "完整紀錄不重貼 ②③⑤ close");
+assert(archiveSrc.includes("journalHasManifestHistory"), "顯化改放到完整紀錄");
+assert(archiveSrc.includes("historyArchiveAllowsText"), "完整紀錄用語意去重");
+const journalSrc = app.slice(app.indexOf("function renderHistoryJournal"), app.indexOf("function renderHistory("));
+assert(!journalSrc.includes('["顯化紀錄"'), "顯化不在五層摘要");
+assert(css.includes(".history-archive > summary::after"), "展開箭頭是 secondary control");
+assert(app.includes('setHistorySectionOpen(iso, "archive"'), "accordion 展開狀態可記住");
 
 console.log("history reading tests passed");

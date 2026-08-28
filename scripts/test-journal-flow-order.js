@@ -130,7 +130,7 @@ assert(app.includes('"② 我今天真正卡住的是什麼"'), "CASE J：歷史
 assert(app.includes('"③ 我今天看見了自己什麼"'), "CASE J：歷史 03 是新的自我理解");
 assert(app.includes('"④ 我接下來要怎麼做"'), "CASE J：歷史 04 是行動");
 assert(app.includes('"今日帶走的一句話"'), "CASE J：歷史最後留一句話");
-assert(app.includes("查看完整深度思考"), "CASE J：深度思考原始對話可在 History 展開");
+assert(app.includes("查看當天完整紀錄"), "CASE J：深度思考原始對話可在 History 展開");
 assert(!app.includes('"⑤ 覺察力"'), "CASE J：歷史不再把覺察力當獨立大章");
 assert(!app.includes('"⑥ 執行力"'), "CASE J：歷史不再把執行力當獨立大章");
 assert(app.includes('"顯化紀錄"'), "CASE J：舊顯化改標顯化紀錄，不再當 07");

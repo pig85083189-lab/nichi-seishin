@@ -14069,25 +14069,42 @@ function historyBodyCheckHtml(journal, date) {
   return `${historyMarkedItemsHtml(lines.map((item) => ({ ...item, date })))}${coachHtml}`;
 }
 
-function historyBodyCoachLongformHtml(journal, date, usedFields) {
+function historyArchiveTextIsRedundant(usedTexts, text) {
+  const raw = String(text || "").trim();
+  if (!raw) return true;
+  const api = historyReadingApi();
+  if (typeof api.hasInformationGain === "function") return !api.hasInformationGain(usedTexts, raw);
+  return false;
+}
+
+function historyArchiveAllowsText(usedFields, usedTexts, field, text) {
+  const raw = String(text || "").trim();
+  if (!raw) return false;
   const used = usedFields instanceof Set ? usedFields : new Set(usedFields || []);
+  if (field && used.has(field)) return false;
+  return !historyArchiveTextIsRedundant(usedTexts, raw);
+}
+
+function historyBodyCoachLongformHtml(journal, date, usedFields, usedTexts) {
+  const used = usedFields instanceof Set ? usedFields : new Set(usedFields || []);
+  const texts = Array.isArray(usedTexts) ? usedTexts : [];
   const coach = normalizeBodyCoach(journal && journal.bodyCoach);
   const title = String(coach.title || "").trim();
   const titleLine = title ? (/[。！？]$/.test(title) ? title : `${title}。`) : "";
   return [
-    titleLine && !used.has("bodyCoach.title")
+    titleLine && historyArchiveAllowsText(used, texts, "bodyCoach.title", titleLine)
       ? renderConclusionCallout(titleLine, "bodyCoach.title", date, fieldHighlightsOf(coach.highlights, "title"))
       : "",
-    coach.analysis && !used.has("bodyCoach.analysis")
+    coach.analysis && historyArchiveAllowsText(used, texts, "bodyCoach.analysis", coach.analysis)
       ? historyBlock("今天的身心訊號", markableP(coach.analysis, "bodyCoach.analysis", "history-journal__text", date, fieldHighlightsOf(coach.highlights, "analysis")))
       : "",
-    coach.notice && !used.has("bodyCoach.notice")
+    coach.notice && historyArchiveAllowsText(used, texts, "bodyCoach.notice", coach.notice)
       ? historyBlock("值得留意", markableP(coach.notice, "bodyCoach.notice", "history-journal__text", date, fieldHighlightsOf(coach.highlights, "notice")))
       : "",
     ...(coach.suggestions || []).map((item, index) => {
       const text = String(item || "").trim();
       const field = `bodyCoach.suggestion.${index}`;
-      return text && !used.has(field)
+      return text && historyArchiveAllowsText(used, texts, field, text)
         ? historyBlock(`今晚照顧 ${index + 1}`, markableP(text, field, "history-journal__text", date, fieldHighlightsOf(coach.highlights, "suggestions")))
         : "";
     }),
@@ -14455,6 +14472,7 @@ function buildHistoryReadingForReview(review) {
     actions: [],
     quote: null,
     usedFields: [],
+    usedTexts: [],
     archive: { hasDeepProcess: false, hasBodyCoach: false, hasAwareProcess: false, hasGuideRounds: false },
   };
 }
@@ -14517,14 +14535,17 @@ function historyExecProcessHtml(journal, date, usedFields) {
     .join("");
 }
 
-function historyAwareProcessHtml(journal, date, usedFields) {
+function historyAwareProcessHtml(journal, date, usedFields, usedTexts) {
   const used = usedFields instanceof Set ? usedFields : new Set(usedFields || []);
+  const texts = Array.isArray(usedTexts) ? usedTexts : [];
   const awareChoiceBag = normalizeChoiceBag(journal.awarenessChoices);
   if (hasMeaningfulChoices(awareChoiceBag)) {
     return [
       ...selectedChoiceTexts(awareChoiceBag).map((text, index) => {
         const field = `awareness.choice.${index}`;
-        return used.has(field) ? "" : markableP(text, field, "history-journal__text", date);
+        return historyArchiveAllowsText(used, texts, field, text)
+          ? markableP(text, field, "history-journal__text", date)
+          : "";
       }),
       awareChoiceBag.none && !used.has("awareness.choice.none")
         ? markableP(choiceNoneText(), "awareness.choice.none", "history-journal__note", date)
@@ -14547,9 +14568,97 @@ function historyAwareProcessHtml(journal, date, usedFields) {
     .join("");
 }
 
+function historyThinkChoiceProcessHtml(journal, date, usedFields, usedTexts) {
+  const bag = normalizeChoiceBag(journal && journal.thinkChoices);
+  if (!hasMeaningfulChoices(bag)) return "";
+  const used = usedFields instanceof Set ? usedFields : new Set(usedFields || []);
+  const texts = Array.isArray(usedTexts) ? usedTexts : [];
+  return [
+    ...selectedChoiceTexts(bag).map((text, index) => {
+      const field = `think.choice.${index}`;
+      return historyArchiveAllowsText(used, texts, field, text)
+        ? markableP(text, field, "history-journal__text", date)
+        : "";
+    }),
+    bag.none && !used.has("think.choice.none")
+      ? markableP(choiceNoneText(), "think.choice.none", "history-journal__note", date)
+      : "",
+  ]
+    .filter(Boolean)
+    .join("");
+}
+
+function historyArchiveInsightBlocksHtml(insight, date, usedFields, usedTexts) {
+  const used = usedFields instanceof Set ? usedFields : new Set(usedFields || []);
+  const texts = Array.isArray(usedTexts) ? usedTexts : [];
+  const data = insight && typeof insight === "object" ? insight : {};
+  const psychology = String(data.psychology || data.analysis || data.logic || "").trim();
+  const conclusion = String(data.conclusion || data.summary || "").trim();
+  const reflection = String(data.reflection || "").trim();
+  const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+  const takeaways = Array.isArray(data.takeaways) ? data.takeaways : [];
+  const marks = data.highlights && typeof data.highlights === "object" ? data.highlights : {};
+  const core = psychology || conclusion;
+  return `${
+    data.title && historyArchiveAllowsText(used, texts, "think.title", data.title)
+      ? renderConclusionCallout(data.title, "think.title", date, fieldHighlightsOf(marks, "title"))
+      : ""
+  }${
+    core && historyArchiveAllowsText(used, texts, "think.psychology", core)
+      ? historyBlock("", markableP(core, "think.psychology", "history-journal__text", date, fieldHighlightsOf(marks, "psychology")))
+      : ""
+  }${
+    data.bodyLink && historyArchiveAllowsText(used, texts, "think.bodyLink", data.bodyLink)
+      ? historyBlock("", markableP(data.bodyLink, "think.bodyLink", "history-journal__note", date, fieldHighlightsOf(marks, "bodyLink")))
+      : ""
+  }${
+    reflection && historyArchiveAllowsText(used, texts, "think.reflection", reflection)
+      ? historyBlock("客觀檢討與反思", markableP(reflection, "think.reflection", "history-journal__text", date, fieldHighlightsOf(marks, "reflection")))
+      : ""
+  }${suggestions
+    .map((item, index) => {
+      const text = String(item || "").trim();
+      const field = `think.suggestion.${index}`;
+      return text && historyArchiveAllowsText(used, texts, field, text)
+        ? historyBlock("具體下一步", markableP(text, field, "history-journal__text", date, fieldHighlightsOf(marks, "suggestions")))
+        : "";
+    })
+    .join("")}${
+    takeaways.some((item, index) => historyArchiveAllowsText(used, texts, `think.takeawayItem.${index}`, item))
+      ? `<ul class="history-journal__list">${takeaways
+          .map((item, index) => {
+            const text = String(item || "").trim();
+            const field = `think.takeawayItem.${index}`;
+            return text && historyArchiveAllowsText(used, texts, field, text)
+              ? `<li>${markableSpan(text, field, "", date, fieldHighlightsOf(marks, "takeaways"))}</li>`
+              : "";
+          })
+          .join("")}</ul>`
+      : ""
+  }`;
+}
+
+function historyLayerUsedTexts(reading) {
+  if (Array.isArray(reading && reading.usedTexts) && reading.usedTexts.length) {
+    return reading.usedTexts.map((item) => String(item || "").trim()).filter(Boolean);
+  }
+  const happened = reading && reading.happened ? reading.happened : {};
+  return [
+    happened.event,
+    ...(Array.isArray(happened.thanks) ? happened.thanks : []),
+    reading && reading.stuck && reading.stuck.text,
+    reading && reading.seen && reading.seen.text,
+    reading && reading.quote && reading.quote.text,
+    ...(Array.isArray(reading && reading.actions) ? reading.actions.map((item) => item && item.text) : []),
+  ]
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+}
+
 function historyArchiveHtml(review, reading, journal, date) {
   const archive = reading && reading.archive ? reading.archive : {};
   const used = new Set(reading && reading.usedFields ? reading.usedFields : []);
+  const usedTexts = historyLayerUsedTexts(reading);
   const parsed = historyGuideFromReview(review);
   const blocks = [];
   if (archive.hasGuideRounds) {
@@ -14561,27 +14670,42 @@ function historyArchiveHtml(review, reading, journal, date) {
         : { kind: "none" };
     if (helper.kind === "thinkHistory") blocks.push(historyGroup("深度思考對話", renderHistoryThinkHistoryHtml(helper.thinkHistory, review)));
     else if (helper.kind === "deep") blocks.push(historyGroup("深度思考對話", renderHistoryDeepJournalHtml(helper.deep, helper.deepPrompts, date)));
-    else if (helper.kind === "blocks") blocks.push(historyGroup("深度思考對話", renderHistoryInsightBlocksHtml(helper.insight || {}, date)));
+    else if (helper.kind === "blocks") blocks.push(historyGroup("深度思考對話", historyArchiveInsightBlocksHtml(helper.insight || {}, date, used, usedTexts)));
     else if (Array.isArray(review && review.thinkHistory) && review.thinkHistory.length) {
       blocks.push(historyGroup("深度思考對話", renderHistoryThinkHistoryHtml(review.thinkHistory, review)));
     } else if (journal.deep || journal.deepPrompts) {
       blocks.push(historyGroup("深度思考對話", renderHistoryDeepJournalHtml(journal.deep, journal.deepPrompts, date)));
     }
+  } else {
+    const leftoverInsight = historyArchiveInsightBlocksHtml(parsed.insight, date, used, usedTexts);
+    if (leftoverInsight && leftoverInsight.replace(/<[^>]+>/g, "").trim()) {
+      blocks.push(historyGroup("舊洞察整理", leftoverInsight));
+    }
   }
+  const thinkChoicesHtml = historyThinkChoiceProcessHtml(journal, date, used, usedTexts);
+  if (thinkChoicesHtml) blocks.push(historyGroup("深度思考勾選", thinkChoicesHtml));
   if (archive.hasAwareProcess) {
-    const awareProcess = historyAwareProcessHtml(journal, date, used);
+    const awareProcess = historyAwareProcessHtml(journal, date, used, usedTexts);
     if (awareProcess) blocks.push(historyGroup("覺察作答", awareProcess));
   }
   const execProcess = historyExecProcessHtml(journal, date, used);
   if (execProcess) blocks.push(historyGroup("執行力作答", execProcess));
   if (archive.hasBodyCoach) {
-    const coachHtml = historyBodyCoachLongformHtml(journal, date, used);
+    const coachHtml = historyBodyCoachLongformHtml(journal, date, used, usedTexts);
     if (coachHtml) blocks.push(historyGroup("身心覺察整理", coachHtml));
+  }
+  const bodyNote = String(journal.bodyNote || "").trim();
+  if (bodyNote && historyArchiveAllowsText(used, usedTexts, "bodyCheck.note", bodyNote)) {
+    blocks.push(historyGroup("身體備註", markableP(bodyNote, "bodyCheck.note", "history-journal__text", date)));
+  }
+  if (journalHasManifestHistory(journal)) {
+    const manifestHtml = historyManifestBlocks(journal, date).filter(Boolean).join("");
+    if (manifestHtml.trim()) blocks.push(historyGroup("顯化紀錄", manifestHtml));
   }
   const body = blocks.filter(Boolean).join("");
   if (!body.trim()) return "";
-  const label = archive.hasDeepProcess ? "查看完整深度思考" : archive.hasBodyCoach ? "查看當天的身心覺察整理" : "查看當天的探索過程";
-  return `<details class="history-archive"><summary>${escapeHtml(label)}</summary><div class="history-archive__body">${body}</div></details>`;
+  const open = historySectionIsOpen(date, "archive", false);
+  return `<details class="history-archive"${open ? " open" : ""} data-history-archive="${escapeHtml(date)}"><summary>查看當天完整紀錄</summary><div class="history-archive__body">${body}</div></details>`;
 }
 
 function renderHistoryJournal(review) {
@@ -14613,7 +14737,6 @@ function renderHistoryJournal(review) {
       ["③ 我今天看見了自己什麼", "seen", seenHtml],
       ["④ 我接下來要怎麼做", "action", actionHtml],
       ["⑤ 今日帶走的一句話", "quote", quoteHtml],
-      ...(journalHasManifestHistory(journal) ? [["顯化紀錄", "manifest", historyManifestBlocks(journal, historyIso)]] : []),
     ],
     historyIso
   );
@@ -15951,6 +16074,13 @@ function bindEvents() {
       setHistorySectionOpen(iso, sectionId, next);
     }
   });
+  document.getElementById("page-history")?.addEventListener("toggle", (event) => {
+    const details = event.target;
+    if (!details || details.tagName !== "DETAILS" || !details.classList.contains("history-archive")) return;
+    const iso = details.getAttribute("data-history-archive") || state.historyDetailDate;
+    if (!iso) return;
+    setHistorySectionOpen(iso, "archive", details.open);
+  }, true);
   document.getElementById("page-history")?.addEventListener("click", (event) => {
     const back = event.target.closest("[data-history-back]");
     if (!back) return;
