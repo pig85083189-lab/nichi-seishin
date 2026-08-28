@@ -23,6 +23,7 @@ function assert(cond, message) {
 const root = path.join(__dirname, "..");
 const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
+const css = fs.readFileSync(path.join(root, "app.css"), "utf8");
 
 const sectionOrder = [...html.matchAll(/id="(section-(?:thanks|event|body|insight|deep|aware|exec|manifest))"/g)].map(
   (item) => item[1]
@@ -162,6 +163,14 @@ const merged = mergeJournalObjects(
 );
 assert(merged.thinkChoices.selectedIds[0] === "t1", "CASE S：空 thinkChoices 不覆蓋");
 assert(merged.awarenessChoices.selectedIds[0] === "a1", "CASE S：空 awarenessChoices 不覆蓋");
+
+assert((html.match(/打字或用麥克風說都可以/g) || []).length >= 4, "語音提示：01／02／03／06 靜態輸入區有提示");
+assert(html.includes("id=\"thanksText\"") && html.slice(html.indexOf("id=\"thanksText\""), html.indexOf("id=\"thanksText\"") + 400).includes("打字或用麥克風說都可以"), "01 感謝 textarea 旁有語音提示");
+assert(html.includes("id=\"eventText\"") && html.slice(html.indexOf("id=\"eventText\""), html.indexOf("id=\"moodRow\"")).includes("打字或用麥克風說都可以"), "02 事件 textarea 旁有語音提示");
+assert(!html.slice(html.indexOf("id=\"moodRow\""), html.indexOf("id=\"quickModules\"")).includes("打字或用麥克風說都可以"), "02 心情選擇不加語音提示");
+assert(app.includes("function journalVoiceHintHtml") && app.includes("think-guide-answer") && app.includes("journalVoiceHintHtml()"), "動態書寫區沿用同一提示");
+assert(!app.includes("getUserMedia") && !app.includes("webkitSpeechRecognition") && !app.includes("SpeechRecognition"), "不新增錄音／語音辨識 API");
+assert(css.includes(".journal-voice-hint") && !html.includes("id=\"btnVoice") && !html.includes("語音輸入</button>"), "提示是輕量文字不是按鈕");
 
 assert(!html.includes("CREATE TABLE") && !app.includes("ALTER TABLE"), "CASE T：沒有 schema SQL");
 assert(!/UPDATE\s+reviews/i.test(app), "CASE T：沒有批次 UPDATE 舊 reviews");

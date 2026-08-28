@@ -5240,6 +5240,20 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   font-weight: 600;
 }
 
+.journal-voice-hint {
+  margin: 8px 0 0;
+  color: #b3a79c;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+}
+
+textarea[hidden] + .journal-voice-hint,
+.journal-voice-hint[hidden] {
+  display: none;
+}
+
 .journal-split--manifest {
   grid-template-columns: minmax(0, 1fr);
 }

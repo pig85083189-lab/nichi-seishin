@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=196" />
+    <link rel="stylesheet" href="app.css?v=197" />
     <style>
       .splash {
         position: fixed;
@@ -283,6 +283,7 @@
                 <label class="thanks-box">
                   <span class="sr-only">今日感謝</span>
                   <textarea class="textarea textarea--thanks" id="thanksText" rows="8" data-journal="thanks" placeholder="今天，我想謝謝⋯"></textarea>
+                  <p class="journal-voice-hint">打字或用麥克風說都可以</p>
                 </label>
               </div>
             </div>
@@ -308,6 +309,7 @@
               <label class="journal-col">
                 <span class="journal-label">寫下今天發生的事（開心、生氣、難過）</span>
                 <textarea class="textarea" id="eventText" rows="5" placeholder="把當時發生的事寫下來⋯"></textarea>
+                <p class="journal-voice-hint">打字或用麥克風說都可以</p>
               </label>
               <div class="journal-col">
                 <p class="journal-label">今天的心情是...</p>
@@ -417,6 +419,7 @@
                   <label class="body-reason" data-body-reason="mood" hidden>
                     <span class="body-subcard__field">原因是什麼？</span>
                     <textarea class="textarea" id="bodyMoodReason" rows="3" placeholder="簡單記錄發生的原因…"></textarea>
+                    <p class="journal-voice-hint">打字或用麥克風說都可以</p>
                   </label>
                 </div>
                 <div class="body-check-group body-subcard" data-body-group="body">
@@ -441,6 +444,7 @@
                   <label class="body-reason" data-body-reason="body" hidden>
                     <span class="body-subcard__field">原因是什麼？</span>
                     <textarea class="textarea" id="bodyBodyReason" rows="3" placeholder="簡單記錄發生的原因…"></textarea>
+                    <p class="journal-voice-hint">打字或用麥克風說都可以</p>
                   </label>
                 </div>
                 <div class="body-check-group body-subcard" data-body-group="sleep">
@@ -483,6 +487,7 @@
                   <label class="body-reason" data-body-reason="sleep" hidden>
                     <span class="body-subcard__field">補充說明（選填）</span>
                     <textarea class="textarea" id="bodySleepReason" rows="2" placeholder="簡單記錄發生的原因…"></textarea>
+                    <p class="journal-voice-hint">打字或用麥克風說都可以</p>
                   </label>
                 </div>
               </div>
@@ -637,6 +642,7 @@
                   <p class="journal-core-q" id="execStepHint">不是完整計畫，只寫第一步。小到你明天幾乎沒有理由不開始。</p>
                   <div id="execStepResult" hidden></div>
                   <textarea class="textarea" id="execNext" rows="3" placeholder="例如：早餐後寫下3件小事／22:30放下手機／下午3點換上運動服"></textarea>
+                  <p class="journal-voice-hint" id="execNextVoiceHint">打字或用麥克風說都可以</p>
                 </div>
                 <div class="js-deep-only">
                   <button class="ai-check-btn" id="btnExecAi" type="button" hidden>收下我的行動卡 <span class="plus-lock-badge">PLUS</span></button>
@@ -1207,6 +1213,6 @@
     <script src="lib/insight-highlight.js?v=5"></script>
     <script src="lib/user-mark.js?v=6"></script>
     <script src="lib/task-sidebar.js?v=1"></script>
-    <script src="app.js?v=229"></script>
+    <script src="app.js?v=230"></script>
   </body>
 </html>

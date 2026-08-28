@@ -5501,6 +5501,10 @@ function emptyThinkGuide() {
   return { round: 0, rounds: [], summary: "", awareness: "", selfSeen: "", takeaway: "", actions: [], title: "", highlights: {}, draftAnswer: "" };
 }
 
+function journalVoiceHintHtml() {
+  return `<p class="journal-voice-hint">打字或用麥克風說都可以</p>`;
+}
+
 function emptyInsight() {
   return {
     title: "",
@@ -8264,6 +8268,7 @@ function renderThinkGuideHtml(insight) {
               ? `<label class="think-guide__field">
                   <span class="sr-only">這一輪的回答</span>
                   <textarea class="textarea think-guide-answer" rows="4" placeholder="用一句話，把此刻真正想到的寫下來…">${escapeHtml(guide.draftAnswer || "")}</textarea>
+                  ${journalVoiceHintHtml()}
                   <button class="ai-check-btn" data-think-guide-next type="button">${index === 2 ? "完成三輪，生成總結" : "送出，進入下一輪"}</button>
                 </label>`
               : ""
@@ -9617,6 +9622,7 @@ function renderExecutionChoices(bag) {
       <div class="aware-q exec-q">
         <p class="journal-core-q">${escapeHtml(data.followupQuestion)}</p>
         <textarea class="textarea" id="execFollowup" rows="3" placeholder="${escapeHtml(data.followupPlaceholder || "例如：睡前把手機放到床以外")}"></textarea>
+        ${journalVoiceHintHtml()}
         <button class="ai-check-btn" id="btnExecChoiceFollow" type="button">整理明天的小行動</button>
       </div>
     `;
