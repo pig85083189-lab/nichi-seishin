@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=204" />
+    <link rel="stylesheet" href="app.css?v=206" />
     <style>
       html.is-booting,
       html.is-booting body {
@@ -52,131 +52,37 @@
         pointer-events: none;
         overflow: hidden;
       }
-      .splash__mark {
-        position: relative;
-        display: grid;
-        place-items: center;
-        width: 72vw;
-        max-width: 510px;
+      .splash__video,
+      .splash__still {
+        display: block;
+        width: min(92vw, 720px);
+        max-width: 720px;
+        height: auto;
+        object-fit: contain;
       }
-      .splash__mark::before {
-        content: "";
-        position: absolute;
-        inset: -6% -10%;
-        background: radial-gradient(circle, rgba(156, 136, 121, 0.24), transparent 72%);
-        filter: blur(32px);
-        pointer-events: none;
-        opacity: 0.75;
-      }
-      .splash__fx {
-        position: relative;
-        display: grid;
-        place-items: center;
-        width: 72vw;
-        max-width: 510px;
-      }
+      .splash__still,
       .splash__logo {
-        position: relative;
+        display: none;
+      }
+      .splash.is-static .splash__video,
+      .splash.is-fallback .splash__video {
+        display: none;
+      }
+      .splash.is-static .splash__still {
+        display: block;
+      }
+      .splash.is-fallback .splash__logo {
         display: block;
         width: 72vw;
         max-width: 510px;
         height: auto;
         object-fit: contain;
         mix-blend-mode: lighten;
-        transform-origin: center center;
-        animation: splashLogoIn 400ms ease-out 1 forwards, splashLogoSheen 750ms ease-in-out 350ms 1 forwards;
       }
-      .splash__shine-clip {
-        position: absolute;
-        inset: -12% -6%;
-        overflow: hidden;
-        pointer-events: none;
-      }
-      .splash__shine {
-        position: absolute;
-        top: -35%;
-        left: -25%;
-        width: 16%;
-        height: 170%;
-        background: linear-gradient(
-          90deg,
-          transparent 0%,
-          rgba(255, 235, 190, 0.15) 35%,
-          rgba(255, 245, 215, 0.9) 50%,
-          rgba(255, 235, 190, 0.18) 65%,
-          transparent 100%
-        );
-        filter: blur(3px);
-        transform: skewX(-18deg);
-        mix-blend-mode: screen;
-        opacity: 0;
-        animation: splashShine 750ms cubic-bezier(0.45, 0.05, 0.55, 0.95) 320ms 1 forwards;
-      }
-      .splash__sparkle {
-        position: absolute;
-        width: 12px;
-        height: 12px;
-        pointer-events: none;
-        opacity: 0;
-      }
-      .splash__sparkle::before,
-      .splash__sparkle::after {
-        content: "";
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        background: #fff3d6;
-        border-radius: 1px;
-        box-shadow: 0 0 5px 1px rgba(255, 243, 214, 0.45);
-      }
-      .splash__sparkle::before {
-        width: 11px;
-        height: 1.5px;
-        transform: translate(-50%, -50%);
-      }
-      .splash__sparkle::after {
-        width: 1.5px;
-        height: 11px;
-        transform: translate(-50%, -50%);
-      }
-      .splash__sparkle--a {
-        top: 14%;
-        left: 9%;
-        animation: splashSparkle 240ms ease-out 500ms 1 forwards;
-      }
-      .splash__sparkle--b {
-        top: 40%;
-        left: 70%;
-        animation: splashSparkle 260ms ease-out 800ms 1 forwards;
-      }
-      @keyframes splashLogoIn {
-        from { opacity: 0; transform: scale(0.97); }
-        to { opacity: 1; transform: scale(1); }
-      }
-      @keyframes splashLogoSheen {
-        0% { filter: brightness(1); }
-        42% { filter: brightness(1.15); }
-        100% { filter: brightness(1); }
-      }
-      @keyframes splashShine {
-        0% { left: -25%; opacity: 0; }
-        12% { opacity: 1; }
-        88% { opacity: 1; }
-        100% { left: 110%; opacity: 0; }
-      }
-      @keyframes splashSparkle {
-        0% { opacity: 0; transform: scale(0.5); }
-        45% { opacity: 1; transform: scale(1); }
-        100% { opacity: 0; transform: scale(0.7); }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .splash__logo { animation: splashLogoFade 400ms ease-out forwards; transform: none; filter: none; }
-        .splash__shine,
-        .splash__sparkle { animation: none; opacity: 0; }
-      }
-      @keyframes splashLogoFade {
-        from { opacity: 0; }
-        to { opacity: 1; }
+      .splash__video::-webkit-media-controls,
+      .splash__video::-webkit-media-controls-start-playback-button {
+        display: none !important;
+        -webkit-appearance: none;
       }
     </style>
   </head>
@@ -191,16 +97,21 @@
     </script>
 
     <div class="splash" id="splash" role="status" aria-label="進行式ING">
-      <div class="splash__mark">
-        <div class="splash__fx">
-          <img class="splash__logo" src="logo.png?v=3" alt="進行式ING" width="720" height="240" />
-          <span class="splash__shine-clip" aria-hidden="true">
-            <span class="splash__shine"></span>
-          </span>
-          <span class="splash__sparkle splash__sparkle--a" aria-hidden="true"></span>
-          <span class="splash__sparkle splash__sparkle--b" aria-hidden="true"></span>
-        </div>
-      </div>
+      <video
+        class="splash__video"
+        id="splashVideo"
+        src="ing-splash.mp4?v=1"
+        poster="ing-splash-poster.jpg?v=1"
+        muted
+        autoplay
+        playsinline
+        webkit-playsinline
+        preload="auto"
+        disablepictureinpicture
+        controlslist="nodownload nofullscreen noremoteplayback"
+      ></video>
+      <img class="splash__still" id="splashStill" src="ing-splash-poster.jpg?v=1" alt="進行式ING" width="1920" height="962" />
+      <img class="splash__logo" id="splashFallback" src="logo.png?v=3" alt="進行式ING" width="720" height="240" />
     </div>
 
     <div class="topbar">
@@ -1346,6 +1257,6 @@
     <script src="lib/insight-highlight.js?v=5"></script>
     <script src="lib/user-mark.js?v=6"></script>
     <script src="lib/task-sidebar.js?v=1"></script>
-    <script src="app.js?v=237"></script>
+    <script src="app.js?v=239"></script>
   </body>
 </html>
