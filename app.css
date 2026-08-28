@@ -7808,8 +7808,11 @@ summary [data-user-mark-field] {
   resize: none;
 }
 
-#page-today.is-archived [data-user-mark-field],
+#page-today.is-archived .journal-fold__toggle,
+#page-today.is-archived .journal-fold__chevron,
 #page-today.is-archived [data-journal-fold],
+#page-today.is-archived [data-user-mark-field],
+#page-today.is-archived [data-user-mark-toolbar],
 #page-today.is-archived [data-mode-guide-toggle],
 #page-today.is-archived #journalDateBtn,
 #page-today.is-archived #reviewDate {

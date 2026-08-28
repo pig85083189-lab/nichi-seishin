@@ -10878,6 +10878,24 @@ function rejectArchivedJournalWrite(options = {}) {
   return isCurrentJournalArchived();
 }
 
+function isArchivedJournalReadTarget(node) {
+  if (!node || typeof node.closest !== "function") return false;
+  if (node.closest("[data-user-mark-field], [data-user-mark-toolbar], .user-mark-bar")) return true;
+  if (node.closest("[data-mode-guide-toggle], #journalDateBtn, #reviewDate")) return true;
+  if (node.closest("[data-journal-fold]") && !node.closest(".journal-fold__panel")) return true;
+  return false;
+}
+
+function isArchivedJournalWriteTarget(node) {
+  if (!node || typeof node.closest !== "function") return false;
+  if (isArchivedJournalReadTarget(node)) return false;
+  return Boolean(
+    node.closest(
+      "button, input, textarea, select, label, .mood-btn, .choice-opt, .body-flag-btn, .sleep-chip, .ai-check-btn, [data-journal-mode], [data-quick-mod], [data-choice-id], [data-think-guide-next], [data-deepen]"
+    )
+  );
+}
+
 async function generateJournalPrompts(options = {}) {
   if (rejectArchivedJournalWrite(options)) return;
   if (state.promptsBusy) return;
@@ -14794,22 +14812,33 @@ function handleTodayPointerClick(event) {
   if (!node || typeof node.closest !== "function") return false;
   if (event._nichiTodayHandled) return false;
   if (!node.closest("#page-today")) return false;
-  if (isCurrentJournalArchived()) {
-    const keep = node.closest("[data-journal-fold], [data-mode-guide-toggle], #journalDateBtn, #reviewDate, [data-user-mark-field]");
-    if (!keep && node.closest("button, input, textarea, label, .mood-btn, .choice-opt, .body-flag-btn, .sleep-chip")) {
-      event.preventDefault();
-      event.stopPropagation();
-      event._nichiTodayHandled = true;
-      return true;
-    }
-    return false;
-  }
   const handled = () => {
     event.preventDefault();
     event.stopPropagation();
     event._nichiTodayHandled = true;
     return true;
   };
+
+  const foldBtn = node.closest("[data-journal-fold]");
+  if (foldBtn && !node.closest(".journal-fold__panel")) {
+    const root = foldBtn.closest(".journal-fold");
+    handled();
+    if (!root?.id) return true;
+    const pointerOk = foldTogglePointer.id === root.id && Date.now() - foldTogglePointer.at < 800;
+    const keyboardOk = foldBtn === document.activeElement || foldBtn.contains(document.activeElement);
+    if (!pointerOk && !keyboardOk) return true;
+    foldTogglePointer = { id: "", at: 0 };
+    toggleJournalFold(root.id);
+    return true;
+  }
+
+  if (isCurrentJournalArchived() && isArchivedJournalWriteTarget(node)) {
+    event.preventDefault();
+    event.stopPropagation();
+    event._nichiTodayHandled = true;
+    return true;
+  }
+  if (isCurrentJournalArchived()) return false;
 
   if (node.closest("#btnAwarePrompts")) {
     handled();
@@ -14896,19 +14925,6 @@ function handleTodayPointerClick(event) {
   if (node.closest("#btnBodyCoach")) {
     handled();
     catchAsync(() => generateBodyCoach(), "身心建議還沒整理好");
-    return true;
-  }
-  const foldBtn = node.closest("[data-journal-fold]");
-  if (foldBtn) {
-    if (node.closest(".journal-fold__panel")) return false;
-    const root = foldBtn.closest(".journal-fold");
-    handled();
-    if (!root?.id) return true;
-    const pointerOk = foldTogglePointer.id === root.id && Date.now() - foldTogglePointer.at < 800;
-    const keyboardOk = foldBtn === document.activeElement || foldBtn.contains(document.activeElement);
-    if (!pointerOk && !keyboardOk) return true;
-    foldTogglePointer = { id: "", at: 0 };
-    toggleJournalFold(root.id);
     return true;
   }
   const nextThink = node.closest("[data-think-guide-next]");

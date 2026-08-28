@@ -48,8 +48,8 @@ assert(app.includes("NichiTaskSidebar") && html.includes("lib/task-sidebar.js"),
 assert(css.includes("complete-confirm-actions"), "CASE AC：confirm 按鈕排版");
 assert(!app.includes("CREATE TABLE") && !app.includes("ALTER TABLE"), "CASE AE：無 schema");
 assert(!html.includes("billing") || app.includes("function trackProduct"), "CASE AF：billing 路徑未當這次主改");
-assert(html.includes("app.js?v=228"), "cache app.js v=228");
-assert(html.includes("app.css?v=195"), "cache app.css v=195");
+assert(html.includes("app.js?v=229"), "cache app.js v=229");
+assert(html.includes("app.css?v=196"), "cache app.css v=196");
 assert(html.includes("lib/review-merge.js?v=7"), "cache review-merge v=7");
 
 assert(reviewIsFinalized({ completedAt: "2026-08-01T10:00:00.000Z" }) === true, "CASE X：有 completedAt 即完成");
@@ -103,5 +103,25 @@ assert(app.includes("scheduleJournalAutosave.timer = setTimeout"), "debounce tim
 assert(app.includes(", 900)"), "autosave debounce 900ms");
 assert(html.includes("data-journal-mode=\"quick\"") && html.includes("data-journal-mode=\"deep\""), "CASE 二十二：兩種模式仍在");
 assert(app.includes("完成快速復盤") && app.includes("完成今日復盤"), "快速／深度完成 CTA 文案仍在");
+
+const clickFnStart = app.indexOf("function handleTodayPointerClick");
+const clickFnEnd = app.indexOf("\nfunction ", clickFnStart + 10);
+const clickFn = app.slice(clickFnStart, clickFnEnd > clickFnStart ? clickFnEnd : clickFnStart + 4000);
+const foldToggleAt = clickFn.indexOf("toggleJournalFold(");
+const archivedWriteAt = clickFn.indexOf("isArchivedJournalWriteTarget");
+assert(foldToggleAt > 0, "CASE B：click handler 仍走 accordion toggle");
+assert(archivedWriteAt > 0 && foldToggleAt < archivedWriteAt, "completed + archived ≠ accordion disabled：fold 在 write guard 之前");
+assert(app.includes("function isArchivedJournalReadTarget"), "閱讀型互動獨立判斷");
+assert(app.includes("function isArchivedJournalWriteTarget"), "寫入型互動獨立判斷");
+assert(!/function toggleJournalFold\([\s\S]{0,180}rejectArchivedJournalWrite/.test(app), "toggleJournalFold 不被 write guard 擋住");
+assert(!/function toggleJournalFold\([\s\S]{0,180}isCurrentJournalArchived/.test(app), "toggleJournalFold 不檢查 archived");
+const noneStart = css.indexOf("#page-today.is-archived .mood-btn");
+const noneEnd = css.indexOf("#page-today.is-archived .journal-fold__toggle");
+const noneBlock = noneStart >= 0 && noneEnd > noneStart ? css.slice(noneStart, noneEnd) : "";
+assert(noneBlock.includes("pointer-events: none"), "archived 仍鎖 write controls");
+assert(!noneBlock.includes(".journal-fold__toggle"), "archived pointer-events none 不套 accordion trigger");
+assert(!noneBlock.includes(".journal-fold {"), "archived 不整張 card pointer-events none");
+assert(css.includes("#page-today.is-archived .journal-fold__toggle"), "archived accordion 明確可點");
+assert(html.includes('data-journal-fold') && html.includes("id=\"section-thanks\"") && html.includes("id=\"section-exec\""), "CASE A：01～06 fold trigger 仍在");
 
 console.log("journal complete / autosave tests passed");
