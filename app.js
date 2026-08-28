@@ -648,6 +648,21 @@ function taskDisplayParts(task) {
   return resolveExecTitleDetail(storedTitle, storedDetail && storedDetail !== storedTitle ? storedDetail : "", []);
 }
 
+function taskSidebarApi() {
+  return (typeof window !== "undefined" && window.NichiTaskSidebar) || {};
+}
+
+function sidebarTodayIso() {
+  return toInputDate(new Date());
+}
+
+function sidebarPresentTask(task) {
+  const parts = taskDisplayParts(task);
+  const api = taskSidebarApi();
+  if (typeof api.presentLegacyTitle === "function") return api.presentLegacyTitle(parts, task);
+  return parts;
+}
+
 function findTaskBySourceKey(key) {
   if (!key) return null;
   return getTasks().find((task) => task.sourceKey === key) || null;
@@ -13101,7 +13116,9 @@ function libraryFullDateLabel(iso) {
 }
 
 function librarySourceMeta(item) {
-  const src = String((item && item.source) || "").trim();
+  const api = taskSidebarApi();
+  const raw = String((item && item.source) || "").trim();
+  const src = typeof api.presentLegacySource === "function" ? api.presentLegacySource(raw) : raw;
   const full = libraryFullDateLabel(item && (item.date || item.createdAt));
   if (full && src) return `來自 ${full} ${src}`;
   if (full) return `來自 ${full}`;
@@ -13159,16 +13176,26 @@ function setTaskAddOpen(open) {
   }
 }
 
-function renderTaskItem(task) {
+function renderTaskFocusAction(task, todayIso) {
+  if (task.status !== "doing") return "";
+  const api = taskSidebarApi();
+  const on = typeof api.isTodayFocus === "function" ? api.isTodayFocus(task, todayIso) : false;
+  const id = escapeHtml(task.id);
+  return `<button class="lib-act__focus${on ? " is-on" : ""}" data-task-focus="${id}" type="button">${on ? "今天 ✓" : "今天做"}</button>`;
+}
+
+function renderTaskItem(task, options = {}) {
   const done = task.status === "done";
   const later = task.status === "later";
-  const parts = taskDisplayParts(task);
+  const parts = sidebarPresentTask(task);
   const title = parts.title || String(task.detail || "").trim();
   const detail = parts.detail && parts.detail !== title ? parts.detail : "";
   const meta = librarySourceMeta(task);
   const id = escapeHtml(task.id);
+  const todayIso = options.todayIso || sidebarTodayIso();
+  const compact = Boolean(options.compact);
   return `
-    <article class="lib-act${done ? " is-done" : ""}${later ? " is-later" : ""}">
+    <article class="lib-act${done ? " is-done" : ""}${later ? " is-later" : ""}${compact ? " lib-act--focus" : ""}">
       <label class="lib-act__check">
         <input type="checkbox" data-task-toggle="${id}" ${done ? "checked" : ""} aria-label="標記完成" />
         <span class="lib-dot" aria-hidden="true"></span>
@@ -13177,18 +13204,19 @@ function renderTaskItem(task) {
         <div class="lib-act__top">
           <p class="lib-act__title">${escapeHtml(title)}</p>
           <div class="lib-act__ops" role="group" aria-label="行動操作">
+            ${renderTaskFocusAction(task, todayIso)}
             ${renderTaskMoveAction(task)}
             <button class="lib-act__del" data-task-delete="${id}" type="button" aria-label="刪除這項行動">×</button>
           </div>
         </div>
         ${detail ? `<p class="lib-act__detail">${escapeHtml(detail)}</p>` : ""}
-        ${meta ? `<p class="lib-act__meta">${escapeHtml(meta)}</p>` : ""}
+        ${compact ? "" : meta ? `<p class="lib-act__meta">${escapeHtml(meta)}</p>` : ""}
       </div>
     </article>
   `;
 }
 
-function renderLibraryTaskGroups(items) {
+function renderLibraryTaskGroups(items, todayIso) {
   const grouped = new Map();
   items.forEach((task) => {
     const iso = task.date || String(task.createdAt || "").slice(0, 10) || "";
@@ -13199,9 +13227,26 @@ function renderLibraryTaskGroups(items) {
     .sort((a, b) => String(b[0]).localeCompare(String(a[0])))
     .map(([iso, rows]) => {
       const label = taskGroupDateLabel(iso);
-      return `${label ? `<p class="lib-day">${escapeHtml(label)}</p>` : ""}${rows.map((task) => renderTaskItem(task)).join("")}`;
+      return `${label ? `<p class="lib-day">${escapeHtml(label)}</p>` : ""}${rows
+        .map((task) => renderTaskItem(task, { todayIso }))
+        .join("")}`;
     })
     .join("");
+}
+
+function renderTodayFocusSection(focused, todayIso) {
+  const count = focused.length;
+  const items = focused
+    .map((task) => renderTaskItem(task, { todayIso, compact: true }))
+    .join("");
+  return `<section class="task-focus">
+    <div class="task-focus__head">
+      <h3 class="task-focus__title">今天要做</h3>
+      <p class="task-focus__count">${count} / 3</p>
+    </div>
+    ${items}
+    <p class="task-focus__hint">今天先完成這些就好。</p>
+  </section>`;
 }
 
 function renderTasks() {
@@ -13225,13 +13270,27 @@ function renderTasks() {
     return;
   }
 
-  const buckets = {
-    later: { items: later, empty: "目前沒有待開始的行動。" },
-    done: { items: done, empty: "還沒有完成的行動。" },
-    doing: { items: doing, empty: "目前沒有進行中的行動。" },
-  };
-  const bucket = buckets[filter];
-  list.innerHTML = bucket.items.length ? renderLibraryTaskGroups(bucket.items) : libEmptyHtml(bucket.empty);
+  if (filter === "later") {
+    list.innerHTML = later.length ? renderLibraryTaskGroups(later) : libEmptyHtml("目前沒有待開始的行動。");
+    return;
+  }
+  if (filter === "done") {
+    list.innerHTML = done.length ? renderLibraryTaskGroups(done) : libEmptyHtml("還沒有完成的行動。");
+    return;
+  }
+
+  const api = taskSidebarApi();
+  const todayIso = sidebarTodayIso();
+  const focused = typeof api.focusedDoingTasks === "function" ? api.focusedDoingTasks(doing, todayIso) : [];
+  const rest = typeof api.otherDoingTasks === "function" ? api.otherDoingTasks(doing, todayIso) : doing;
+  if (!doing.length) {
+    list.innerHTML = libEmptyHtml("目前沒有進行中的行動。");
+    return;
+  }
+  const restHtml = rest.length
+    ? `${focused.length ? `<p class="task-focus__rest">其他進行中</p>` : ""}${renderLibraryTaskGroups(rest, todayIso)}`
+    : "";
+  list.innerHTML = `${renderTodayFocusSection(focused, todayIso)}${restHtml}`;
 }
 
 function setTaskFilter(filter) {
@@ -13247,14 +13306,36 @@ function setTaskFilter(filter) {
 function setTaskStatus(id, status) {
   const allowed = new Set(["doing", "later", "done"]);
   const next = allowed.has(status) ? status : "doing";
+  const api = taskSidebarApi();
+  const prev = getTasks().find((task) => task.id === id);
+  const prevStatus = prev && prev.status;
   saveTasks(
-    getTasks().map((task) =>
-      task.id === id ? { ...task, status: next, updatedAt: new Date().toISOString() } : task
-    )
+    getTasks().map((task) => {
+      if (task.id !== id) return task;
+      const patched =
+        typeof api.clearFocusLeavingDoing === "function" ? api.clearFocusLeavingDoing(task, next) : task;
+      return { ...patched, status: next, updatedAt: new Date().toISOString() };
+    })
   );
   setTaskFilter(next);
   renderTasks();
+  if (prevStatus !== "done" && next === "done") {
+    showToast((api && api.COMPLETE_TOAST) || "完成了。你正在把想法慢慢變成生活。");
+  }
   if (next === "done") trackProduct("action_card_completed", { source: "sidebar" });
+}
+
+function toggleTaskTodayFocus(id) {
+  const api = taskSidebarApi();
+  if (typeof api.toggleTodayFocus !== "function") return;
+  const result = api.toggleTodayFocus(getTasks(), id, sidebarTodayIso(), new Date().toISOString());
+  if (result.reason === "limit") {
+    showToast(api.FOCUS_LIMIT_TOAST || "今天先完成 3 件就好。");
+    return;
+  }
+  if (!result.ok) return;
+  saveTasks(result.tasks);
+  renderTasks();
 }
 
 function setTaskDone(id, done) {
@@ -15502,7 +15583,13 @@ function bindEvents() {
       event.preventDefault();
       const to = statusBtn.dataset.to;
       setTaskStatus(statusBtn.dataset.taskStatus, to);
-      showToast(statusMoveToast(to));
+      if (to !== "done") showToast(statusMoveToast(to));
+      return;
+    }
+    const focusBtn = event.target.closest("[data-task-focus]");
+    if (focusBtn) {
+      event.preventDefault();
+      toggleTaskTodayFocus(focusBtn.dataset.taskFocus);
       return;
     }
     if (deleteBtn) {

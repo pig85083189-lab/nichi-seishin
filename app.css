@@ -8516,14 +8516,18 @@ summary [data-user-mark-field] {
 #page-sfm .lib-act__ops {
   display: flex;
   flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
-  gap: 10px;
+  gap: 8px 10px;
+  max-width: 100%;
   padding: 1px 0 0;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 #page-sfm .lib-act__move,
-#page-sfm .lib-act__del {
+#page-sfm .lib-act__del,
+#page-sfm .lib-act__focus {
   padding: 0;
   border: 0;
   background: transparent;
@@ -8546,8 +8550,81 @@ summary [data-user-mark-field] {
 }
 
 #page-sfm .lib-act__move:hover,
-#page-sfm .lib-act__del:hover {
+#page-sfm .lib-act__del:hover,
+#page-sfm .lib-act__focus:hover {
   color: #8a6a64;
+}
+
+#page-sfm .lib-act__focus {
+  color: #c4b4a6;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+#page-sfm .lib-act__focus.is-on {
+  color: #8a6a64;
+}
+
+.task-focus {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
+  margin: 6px 0 8px;
+  padding: 14px 2px 16px;
+  border-bottom: 1px solid #e8ddd0;
+}
+
+.task-focus__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 6px;
+}
+
+.task-focus__title {
+  margin: 0;
+  color: #806d5e;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.task-focus__count {
+  margin: 0;
+  color: #c4b4a6;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+.task-focus .lib-act--focus {
+  margin: 4px 0 0;
+  padding: 10px 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.task-focus .lib-act--focus + .lib-act--focus {
+  border-top: 1px solid #f0e6da;
+}
+
+.task-focus__hint {
+  margin: 10px 0 0;
+  color: #c4b4a6;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.task-focus__rest {
+  margin: 18px 0 2px;
+  color: #c4b4a6;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
 }
 
 #page-sfm .lib-add-label {
