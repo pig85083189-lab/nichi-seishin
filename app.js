@@ -16188,14 +16188,24 @@ function splashMotionReduced() {
   return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-const SPLASH_MIN_DURATION = 4000;
+const SPLASH_MIN_DURATION = 2000;
 
 function splashLeaveMs() {
-  return splashMotionReduced() ? 120 : 400;
+  return splashMotionReduced() ? 120 : 300;
 }
 
 function splashHoldMs() {
-  return Math.max(0, SPLASH_MIN_DURATION - splashLeaveMs());
+  return SPLASH_MIN_DURATION;
+}
+
+function waitForAppPaint() {
+  return new Promise((resolve) => {
+    const tick =
+      typeof requestAnimationFrame === "function"
+        ? requestAnimationFrame
+        : (fn) => window.setTimeout(fn, 16);
+    tick(() => tick(resolve));
+  });
 }
 
 function clearBootingChrome() {
@@ -16211,17 +16221,26 @@ function dismissSplash() {
   }
   if (splash.dataset.leaving === "1") return;
   splash.dataset.leaving = "1";
-  splash.classList.add("is-leaving");
-  splash.setAttribute("aria-hidden", "true");
-  const leaveMs = splashLeaveMs();
-  const finish = () => {
-    if (splash.parentNode) splash.remove();
-    clearBootingChrome();
+
+  const beginLeave = () => {
+    if (!splash.isConnected) {
+      clearBootingChrome();
+      return;
+    }
+    splash.classList.add("is-leaving");
+    splash.setAttribute("aria-hidden", "true");
+    const leaveMs = splashLeaveMs();
+    const finish = () => {
+      if (splash.parentNode) splash.remove();
+    };
+    splash.addEventListener("animationend", (event) => {
+      if (event.target === splash) finish();
+    });
+    window.setTimeout(finish, leaveMs + 80);
   };
-  splash.addEventListener("animationend", (event) => {
-    if (event.target === splash) finish();
-  });
-  window.setTimeout(finish, leaveMs + 80);
+
+  clearBootingChrome();
+  waitForAppPaint().then(beginLeave);
 }
 
 function tryDismissSplash() {

@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=209" />
+    <link rel="stylesheet" href="app.css?v=210" />
     <style>
       html.is-booting,
       html.is-booting body {
@@ -38,15 +38,17 @@
       }
       .splash {
         position: fixed;
-        inset: 0;
+        top: 0;
+        left: 0;
+        right: 0;
         z-index: 9999;
         display: flex;
         align-items: center;
         justify-content: center;
         width: 100%;
-        min-height: 100%;
-        min-height: 100dvh;
+        height: 100svh;
         min-height: 100svh;
+        max-height: 100svh;
         padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
         background: radial-gradient(ellipse at center, #3a322c 0%, #1a1613 52%, #110e0c 100%);
         pointer-events: none;
@@ -58,6 +60,7 @@
         place-items: center;
         width: 72vw;
         max-width: 510px;
+        transform: translateY(-1.8vh);
       }
       .splash__mark::before {
         content: "";
@@ -1237,6 +1240,6 @@
     <script src="lib/insight-highlight.js?v=5"></script>
     <script src="lib/user-mark.js?v=6"></script>
     <script src="lib/task-sidebar.js?v=1"></script>
-    <script src="app.js?v=242"></script>
+    <script src="app.js?v=243"></script>
   </body>
 </html>
