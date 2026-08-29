@@ -10,6 +10,7 @@ const {
   mergeExecutionChoiceBags,
   mergeJournalObjects,
   choicesLookSimilar,
+  insightExecutionFallbackOptions,
   EXEC_CHOICE_CUSTOM_ID,
   EXEC_CHOICE_CUSTOM_TEXT,
   EXEC_CHOICE_MAX_SELECTED,
@@ -33,6 +34,7 @@ const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
 const css = fs.readFileSync(path.join(root, "app.css"), "utf8");
 const analyticsClient = fs.readFileSync(path.join(root, "analytics.js"), "utf8");
 const analyticsServer = fs.readFileSync(path.join(root, "lib/analytics.js"), "utf8");
+const reviewJs = fs.readFileSync(path.join(root, "api/review.js"), "utf8");
 
 const longAction =
   "今晚 9:30 洗完澡後，把手機放到客廳充電，直接換上睡衣準備上床，不再打開任何需要動腦的訊息。";
@@ -43,9 +45,10 @@ const sleepOptions = [
   { id: "e3", text: "晚上 10 點後不再安排需要動腦的事情" },
 ];
 
-/* CASE A：04＋05 足夠時，prompt 要求直接給 3 個行動、不出問答 */
+/* CASE A：04＋05 足夠時，prompt 要求直接給行動、不出問答 */
 assert(EXECUTION_CHOICES_SYSTEM.includes("needFollowup 必須是 false"), "CASE A：足夠時禁止追問");
 assert(EXECUTION_CHOICES_SYSTEM.includes("不要再問一長串問題"), "CASE A：新版不是問答");
+assert(EXECUTION_CHOICES_SYSTEM.includes("不要為了看起來完整硬湊"), "CASE A：不要硬湊 3 個");
 assert(app.includes("executionContextEnough"), "CASE A：client 判斷 04／05 是否足夠");
 assert(app.includes("allowFollowup = !enough && !alreadyFollowed"), "CASE A：足夠時 client 忽略 followup");
 
@@ -64,6 +67,7 @@ const enoughPrompt = choicesUserPrompt({
 assert(enoughPrompt.includes("【05 核心覺察】"), "CASE A：06 讀 05 核心覺察");
 assert(enoughPrompt.includes("【04 勾選】"), "CASE A：06 讀 04 勾選");
 assert(enoughPrompt.includes("needFollowup=false"), "CASE A：足夠時直接給行動");
+assert(enoughPrompt.includes("不要為了看起來完整硬湊 3 個"), "CASE A：user prompt 也不硬湊");
 assert(!enoughPrompt.includes("人生願景"), "CASE A：06 不搶 07");
 
 /* CASE B：近義重複會被丟掉 */
@@ -220,6 +224,71 @@ assert(analyticsServer.includes("action_card_created"), "server 完成率事件�
 
 assert(choicesKind({ kind: "execution-choices" }) === "execution", "choicesKind 認得 execution");
 assert(hasMeaningfulExecutionChoices(emptyExecutionChoiceBag()) === false, "空 bag 不算有內容");
+
+const oneGrown = normalizeExecutionChoiceOptions([
+  {
+    id: "e1",
+    text: "記下真正不舒服的瞬間",
+    detail: "下次環境再讓你明顯不舒服時，寫下剛剛發生什麼、哪一個瞬間最受不了。",
+    kind: "observe",
+    horizon: "next",
+  },
+]);
+assert(oneGrown.length === 1, "品質優先：1 個完整行動也成立");
+assert(oneGrown[0].detail.includes("哪一個瞬間"), "detail 會被保留");
+assert(oneGrown[0].kind === "observe" && oneGrown[0].horizon === "next", "kind／horizon 是可選擴充，不是新 schema");
+const selectedGrown = selectedExecutionChoiceActions({ options: oneGrown, selectedIds: ["e1"] });
+assert(selectedGrown[0].detail.includes("下次環境"), "已選行動帶著同一份 detail");
+const legacyOnly = normalizeExecutionChoiceOptions([{ id: "e1", text: "今晚 9:30 洗完澡後就直接準備上床" }]);
+assert(legacyOnly.length === 1 && !legacyOnly[0].detail, "舊的只有 text 的 option 仍可讀");
+assert(EXECUTION_CHOICES_SYSTEM.includes("禁止因為一次情緒事件就叫使用者分手"), "重大決定不可直接下指令");
+assert(EXECUTION_CHOICES_SYSTEM.includes("自我照顧"), "自我照顧仍可用，但有條件");
+assert(app.includes("passthroughExecChoiceCheckItems"), "收下行動卡時沿用已選 title／detail，不另造一套");
+assert(app.includes("optionsList.length < 1"), "API／client 接受 1～3 個");
+const mergeJs = fs.readFileSync(path.join(root, "lib/review-merge.js"), "utf8");
+assert(mergeJs.includes("記下真正不舒服的瞬間"), "界線 fallback 不是感恩／靜坐");
+assert(mergeJs.includes("先推進卡住的那一件"), "工作 fallback 直接推進卡住的事");
+assert(app.includes("careOk") || app.includes("insightExecutionFallbackOptions"), "疲累才走自我照顧 fallback");
+assert(app.includes("insightExecutionFallbackOptions"), "fallback 與 History／Execution 共用同一組 insight actions");
+assert(reviewJs.includes("需求與模式") && reviewJs.includes("判斷點"), "深度思考追問改為服務下一步");
+assert(reviewJs.includes("不要為了輪數再問一次感受"), "挖到核心後不要重複問");
+
+const unseenBlob =
+  "我今天覺得很努力，但重要的人沒有看見。感到失落、委屈。我平常習慣告訴自己「我自己知道就好」，但其實仍然希望被看見。";
+const unseenActions = insightExecutionFallbackOptions(unseenBlob);
+assert(unseenActions.length >= 1 && unseenActions.length <= 2, `被看見案例不要硬湊 3 個，實際 ${unseenActions.length}`);
+unseenActions.forEach((item, index) => {
+  assert(item.text && item.detail, `被看見案例 action ${index + 1} 必須有 title + detail`);
+  const blob = `${item.text}${item.detail}`;
+  assert(!/感恩|靜坐|早睡|相信自己/.test(blob), `被看見案例不可變成感恩／靜坐／早睡／相信自己：${item.text}`);
+});
+assert(
+  unseenActions.some((item) => /看見|說|表達/.test(`${item.text}${item.detail}`)) &&
+    unseenActions.some((item) => /觀察|自己知道就好|需求/.test(`${item.text}${item.detail}`)),
+  "被看見案例應同時碰到表達／被看見，以及觀察／需求確認"
+);
+const unseenBag = { options: unseenActions, selectedIds: unseenActions.map((item) => item.id) };
+const unseenSelected = selectedExecutionChoiceActions(unseenBag);
+assert(unseenSelected.length === unseenActions.length, "Execution 讀同一組已選 action");
+assert(
+  unseenSelected.every((item, index) => item.text === unseenActions[index].text && item.detail === unseenActions[index].detail),
+  "Execution 的 title／detail 與生成結果一致"
+);
+const unseenPrompt = choicesUserPrompt({
+  mode: "choices",
+  kind: "execution",
+  context: {
+    awarenessLine: "我表面上告訴自己「我自己知道就好」，但其實仍然希望被看見。",
+    awarenessSeen: "我發現自己平常習慣把被看見的需要藏起來。",
+    thinkSelected: ["我很努力，但重要的人沒有看見"],
+    thinkCloseAwareness: "真正卡住的不是不夠努力，而是我渴望被看見，卻習慣告訴自己不用被看見。",
+    event: "今天覺得很努力，但重要的人沒有看見，感到失落、委屈。",
+    mood: "委屈",
+  },
+});
+assert(unseenPrompt.includes("希望被看見") || unseenPrompt.includes("自己知道就好"), "06 會讀到被看見核心");
+assert(EXECUTION_CHOICES_SYSTEM.includes("渴望被看見"), "system 把被看見當核心，而不是自我打氣");
+assert(EXECUTION_CHOICES_SYSTEM.includes("相信自己"), "system 禁止只叫使用者相信自己");
 
 assert(html.includes("把覺察變成下一步，不求做很多，只留下明天真正做得到的行動。"), "使用說明 06 是行動，不是問答");
 assert(!html.includes("AI 會依今天的內容問你 1 題"), "使用說明不再寫舊問答");

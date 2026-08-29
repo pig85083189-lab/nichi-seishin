@@ -632,11 +632,14 @@ function execRawSourcesFrom(journal) {
   const data = journal && typeof journal === "object" ? journal : {};
   const bag = data.executionChoices || state.executionChoices;
   const selected = selectedExecutionChoiceActions(bag).map((item) => item.text);
-  const options = Array.isArray(bag && bag.options) ? bag.options.map((item) => String(item && item.text ? item.text : "").trim()) : [];
+  const selectedDetails = selectedExecutionChoiceActions(bag).map((item) => String(item && item.detail ? item.detail : "").trim()).filter(Boolean);
+  const options = Array.isArray(bag && bag.options)
+    ? bag.options.flatMap((item) => [String(item && item.text ? item.text : "").trim(), String(item && item.detail ? item.detail : "").trim()])
+    : [];
   const custom = String((bag && bag.custom) || "").trim();
   const step = String(data.smallestStep || "").trim();
   const checks = Array.isArray(data.executionChecks) ? data.executionChecks : [];
-  return [...selected, ...options, custom, step, ...checks].map((item) => String(item || "").trim()).filter(Boolean);
+  return [...selected, ...selectedDetails, ...options, custom, step, ...checks].map((item) => String(item || "").trim()).filter(Boolean);
 }
 
 function flattenExecSentence(text, extra) {
@@ -2488,10 +2491,23 @@ function normalizeExecutionChoiceBag(raw, options) {
   const api = reviewMergeApi();
   if (typeof api.normalizeExecutionChoiceBag === "function") return api.normalizeExecutionChoiceBag(raw, options);
   const src = raw && typeof raw === "object" ? raw : {};
-  const optionsList = Array.isArray(src.options) ? src.options.map((item, index) => ({
-    id: String(item && item.id ? item.id : `e${index + 1}`),
-    text: String(item && (item.text || item.label) ? item.text || item.label : item || "").trim(),
-  })).filter((item) => item.text) : [];
+  const optionsList = Array.isArray(src.options) ? src.options.map((item, index) => {
+    const text = String(item && (item.text || item.label) ? item.text || item.label : item || "").trim();
+    const next = {
+      id: String(item && item.id ? item.id : `e${index + 1}`),
+      text,
+    };
+    const extras = typeof api.executionChoiceOptionExtras === "function"
+      ? api.executionChoiceOptionExtras(item, text)
+      : {};
+    if (extras.detail) next.detail = extras.detail;
+    else if (item && item.detail) next.detail = String(item.detail).trim();
+    if (extras.kind) next.kind = extras.kind;
+    else if (item && item.kind) next.kind = item.kind;
+    if (extras.horizon) next.horizon = extras.horizon;
+    else if (item && item.horizon) next.horizon = item.horizon;
+    return next;
+  }).filter((item) => item.text) : [];
   const optionIds = new Set(optionsList.map((item) => item.id));
   const hasIdsField = Array.isArray(src.selectedIds);
   const rawIds = hasIdsField && src.selectedIds.length
@@ -2535,7 +2551,11 @@ function selectedExecutionChoiceActions(value) {
     }
     const match = bag.options.find((item) => item.id === id);
     const text = match ? String(match.text || "").trim() : "";
-    return text ? { id, text } : null;
+    if (!text) return null;
+    const extras = typeof api.executionChoiceOptionExtras === "function"
+      ? api.executionChoiceOptionExtras(match, text)
+      : {};
+    return { id, text, ...extras };
   }).filter(Boolean);
 }
 
@@ -2546,11 +2566,22 @@ function selectedExecutionChoiceText(value) {
   return actions[0] ? actions[0].text : "";
 }
 
+function serializeExecutionChoiceOption(item) {
+  const next = {
+    id: item && item.id ? item.id : "",
+    text: item && item.text ? item.text : "",
+  };
+  if (item && item.detail) next.detail = item.detail;
+  if (item && item.kind) next.kind = item.kind;
+  if (item && item.horizon) next.horizon = item.horizon;
+  return next;
+}
+
 function serializeExecutionChoiceBag(raw) {
   const bag = normalizeExecutionChoiceBag(raw);
   return {
     sourceSig: bag.sourceSig,
-    options: bag.options.map((item) => ({ id: item.id, text: item.text })),
+    options: bag.options.map((item) => serializeExecutionChoiceOption(item)),
     selectedId: bag.selectedId,
     selectedIds: Array.isArray(bag.selectedIds) ? bag.selectedIds.slice() : [],
     custom: bag.custom,
@@ -6716,7 +6747,7 @@ function buildExecutionCheckItems(journal) {
   const step = String(journal.smallestStep || "").trim();
   if (usesExecutionChoiceUi(journal)) {
     selectedExecutionChoiceActions((journal && journal.executionChoices) || state.executionChoices).forEach((action) => {
-      pushUniqueExec(items, action.text, "", EXECUTION_CARD_MAX);
+      pushUniqueExec(items, action.text, action.detail || "", EXECUTION_CARD_MAX);
     });
     return items.slice(0, EXECUTION_CARD_MAX);
   }
@@ -6975,11 +7006,20 @@ function alignExecChoiceCheckItems(remoteRaw, actions) {
       if (index < 0) index = remote.findIndex((_, i) => !used.has(i));
       if (index >= 0) used.add(index);
       const match = index >= 0 ? remote[index] : null;
-      let detail = match ? String(match.detail || "").trim() : "";
+      const fromAction = String(action && action.detail ? action.detail : "").trim();
+      let detail = fromAction || (match ? String(match.detail || "").trim() : "");
       if (detail === text) detail = "";
       return { title: text, detail };
     })
     .filter(Boolean);
+}
+
+function passthroughExecChoiceCheckItems(actions) {
+  const items = [];
+  (Array.isArray(actions) ? actions : []).forEach((action) => {
+    pushUniqueExec(items, action && action.text, action && action.detail, EXECUTION_CARD_MAX);
+  });
+  return items;
 }
 
 function addExecutionCheckItemsToSidebar(items) {
@@ -7147,6 +7187,30 @@ async function generateJournalChecklist(kind, options = {}) {
       ? JSON.stringify({ ids: execChoiceBag.selectedIds, custom: execChoiceBag.custom })
     : checklistSignature(answers);
   if (options.auto && state.journalMeta[isAware ? "awarenessAiSig" : "executionAiSig"] === sig) return;
+
+  if (!isAware && usingExecChoices) {
+    const items = passthroughExecChoiceCheckItems(execActions);
+    if (!items.length) {
+      if (!options.auto) showToast("先選明天的小行動，再收下行動卡。");
+      return;
+    }
+    const token = (state.checklistToken[kind] || 0) + 1;
+    state.checklistToken[kind] = token;
+    setChecklistLoading(kind, true);
+    try {
+      state.journalExecFocus = rewriteGeneratedExecFocus(items[0], items, journal.smallestStep, { keepFull: true });
+      applyGeneratedChecklist(kind, items, sig);
+      renderExecFocus(state.journalExecFocus, items);
+      addExecutionCheckItemsToSidebar(items);
+      showToast(items.length > 1 ? "行動卡已經整理好了。" : "行動卡已經整理好了。");
+      if (execChoiceBag.selectedIds.includes(execChoiceCustomId()) && String(execChoiceBag.custom || "").trim()) {
+        trackProduct("execution_custom_completed", { source: "checklist", mode: state.journalMode === "quick" ? "quick" : "deep" });
+      }
+    } finally {
+      if (state.checklistToken[kind] === token) setChecklistLoading(kind, false);
+    }
+    return;
+  }
 
   const token = (state.checklistToken[kind] || 0) + 1;
   state.checklistToken[kind] = token;
@@ -8268,7 +8332,7 @@ function renderThinkGuideHtml(insight) {
   }
   const current = Math.min(3, Math.max(1, guide.round || rounds.length || 1));
   const done = thinkGuideDone(guide);
-  const roles = ["感受", "意義", "看見自己"];
+  const roles = ["感受", "需求與模式", "判斷點"];
   const roundCards = rounds
     .map((item, index) => {
       const num = String(index + 1).padStart(2, "0");
@@ -9537,15 +9601,19 @@ function renderThinkChoiceResult(insight) {
 }
 
 function execStepActionsHtml(actions, date) {
-  const list = (Array.isArray(actions) ? actions : []).map((item) => String(item && item.text ? item.text : item || "").trim()).filter(Boolean);
+  const list = (Array.isArray(actions) ? actions : []).filter((item) => String(item && item.text ? item.text : item || "").trim());
   if (!list.length) return "";
   return `<div class="exec-step-list">${list
-    .map((text, index) => {
-      const chosen = text;
+    .map((item, index) => {
+      const chosen = String(item && item.text ? item.text : item || "").trim();
+      const detail = String(item && item.detail ? item.detail : "").trim();
       const field = index === 0 ? "exec.smallestStep" : `exec.selected.${index}`;
       return `<div class="exec-step-list__item">
         <span class="exec-step-list__num">${String(index + 1).padStart(2, "0")}</span>
-        ${markableP(chosen, field, "exec-step-list__text", date)}
+        <div class="exec-step-list__copy">
+          ${markableP(chosen, field, "exec-step-list__text", date)}
+          ${detail && detail !== chosen ? `<p class="exec-step-list__detail">${escapeHtml(detail)}</p>` : ""}
+        </div>
       </div>`;
     })
     .join("")}</div>`;
@@ -9659,7 +9727,10 @@ function renderExecutionChoices(bag) {
             <button type="button" class="choice-opt${on ? " is-on" : ""}${item.custom ? " choice-opt--none" : ""}" data-choice-id="${escapeHtml(item.id)}" data-choice-kind="execution" role="checkbox" aria-checked="${on ? "true" : "false"}">
               <span class="choice-opt__row">
                 <span class="choice-opt__box" aria-hidden="true"></span>
-                <span class="choice-opt__text">${escapeHtml(item.text)}</span>
+                <span class="choice-opt__copy">
+                  <span class="choice-opt__text">${escapeHtml(item.text)}</span>
+                  ${item.detail ? `<span class="choice-opt__detail">${escapeHtml(item.detail)}</span>` : ""}
+                </span>
               </span>
             </button>
           `;
@@ -10091,38 +10162,15 @@ function localExecutionChoiceFallbacks(journal) {
   ]
     .filter(Boolean)
     .join(" ");
-  const candidates = [];
-  if (/睡|床|失眠|熬夜|休息|累|疲/.test(blob)) {
-    candidates.push(
-      { id: "e1", text: "今晚 9:30 洗完澡後就直接準備上床" },
-      { id: "e2", text: "睡前 30 分鐘把手機放到床以外的地方" },
-      { id: "e3", text: "晚上 10 點後不再安排需要動腦的事情" }
-    );
-  } else if (/老公|伴侶|女兒|家人|關係|吵架|溝通|對方/.test(blob)) {
-    candidates.push(
-      { id: "e1", text: "明天主動說一句今天真正想說的話" },
-      { id: "e2", text: "情緒上來時先停 10 秒再回應" },
-      { id: "e3", text: "安排 10 分鐘好好聽對方說話" }
-    );
-  } else if (/工作|任務|專案|截止|開會|拖延|忙碌/.test(blob)) {
-    candidates.push(
-      { id: "e1", text: "明天先做 15 分鐘最重要的那件事" },
-      { id: "e2", text: "開始前先關掉通知 30 分鐘" },
-      { id: "e3", text: "今晚先寫下明天做到哪裡就算過關" }
-    );
-  } else {
-    candidates.push(
-      { id: "e1", text: "明天用 10 分鐘只做一件跟今天看見的有關的小事" },
-      { id: "e2", text: "開始前先把會分心的東西放到手搆不到的地方" },
-      { id: "e3", text: "今晚先寫下明天做到哪一步就算完成" }
-    );
-  }
   const api = reviewMergeApi();
+  const candidates =
+    typeof api.insightExecutionFallbackOptions === "function" ? api.insightExecutionFallbackOptions(blob) : [];
   const lookSimilar = typeof api.choicesLookSimilar === "function" ? api.choicesLookSimilar.bind(api) : () => false;
+  const extras = typeof api.executionChoiceOptionExtras === "function" ? api.executionChoiceOptionExtras.bind(api) : () => ({});
   const items = [];
   candidates.forEach((item) => {
     if (items.some((entry) => lookSimilar(entry.text, item.text))) return;
-    items.push(item);
+    items.push({ id: item.id, text: item.text, ...extras(item, item.text) });
   });
   return items.slice(0, 3);
 }
@@ -10142,7 +10190,7 @@ async function generateExecutionChoices(options = {}) {
   }
   const existing = normalizeExecutionChoiceBag(state.executionChoices);
   const followupAnswer = String(options.followupAnswer || "").trim();
-  if (!options.force && existing.options.length >= 3 && !followupAnswer) {
+  if (!options.force && existing.options.length >= 1 && !followupAnswer) {
     renderExecutionChoices(existing);
     return;
   }
@@ -10184,7 +10232,7 @@ async function generateExecutionChoices(options = {}) {
       return;
     }
     const optionsList = normalizeExecutionChoiceBag({ options: remote.options }).options;
-    if (optionsList.length < 3) throw new Error("今天的行動選項還沒準備好，請再試一次。");
+    if (optionsList.length < 1) throw new Error("今天的行動選項還沒準備好，請再試一次。");
     state.executionChoices = serializeExecutionChoiceBag({
       sourceSig: `${thanksTextFrom(journal)}\n${journal.event}\n${journal.mood}`,
       options: optionsList,
@@ -10216,7 +10264,7 @@ async function generateExecutionChoices(options = {}) {
       if (!options.auto) showToast("先補一個很短的問題，再整理明天的小行動。");
       return;
     }
-    if (fallback.length >= 3) {
+    if (fallback.length >= 1) {
       state.executionChoices = serializeExecutionChoiceBag({
         sourceSig: `${thanksTextFrom(journal)}\n${journal.event}\n${journal.mood}`,
         options: fallback,
@@ -14528,10 +14576,14 @@ function historyReadingActionsHtml(actions, date) {
   return `<div class="exec-step-list">${list
     .map((item, index) => {
       const text = String(item.text || "").trim();
+      const detail = String(item.detail || "").trim();
       const field = item.field || (index === 0 ? "exec.smallestStep" : `exec.selected.${index}`);
       return `<div class="exec-step-list__item">
         <span class="exec-step-list__num">${String(index + 1).padStart(2, "0")}</span>
-        ${markableP(text, field, "exec-step-list__text", date, item.highlights)}
+        <div class="exec-step-list__copy">
+          ${markableP(text, field, "exec-step-list__text", date, item.highlights)}
+          ${detail && detail !== text ? `<p class="exec-step-list__detail">${escapeHtml(detail)}</p>` : ""}
+        </div>
       </div>`;
     })
     .join("")}</div>`;

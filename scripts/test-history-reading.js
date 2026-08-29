@@ -224,4 +224,61 @@ assert(!journalSrc.includes('["顯化紀錄"'), "顯化不在五層摘要");
 assert(css.includes(".history-archive > summary::after"), "展開箭頭是 secondary control");
 assert(app.includes('setHistorySectionOpen(iso, "archive"'), "accordion 展開狀態可記住");
 
+const caseActionDetail = buildHistoryReading({
+  journal: {
+    event: "住在自己不喜歡的環境，覺得很痛苦，但又覺得沒有辦法改變，只能接受。",
+    insight: {
+      guide: {
+        awareness: "真正卡住的不是環境本身，而是我又一次告訴自己只能接受。",
+        selfSeen: "過去其他關係也曾出現只能接受，最後是撐到臨界點才離開。",
+      },
+    },
+    executionChoices: {
+      options: [
+        {
+          id: "e1",
+          text: "記下真正不舒服的瞬間",
+          detail: "下次環境再讓你明顯不舒服時，寫下剛剛發生什麼、哪一個瞬間最受不了。",
+        },
+      ],
+      selectedIds: ["e1"],
+    },
+  },
+});
+assert(caseActionDetail.actions.length === 1, "CASE G：④ 仍是已選行動，不另造摘要");
+assert(caseActionDetail.actions[0].text === "記下真正不舒服的瞬間", "CASE G：④ 標題就是深度思考收斂出的 action");
+assert(caseActionDetail.actions[0].detail.includes("哪一個瞬間"), "CASE G：④ 帶著同一份 detail");
+assert(app.includes("exec-step-list__detail"), "CASE G／H：History 與執行力都顯示 detail");
+assert(!app.includes("CREATE TABLE") && !app.includes("ALTER TABLE"), "CASE N：沒有 schema migration");
+
+const { insightExecutionFallbackOptions, selectedExecutionChoiceActions } = require("../lib/review-merge");
+const unseenSeenActions = insightExecutionFallbackOptions(
+  "我今天覺得很努力，但重要的人沒有看見。失落、委屈。我習慣告訴自己「我自己知道就好」，但其實仍然希望被看見。"
+);
+const unseenReading = buildHistoryReading({
+  journal: {
+    event: "今天很努力，但重要的人沒有看見。",
+    mood: "委屈",
+    insight: {
+      guide: {
+        awareness: "我表面上告訴自己我自己知道就好，但其實仍然希望被看見。",
+        selfSeen: "我發現自己習慣把被看見的需要藏起來。",
+      },
+    },
+    executionChoices: {
+      options: unseenSeenActions,
+      selectedIds: unseenSeenActions.map((item) => item.id),
+    },
+  },
+});
+const unseenSelected = selectedExecutionChoiceActions({
+  options: unseenSeenActions,
+  selectedIds: unseenSeenActions.map((item) => item.id),
+});
+assert(unseenReading.actions.length === unseenSelected.length, "被看見案例：History ④ 與 Execution 數量一致");
+unseenReading.actions.forEach((item, index) => {
+  assert(item.text === unseenSelected[index].text, "被看見案例：History ④ 標題與 Execution 相同");
+  assert(item.detail === unseenSelected[index].detail, "被看見案例：History ④ detail 與 Execution 相同");
+});
+
 console.log("history reading tests passed");
