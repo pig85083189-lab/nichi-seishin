@@ -31,7 +31,9 @@ assert(app.includes("persistArchivedUserMarks"), "userMarks 規則未拆");
 assert(app.includes("thinkVariant: think.thinkVariant"), "05 可讀 V2 variant");
 assert(app.includes("slice(-2)"), "05 只帶最後幾句使用者回答");
 assert(app.includes("choicesBusy?.think") && app.includes("choicesBusy?.thinkClose"), "request lock 在");
-assert(app.includes("thinkV2Closed(guide) && (guide.awareness || guide.selfSeen)"), "close 可重入");
+assert(app.includes("thinkV2Closed(guide) && (guide.awareness || guide.selfSeen"), "close 可重入");
+assert(app.includes("核心結論") && app.includes("我沒看見的問題") && app.includes("怎麼做可以更好"), "04 完成後三個固定區塊");
+assert(app.includes("close: {") && app.includes("coreConclusion"), "persist close 物件");
 assert(css.includes(".think-v2") && css.includes("overflow-wrap: anywhere"), "長問題可換行");
 assert(!app.includes("CREATE TABLE") && !reviewJs.includes("ALTER TABLE"), "schema 零修改");
 
@@ -63,10 +65,12 @@ const v2Aware = choicesUserPrompt({
     thinkSelected: ["就是身體累，不想分析。"],
     thinkCloseAwareness: "今天就是累了。",
     thinkCloseSelfSeen: "你說不想分析。",
+    thinkCloseBlindSpot: "目前沒有明顯的心理盲點，今天更像是真的累了。",
   },
 });
 assert(v2Aware.includes("【04 深度思考"), "05 仍讀 04");
-assert(v2Aware.includes("今天就是累了。"), "05 讀 V2 stuck");
+assert(v2Aware.includes("今天就是累了。"), "05 讀 V2 核心結論");
+assert(v2Aware.includes("不要把「我沒看見的問題」原句當成 05"), "05 不直接複製盲點");
 assert(v2Aware.includes("就是身體累，不想分析。"), "05 讀使用者自己說的");
 assert(!v2Aware.includes("尚未勾選"), "V2 不走勾選空狀態");
 
@@ -78,5 +82,23 @@ const reading = buildHistoryReading({
   },
 });
 assert(reading.stuck && reading.stuck.text.includes("熱"), "History ② 讀 V2 stuck");
+
+const readingClose = buildHistoryReading({
+  journal: {
+    event: "媽媽叫我搬出去。",
+    mood: "難過",
+    insight: {
+      guide: {
+        variant: "think-v2",
+        awareness: "舊 stuck 不該蓋過新 close。",
+        close: { coreConclusion: "真正卡住的是理解與同意不是同一件事。", blindSpot: "你在確認她有沒有聽懂。", improvementDirection: "先分開理解和同意。" },
+      },
+    },
+    awarenessResult: { line: "我看見自己一直在解釋。", seen: "我允許自己先停下來。" },
+    executionChoices: { options: [{ id: "e1", text: "問媽媽現在理解到哪", detail: "具體問一句", selected: true }], selectedIds: ["e1"] },
+  },
+});
+assert(readingClose.stuck && readingClose.stuck.text.includes("理解與同意"), "History ② 讀 coreConclusion");
+assert(readingClose.seen && !String(readingClose.seen.text || "").includes("你在確認她有沒有聽懂"), "History ③ 不直接用 blindSpot");
 
 console.log("think v2 wiring tests passed");

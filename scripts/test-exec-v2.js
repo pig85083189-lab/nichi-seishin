@@ -269,7 +269,8 @@ const prompt = choicesUserPrompt({
   },
 });
 assert(prompt.includes("【05 核心覺察】"), "讀 05");
-assert(prompt.includes("【04 真正卡住的】"), "讀 V2 stuck");
+assert(prompt.includes("【04 核心結論】"), "讀 V2 核心結論");
+assert(prompt.includes("不要原句當 action"), "06 不把改善方向當 action");
 assert(prompt.includes("已經跟媽媽說了"), "讀已做過");
 assert(prompt.includes("禁止把已經做過的事再當下一步"), "4. already-done rule");
 assert(!prompt.includes("人生願景"), "06 不搶願景");

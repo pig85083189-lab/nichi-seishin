@@ -75,7 +75,7 @@ assert(prompt.includes("媽媽叫我搬出去"), "11. 04 讀得到 03 原文");
 
 assert(thinkV2.looksKnownAnswerRestate("你希望媽媽理解你什麼？", { event: "我希望她理解我的感受" }, []), "12. 已說希望被理解不再問");
 assert(thinkV2.THINK_V2_ASK_SYSTEM.includes("答案會改變理解"), "13. information gain");
-assert(thinkV2.THINK_V2_CLOSE_SYSTEM.includes("可以怎麼變得更好"), "14. close 有 core + direction");
+assert(thinkV2.THINK_V2_CLOSE_SYSTEM.includes("怎麼做可以更好"), "14. close 有 core + direction");
 assert(thinkV2.THINK_V2_CLOSE_SYSTEM.includes("不是 checklist"), "15. 04 不搶 06");
 assert(app.includes("function generateExecDeepFinal"), "31. 06 Exec V2 仍在");
 assert(app.includes("executionSummary"), "31. executionSummary 仍在");

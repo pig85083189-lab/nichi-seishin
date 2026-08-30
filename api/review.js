@@ -2183,12 +2183,13 @@ ${picked}
 【04 深度思考】
 ${
   ctx.thinkVariant === "think-v2"
-    ? `核心：${[ctx.thinkCloseTitle, ctx.thinkCloseAwareness, ctx.thinkCloseSelfSeen].filter(Boolean).join("\n") || "尚未整理"}
-改善方向：${ctx.thinkCloseDirection || "未寫"}
+    ? `核心結論：${ctx.thinkCloseCore || ctx.thinkCloseAwareness || "尚未整理"}
+我沒看見的問題：${ctx.thinkCloseBlindSpot || "未寫"}
+改善方向：${ctx.thinkCloseImprovement || ctx.thinkCloseDirection || "未寫"}
 使用者自己說出的：${Array.isArray(ctx.thinkSelected) && ctx.thinkSelected.length ? ctx.thinkSelected.join("／") : "尚未寫"}
-仍待確認：${ctx.thinkCloseTakeaway || "沒有"}
 03 身心原文：${compactLine(ctx.bodyMindText || ctx.bodyNote, 160) || "未寫"}
-03 模型假設（非事實，不要重講）：${compactLine(ctx.bodyMindInsight, 80) || "無"}`
+03 模型假設（非事實，不要重講）：${compactLine(ctx.bodyMindInsight, 80) || "無"}
+不要把「我沒看見的問題」原句當成 05。05 只寫「經過今天，我真正看見了自己什麼」。`
     : `勾選：${Array.isArray(ctx.thinkSelected) && ctx.thinkSelected.length ? ctx.thinkSelected.map((item, index) => `${index + 1}. ${item}`).join("\n") : ctx.thinkNone ? "今天沒有特別符合我的選項" : "尚未勾選"}
 深度看見：${[ctx.thinkCloseTitle, ctx.thinkCloseAwareness, ctx.thinkCloseSelfSeen, ctx.thinkCloseTakeaway].filter(Boolean).join("\n") || "尚未整理"}`
 }
@@ -2655,7 +2656,17 @@ function formatThinkAwarePrompt(ctx) {
   const thinkOptions = Array.isArray(ctx.thinkOptions) ? ctx.thinkOptions.map((item) => String(item || "").trim()).filter(Boolean) : [];
   const thinkNone = Boolean(ctx.thinkNone);
   const v2 = String(ctx.thinkVariant || "") === "think-v2";
-  const thinkClose = [ctx.thinkCloseTitle, ctx.thinkCloseAwareness, ctx.thinkCloseSelfSeen, ctx.thinkCloseTakeaway]
+  const thinkClose = (
+    v2
+      ? [
+          ctx.thinkCloseCore || ctx.thinkCloseAwareness,
+          ctx.thinkCloseBlindSpot,
+          ctx.thinkCloseImprovement || ctx.thinkCloseDirection,
+          ctx.thinkCloseSelfSeen,
+          ctx.thinkCloseTakeaway,
+        ]
+      : [ctx.thinkCloseTitle, ctx.thinkCloseAwareness, ctx.thinkCloseSelfSeen, ctx.thinkCloseTakeaway]
+  )
     .map((item) => String(item || "").trim())
     .filter(Boolean);
   const awareSelected = Array.isArray(ctx.awarenessSelected) ? ctx.awarenessSelected.map((item) => String(item || "").trim()).filter(Boolean) : [];
@@ -2742,10 +2753,12 @@ ${avoidBlock}
 【04 深度思考｜可讀，但不要重複】
 ${
   ctx.thinkVariant === "think-v2"
-    ? `核心：
-${thinkAware.thinkClose}
+    ? `核心結論：${ctx.thinkCloseCore || ctx.thinkCloseAwareness || "尚未整理"}
+我沒看見的問題：${ctx.thinkCloseBlindSpot || "未寫"}
+改善方向：${ctx.thinkCloseImprovement || ctx.thinkCloseDirection || "未寫"}
 使用者自己說出的：
-${thinkAware.thinkPicked}`
+${thinkAware.thinkPicked}
+不要把「我沒看見的問題」原句當成 05 選項。`
     : `勾選：
 ${thinkAware.thinkPicked}
 選項：
@@ -3618,7 +3631,7 @@ module.exports = async function handler(req, res) {
       if (thinkV2.isThinkV2Request(body)) {
         if (thinkV2.thinkV2Step(body) === "close") {
           const closed = thinkV2.normalizeThinkV2Close(data, body);
-          if (!closed.stuck && !closed.seen) {
+          if (!closed.stuck && !closed.seen && !closed.coreConclusion) {
             res.status(502).json({ ok: false, error: "深度思考收束還沒整理好，請再試一次" });
             return;
           }

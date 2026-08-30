@@ -304,4 +304,30 @@ assert(v2Reading.happened.event.includes("好累"), "V2 History ① 仍是今日
 assert(v2Reading.stuck && v2Reading.stuck.text.includes("身體累"), "V2 History ② 讀 stuck");
 assert(v2Reading.seen && v2Reading.seen.field.startsWith("awareness."), "V2 History ③ 優先 05");
 
+const v2CloseReading = buildHistoryReading({
+  journal: {
+    thanksText: "今天撐完了",
+    event: "今天真的好累，什麼都不想想。",
+    mood: "疲憊",
+    insight: {
+      guide: {
+        variant: "think-v2",
+        awareness: "舊 stuck。",
+        close: {
+          coreConclusion: "今天就是身體累，不必再往深處解釋。",
+          blindSpot: "目前沒有明顯需要再往深處解讀的地方。",
+          improvementDirection: "先讓身體休息，而不是再分析原因。",
+        },
+      },
+    },
+    awarenessResult: {
+      line: "我看見自己今天只是累了。",
+      seen: "我允許自己先休息。",
+    },
+  },
+});
+assert(v2CloseReading.stuck && v2CloseReading.stuck.text.includes("不必再往深處"), "新 close 的 ② 讀 coreConclusion");
+assert(v2CloseReading.seen && v2CloseReading.seen.field.startsWith("awareness."), "新 close 的 ③ 仍優先 05");
+assert(!String(v2CloseReading.seen && v2CloseReading.seen.text || "").includes("再往深處解讀"), "③ 不把 blindSpot 當 05");
+
 console.log("history reading tests passed");

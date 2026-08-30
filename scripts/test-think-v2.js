@@ -26,7 +26,7 @@ assert(reviewJs.includes('body?.variant === "think-guide"'), "legacy think-guide
 assert(reviewJs.includes("thinkV2.isThinkV2Request"), "review 有獨立 V2 路由");
 assert(reviewJs.includes("CHOICES_THINK_SYSTEM"), "CURRENT 04 prompt 仍在");
 assert(!reviewJs.includes("CREATE TABLE") && !reviewJs.includes("ALTER TABLE"), "V2 不改 schema");
-assert(html.includes("app.js?v=251") && html.includes("app.css?v=218"), "cache 已 bump");
+assert(html.includes("app.js?v=252") && html.includes("app.css?v=218"), "cache 已 bump");
 
 assert(thinkV2.MIN_ROUNDS === 1 && thinkV2.MAX_ROUNDS === 3, "V2 最少 1 最多 3");
 assert(thinkV2.THINK_V2_ASK_SYSTEM.includes("【優先順序"), "ask 有優先順序");
@@ -180,6 +180,8 @@ assert(revived.readyToClose === true, "否定後換句話追同一假設要丟�
 
 const closed = thinkV2.normalizeThinkV2Close({ title: "被看見與失落", stuck: "失落和自己知道就好同時存在。", seen: "他說他不懷疑自己，只是希望被看見。", unknown: "" });
 assert(closed.stuck && closed.seen, "V2 close 仍有卡點與看見");
+assert(closed.coreConclusion === closed.stuck, "stuck 相容對到 coreConclusion");
+assert(closed.close.coreConclusion === closed.coreConclusion, "close 物件有寫入");
 assert(closed.unknown === "", "unknown 可以是空的");
 assert(closed.actions.length === 0, "V2 close 沒有行動");
 
@@ -195,7 +197,7 @@ const jClose = thinkV2.normalizeThinkV2Close(
     },
   }
 );
-assert(/還沒想清楚|有沒有選擇/.test(jClose.unknown), "J 的使用者未知必須留下");
+assert(/還沒想清楚|有沒有選擇/.test(`${jClose.unknown}${jClose.coreConclusion}`), "J 的使用者未知必須留下");
 
 const hClose = thinkV2.normalizeThinkV2Close({
   title: "被糾正",
@@ -281,8 +283,12 @@ const closeDir = thinkV2.normalizeThinkV2Close({
   direction: "下一次先確認彼此目前理解到哪裡，再決定要不要補解釋。",
 });
 assert(closeDir.direction.includes("理解"), "14. close 有改善方向");
+assert(closeDir.improvementDirection === closeDir.direction, "direction 相容對到 improvementDirection");
 assert(closeDir.actions.length === 0, "15. 04 不產出 06 checklist");
-assert(thinkV2.THINK_V2_CLOSE_SYSTEM.includes("direction"), "14. close prompt 有 direction");
+assert(thinkV2.THINK_V2_CLOSE_SYSTEM.includes("improvementDirection"), "14. close prompt 有 improvementDirection");
+assert(thinkV2.THINK_V2_CLOSE_SYSTEM.includes("核心結論"), "close 有核心結論");
+assert(thinkV2.THINK_V2_CLOSE_SYSTEM.includes("我沒看見的問題"), "close 有盲點");
+assert(thinkV2.THINK_V2_CLOSE_SYSTEM.includes("怎麼做可以更好"), "close 有改善方向");
 assert(thinkV2.THINK_V2_ASK_SYSTEM.includes("重新包裝成問題"), "12. ask 禁止重述已知");
 assert(thinkV2.MAX_ROUNDS === 3, "18. max rounds 不變");
 

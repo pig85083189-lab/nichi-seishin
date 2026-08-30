@@ -5720,7 +5720,20 @@ function emptyDeep() {
 }
 
 function emptyThinkGuide() {
-  return { round: 0, rounds: [], summary: "", awareness: "", selfSeen: "", takeaway: "", actions: [], title: "", highlights: {}, draftAnswer: "" };
+  return {
+    round: 0,
+    rounds: [],
+    summary: "",
+    awareness: "",
+    selfSeen: "",
+    takeaway: "",
+    actions: [],
+    title: "",
+    highlights: {},
+    draftAnswer: "",
+    direction: "",
+    close: { coreConclusion: "", blindSpot: "", improvementDirection: "" },
+  };
 }
 
 function journalVoiceHintHtml() {
@@ -6086,12 +6099,20 @@ function normalizeThinkGuide(raw) {
   const round = Number.isFinite(roundNum) ? Math.max(0, Math.min(4, Math.floor(roundNum))) : 0;
   const awareness = String(data.awareness || "").trim();
   const summary = String(data.summary || awareness || "").trim();
+  const storedClose = data.close && typeof data.close === "object" ? data.close : {};
+  const coreConclusion = String(
+    storedClose.coreConclusion || data.coreConclusion || data.stuck || awareness || summary || ""
+  ).trim();
+  const blindSpot = String(storedClose.blindSpot || data.blindSpot || "").trim();
+  const improvementDirection = String(
+    storedClose.improvementDirection || data.improvementDirection || data.direction || ""
+  ).trim();
   return {
     ...data,
     round: round || (summary ? 4 : rounds.length),
     rounds,
     summary,
-    awareness: awareness || summary,
+    awareness: awareness || summary || coreConclusion,
     selfSeen: String(data.selfSeen || data.self || "").trim(),
     takeaway: String(data.takeaway || data.line || "").trim(),
     actions: normalizeInsightList(data.actions, 2),
@@ -6100,6 +6121,8 @@ function normalizeThinkGuide(raw) {
     draftAnswer: String(data.draftAnswer || "").trim(),
     variant: String(data.variant || "").trim(),
     status: String(data.status || "").trim(),
+    direction: improvementDirection,
+    close: { coreConclusion, blindSpot, improvementDirection },
   };
 }
 
@@ -6107,7 +6130,12 @@ function thinkV2Closed(guide) {
   const data = normalizeThinkGuide(guide);
   if (data.variant !== "think-v2") return false;
   if (data.status === "closed") return true;
-  return Boolean(data.summary || data.awareness || data.selfSeen);
+  return Boolean(
+    data.summary ||
+      data.awareness ||
+      data.selfSeen ||
+      (data.close && data.close.coreConclusion)
+  );
 }
 
 function thinkGuideDone(guide) {
@@ -9916,21 +9944,41 @@ function renderThinkChoiceResult(insight) {
   const root = document.getElementById("thinkChoiceResult");
   if (!root) return;
   const guide = normalizeInsight(insight || state.journalInsight).guide || emptyThinkGuide();
-  const hasClose = Boolean(guide.awareness || guide.summary || guide.selfSeen || guide.takeaway || guide.direction);
+  const close = guide.close && typeof guide.close === "object" ? guide.close : {};
+  const coreConclusion = String(close.coreConclusion || guide.awareness || guide.summary || "").trim();
+  const blindSpot = String(close.blindSpot || "").trim();
+  const improvementDirection = String(close.improvementDirection || guide.direction || "").trim();
+  const hasClose = Boolean(
+    coreConclusion || blindSpot || improvementDirection || guide.selfSeen || guide.takeaway || guide.direction
+  );
   if (!hasClose) {
     root.innerHTML = "";
     return;
   }
   const v2 = guide.variant === "think-v2";
-  const sections = [
-    guide.awareness || guide.summary ? { kicker: v2 ? "今天真正值得看的" : "今天，這件事背後可能代表什麼", text: guide.awareness || guide.summary, kind: "awareness" } : null,
-    guide.selfSeen ? { kicker: v2 ? "今天我看見的" : "今天我看見的自己", text: guide.selfSeen, kind: "selfSeen" } : null,
-    guide.direction ? { kicker: v2 ? "可以怎麼變得更好" : "今日帶走的一句話", text: guide.direction, kind: "direction" } : null,
-    guide.takeaway ? { kicker: v2 ? "還想確認的" : "今日帶走的一句話", text: guide.takeaway, kind: "takeaway" } : null,
-  ].filter(Boolean);
+  const rawClose = ((insight || state.journalInsight || {}).guide || {}).close;
+  const hasStoredClose = Boolean(
+    rawClose &&
+      typeof rawClose === "object" &&
+      (rawClose.coreConclusion || rawClose.blindSpot || rawClose.improvementDirection)
+  );
+  const sections = v2
+    ? [
+        coreConclusion ? { kicker: "核心結論", text: coreConclusion, kind: "awareness" } : null,
+        blindSpot ? { kicker: "我沒看見的問題", text: blindSpot, kind: "blindSpot" } : null,
+        improvementDirection ? { kicker: "怎麼做可以更好", text: improvementDirection, kind: "direction" } : null,
+        !hasStoredClose && guide.selfSeen ? { kicker: "今天我看見的", text: guide.selfSeen, kind: "selfSeen" } : null,
+        !hasStoredClose && guide.takeaway ? { kicker: "還想確認的", text: guide.takeaway, kind: "takeaway" } : null,
+      ].filter(Boolean)
+    : [
+        guide.awareness || guide.summary ? { kicker: "今天，這件事背後可能代表什麼", text: guide.awareness || guide.summary, kind: "awareness" } : null,
+        guide.selfSeen ? { kicker: "今天我看見的自己", text: guide.selfSeen, kind: "selfSeen" } : null,
+        guide.direction ? { kicker: "今日帶走的一句話", text: guide.direction, kind: "direction" } : null,
+        guide.takeaway ? { kicker: "今日帶走的一句話", text: guide.takeaway, kind: "takeaway" } : null,
+      ].filter(Boolean);
   root.innerHTML = `
     <div class="think-choice-result aware-result">
-      ${guide.title ? renderConclusionCallout(guide.title, "think.title", "", fieldHighlightsOf(guide.highlights, "title")) : ""}
+      ${!v2 && guide.title ? renderConclusionCallout(guide.title, "think.title", "", fieldHighlightsOf(guide.highlights, "title")) : ""}
       ${sections
         .map(
           (item) => `<article class="aware-result__card">
@@ -10327,7 +10375,7 @@ function localThinkChoiceFallbacks(journal, avoid) {
 function thinkBitsFrom(journal) {
   const bag = normalizeChoiceBag((journal && journal.thinkChoices) || state.thinkChoices);
   const insight = (journal && journal.insight && typeof journal.insight === "object" ? journal.insight : null) || state.journalInsight || {};
-  const guide = insight.guide && typeof insight.guide === "object" ? insight.guide : {};
+  const guide = normalizeThinkGuide(insight.guide);
   const isV2 = String(guide.variant || "") === "think-v2";
   const v2Answers = (Array.isArray(guide.rounds) ? guide.rounds : [])
     .map((item) => String(item && item.answer || "").trim())
@@ -10339,10 +10387,13 @@ function thinkBitsFrom(journal) {
     none: isV2 ? false : Boolean(bag.none),
     options: isV2 ? [] : bag.options.map((item) => String(item.text || "").trim()).filter(Boolean),
     title: String(guide.title || insight.title || "").trim(),
-    awareness: String(guide.awareness || guide.summary || "").trim(),
+    awareness: String((guide.close && guide.close.coreConclusion) || guide.awareness || guide.summary || "").trim(),
     selfSeen: String(guide.selfSeen || "").trim(),
     takeaway: String(guide.takeaway || "").trim(),
-    direction: String(guide.direction || "").trim(),
+    direction: String((guide.close && guide.close.improvementDirection) || guide.direction || "").trim(),
+    coreConclusion: String((guide.close && guide.close.coreConclusion) || guide.awareness || guide.summary || "").trim(),
+    blindSpot: String((guide.close && guide.close.blindSpot) || "").trim(),
+    improvementDirection: String((guide.close && guide.close.improvementDirection) || guide.direction || "").trim(),
     thinkVariant: isV2 ? "think-v2" : "",
   };
 }
@@ -10371,6 +10422,9 @@ function priorThinkAwareContext(journal) {
     thinkCloseSelfSeen: think.selfSeen,
     thinkCloseTakeaway: think.takeaway,
     thinkCloseDirection: think.direction,
+    thinkCloseCore: think.coreConclusion,
+    thinkCloseBlindSpot: think.blindSpot,
+    thinkCloseImprovement: think.improvementDirection,
     thinkVariant: think.thinkVariant,
     awarenessSelected: aware.selected,
     awarenessNone: aware.none,
@@ -10430,6 +10484,10 @@ async function generateAwarenessChoices(options = {}) {
         thinkCloseAwareness: think.awareness,
         thinkCloseSelfSeen: think.selfSeen,
         thinkCloseTakeaway: think.takeaway,
+        thinkCloseDirection: think.direction,
+        thinkCloseCore: think.coreConclusion,
+        thinkCloseBlindSpot: think.blindSpot,
+        thinkCloseImprovement: think.improvementDirection,
         thinkVariant: think.thinkVariant,
       }),
       progress: { streak: collectGrowthProgress().streak },
@@ -10669,8 +10727,11 @@ function renderThinkV2() {
       </article>`;
   }
   root.innerHTML = `<div class="think-v2 think-guide">${doneCards}${active}</div>`;
-  paintInternalModelDebug(root, state.internalModelDebug && state.internalModelDebug.think);
   renderThinkChoiceResult(state.journalInsight);
+  paintInternalModelDebug(
+    closed ? document.getElementById("thinkChoiceResult") || root : root,
+    state.internalModelDebug && state.internalModelDebug.think
+  );
 }
 
 async function generateThinkV2Ask(options = {}) {
@@ -10791,7 +10852,7 @@ async function submitThinkV2Answer(options = {}) {
 async function generateThinkV2Close(options = {}) {
   if (rejectArchivedJournalWrite(options)) return;
   const guide = normalizeThinkGuide((state.journalInsight || {}).guide);
-  if (thinkV2Closed(guide) && (guide.awareness || guide.selfSeen)) {
+  if (thinkV2Closed(guide) && (guide.awareness || guide.selfSeen || (guide.close && guide.close.coreConclusion))) {
     renderThinkV2();
     return;
   }
@@ -10835,18 +10896,29 @@ async function generateThinkV2Close(options = {}) {
       },
     });
     if (state.choicesToken.thinkClose !== token) return;
-    const stuck = String(remote.stuck || remote.awareness || "").trim();
+    const core = String(remote.coreConclusion || remote.stuck || remote.awareness || "").trim();
     const seen = String(remote.seen || remote.selfSeen || "").trim();
-    if (!stuck && !seen) throw new Error("今天的深度看見還沒整理好，請再試一次。");
+    const blind =
+      String(remote.blindSpot || (remote.close && remote.close.blindSpot) || "").trim() ||
+      "目前沒有明顯需要再往深處解讀的地方。";
+    const improve = String(
+      remote.improvementDirection || remote.direction || (remote.close && remote.close.improvementDirection) || ""
+    ).trim();
+    if (!core && !seen) throw new Error("今天的深度看見還沒整理好，請再試一次。");
     applyThinkV2Guide({
       status: "closed",
       rounds: answered,
       title: String(remote.title || "").trim(),
-      summary: stuck,
-      awareness: stuck,
+      summary: core,
+      awareness: core,
       selfSeen: seen,
       takeaway: String(remote.unknown || remote.takeaway || "").trim(),
-      direction: String(remote.direction || "").trim(),
+      direction: improve,
+      close: {
+        coreConclusion: core,
+        blindSpot: blind,
+        improvementDirection: improve,
+      },
       draftAnswer: "",
     });
     if (!state.internalModelDebug) state.internalModelDebug = {};

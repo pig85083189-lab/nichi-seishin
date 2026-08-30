@@ -65,7 +65,12 @@ const enoughPrompt = choicesUserPrompt({
   },
 });
 assert(enoughPrompt.includes("【05 核心覺察】"), "CASE A：06 讀 05 核心覺察");
-assert(enoughPrompt.includes("【04 勾選／卡住的】") || enoughPrompt.includes("【04 真正卡住的】"), "CASE A：06 讀 04");
+assert(
+  enoughPrompt.includes("【04 勾選／卡住的】") ||
+    enoughPrompt.includes("【04 真正卡住的】") ||
+    enoughPrompt.includes("【04 核心結論】"),
+  "CASE A：06 讀 04"
+);
 assert(enoughPrompt.includes("needFollowup=false"), "CASE A：足夠時直接給行動");
 assert(enoughPrompt.includes("固定生成 3 個下一步"), "CASE A：user prompt 固定 3 個");
 assert(!enoughPrompt.includes("人生願景"), "CASE A：06 不搶 07");
