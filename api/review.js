@@ -6,6 +6,7 @@ const textIntegrity = require("../lib/text-integrity");
 const bodyCoachInsight = require("../lib/body-coach-insight");
 const insightHighlight = require("../lib/insight-highlight");
 const reviewMerge = require("../lib/review-merge");
+const thinkV2 = require("../lib/think-v2");
 
 const HIGHLIGHT_RULE = `【重點反白 highlights】
 從你實際生成的原文中，挑選最值得停下來看的核心片段。目的是抓重點，不是把整段塗成彩色。
@@ -2177,8 +2178,14 @@ ${formatBodyCheckPrompt(ctx)}
 ${picked}
 
 【04 深度思考】
-勾選：${Array.isArray(ctx.thinkSelected) && ctx.thinkSelected.length ? ctx.thinkSelected.map((item, index) => `${index + 1}. ${item}`).join("\n") : ctx.thinkNone ? "今天沒有特別符合我的選項" : "尚未勾選"}
-深度看見：${[ctx.thinkCloseTitle, ctx.thinkCloseAwareness, ctx.thinkCloseSelfSeen, ctx.thinkCloseTakeaway].filter(Boolean).join("\n") || "尚未整理"}
+${
+  ctx.thinkVariant === "think-v2"
+    ? `核心：${[ctx.thinkCloseTitle, ctx.thinkCloseAwareness, ctx.thinkCloseSelfSeen].filter(Boolean).join("\n") || "尚未整理"}
+使用者自己說出的：${Array.isArray(ctx.thinkSelected) && ctx.thinkSelected.length ? ctx.thinkSelected.join("／") : "尚未寫"}
+仍待確認：${ctx.thinkCloseTakeaway || "沒有"}`
+    : `勾選：${Array.isArray(ctx.thinkSelected) && ctx.thinkSelected.length ? ctx.thinkSelected.map((item, index) => `${index + 1}. ${item}`).join("\n") : ctx.thinkNone ? "今天沒有特別符合我的選項" : "尚未勾選"}
+深度看見：${[ctx.thinkCloseTitle, ctx.thinkCloseAwareness, ctx.thinkCloseSelfSeen, ctx.thinkCloseTakeaway].filter(Boolean).join("\n") || "尚未整理"}`
+}
 
 【今天已完成的內容】
 今日感謝：
@@ -2698,12 +2705,17 @@ function formatThinkAwarePrompt(ctx) {
   const thinkSelected = Array.isArray(ctx.thinkSelected) ? ctx.thinkSelected.map((item) => String(item || "").trim()).filter(Boolean) : [];
   const thinkOptions = Array.isArray(ctx.thinkOptions) ? ctx.thinkOptions.map((item) => String(item || "").trim()).filter(Boolean) : [];
   const thinkNone = Boolean(ctx.thinkNone);
+  const v2 = String(ctx.thinkVariant || "") === "think-v2";
   const thinkClose = [ctx.thinkCloseTitle, ctx.thinkCloseAwareness, ctx.thinkCloseSelfSeen, ctx.thinkCloseTakeaway]
     .map((item) => String(item || "").trim())
     .filter(Boolean);
   const awareSelected = Array.isArray(ctx.awarenessSelected) ? ctx.awarenessSelected.map((item) => String(item || "").trim()).filter(Boolean) : [];
   return {
-    thinkPicked: thinkNone
+    thinkPicked: v2
+      ? thinkSelected.length
+        ? thinkSelected.map((item, index) => `${index + 1}. ${item}`).join("\n")
+        : "尚未寫下。"
+      : thinkNone
       ? "使用者勾選了「今天沒有特別符合我的選項」。"
       : thinkSelected.length
         ? thinkSelected.map((item, index) => `${index + 1}. ${item}`).join("\n")
@@ -2798,12 +2810,19 @@ ${story}`;
 ${avoidBlock}
 
 【04 深度思考｜可讀，但不要重複】
-勾選：
+${
+  ctx.thinkVariant === "think-v2"
+    ? `核心：
+${thinkAware.thinkClose}
+使用者自己說出的：
+${thinkAware.thinkPicked}`
+    : `勾選：
 ${thinkAware.thinkPicked}
 選項：
 ${thinkAware.thinkOptions}
 深度看見：
-${thinkAware.thinkClose}
+${thinkAware.thinkClose}`
+}
 
 【今天的輸入｜必須據此長出選項】
 ${story}`;
@@ -3193,7 +3212,19 @@ module.exports = async function handler(req, res) {
       const ctx = body.context && typeof body.context === "object" ? body.context : {};
       const event = String(ctx.event || text || "").trim();
       const mood = String(ctx.mood || "").trim();
-      if (isThinkGuideRequest(body) && thinkGuideStep(body) === "close") {
+      if (thinkV2.isThinkV2Request(body) && thinkV2.thinkV2Step(body) === "close") {
+        const answered = thinkV2.answeredRounds(ctx.rounds);
+        if (answered.length < thinkV2.MIN_ROUNDS) {
+          res.status(400).json({ ok: false, error: "請先完成至少一輪深度思考" });
+          return;
+        }
+      } else if (thinkV2.isThinkV2Request(body)) {
+        const thanks = thanksItems(ctx.thanksText || ctx.thanks);
+        if (!event || !mood || !thanks.length) {
+          res.status(400).json({ ok: false, error: "請先寫下今日感謝、事件，並選擇心情" });
+          return;
+        }
+      } else if (isThinkGuideRequest(body) && thinkGuideStep(body) === "close") {
         const rounds = Array.isArray(ctx.rounds) ? ctx.rounds : [];
         const answered = rounds.filter((item) => String(item?.question || "").trim() && String(item?.answer || "").trim());
         if (answered.length < 3) {
@@ -3291,7 +3322,13 @@ module.exports = async function handler(req, res) {
         { role: "user", content: choicesUserPrompt(body) },
       ];
     } else if (mode === "insight") {
-      if (isThinkGuideRequest(body)) {
+      if (thinkV2.isThinkV2Request(body)) {
+        const close = thinkV2.thinkV2Step(body) === "close";
+        messages = [
+          { role: "system", content: withCompleteRule(close ? thinkV2.THINK_V2_CLOSE_SYSTEM : thinkV2.THINK_V2_ASK_SYSTEM) },
+          { role: "user", content: thinkV2.thinkV2UserPrompt(body) },
+        ];
+      } else if (isThinkGuideRequest(body)) {
         const close = thinkGuideStep(body) === "close";
         messages = [
           { role: "system", content: withCompleteRule(close ? THINK_GUIDE_CLOSE_SYSTEM : THINK_GUIDE_ASK_SYSTEM) },
@@ -3380,7 +3417,11 @@ module.exports = async function handler(req, res) {
       (mode === "choices" && choiceKind !== "think-close" && choiceKind !== "execution");
     const aiOpts = {
       temperature:
-        mode === "insight" && isThinkGuideRequest(body)
+        mode === "insight" && thinkV2.isThinkV2Request(body)
+          ? thinkV2.thinkV2Step(body) === "close"
+            ? 0.4
+            : 0.55
+        : mode === "insight" && isThinkGuideRequest(body)
           ? thinkGuideStep(body) === "close"
             ? 0.4
             : 0.55
@@ -3410,6 +3451,10 @@ module.exports = async function handler(req, res) {
             ? 900
           : mode === "choices"
             ? 700
+          : mode === "insight" && thinkV2.isThinkV2Request(body)
+          ? thinkV2.thinkV2Step(body) === "close"
+            ? 900
+            : 800
           : mode === "insight" && isThinkGuideRequest(body)
           ? thinkGuideStep(body) === "close"
             ? 900
@@ -3432,6 +3477,11 @@ module.exports = async function handler(req, res) {
                       : 1800
                   : 1600,
     };
+    if (mode === "insight" && thinkV2.isThinkV2Request(body) && thinkV2.shouldSkipThinkV2Ask(body)) {
+      const skipped = thinkV2.normalizeThinkV2Ask({ readyToClose: true, question: "", unknown: "", unknownWouldChangeCore: false }, body);
+      res.status(200).json({ ok: true, source: "local-stop", data: skipped });
+      return;
+    }
     let data;
     try {
       data = await callOpenAI(messages, aiOpts);
@@ -3526,6 +3576,24 @@ module.exports = async function handler(req, res) {
       return;
     }
     if (mode === "insight") {
+      if (thinkV2.isThinkV2Request(body)) {
+        if (thinkV2.thinkV2Step(body) === "close") {
+          const closed = thinkV2.normalizeThinkV2Close(data, body);
+          if (!closed.stuck && !closed.seen) {
+            res.status(502).json({ ok: false, error: "深度思考收束還沒整理好，請再試一次" });
+            return;
+          }
+          res.status(200).json({ ok: true, source: getProvider(), data: closed });
+          return;
+        }
+        const asked = thinkV2.normalizeThinkV2Ask(data, body);
+        if (!asked.question && !asked.readyToClose) {
+          res.status(502).json({ ok: false, error: "深度思考提問格式不完整，請再試一次" });
+          return;
+        }
+        res.status(200).json({ ok: true, source: getProvider(), data: asked });
+        return;
+      }
       if (isThinkGuideRequest(body)) {
         if (thinkGuideStep(body) === "close") {
           const closed = normalizeThinkGuideClose(data);
@@ -3689,6 +3757,9 @@ module.exports.normalizeGeneratedChoiceOptions = normalizeGeneratedChoiceOptions
 module.exports.choicesKind = choicesKind;
 module.exports.CHOICES_AWARENESS_SYSTEM = CHOICES_AWARENESS_SYSTEM;
 module.exports.CHOICES_THINK_SYSTEM = CHOICES_THINK_SYSTEM;
+module.exports.THINK_CHOICES_CLOSE_SYSTEM = THINK_CHOICES_CLOSE_SYSTEM;
+module.exports.THINK_V2_ASK_SYSTEM = thinkV2.THINK_V2_ASK_SYSTEM;
+module.exports.THINK_V2_CLOSE_SYSTEM = thinkV2.THINK_V2_CLOSE_SYSTEM;
 module.exports.choicesUserPrompt = choicesUserPrompt;
 module.exports.EXECUTION_CHOICES_SYSTEM = EXECUTION_CHOICES_SYSTEM;
 module.exports.EXECUTION_PROMPTS_SYSTEM = EXECUTION_PROMPTS_SYSTEM;

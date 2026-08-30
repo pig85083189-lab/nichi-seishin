@@ -7063,6 +7063,26 @@ textarea[hidden] + .journal-voice-hint,
   justify-self: start;
 }
 
+.think-v2 .think-guide__q {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.think-v2 .think-guide-answer {
+  min-height: 96px;
+  max-height: none;
+  width: 100%;
+}
+
+.think-v2__done {
+  padding: 12px 14px 14px;
+}
+
+.think-v2__done .think-guide__q {
+  font-size: 15px;
+  font-weight: 600;
+}
+
 .think-guide__close {
   padding: 16px 16px 14px;
   background: linear-gradient(165deg, rgba(255, 252, 247, 0.98) 0%, #f7efe6 58%, #f3e6d8 100%);

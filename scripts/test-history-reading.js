@@ -21,7 +21,7 @@ const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const css = fs.readFileSync(path.join(root, "app.css"), "utf8");
 const reviewApi = fs.readFileSync(path.join(root, "api/review.js"), "utf8");
 
-assert(html.includes("lib/history-reading.js?v=3"), "History reading mapper 已載入");
+assert(html.includes("lib/history-reading.js?v=4"), "History reading mapper 已載入");
 assert(app.includes('"① 今天發生了什麼"'), "主閱讀流有①");
 assert(app.includes('"⑤ 今日帶走的一句話"'), "主閱讀流有⑤");
 assert(app.includes("查看當天完整紀錄"), "完整紀錄可展開");
@@ -280,5 +280,28 @@ unseenReading.actions.forEach((item, index) => {
   assert(item.text === unseenSelected[index].text, "被看見案例：History ④ 標題與 Execution 相同");
   assert(item.detail === unseenSelected[index].detail, "被看見案例：History ④ detail 與 Execution 相同");
 });
+
+const v2Reading = buildHistoryReading({
+  journal: {
+    thanksText: "今天撐完了",
+    event: "今天真的好累，什麼都不想想。",
+    mood: "疲憊",
+    insight: {
+      guide: {
+        variant: "think-v2",
+        awareness: "今天就是身體累。",
+        selfSeen: "你說不想分析。",
+        takeaway: "",
+      },
+    },
+    awarenessResult: {
+      line: "我看見自己今天只是累了。",
+      seen: "我允許自己先休息。",
+    },
+  },
+});
+assert(v2Reading.happened.event.includes("好累"), "V2 History ① 仍是今日原文");
+assert(v2Reading.stuck && v2Reading.stuck.text.includes("身體累"), "V2 History ② 讀 stuck");
+assert(v2Reading.seen && v2Reading.seen.field.startsWith("awareness."), "V2 History ③ 優先 05");
 
 console.log("history reading tests passed");

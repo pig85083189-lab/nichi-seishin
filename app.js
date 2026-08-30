@@ -5883,11 +5883,21 @@ function normalizeThinkGuide(raw) {
     title: String(data.title || "").trim(),
     highlights: data.highlights && typeof data.highlights === "object" ? data.highlights : {},
     draftAnswer: String(data.draftAnswer || "").trim(),
+    variant: String(data.variant || "").trim(),
+    status: String(data.status || "").trim(),
   };
+}
+
+function thinkV2Closed(guide) {
+  const data = normalizeThinkGuide(guide);
+  if (data.variant !== "think-v2") return false;
+  if (data.status === "closed") return true;
+  return Boolean(data.summary || data.awareness || data.selfSeen);
 }
 
 function thinkGuideDone(guide) {
   const data = normalizeThinkGuide(guide);
+  if (data.variant === "think-v2") return thinkV2Closed(data);
   const answered = data.rounds.filter((item) => item.answer).length >= 3;
   if (!answered) return false;
   return Boolean(data.summary || data.awareness || data.selfSeen || data.takeaway);
@@ -9571,6 +9581,20 @@ function renderThinkChoices(bag) {
   syncThinkChoiceGate();
 }
 
+function usesThinkV2Path(journal) {
+  const insight = (journal && journal.insight) || state.journalInsight;
+  const guide = normalizeThinkGuide(insight && insight.guide);
+  if (guide.variant === "think-v2") return true;
+  const bag = normalizeChoiceBag((journal && journal.thinkChoices) || state.thinkChoices);
+  if (hasMeaningfulChoices(bag)) return false;
+  return true;
+}
+
+function renderThinkSection() {
+  if (usesThinkV2Path()) renderThinkV2();
+  else renderThinkChoices(state.thinkChoices);
+}
+
 function renderThinkChoiceResult(insight) {
   const root = document.getElementById("thinkChoiceResult");
   if (!root) return;
@@ -9580,10 +9604,11 @@ function renderThinkChoiceResult(insight) {
     root.innerHTML = "";
     return;
   }
+  const v2 = guide.variant === "think-v2";
   const sections = [
-    guide.awareness || guide.summary ? { kicker: "今天，這件事背後可能代表什麼", text: guide.awareness || guide.summary, kind: "awareness" } : null,
-    guide.selfSeen ? { kicker: "今天我看見的自己", text: guide.selfSeen, kind: "selfSeen" } : null,
-    guide.takeaway ? { kicker: "今日帶走的一句話", text: guide.takeaway, kind: "takeaway" } : null,
+    guide.awareness || guide.summary ? { kicker: v2 ? "今天真正值得看的" : "今天，這件事背後可能代表什麼", text: guide.awareness || guide.summary, kind: "awareness" } : null,
+    guide.selfSeen ? { kicker: v2 ? "今天我看見的" : "今天我看見的自己", text: guide.selfSeen, kind: "selfSeen" } : null,
+    guide.takeaway ? { kicker: v2 ? "還想確認的" : "今日帶走的一句話", text: guide.takeaway, kind: "takeaway" } : null,
   ].filter(Boolean);
   root.innerHTML = `
     <div class="think-choice-result aware-result">
@@ -9813,7 +9838,7 @@ function setChoicesLoading(kind, loading) {
   } else if (kind === "think") {
     const loader = document.getElementById("deepPromptLoading");
     if (loader) loader.hidden = !loading;
-    renderThinkChoices(state.thinkChoices);
+    renderThinkSection();
   } else if (kind === "execution") {
     const loader = document.getElementById("execPromptLoading");
     if (loader) loader.hidden = !loading;
@@ -9889,15 +9914,21 @@ function thinkBitsFrom(journal) {
   const bag = normalizeChoiceBag((journal && journal.thinkChoices) || state.thinkChoices);
   const insight = (journal && journal.insight && typeof journal.insight === "object" ? journal.insight : null) || state.journalInsight || {};
   const guide = insight.guide && typeof insight.guide === "object" ? insight.guide : {};
+  const isV2 = String(guide.variant || "") === "think-v2";
+  const v2Answers = (Array.isArray(guide.rounds) ? guide.rounds : [])
+    .map((item) => String(item && item.answer || "").trim())
+    .filter(Boolean)
+    .slice(-2);
   return {
     bag,
-    selected: selectedChoiceTexts(bag),
-    none: Boolean(bag.none),
-    options: bag.options.map((item) => String(item.text || "").trim()).filter(Boolean),
+    selected: isV2 ? v2Answers : selectedChoiceTexts(bag),
+    none: isV2 ? false : Boolean(bag.none),
+    options: isV2 ? [] : bag.options.map((item) => String(item.text || "").trim()).filter(Boolean),
     title: String(guide.title || insight.title || "").trim(),
     awareness: String(guide.awareness || guide.summary || "").trim(),
     selfSeen: String(guide.selfSeen || "").trim(),
     takeaway: String(guide.takeaway || "").trim(),
+    thinkVariant: isV2 ? "think-v2" : "",
   };
 }
 
@@ -9924,6 +9955,7 @@ function priorThinkAwareContext(journal) {
     thinkCloseAwareness: think.awareness,
     thinkCloseSelfSeen: think.selfSeen,
     thinkCloseTakeaway: think.takeaway,
+    thinkVariant: think.thinkVariant,
     awarenessSelected: aware.selected,
     awarenessNone: aware.none,
     awarenessLine: aware.line,
@@ -9980,6 +10012,7 @@ async function generateAwarenessChoices(options = {}) {
         thinkCloseAwareness: think.awareness,
         thinkCloseSelfSeen: think.selfSeen,
         thinkCloseTakeaway: think.takeaway,
+        thinkVariant: think.thinkVariant,
       }),
       progress: { streak: collectGrowthProgress().streak },
     });
@@ -10127,6 +10160,278 @@ async function generateThinkChoicesClose(options = {}) {
     if (state.choicesToken.thinkClose === token) {
       state.choicesBusy.thinkClose = false;
       syncThinkChoiceGate();
+    }
+  }
+}
+
+function thinkV2AnsweredRounds(guide) {
+  return (normalizeThinkGuide(guide).rounds || []).filter(
+    (item) => String(item.question || "").trim() && String(item.answer || "").trim()
+  );
+}
+
+function thinkV2CurrentQuestion(guide) {
+  return (normalizeThinkGuide(guide).rounds || []).find(
+    (item) => String(item.question || "").trim() && !String(item.answer || "").trim()
+  ) || null;
+}
+
+function applyThinkV2Guide(patch) {
+  const insight = normalizeInsight(state.journalInsight);
+  const next = { ...(insight.guide || emptyThinkGuide()), ...patch, variant: "think-v2" };
+  insight.guide = normalizeThinkGuide(next);
+  if (next.title) insight.title = next.title;
+  if (next.awareness || next.summary) {
+    insight.conclusion = next.awareness || next.summary;
+    insight.psychology = next.awareness || next.summary;
+  }
+  state.journalInsight = insight;
+  return insight;
+}
+
+function renderThinkV2() {
+  const root = document.getElementById("thinkQuestions");
+  const empty = document.getElementById("thinkEmpty");
+  const genBtn = document.getElementById("btnThinkChoices");
+  const closeBtn = document.getElementById("btnThinkClose");
+  if (!root) return;
+  const guide = normalizeThinkGuide((state.journalInsight || {}).guide);
+  const archived = isCurrentJournalArchived();
+  const loading = Boolean(state.choicesBusy?.think);
+  const closeLoading = Boolean(state.choicesBusy?.thinkClose);
+  const closed = thinkV2Closed(guide);
+  const pending = thinkV2CurrentQuestion(guide);
+  const answered = thinkV2AnsweredRounds(guide);
+  if (empty) {
+    empty.textContent = THINK_WAIT_COPY;
+    empty.hidden = Boolean((guide.rounds || []).length || loading || closed);
+  }
+  if (genBtn) {
+    const showStart = !(guide.rounds || []).length && !closed;
+    genBtn.hidden = !showStart || loading;
+    genBtn.disabled = loading || archived;
+    genBtn.classList.toggle("is-busy", loading && showStart);
+    genBtn.setAttribute("aria-busy", loading && showStart ? "true" : "false");
+    genBtn.textContent = loading ? "正在整理今天的問題…" : "✦ 開始今天的深度思考";
+  }
+  if (closeBtn) {
+    const showClose = Boolean(answered.length && !closed && !pending);
+    closeBtn.hidden = !(showClose || closeLoading);
+    closeBtn.disabled = closeLoading || archived || !answered.length;
+    closeBtn.classList.toggle("is-busy", closeLoading);
+    closeBtn.textContent = closeLoading ? "正在整理…" : "✦ 整理今天的深度看見";
+  }
+  if (!(guide.rounds || []).length && !closed) {
+    root.innerHTML = "";
+    renderThinkChoiceResult(state.journalInsight);
+    return;
+  }
+  const doneCards = (closed ? guide.rounds : answered)
+    .filter((item) => String(item.question || "").trim())
+    .map((item) => `<article class="think-guide__round is-done think-v2__done">
+        <p class="think-guide__q">${escapeHtml(item.question)}</p>
+        ${item.answer ? `<p class="think-guide__answer">${escapeHtml(item.answer)}</p>` : ""}
+      </article>`)
+    .join("");
+  let active = "";
+  if (!closed && pending) {
+    active = archived
+      ? `<article class="think-guide__round is-on think-v2__now">
+        <p class="think-guide__q">${escapeHtml(pending.question)}</p>
+      </article>`
+      : `<article class="think-guide__round is-on think-v2__now">
+        <p class="think-guide__q">${escapeHtml(pending.question)}</p>
+        ${pending.hint ? `<p class="think-guide__hint">${escapeHtml(pending.hint)}</p>` : ""}
+        <label class="think-guide__field">
+          <textarea class="textarea think-guide-answer" id="thinkV2Answer" rows="4" placeholder="把此刻想到的寫下來就好">${escapeHtml(guide.draftAnswer || "")}</textarea>
+          <button class="ai-check-btn ai-check-btn--label" id="btnThinkV2Next" type="button"${loading || closeLoading ? " disabled" : ""}>${loading ? "正在整理…" : "繼續"}</button>
+        </label>
+      </article>`;
+  }
+  root.innerHTML = `<div class="think-v2 think-guide">${doneCards}${active}</div>`;
+  renderThinkChoiceResult(state.journalInsight);
+}
+
+async function generateThinkV2Ask(options = {}) {
+  if (rejectArchivedJournalWrite(options)) return;
+  setJournalFoldOpen("section-deep", true, { manual: true });
+  if (!ensurePlusFeature("think_ai", options)) return;
+  if (state.choicesBusy?.think || state.choicesBusy?.thinkClose) {
+    if (!options.auto) showToast("還在整理，請稍候。");
+    return;
+  }
+  const journal = collectJournal();
+  if (!coreStoryReady(journal)) {
+    if (!options.auto) showToast("請先寫下今日感謝、事件，並選擇心情。");
+    return;
+  }
+  const current = normalizeThinkGuide((state.journalInsight || {}).guide);
+  if (thinkV2Closed(current)) {
+    renderThinkV2();
+    return;
+  }
+  if (thinkV2CurrentQuestion(current)) {
+    renderThinkV2();
+    return;
+  }
+  const answered = thinkV2AnsweredRounds(current);
+  const token = (state.choicesToken.think || 0) + 1;
+  state.choicesToken.think = token;
+  setChoicesLoading("think", true);
+  try {
+    if (!state.user) throw new Error("請先登入，才能開始今天的深度思考。");
+    const remote = await postReview({
+      mode: "insight",
+      variant: "think-v2",
+      step: "ask",
+      round: answered.length + 1,
+      date: currentIso(),
+      text: journal.event,
+      context: {
+        variant: "think-v2",
+        thanksText: thanksTextFrom(journal),
+        thanks: thanksTextFrom(journal),
+        event: journal.event,
+        mood: journal.mood,
+        bodyCheck: journal.bodyCheck,
+        bodyTags: journal.bodyTags,
+        bodyNote: journal.bodyNote,
+        rounds: answered,
+      },
+    });
+    if (state.choicesToken.think !== token) return;
+    if (remote.readyToClose || !String(remote.question || "").trim()) {
+      await generateThinkV2Close({ auto: true, fromAsk: true });
+      return;
+    }
+    const rounds = answered.concat([
+      {
+        question: String(remote.question || "").trim(),
+        hint: String(remote.hint || "").trim(),
+        observation: String(remote.observation || "").trim(),
+        answer: "",
+        focus: String(remote.focus || "").trim(),
+      },
+    ]);
+    applyThinkV2Guide({
+      status: "asking",
+      rounds,
+      round: rounds.length,
+      draftAnswer: "",
+    });
+    persistJournalQuietly();
+    renderThinkV2();
+  } catch (error) {
+    if (state.choicesToken.think !== token) return;
+    if (isPlusRequiredError(error)) return;
+    if (!options.auto) showToast(formatApiError(error) || "這次問題還沒好，請再試一次。");
+    renderThinkV2();
+  } finally {
+    if (state.choicesToken.think === token) setChoicesLoading("think", false);
+  }
+}
+
+async function submitThinkV2Answer(options = {}) {
+  if (rejectArchivedJournalWrite(options)) return;
+  if (state.choicesBusy?.think || state.choicesBusy?.thinkClose) {
+    showToast("還在整理，請稍候。");
+    return;
+  }
+  const guide = normalizeThinkGuide((state.journalInsight || {}).guide);
+  const pending = thinkV2CurrentQuestion(guide);
+  if (!pending) {
+    if (thinkV2AnsweredRounds(guide).length && !thinkV2Closed(guide)) return generateThinkV2Close(options);
+    return;
+  }
+  const answer = String(document.getElementById("thinkV2Answer")?.value || guide.draftAnswer || "").trim();
+  if (!answer) {
+    showToast("先把想到的寫下來，再繼續。");
+    return;
+  }
+  const rounds = (guide.rounds || []).map((item) => {
+    if (item.question === pending.question && !item.answer) return { ...item, answer };
+    return item;
+  });
+  applyThinkV2Guide({
+    rounds,
+    draftAnswer: "",
+    status: "asking",
+    round: thinkV2AnsweredRounds({ ...guide, rounds }).length,
+  });
+  persistJournalQuietly();
+  renderThinkV2();
+  await generateThinkV2Ask({ auto: true });
+}
+
+async function generateThinkV2Close(options = {}) {
+  if (rejectArchivedJournalWrite(options)) return;
+  const guide = normalizeThinkGuide((state.journalInsight || {}).guide);
+  if (thinkV2Closed(guide) && (guide.awareness || guide.selfSeen)) {
+    renderThinkV2();
+    return;
+  }
+  const answered = thinkV2AnsweredRounds(guide);
+  if (!answered.length) {
+    if (!options.auto) showToast("先回答今天的問題。");
+    return;
+  }
+  if (!ensurePlusFeature("think_ai", options)) return;
+  if (state.choicesBusy?.thinkClose) {
+    if (!options.auto) showToast("還在整理今天的深度看見，請稍候。");
+    return;
+  }
+  const journal = collectJournal();
+  const token = (state.choicesToken.thinkClose || 0) + 1;
+  state.choicesToken.thinkClose = token;
+  state.choicesBusy.thinkClose = true;
+  renderThinkV2();
+  const closeLoader = document.getElementById("thinkCloseLoading");
+  if (closeLoader) closeLoader.hidden = false;
+  try {
+    if (!state.user) throw new Error("請先登入，才能整理今天的深度看見。");
+    const remote = await postReview({
+      mode: "insight",
+      variant: "think-v2",
+      step: "close",
+      date: currentIso(),
+      text: journal.event,
+      context: {
+        variant: "think-v2",
+        thanksText: thanksTextFrom(journal),
+        thanks: thanksTextFrom(journal),
+        event: journal.event,
+        mood: journal.mood,
+        bodyCheck: journal.bodyCheck,
+        rounds: answered,
+      },
+    });
+    if (state.choicesToken.thinkClose !== token) return;
+    const stuck = String(remote.stuck || remote.awareness || "").trim();
+    const seen = String(remote.seen || remote.selfSeen || "").trim();
+    if (!stuck && !seen) throw new Error("今天的深度看見還沒整理好，請再試一次。");
+    applyThinkV2Guide({
+      status: "closed",
+      rounds: answered,
+      title: String(remote.title || "").trim(),
+      summary: stuck,
+      awareness: stuck,
+      selfSeen: seen,
+      takeaway: String(remote.unknown || remote.takeaway || "").trim(),
+      draftAnswer: "",
+    });
+    persistJournalQuietly();
+    renderThinkV2();
+    if (!options.auto && !options.fromAsk) showToast("今天的深度看見，已經整理好了。");
+  } catch (error) {
+    if (state.choicesToken.thinkClose !== token) return;
+    if (isPlusRequiredError(error)) return;
+    if (!options.auto) showToast(formatApiError(error) || "今天的深度看見還沒整理好，請再試一次。");
+    renderThinkV2();
+  } finally {
+    if (state.choicesToken.thinkClose === token) {
+      state.choicesBusy.thinkClose = false;
+      if (closeLoader) closeLoader.hidden = true;
+      renderThinkV2();
     }
   }
 }
@@ -10933,9 +11238,13 @@ function isJournalAutosaveField(el) {
   return /^(thanksText|thanks\d+|aware\d+|exec\d+|execNext|execFollowup|eventText|bodyNote|bodyOtherNote|body(Mood|Body|Sleep)Reason|manifestVision|manifestThink\d+|deep\d)/.test(id);
 }
 
+function thinkV2AnswerEl() {
+  return document.querySelector("#thinkQuestions .think-guide-answer");
+}
+
 function withThinkGuideDraft(insight) {
   const next = normalizeInsight(insight);
-  const ta = thinkGuideBodyEl()?.querySelector(".think-guide-answer");
+  const ta = thinkV2AnswerEl() || thinkGuideBodyEl()?.querySelector(".think-guide-answer");
   if (!ta) return next;
   const guide = { ...(next.guide || emptyThinkGuide()), draftAnswer: String(ta.value || "").trim() };
   return { ...next, guide };
@@ -11949,7 +12258,7 @@ function fillJournal(journal) {
   }
   syncExecStepUi();
   renderDeepThemes(state.deepPrompts, { deep: normalizeDeep(data.deep) });
-  renderThinkChoices(state.thinkChoices);
+  renderThinkSection();
   renderThinkChoiceResult(state.journalInsight);
   refreshJournalChecklists(data, { useSaved: true });
   renderInsightCard(state.journalInsight);
@@ -13049,7 +13358,14 @@ async function finishTodayReview() {
     }
   }
   const guide = normalizeInsight(state.journalInsight).guide || emptyThinkGuide();
-  if (guide.rounds.filter((item) => item.answer).length >= 3 && !thinkGuideDone(guide)) {
+  if (guide.variant === "think-v2" && thinkV2AnsweredRounds(guide).length && !thinkV2Closed(guide)) {
+    setCompleteBusy(true);
+    try {
+      await generateThinkV2Close({ fromComplete: true, auto: true });
+    } finally {
+      setCompleteBusy(false);
+    }
+  } else if (guide.rounds.filter((item) => item.answer).length >= 3 && !thinkGuideDone(guide)) {
     if (state.journalMode === "quick") {
       document.getElementById("section-quick-insight")?.scrollIntoView({ behavior: "smooth", block: "center" });
     }
@@ -15118,12 +15434,17 @@ function handleTodayPointerClick(event) {
   if (node.closest("#btnThinkChoices")) {
     handled();
     setJournalFoldOpen("section-deep", true, { manual: true });
-    catchAsync(() => generateThinkChoices(), "深度選項生成失敗");
+    catchAsync(() => (usesThinkV2Path() ? generateThinkV2Ask() : generateThinkChoices()), "深度思考還沒開始");
+    return true;
+  }
+  if (node.closest("#btnThinkV2Next")) {
+    handled();
+    catchAsync(() => submitThinkV2Answer(), "這次回答還沒送出");
     return true;
   }
   if (node.closest("#btnThinkClose")) {
     handled();
-    catchAsync(() => generateThinkChoicesClose(), "今天的深度看見還沒整理好");
+    catchAsync(() => (usesThinkV2Path() ? generateThinkV2Close() : generateThinkChoicesClose()), "今天的深度看見還沒整理好");
     return true;
   }
   if (node.closest("#btnExecChoiceFollow")) {
@@ -15397,14 +15718,15 @@ function syncUserMarkBarFromLiveSelection() {
 }
 
 function refreshUserMarkSurfaces(date) {
-  const draftThink = thinkGuideBodyEl()?.querySelector(".think-guide-answer")?.value || "";
+  const draftThink = (thinkV2AnswerEl() || thinkGuideBodyEl()?.querySelector(".think-guide-answer"))?.value || "";
   dismissUserMarkUi("complete");
   if (!date || date === currentIso()) {
     const journal = collectJournal();
     renderBodyCoachCard(state.journalBodyCoach);
     renderInsightCard(state.journalInsight);
+    renderThinkSection();
     if (draftThink) {
-      const ta = thinkGuideBodyEl()?.querySelector(".think-guide-answer");
+      const ta = thinkV2AnswerEl() || thinkGuideBodyEl()?.querySelector(".think-guide-answer");
       if (ta) ta.value = draftThink;
     }
     renderAwarenessQuestions(state.awarenessPrompts, { answers: journal.awareness });

@@ -71,6 +71,8 @@ assert(thinkFn.includes("choicesContext(journal)"), "CASE B：04 只帶 01–03 
 const awareFn = app.slice(app.indexOf("async function generateAwarenessChoices"), app.indexOf("async function generateThinkChoices"));
 assert(awareFn.includes("thinkSelected"), "CASE D：05 生成可讀 04 勾選");
 assert(awareFn.includes("thinkCloseAwareness") || awareFn.includes("thinkClose"), "CASE D：05 可讀 04 深度看見");
+assert(app.includes("function generateThinkV2Ask"), "正式 04 主路徑已接 V2");
+assert(app.includes("function generateThinkChoices"), "CURRENT 04 仍保留相容");
 
 const thinkPrompt = choicesUserPrompt({
   mode: "choices",
