@@ -1,5 +1,6 @@
 const { requireUser, bearerToken } = require("../lib/auth");
-const { ensureTrial, effectivePlanFromRow, supabaseAdminConfigured } = require("../lib/supabase");
+const { ensureTrial, effectivePlanFromRow, supabaseAdminConfigured, isInternal } = require("../lib/supabase");
+const bodyMind = require("../lib/body-mind");
 const { featureForReviewRequest, enforcePlusEntitlement } = require("../lib/entitlement");
 const { getApiKey, getModel, getProvider, usesClaude, callOpenAI } = require("../lib/openai");
 const textIntegrity = require("../lib/text-integrity");
@@ -2182,8 +2183,11 @@ ${picked}
 ${
   ctx.thinkVariant === "think-v2"
     ? `核心：${[ctx.thinkCloseTitle, ctx.thinkCloseAwareness, ctx.thinkCloseSelfSeen].filter(Boolean).join("\n") || "尚未整理"}
+改善方向：${ctx.thinkCloseDirection || "未寫"}
 使用者自己說出的：${Array.isArray(ctx.thinkSelected) && ctx.thinkSelected.length ? ctx.thinkSelected.join("／") : "尚未寫"}
-仍待確認：${ctx.thinkCloseTakeaway || "沒有"}`
+仍待確認：${ctx.thinkCloseTakeaway || "沒有"}
+03 身心原文：${compactLine(ctx.bodyMindText || ctx.bodyNote, 160) || "未寫"}
+03 模型假設（非事實，不要重講）：${compactLine(ctx.bodyMindInsight, 80) || "無"}`
     : `勾選：${Array.isArray(ctx.thinkSelected) && ctx.thinkSelected.length ? ctx.thinkSelected.map((item, index) => `${index + 1}. ${item}`).join("\n") : ctx.thinkNone ? "今天沒有特別符合我的選項" : "尚未勾選"}
 深度看見：${[ctx.thinkCloseTitle, ctx.thinkCloseAwareness, ctx.thinkCloseSelfSeen, ctx.thinkCloseTakeaway].filter(Boolean).join("\n") || "尚未整理"}`
 }
@@ -3087,7 +3091,10 @@ module.exports = async function handler(req, res) {
     feature: featureForReviewRequest(body),
     res,
     supabaseReady: supabaseAdminConfigured(),
-    loadPlan: async () => effectivePlanFromRow(await ensureTrial(user)),
+    loadPlan: async () => {
+      const row = await ensureTrial(user);
+      return { plan: effectivePlanFromRow(row), isInternal: isInternal(row) };
+    },
   });
   if (!allowed) return;
 
@@ -3113,6 +3120,8 @@ module.exports = async function handler(req, res) {
                   ? "manifest"
                   : body.mode === "bodycoach"
                     ? "bodycoach"
+                    : body.mode === "bodymind"
+                      ? "bodymind"
                     : body.mode === "choices"
                       ? "choices"
                       : "organize";
@@ -3339,6 +3348,11 @@ module.exports = async function handler(req, res) {
         { role: "system", content: withCompleteRule(BODY_COACH_SYSTEM) },
         { role: "user", content: bodyCoachUserPrompt(body) },
       ];
+    } else if (mode === "bodymind") {
+      messages = [
+        { role: "system", content: withCompleteRule(bodyMind.BODY_MIND_SYSTEM) },
+        { role: "user", content: bodyMind.bodyMindUserPrompt(body) },
+      ];
     } else if (mode === "think") {
       const round = Number(body.round) || 1;
       const max = Number(body.max) || 5;
@@ -3379,7 +3393,7 @@ module.exports = async function handler(req, res) {
           ? 0.4
           : mode === "choices"
             ? 0.55
-        : mode === "bodycoach"
+        : mode === "bodycoach" || mode === "bodymind"
           ? 0.45
           : mode === "manifest"
             ? 0.45
@@ -3395,8 +3409,8 @@ module.exports = async function handler(req, res) {
       timeoutMs: promptKind === "awareness" || mode === "choices" ? 20000 : 22000,
       rejectPartial: true,
       maxTokens:
-        mode === "bodycoach"
-          ? 900
+        mode === "bodycoach" || mode === "bodymind"
+          ? 640
           : mode === "choices" && choiceKind === "think-close"
             ? 900
           : mode === "choices" && (choiceKind === "execution" || choiceKind === "execution-deep")
@@ -3692,6 +3706,15 @@ module.exports = async function handler(req, res) {
       res.status(200).json({ ok: true, source: getProvider(), data: coach });
       return;
     }
+    if (mode === "bodymind") {
+      const result = bodyMind.normalizeBodyMindInsight(data);
+      if (!result.insight) {
+        res.status(502).json({ ok: false, error: "今天的深度覺察還沒整理好，請再試一次" });
+        return;
+      }
+      res.status(200).json({ ok: true, source: getProvider(), data: result });
+      return;
+    }
     res.status(200).json({ ok: true, source: getProvider(), data });
   } catch (error) {
     const aborted = error?.name === "AbortError" || /aborted/i.test(String(error?.message || ""));
@@ -3707,6 +3730,7 @@ module.exports.awarenessPromptFallbacks = awarenessPromptFallbacks;
 module.exports.formatRecentAwarenessDays = formatRecentAwarenessDays;
 module.exports.normalizeBodyCoachResult = normalizeBodyCoachResult;
 module.exports.BODY_COACH_SYSTEM = BODY_COACH_SYSTEM;
+module.exports.BODY_MIND_SYSTEM = bodyMind.BODY_MIND_SYSTEM;
 module.exports.bodyCoachUserPrompt = bodyCoachUserPrompt;
 module.exports.rewriteExecFocus = rewriteExecFocus;
 module.exports.normalizeExecutionChecklistItems = normalizeExecutionChecklistItems;

@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=215" />
+    <link rel="stylesheet" href="app.css?v=216" />
     <style>
       html.is-booting,
       html.is-booting body {
@@ -396,7 +396,7 @@
               <div class="journal-fold__inner">
             <p class="journal-guide">預設保持極簡。想加強哪一塊，再勾選展開；取消就會收合。</p>
             <div class="quick-modules__list" role="group" aria-label="快速復盤選配模組">
-              <button class="quick-mod" data-quick-mod="body" type="button" aria-pressed="false">身體覺察</button>
+              <button class="quick-mod" data-quick-mod="body" type="button" aria-pressed="false">身心覺察</button>
               <button class="quick-mod" data-quick-mod="aware" type="button" aria-pressed="false">覺察力 <span class="plus-lock-badge">PLUS</span></button>
               <button class="quick-mod" data-quick-mod="exec" type="button" aria-pressed="false">執行力 <span class="plus-lock-badge">PLUS</span></button>
             </div>
@@ -407,18 +407,29 @@
           <section class="journal-card journal-fold" id="section-body">
             <button class="journal-fold__toggle" type="button" data-journal-fold aria-expanded="false" aria-controls="bodyFoldPanel">
               <span class="journal-fold__copy">
-                <h2 class="journal-card__title"><span>03</span> 身體覺察</h2>
-                <p class="journal-fold__summary">快速看看今天的心情、身體與睡眠狀態。</p>
+                <h2 class="journal-card__title"><span>03</span> 身心覺察</h2>
+                <p class="journal-fold__summary">留意今天身體或心裡，特別有感覺的那一刻。</p>
               </span>
               <span class="journal-fold__chevron" aria-hidden="true"></span>
             </button>
             <div class="journal-fold__panel" id="bodyFoldPanel" inert aria-hidden="true">
               <div class="journal-fold__inner">
-            <div class="journal-guide journal-guide--lead">
+            <div class="body-mind" id="bodyMindCard">
+              <p class="journal-core-q">今天有沒有哪一個瞬間，讓你覺得特別舒服或不舒服？</p>
+              <textarea class="textarea" id="bodyMindText" rows="5" placeholder="把那個瞬間寫下來就好"></textarea>
+              <p class="journal-guide">可能是身體的感受，也可能是某個人說的一句話、發生的一件事，或某個讓你心裡特別有感覺的瞬間，都可以寫下來。</p>
+              <p class="journal-voice-hint">打字或用麥克風說都可以</p>
+              <div class="check-loading" id="bodyMindLoading" hidden>
+                <p class="check-loading__label">正在整理今天的深度覺察…</p>
+                <div class="ai-thinking__bar"><i></i></div>
+              </div>
+              <div id="bodyMindInsight"></div>
+            </div>
+            <div class="journal-guide journal-guide--lead js-legacy-body-ui" hidden>
               <p>今天的你，身體和心情還好嗎？</p>
               <p>花一分鐘看看自己的心情、身體和睡眠，也許會發現一些平常沒注意到的小訊號。</p>
             </div>
-            <div class="journal-split journal-split--body">
+            <div class="journal-split journal-split--body js-legacy-body-ui" hidden>
               <div class="journal-col body-check">
                 <div class="body-check-group body-subcard" data-body-group="mood">
                   <header class="body-subcard__head">
@@ -555,7 +566,7 @@
               <div class="ai-thinking__bar"><i></i></div>
             </div>
             <div class="insight-card__body" id="insightBody">
-              <p class="insight-card__empty">先把感謝、事件、心情與身體覺察寫下來，再開始 3 輪引導式深度思考。</p>
+              <p class="insight-card__empty">先把感謝、事件、心情與身心覺察寫下來，再開始 3 輪引導式深度思考。</p>
             </div>
               </div>
             </div>
@@ -920,7 +931,7 @@
               <article class="guide-mode">
                 <p class="guide-mode__tag">時間有限</p>
                 <h4>⚡ 快速復盤</h4>
-                <p>大約 3～5 分鐘。寫感謝、事件與心情就好。想加強時，再加選身體覺察、覺察力或執行力。</p>
+                <p>大約 3～5 分鐘。寫感謝、事件與心情就好。想加強時，再加選身心覺察、覺察力或執行力。</p>
               </article>
               <article class="guide-mode guide-mode--deep">
                 <p class="guide-mode__tag">想慢慢想</p>
@@ -963,9 +974,9 @@
             <li class="guide-step" id="guide-03">
               <span class="guide-step__num" aria-hidden="true">03</span>
               <div class="guide-step__body">
-                <p class="guide-step__label">身體覺察</p>
-                <h3 class="guide-step__title">快速看看今天的心情、身體與睡眠狀態</h3>
-                <p class="guide-step__text">快速看看今天的心情、身體與睡眠狀態。</p>
+                <p class="guide-step__label">身心覺察</p>
+                <h3 class="guide-step__title">留意今天身體或心裡，特別有感覺的那一刻</h3>
+                <p class="guide-step__text">今天有沒有哪一個瞬間，讓你覺得特別舒服或不舒服？</p>
               </div>
             </li>
             <li class="guide-step" id="guide-04">
@@ -1233,13 +1244,13 @@
     <script src="analytics.js?v=4"></script>
     <script src="lib/text-integrity.js?v=6"></script>
     <script src="lib/body-coach-insight.js?v=1"></script>
-    <script src="lib/review-merge.js?v=11"></script>
-    <script src="lib/entitlement.js?v=3"></script>
-    <script src="lib/history-reading.js?v=5"></script>
-    <script src="lib/history-summary.js?v=8"></script>
+    <script src="lib/review-merge.js?v=12"></script>
+    <script src="lib/entitlement.js?v=4"></script>
+    <script src="lib/history-reading.js?v=6"></script>
+    <script src="lib/history-summary.js?v=9"></script>
     <script src="lib/insight-highlight.js?v=5"></script>
     <script src="lib/user-mark.js?v=6"></script>
     <script src="lib/task-sidebar.js?v=1"></script>
-    <script src="app.js?v=248"></script>
+    <script src="app.js?v=249"></script>
   </body>
 </html>

@@ -26,7 +26,7 @@ assert(reviewJs.includes('body?.variant === "think-guide"'), "legacy think-guide
 assert(reviewJs.includes("thinkV2.isThinkV2Request"), "review 有獨立 V2 路由");
 assert(reviewJs.includes("CHOICES_THINK_SYSTEM"), "CURRENT 04 prompt 仍在");
 assert(!reviewJs.includes("CREATE TABLE") && !reviewJs.includes("ALTER TABLE"), "V2 不改 schema");
-assert(html.includes("app.js?v=248") && html.includes("app.css?v=215"), "cache 已 bump");
+assert(html.includes("app.js?v=249") && html.includes("app.css?v=216"), "cache 已 bump");
 
 assert(thinkV2.MIN_ROUNDS === 1 && thinkV2.MAX_ROUNDS === 3, "V2 最少 1 最多 3");
 assert(thinkV2.THINK_V2_ASK_SYSTEM.includes("【優先順序"), "ask 有優先順序");
@@ -259,6 +259,32 @@ assert(
   }) === false,
   "使用者自己留下未知時，第 3 題仍要問"
 );
+
+assert(
+  thinkV2.looksKnownAnswerRestate("你想怎麼跟媽媽好好溝通？", { event: "我想跟媽媽好好溝通。" }, []) === true,
+  "12. 已說要溝通不能再問怎麼溝通"
+);
+assert(
+  thinkV2.scoreInformationGain({
+    question: "你想怎麼跟媽媽好好溝通？",
+    ctx: { event: "我想跟媽媽好好溝通。" },
+    rounds: [],
+    callIndex: 1,
+  }).score === 0,
+  "13. 重述已知沒有 information gain"
+);
+const closeDir = thinkV2.normalizeThinkV2Close({
+  title: "理解落差",
+  stuck: "問題不一定是說得不夠多，而是彼此理解可能從沒對齊。",
+  seen: "你已經講過一次，真正卡住的是對不上。",
+  unknown: "",
+  direction: "下一次先確認彼此目前理解到哪裡，再決定要不要補解釋。",
+});
+assert(closeDir.direction.includes("理解"), "14. close 有改善方向");
+assert(closeDir.actions.length === 0, "15. 04 不產出 06 checklist");
+assert(thinkV2.THINK_V2_CLOSE_SYSTEM.includes("direction"), "14. close prompt 有 direction");
+assert(thinkV2.THINK_V2_ASK_SYSTEM.includes("重新包裝成問題"), "12. ask 禁止重述已知");
+assert(thinkV2.MAX_ROUNDS === 3, "18. max rounds 不變");
 
 assert(thinkV2.isThinkV2Request({ variant: "think-v2" }), "variant think-v2");
 assert(!thinkV2.isThinkV2Request({ variant: "think-guide" }), "不會誤判 think-guide");

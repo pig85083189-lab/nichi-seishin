@@ -95,6 +95,9 @@ plusFeatures.forEach((feature) => {
 });
 
 assert(featureForReviewRequest({ mode: "bodycoach" }) === "body_ai", "bodycoach → body_ai");
+assert(featureForReviewRequest({ mode: "bodymind" }) === "body_ai", "bodymind → body_ai");
+assert(canUseFeature("free", "think_ai", { isInternal: true }) === true, "Internal options bypass PLUS");
+assert(canUseFeature("free", "think_ai") === false, "FREE 無 Internal 仍擋");
 assert(featureForReviewRequest({ mode: "choices", kind: "awareness" }) === "awareness_ai", "awareness choices");
 assert(featureForReviewRequest({ mode: "choices", kind: "execution" }) === "execution_ai", "execution choices");
 assert(featureForReviewRequest({ mode: "choices", kind: "execution-deep" }) === "execution_ai", "execution deep");
@@ -233,6 +236,33 @@ function mockRes() {
     loadPlan: async () => "plus",
   });
   assert(plusOk === true, "PLUS 可通過");
+
+  const trialRes = mockRes();
+  const trialOk = await enforcePlusEntitlement({
+    feature: "execution_ai",
+    res: trialRes,
+    supabaseReady: true,
+    loadPlan: async () => ({ plan: "plus", isInternal: false }),
+  });
+  assert(trialOk === true, "Trial／PLUS object load 可通過");
+
+  const internalFree = mockRes();
+  const internalOk = await enforcePlusEntitlement({
+    feature: "think_ai",
+    res: internalFree,
+    supabaseReady: true,
+    loadPlan: async () => ({ plan: "free", isInternal: true }),
+  });
+  assert(internalOk === true, "Internal 即使 plan=free 也 bypass quota");
+
+  const freeStill = mockRes();
+  const freeStillOk = await enforcePlusEntitlement({
+    feature: "body_ai",
+    res: freeStill,
+    supabaseReady: true,
+    loadPlan: async () => ({ plan: "free", isInternal: false }),
+  });
+  assert(freeStillOk === false && freeStill.statusCode === 403, "一般 FREE 不受 Internal bypass 影響");
 
   console.log("entitlement tests passed");
 })().catch((error) => {

@@ -106,6 +106,7 @@ const state = {
     manifestPromptsSig: "",
     insightSig: "",
     bodyCoachSig: "",
+    bodyMindSig: "",
     promptsSig: "",
     promptsAi: false,
     corePromptsSig: "",
@@ -120,6 +121,9 @@ const state = {
   bodyCoachBusy: false,
   bodyCoachToken: 0,
   journalBodyCoach: null,
+  bodyMindBusy: false,
+  bodyMindToken: 0,
+  journalBodyMind: null,
   journalExecFocus: null,
   journalAwarenessResult: null,
   awarenessChoices: { sourceSig: "", options: [], selectedIds: [], generatedAt: "" },
@@ -2384,6 +2388,7 @@ function reviewContentScore(review) {
     journal.mood,
     journal.body,
     journal.bodyNote,
+    journal.bodyMind ? JSON.stringify(journal.bodyMind) : "",
     journal.aware,
     journal.exec,
     journal.smallestStep,
@@ -3470,6 +3475,7 @@ function clearJournalMemory() {
   state.gratitude = "";
   state.journalInsight = null;
   state.journalBodyCoach = null;
+  state.journalBodyMind = null;
   state.journalExecFocus = null;
   state.journalAwarenessResult = null;
   state.journalManifestSentence = "";
@@ -3491,6 +3497,7 @@ function clearJournalMemory() {
     manifestPromptsSig: "",
     insightSig: "",
     bodyCoachSig: "",
+    bodyMindSig: "",
     promptsSig: "",
     promptsAi: false,
     corePromptsSig: "",
@@ -5105,7 +5112,7 @@ function tourSteps() {
       element: "#section-body",
       tourPage: "today",
       popover: {
-        title: "03 身體覺察",
+        title: "03 身心覺察",
         description: "用心情、身體、睡眠三個檢核看今天的狀態。看完後，右側會整理今日身心小結，給你今晚就能照顧自己的小建議。",
         side: "bottom",
       },
@@ -5612,6 +5619,7 @@ function emptyJournal() {
     bodyNote: "",
     bodyCheck: emptyBodyCheck(),
     bodyCoach: emptyBodyCoach(),
+    bodyMind: emptyBodyMind(),
     awareness: ["", "", ""],
     awarenessChecks: [],
     awarenessCheckItems: [],
@@ -5705,6 +5713,44 @@ function emptyBodyCheck() {
 
 function emptyBodyCoach() {
   return { title: "", analysis: "", notice: "", suggestions: [], sig: "", highlights: {} };
+}
+
+function emptyBodyMind() {
+  const api = reviewMergeApi();
+  if (typeof api.emptyBodyMind === "function") return api.emptyBodyMind();
+  return { text: "", insight: "", support: "", generatedAt: "", sig: "" };
+}
+
+function normalizeBodyMind(raw) {
+  const api = reviewMergeApi();
+  if (typeof api.normalizeBodyMind === "function") return api.normalizeBodyMind(raw);
+  const src = raw && typeof raw === "object" ? raw : {};
+  return {
+    text: String(src.text || "").replace(/\s+/g, " ").trim(),
+    insight: String(src.insight || "").replace(/\s+/g, " ").trim(),
+    support: String(src.support || "").replace(/\s+/g, " ").trim(),
+    generatedAt: String(src.generatedAt || "").trim(),
+    sig: String(src.sig || "").trim(),
+  };
+}
+
+function hasBodyMindResult(value) {
+  const data = normalizeBodyMind(value);
+  return Boolean(data.insight && data.support);
+}
+
+function bodyMindTextReady(text) {
+  return String(text || "").replace(/\s+/g, "").trim().length >= 6;
+}
+
+function collectBodyMindText() {
+  return String(document.getElementById("bodyMindText")?.value || "").replace(/\s+/g, " ").trim();
+}
+
+function bodyMindSignature(journal) {
+  const data = journal || {};
+  const mind = normalizeBodyMind(data.bodyMind);
+  return [mind.text || data.bodyNote || "", String(data.event || "").trim(), String(data.mood || "").trim()].join("\n");
 }
 
 function normalizeBodyGroup(group) {
@@ -6084,6 +6130,7 @@ function journalHasContent(journal) {
     journal.event,
     journal.mood,
     journal.bodyNote,
+    journal.bodyMind && journal.bodyMind.text,
     journal.smallestStep,
     ...(journal.awareness || []),
     ...(journal.execution || []),
@@ -6126,6 +6173,7 @@ function journalBlob(journal) {
     journal.event,
     journal.mood,
     journal.bodyNote,
+    journal.bodyMind && journal.bodyMind.text,
     journal.smallestStep,
     ...(journal.awareness || []),
     ...(journal.execution || []),
@@ -8293,6 +8341,7 @@ function insightReady(journal) {
   const hasBody = Boolean(
     (data.bodyTags || []).length ||
     String(data.bodyNote || "").trim() ||
+    String((data.bodyMind && data.bodyMind.text) || "").trim() ||
     (check.mood.flags || []).length ||
     check.mood.reason ||
     (check.body.flags || []).length ||
@@ -8336,7 +8385,7 @@ function insightSignature(journal) {
 function insightEmptyCopy(quick) {
   return quick
     ? "先寫下感謝、事件與心情，再開始 3 輪引導式深度思考。"
-    : "先把感謝、事件、心情與身體覺察寫下來，再開始 3 輪引導式深度思考。";
+    : "先把感謝、事件、心情與身心覺察寫下來，再開始 3 輪引導式深度思考。";
 }
 
 function thinkGuideFoldId() {
@@ -9156,11 +9205,107 @@ async function generateBodyCoach(options = {}) {
 
 function maybeAutoGenerateBodyCoach(journal) {
   if (state.journalHydrating || rejectArchivedJournalWrite({ auto: true })) return;
+  maybeAutoGenerateBodyMind(journal);
+}
+
+function renderBodyMindInsight(mind) {
+  const root = document.getElementById("bodyMindInsight");
+  if (!root) return;
+  const data = normalizeBodyMind(mind || state.journalBodyMind);
+  if (!data.insight && !data.support) {
+    root.innerHTML = "";
+    return;
+  }
+  root.innerHTML = `
+    <article class="body-mind-insight">
+      <p class="body-mind-insight__head">深度覺察</p>
+      ${data.insight ? `<div class="body-mind-insight__line">
+        <p class="body-mind-insight__label">覺察一句話</p>
+        <p class="body-mind-insight__text">${escapeHtml(data.insight)}</p>
+      </div>` : ""}
+      ${data.support ? `<div>
+        <p class="body-mind-insight__label">給今天的你</p>
+        <p class="body-mind-insight__support">${escapeHtml(data.support)}</p>
+      </div>` : ""}
+    </article>`;
+}
+
+function setBodyMindLoading(loading) {
+  state.bodyMindBusy = loading;
+  const loader = document.getElementById("bodyMindLoading");
+  if (loader) loader.hidden = !loading;
+}
+
+async function generateBodyMindInsight(options = {}) {
+  if (rejectArchivedJournalWrite(options)) return;
+  if (!ensurePlusFeature("body_ai", options)) return;
+  const journal = collectJournal();
+  const text = String((journal.bodyMind && journal.bodyMind.text) || "").trim();
+  if (!bodyMindTextReady(text)) {
+    if (!options.auto) showToast("先寫下那個瞬間就好。");
+    return;
+  }
+  const sig = bodyMindSignature(journal);
+  if (hasBodyMindResult(journal.bodyMind) && journal.bodyMind.sig === sig && !options.force) {
+    renderBodyMindInsight(journal.bodyMind);
+    return;
+  }
+  if (state.bodyMindBusy && !options.force) return;
+  const token = (state.bodyMindToken || 0) + 1;
+  state.bodyMindToken = token;
+  setBodyMindLoading(true);
+  try {
+    if (!state.user) throw new Error("請先登入，才能整理今天的深度覺察。");
+    const remote = await postReview({
+      mode: "bodymind",
+      date: currentIso(),
+      text,
+      context: {
+        bodyMindText: text,
+        event: journal.event,
+        mood: journal.mood,
+        thanksText: thanksTextFrom(journal),
+        thanks: thanksTextFrom(journal),
+      },
+    });
+    if (state.bodyMindToken !== token) return;
+    const insight = String(remote.insight || "").replace(/\s+/g, " ").trim();
+    const support = String(remote.support || "").replace(/\s+/g, " ").trim();
+    if (!insight) throw new Error("今天的深度覺察還沒整理好，請再試一次。");
+    const next = normalizeBodyMind({
+      ...normalizeBodyMind(journal.bodyMind),
+      text,
+      insight,
+      support,
+      generatedAt: new Date().toISOString(),
+      sig,
+    });
+    state.journalBodyMind = next;
+    state.journalMeta.bodyMindSig = sig;
+    renderBodyMindInsight(next);
+    persistJournalQuietly();
+  } catch (error) {
+    if (state.bodyMindToken !== token) return;
+    if (isPlusRequiredError(error)) return;
+    if (!options.auto) showToast(formatApiError(error) || "今天的深度覺察還沒整理好，請再試一次。");
+  } finally {
+    if (state.bodyMindToken === token) setBodyMindLoading(false);
+  }
+}
+
+function maybeAutoGenerateBodyMind(journal) {
+  if (state.journalHydrating || rejectArchivedJournalWrite({ auto: true })) return;
   if (!canUsePlusFeature("body_ai")) return;
   if (state.journalMode === "quick" && !state.quickModules?.body) return;
-  if (bodyCoachReady(journal, { auto: true }) && state.journalMeta.bodyCoachSig !== bodyCoachSignature(journal)) {
-    generateBodyCoach({ auto: true });
+  const data = journal || collectJournal();
+  const text = String((data.bodyMind && data.bodyMind.text) || "").trim();
+  if (!bodyMindTextReady(text)) return;
+  const sig = bodyMindSignature(data);
+  if (hasBodyMindResult(data.bodyMind) && (data.bodyMind.sig === sig || state.journalMeta.bodyMindSig === sig)) {
+    renderBodyMindInsight(data.bodyMind);
+    return;
   }
+  generateBodyMindInsight({ auto: true });
 }
 
 const LEGACY_AWARENESS_PROMPTS = [CORE_AWARENESS_PROMPT];
@@ -9722,7 +9867,7 @@ function renderThinkChoiceResult(insight) {
   const root = document.getElementById("thinkChoiceResult");
   if (!root) return;
   const guide = normalizeInsight(insight || state.journalInsight).guide || emptyThinkGuide();
-  const hasClose = Boolean(guide.awareness || guide.summary || guide.selfSeen || guide.takeaway);
+  const hasClose = Boolean(guide.awareness || guide.summary || guide.selfSeen || guide.takeaway || guide.direction);
   if (!hasClose) {
     root.innerHTML = "";
     return;
@@ -9731,6 +9876,7 @@ function renderThinkChoiceResult(insight) {
   const sections = [
     guide.awareness || guide.summary ? { kicker: v2 ? "今天真正值得看的" : "今天，這件事背後可能代表什麼", text: guide.awareness || guide.summary, kind: "awareness" } : null,
     guide.selfSeen ? { kicker: v2 ? "今天我看見的" : "今天我看見的自己", text: guide.selfSeen, kind: "selfSeen" } : null,
+    guide.direction ? { kicker: v2 ? "可以怎麼變得更好" : "今日帶走的一句話", text: guide.direction, kind: "direction" } : null,
     guide.takeaway ? { kicker: v2 ? "還想確認的" : "今日帶走的一句話", text: guide.takeaway, kind: "takeaway" } : null,
   ].filter(Boolean);
   root.innerHTML = `
@@ -10146,6 +10292,7 @@ function thinkBitsFrom(journal) {
     awareness: String(guide.awareness || guide.summary || "").trim(),
     selfSeen: String(guide.selfSeen || "").trim(),
     takeaway: String(guide.takeaway || "").trim(),
+    direction: String(guide.direction || "").trim(),
     thinkVariant: isV2 ? "think-v2" : "",
   };
 }
@@ -10173,6 +10320,7 @@ function priorThinkAwareContext(journal) {
     thinkCloseAwareness: think.awareness,
     thinkCloseSelfSeen: think.selfSeen,
     thinkCloseTakeaway: think.takeaway,
+    thinkCloseDirection: think.direction,
     thinkVariant: think.thinkVariant,
     awarenessSelected: aware.selected,
     awarenessNone: aware.none,
@@ -10190,6 +10338,8 @@ function choicesContext(journal, extra = {}) {
     bodyTags: journal.bodyTags,
     bodyNote: journal.bodyNote,
     bodyCheck: journal.bodyCheck,
+    bodyMindText: journal.bodyMind && journal.bodyMind.text,
+    bodyMindInsight: journal.bodyMind && journal.bodyMind.insight,
     ...extra,
   };
 }
@@ -10514,6 +10664,8 @@ async function generateThinkV2Ask(options = {}) {
         bodyCheck: journal.bodyCheck,
         bodyTags: journal.bodyTags,
         bodyNote: journal.bodyNote,
+        bodyMindText: journal.bodyMind && journal.bodyMind.text,
+        bodyMindInsight: journal.bodyMind && journal.bodyMind.insight,
         rounds: answered,
       },
     });
@@ -10620,6 +10772,10 @@ async function generateThinkV2Close(options = {}) {
         event: journal.event,
         mood: journal.mood,
         bodyCheck: journal.bodyCheck,
+        bodyTags: journal.bodyTags,
+        bodyNote: journal.bodyNote,
+        bodyMindText: journal.bodyMind && journal.bodyMind.text,
+        bodyMindInsight: journal.bodyMind && journal.bodyMind.insight,
         rounds: answered,
       },
     });
@@ -10635,6 +10791,7 @@ async function generateThinkV2Close(options = {}) {
       awareness: stuck,
       selfSeen: seen,
       takeaway: String(remote.unknown || remote.takeaway || "").trim(),
+      direction: String(remote.direction || "").trim(),
       draftAnswer: "",
     });
     persistJournalQuietly();
@@ -11592,6 +11749,7 @@ function persistJournalNow(options = {}) {
   clearTimeout(scheduleJournalAutosave.timer);
   scheduleJournalAutosave.timer = 0;
   persistJournalQuietly({ showHint: options.showHint !== false });
+  if (!options.skipBodyMind) maybeAutoGenerateBodyMind();
 }
 
 function scheduleJournalAutosave() {
@@ -11613,7 +11771,7 @@ function isJournalAutosaveField(el) {
   if (!el) return false;
   if (el.classList && el.classList.contains("think-guide-answer")) return true;
   const id = String(el.id || "");
-  return /^(thanksText|thanks\d+|aware\d+|exec\d+|execNext|execFollowup|execDeepAnswer|eventText|bodyNote|bodyOtherNote|body(Mood|Body|Sleep)Reason|manifestVision|manifestThink\d+|deep\d)/.test(id);
+  return /^(thanksText|thanks\d+|aware\d+|exec\d+|execNext|execFollowup|execDeepAnswer|eventText|bodyMindText|bodyNote|bodyOtherNote|body(Mood|Body|Sleep)Reason|manifestVision|manifestThink\d+|deep\d)/.test(id);
 }
 
 function thinkV2AnswerEl() {
@@ -12002,6 +12160,10 @@ function execCheckHistoryLines(journal) {
 
 function collectJournal() {
   const bodyCheck = collectBodyCheck();
+  const bodyMind = normalizeBodyMind({
+    ...(state.journalBodyMind || emptyBodyMind()),
+    text: collectBodyMindText() || String((state.journalBodyMind && state.journalBodyMind.text) || "").trim(),
+  });
   const journal = {
     thanks: collectThanksText(),
     thanksText: collectThanksText(),
@@ -12009,7 +12171,8 @@ function collectJournal() {
     mood: document.querySelector("#moodRow .mood-btn.is-on")?.dataset.mood || "",
     bodyCheck,
     bodyTags: deriveBodyTags(bodyCheck),
-    bodyNote: deriveBodyNote(bodyCheck),
+    bodyNote: bodyMind.text || deriveBodyNote(bodyCheck),
+    bodyMind,
     bodyCoach: state.journalBodyCoach || emptyBodyCoach(),
     awareness: collectAwarenessQuizAnswers(),
     awarenessChecks: checkedValues("awareChecks"),
@@ -12585,6 +12748,7 @@ function fillJournal(journal) {
     manifestPromptsSig: data.manifestPromptsSig || "",
     insightSig: data.insight?.sig || "",
     bodyCoachSig: data.bodyCoach?.sig || "",
+    bodyMindSig: data.bodyMind?.sig || "",
     promptsSig: data.promptsSig || "",
     promptsAi: Boolean(data.promptsAi),
     corePromptsSig: data.corePromptsSig || "",
@@ -12592,6 +12756,9 @@ function fillJournal(journal) {
   };
   state.journalInsight = normalizeInsight(data.insight);
   state.journalBodyCoach = normalizeBodyCoach(data.bodyCoach);
+  const incomingMind = normalizeBodyMind(data.bodyMind);
+  if (!incomingMind.text && String(data.bodyNote || "").trim()) incomingMind.text = String(data.bodyNote || "").trim();
+  state.journalBodyMind = incomingMind;
   state.journalExecFocus = normalizeExecFocus(data.executionFocus, data.executionCheckItems, execRawSourcesFrom(data));
   state.journalAwarenessResult = normalizeAwarenessResult(data.awarenessResult, { keepSource: true });
   state.awarenessChoices = normalizeChoiceBag(data.awarenessChoices);
@@ -12625,6 +12792,9 @@ function fillJournal(journal) {
   if (eventText) eventText.value = data.event || "";
   setActiveButtons("moodRow", ".mood-btn", data.mood ? [data.mood] : []);
   fillBodyCheck(normalizeBodyCheck(data.bodyCheck, data.bodyTags, data.bodyNote));
+  const bodyMindText = document.getElementById("bodyMindText");
+  if (bodyMindText) bodyMindText.value = state.journalBodyMind.text || "";
+  renderBodyMindInsight(state.journalBodyMind);
   const manifestVision = document.getElementById("manifestVision");
   if (manifestVision) manifestVision.value = data.manifest || "";
   renderManifestQuestions(state.manifestPrompts, { answers: data.manifestThink });

@@ -21,7 +21,7 @@ const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const css = fs.readFileSync(path.join(root, "app.css"), "utf8");
 const reviewApi = fs.readFileSync(path.join(root, "api/review.js"), "utf8");
 
-assert(html.includes("lib/history-reading.js?v=5"), "History reading mapper 已載入");
+assert(html.includes("lib/history-reading.js?v=6"), "History reading mapper 已載入");
 assert(app.includes('"① 今天發生了什麼"'), "主閱讀流有①");
 assert(app.includes('"⑤ 今日帶走的一句話"'), "主閱讀流有⑤");
 assert(app.includes("查看當天完整紀錄"), "完整紀錄可展開");

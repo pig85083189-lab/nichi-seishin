@@ -13,7 +13,7 @@ const {
   listArchivedReports,
   archiveUserReport,
 } = require("../lib/store");
-const { ensureTrial, getSubscription, withInternalAccess, effectivePlanFromRow, supabaseAdminConfigured } = require("../lib/supabase");
+const { ensureTrial, getSubscription, withInternalAccess, effectivePlanFromRow, supabaseAdminConfigured, isInternal } = require("../lib/supabase");
 
 const REPORT_SYSTEM = `你是「日精進」溫暖且具建設性的成長教練。使用者會給你一段期間內的復盤摘要，以及覺察力、執行力、顯化力的勾選量與完成頻率。
 
@@ -327,12 +327,15 @@ async function handler(req, res, forced = {}) {
           continue;
         }
         let plan = "free";
+        let cronInternal = false;
         try {
-          plan = effectivePlanFromRow(await withInternalAccess(await getSubscription(account.id), account.id));
+          const row = await withInternalAccess(await getSubscription(account.id), account.id);
+          plan = effectivePlanFromRow(row);
+          cronInternal = isInternal(row);
         } catch {
           plan = "free";
         }
-        if (!canUseFeature(plan, featureForReportType(kind))) {
+        if (!canUseFeature(plan, featureForReportType(kind), { isInternal: cronInternal })) {
           results.push({ userId: account.id, skipped: true, reason: "plus_required" });
           continue;
         }
@@ -392,7 +395,10 @@ async function handler(req, res, forced = {}) {
       feature: reportFeature,
       res,
       supabaseReady: supabaseAdminConfigured(),
-      loadPlan: async () => effectivePlanFromRow(await ensureTrial(user)),
+      loadPlan: async () => {
+        const row = await ensureTrial(user);
+        return { plan: effectivePlanFromRow(row), isInternal: isInternal(row) };
+      },
     });
     if (!allowed) return;
 

@@ -1,6 +1,6 @@
 const reviewHandler = require("./review");
 const { requireUser } = require("../lib/auth");
-const { ensureTrial, effectivePlanFromRow, supabaseAdminConfigured } = require("../lib/supabase");
+const { ensureTrial, effectivePlanFromRow, supabaseAdminConfigured, isInternal } = require("../lib/supabase");
 const { enforcePlusEntitlement } = require("../lib/entitlement");
 const { getApiKey, getModel, getProvider, usesClaude, callOpenAI } = require("../lib/openai");
 
@@ -75,7 +75,10 @@ module.exports = async function handler(req, res) {
     feature: "think_ai",
     res,
     supabaseReady: supabaseAdminConfigured(),
-    loadPlan: async () => effectivePlanFromRow(await ensureTrial(user)),
+    loadPlan: async () => {
+      const row = await ensureTrial(user);
+      return { plan: effectivePlanFromRow(row), isInternal: isInternal(row) };
+    },
   });
   if (!allowed) return;
 
