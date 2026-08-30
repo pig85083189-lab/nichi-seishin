@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=217" />
+    <link rel="stylesheet" href="app.css?v=218" />
     <style>
       html.is-booting,
       html.is-booting body {
@@ -408,7 +408,7 @@
             <button class="journal-fold__toggle" type="button" data-journal-fold aria-expanded="false" aria-controls="bodyFoldPanel">
               <span class="journal-fold__copy">
                 <h2 class="journal-card__title"><span>03</span> 身心覺察</h2>
-                <p class="journal-fold__summary">留意今天身體或心裡，特別有感覺的那一刻。</p>
+                <p class="journal-fold__summary" hidden>留意今天身體或心裡，特別有感覺的那一刻。</p>
               </span>
               <span class="journal-fold__chevron" aria-hidden="true"></span>
             </button>
@@ -417,8 +417,8 @@
             <div class="body-mind" id="bodyMindCard">
               <p class="journal-core-q">今天有沒有哪一個瞬間，讓你覺得特別舒服或不舒服？</p>
               <textarea class="textarea" id="bodyMindText" rows="5" placeholder="把那個瞬間寫下來就好"></textarea>
-              <p class="journal-guide">可能是身體的感受，也可能是某個人說的一句話、發生的一件事，或某個讓你心裡特別有感覺的瞬間，都可以寫下來。</p>
-              <p class="journal-voice-hint">打字或用麥克風說都可以</p>
+              <p class="journal-guide js-new-body-extra" hidden>可能是身體的感受，也可能是某個人說的一句話、發生的一件事，或某個讓你心裡特別有感覺的瞬間，都可以寫下來。</p>
+              <p class="journal-voice-hint js-new-body-extra" hidden>打字或用麥克風說都可以</p>
               <div class="check-loading" id="bodyMindLoading" hidden>
                 <p class="check-loading__label">正在整理今天的深度覺察…</p>
                 <div class="ai-thinking__bar"><i></i></div>
@@ -1264,6 +1264,6 @@
     <script src="lib/insight-highlight.js?v=5"></script>
     <script src="lib/user-mark.js?v=6"></script>
     <script src="lib/task-sidebar.js?v=1"></script>
-    <script src="app.js?v=250"></script>
+    <script src="app.js?v=251"></script>
   </body>
 </html>

@@ -22,14 +22,22 @@ const css = fs.readFileSync(path.join(root, "app.css"), "utf8");
 const reviewJs = fs.readFileSync(path.join(root, "api/review.js"), "utf8");
 
 assert(html.includes("<span>03</span> 身心覺察"), "03 正式名稱");
-assert(html.includes("留意今天身體或心裡，特別有感覺的那一刻。"), "03 subtitle");
 assert(html.includes("id=\"bodyMindText\""), "2. 只有一個主 textarea");
 assert((html.match(/id="bodyMindText"/g) || []).length === 1, "2. textarea 只有一個");
 const visible03 = html.slice(html.indexOf("id=\"bodyMindCard\""), html.indexOf("js-legacy-body-ui"));
+assert(visible03.includes("今天有沒有哪一個瞬間"), "1. 唯一問題");
+assert(!/class="journal-guide"(?![^>]*hidden)/.test(visible03), "3. 新 day 無可見 helper");
 assert(!visible03.includes("今日的心情"), "1. 新 day 不顯示重複 mood");
 assert(!visible03.includes("data-body-flag"), "1. 新 UI 無身體選項");
 assert(!visible03.includes("sleep-chip"), "1. 新 UI 無 sleep selector");
 assert(html.includes("js-legacy-body-ui"), "7. legacy DOM 仍在但隱藏");
+assert(html.includes("id=\"bodyCoachCard\""), "14. bodyCoach DOM 仍在 legacy");
+assert(css.includes("#section-body .js-legacy-body-ui"), "7. legacy 用 display none 鎖定");
+assert(css.includes("display: none !important"), "7. 不被 .journal-split display:grid 蓋掉");
+assert(app.includes("function lockNewDayBodyUi"), "7. render path 會再鎖舊 UI");
+assert(app.includes("function generateThinkV2Ask"), "16. 04 未改");
+assert(app.includes("function generateExecDeepFinal"), "18. 06 未改");
+assert(app.includes("internal-reset-today"), "19. Internal reset 未拆");
 
 assert(app.includes("bodyMindText"), "3. raw autosave field");
 assert(app.includes("function generateBodyMindInsight"), "4. insight persist 路徑");

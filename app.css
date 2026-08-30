@@ -6158,6 +6158,12 @@ textarea[hidden] + .journal-voice-hint,
   gap: 0;
 }
 
+#section-body .js-legacy-body-ui,
+#section-body .js-new-body-extra,
+#section-body .journal-fold__summary {
+  display: none !important;
+}
+
 .body-mind {
   min-width: 0;
 }

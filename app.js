@@ -11875,10 +11875,18 @@ function syncJournalFooter() {
   syncCompleteButtonLabel();
 }
 
+function lockNewDayBodyUi() {
+  document.querySelectorAll("#section-body .js-legacy-body-ui, #section-body .js-new-body-extra, #section-body .journal-fold__summary").forEach((node) => {
+    node.hidden = true;
+    node.setAttribute("hidden", "");
+  });
+}
+
 function applyJournalArchiveLock() {
   const page = document.getElementById("page-today");
   const archived = isCurrentJournalArchived();
   if (page) page.classList.toggle("is-archived", archived);
+  lockNewDayBodyUi();
   syncJournalFooter();
 }
 
@@ -12846,6 +12854,7 @@ function applyJournalFolds() {
 }
 
 function fillJournal(journal) {
+  lockNewDayBodyUi();
   const data = { ...emptyJournal(), ...(journal && typeof journal === "object" ? journal : {}) };
   state.awareFoldPinned = false;
   state.journalHydrating = true;

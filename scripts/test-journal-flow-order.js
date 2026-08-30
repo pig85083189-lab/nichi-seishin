@@ -174,7 +174,8 @@ const awareFold = html.slice(html.indexOf("id=\"section-aware\""), html.indexOf(
 const execFold = html.slice(html.indexOf("id=\"section-exec\""), html.indexOf("id=\"execFoldPanel\""));
 assert(thanksFold.includes("把今天值得感謝的人、事、物留下來。"), "01 收合說明是意義不是操作");
 assert(eventFold.includes("寫下今天真正碰到你的那件事與感受。"), "02 收合說明");
-assert(bodyFold.includes("留意今天身體或心裡，特別有感覺的那一刻。"), "03 收合說明");
+assert(bodyFold.includes("身心覺察"), "03 標題");
+assert(bodyFold.includes("hidden"), "03 收合說明已隱藏");
 assert(html.includes("id=\"bodyMindText\""), "03 新版只有主 textarea");
 assert(html.includes("js-legacy-body-ui") && html.includes("hidden"), "舊 03 mood／身體選項改為隱藏相容");
 assert(deepFold.includes("看看這件事背後，對你真正代表什麼。"), "04 收合說明：理解這件事");
