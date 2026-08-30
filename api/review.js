@@ -9,6 +9,7 @@ const bodyCoachInsight = require("../lib/body-coach-insight");
 const insightHighlight = require("../lib/insight-highlight");
 const reviewMerge = require("../lib/review-merge");
 const thinkV2 = require("../lib/think-v2");
+const reflectionV3 = require("../lib/reflection-v3");
 const execV2 = require("../lib/exec-v2");
 
 const HIGHLIGHT_RULE = `【重點反白 highlights】
@@ -3351,7 +3352,12 @@ module.exports = async function handler(req, res) {
         ];
       }
     } else if (mode === "insight") {
-      if (thinkV2.isThinkV2Request(body)) {
+      if (reflectionV3.isReflectionV3Request(body)) {
+        messages = [
+          { role: "system", content: withCompleteRule(reflectionV3.REFLECTION_V3_SYSTEM) },
+          { role: "user", content: reflectionV3.reflectionV3UserPrompt(body) },
+        ];
+      } else if (thinkV2.isThinkV2Request(body)) {
         const close = thinkV2.thinkV2Step(body) === "close";
         messages = [
           { role: "system", content: withCompleteRule(close ? thinkV2.THINK_V2_CLOSE_SYSTEM : thinkV2.THINK_V2_ASK_SYSTEM) },
@@ -3452,11 +3458,13 @@ module.exports = async function handler(req, res) {
     const aiOpts = {
       internal: internalUser,
       effort:
-        internalUser && mode === "insight" && thinkV2.isThinkV2Request(body)
+        internalUser && mode === "insight" && (thinkV2.isThinkV2Request(body) || reflectionV3.isReflectionV3Request(body))
           ? "high"
           : undefined,
       temperature:
-        mode === "insight" && thinkV2.isThinkV2Request(body)
+        mode === "insight" && reflectionV3.isReflectionV3Request(body)
+          ? 0.45
+        : mode === "insight" && thinkV2.isThinkV2Request(body)
           ? thinkV2.thinkV2Step(body) === "close"
             ? 0.4
             : 0.55
@@ -3494,6 +3502,8 @@ module.exports = async function handler(req, res) {
             ? 900
           : mode === "choices"
             ? 700
+          : mode === "insight" && reflectionV3.isReflectionV3Request(body)
+            ? 900
           : mode === "insight" && thinkV2.isThinkV2Request(body)
           ? thinkV2.thinkV2Step(body) === "close"
             ? 900
@@ -3637,6 +3647,15 @@ module.exports = async function handler(req, res) {
       return;
     }
     if (mode === "insight") {
+      if (reflectionV3.isReflectionV3Request(body)) {
+        const result = reflectionV3.normalizeReflectionV3Result(data, body.context || {});
+        if (!result.coreQuote || result.questions.length < 3) {
+          res.status(502).json({ ok: false, error: "今天的深度思考還沒整理好，請再試一次" });
+          return;
+        }
+        res.status(200).json({ ok: true, source: getProvider(), data: result });
+        return;
+      }
       if (thinkV2.isThinkV2Request(body)) {
         if (thinkV2.thinkV2Step(body) === "close") {
           const closed = thinkV2.normalizeThinkV2Close(data, body);
@@ -3831,6 +3850,7 @@ module.exports.CHOICES_THINK_SYSTEM = CHOICES_THINK_SYSTEM;
 module.exports.THINK_CHOICES_CLOSE_SYSTEM = THINK_CHOICES_CLOSE_SYSTEM;
 module.exports.THINK_V2_ASK_SYSTEM = thinkV2.THINK_V2_ASK_SYSTEM;
 module.exports.THINK_V2_CLOSE_SYSTEM = thinkV2.THINK_V2_CLOSE_SYSTEM;
+module.exports.REFLECTION_V3_SYSTEM = reflectionV3.REFLECTION_V3_SYSTEM;
 module.exports.choicesUserPrompt = choicesUserPrompt;
 module.exports.EXECUTION_CHOICES_SYSTEM = EXECUTION_CHOICES_SYSTEM;
 module.exports.EXECUTION_PROMPTS_SYSTEM = EXECUTION_PROMPTS_SYSTEM;

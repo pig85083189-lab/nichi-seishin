@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=221" />
+    <link rel="stylesheet" href="app.css?v=222" />
     <style>
       html.is-booting,
       html.is-booting body {
@@ -578,13 +578,22 @@
             <button class="journal-fold__toggle" type="button" data-journal-fold aria-expanded="false" aria-controls="deepFoldPanel">
               <span class="journal-fold__copy">
                 <h2 class="journal-card__title"><span>04</span> 深度思考 <span class="plus-lock-badge">PLUS</span></h2>
-                <p class="journal-fold__summary">看看這件事背後，對你真正代表什麼。</p>
+                <p class="journal-fold__summary">今天真正值得重新思考的是什麼。</p>
               </span>
               <span class="journal-fold__chevron" aria-hidden="true"></span>
             </button>
             <div class="journal-fold__panel" id="deepFoldPanel" inert aria-hidden="true">
               <div class="journal-fold__inner">
-            <p class="journal-guide">先把這件事看清楚：真正值得停下來的是什麼。</p>
+            <div class="think-v3" id="thinkV3Card">
+              <button class="body-mind-cta think-v3-cta" id="btnReflectionV3" type="button" disabled>看看今天真正值得想的是什麼 →</button>
+              <p class="think-v3-hint" id="thinkV3Hint" hidden></p>
+              <div class="check-loading" id="thinkV3Loading" hidden>
+                <p class="check-loading__label">正在整理今天真正值得想的事…</p>
+                <div class="ai-thinking__bar"><i></i></div>
+              </div>
+              <div id="thinkV3Result"></div>
+            </div>
+            <p class="journal-guide js-legacy-think-ui">先把這件事看清楚：真正值得停下來的是什麼。</p>
             <div class="check-loading" id="deepPromptLoading" hidden>
               <p class="check-loading__label">正在整理今天的問題…</p>
               <div class="ai-thinking__bar"><i></i></div>
@@ -986,8 +995,8 @@
               <span class="guide-step__num" aria-hidden="true">04</span>
               <div class="guide-step__body">
                 <p class="guide-step__label">深度思考</p>
-                <h3 class="guide-step__title">看見事情背後更深一層的意義</h3>
-                <p class="guide-step__text">從今天的記錄裡，看見事情背後更深一層的意義。</p>
+                <h3 class="guide-step__title">看看今天真正值得重新思考的是什麼</h3>
+                <p class="guide-step__text">系統會讀懂今天的 01～03，給你一句核心金句和三個深度問題。你不用再回答 AI。</p>
               </div>
             </li>
             <li class="guide-step" id="guide-05">
@@ -1259,13 +1268,13 @@
     <script src="lib/text-integrity.js?v=6"></script>
     <script src="lib/body-coach-insight.js?v=1"></script>
     <script src="lib/internal-test.js?v=1"></script>
-    <script src="lib/review-merge.js?v=14"></script>
+    <script src="lib/review-merge.js?v=15"></script>
     <script src="lib/entitlement.js?v=4"></script>
-    <script src="lib/history-reading.js?v=6"></script>
+    <script src="lib/history-reading.js?v=7"></script>
     <script src="lib/history-summary.js?v=9"></script>
     <script src="lib/insight-highlight.js?v=5"></script>
     <script src="lib/user-mark.js?v=6"></script>
     <script src="lib/task-sidebar.js?v=1"></script>
-    <script src="app.js?v=256"></script>
+    <script src="app.js?v=257"></script>
   </body>
 </html>

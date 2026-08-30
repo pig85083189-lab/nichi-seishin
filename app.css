@@ -7219,6 +7219,95 @@ textarea[hidden] + .journal-voice-hint,
   line-height: 1.7;
 }
 
+.think-v3 {
+  min-width: 0;
+}
+
+.think-v3-cta {
+  margin-top: 0;
+}
+
+.think-v3-hint {
+  margin: 8px 0 0;
+  color: #8a7a6e;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.think-v3-hint[hidden] {
+  display: none;
+}
+
+.think-v3-quote {
+  margin: 18px 0 0;
+  padding: 14px 16px 15px;
+  background: rgba(251, 247, 242, 0.45);
+  border-left: 2px solid #bca58f;
+  border-radius: 0 8px 8px 0;
+}
+
+.think-v3-quote__label,
+.think-v3-list__label {
+  margin: 0 0 8px;
+  color: #806d5e;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.think-v3-quote__text {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.7;
+  color: #342c27;
+  overflow-wrap: anywhere;
+}
+
+.think-v3-list {
+  margin: 22px 0 0;
+  display: grid;
+  gap: 16px;
+}
+
+.think-v3-q {
+  margin: 0;
+}
+
+.think-v3-q__index {
+  margin: 0 0 6px;
+  color: #806d5e;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.think-v3-q__text {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+#page-today.is-archived .think-v3-cta {
+  display: none !important;
+}
+
+#thinkV3Card:not([hidden]) ~ .js-legacy-think-ui,
+#thinkV3Card:not([hidden]) ~ #thinkEmpty,
+#thinkV3Card:not([hidden]) ~ #btnThinkChoices,
+#thinkV3Card:not([hidden]) ~ #thinkQuestions,
+#thinkV3Card:not([hidden]) ~ #thinkCloseLoading,
+#thinkV3Card:not([hidden]) ~ #btnThinkClose,
+#thinkV3Card:not([hidden]) ~ #thinkChoiceResult,
+#thinkV3Card:not([hidden]) ~ #deepList,
+#thinkV3Card:not([hidden]) ~ #btnDeepMore,
+#thinkV3Card:not([hidden]) ~ #deepPromptLoading {
+  display: none !important;
+}
+
 .think-guide {
   display: grid;
   gap: 14px;
