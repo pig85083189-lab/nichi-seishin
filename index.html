@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=213" />
+    <link rel="stylesheet" href="app.css?v=214" />
     <style>
       html.is-booting,
       html.is-booting body {
@@ -634,23 +634,23 @@
               <span class="journal-fold__copy">
                 <h2 class="journal-card__title js-quick-only"><span>04</span> 今日最小行動</h2>
                 <h2 class="journal-card__title js-deep-only"><span>06</span> 執行力 <span class="plus-lock-badge">PLUS</span></h2>
-                <p class="journal-fold__summary">把今天的看見，變成明天真正做得到的一小步。</p>
+                <p class="journal-fold__summary">把今天的覺察，變成真正做得到的下一步。</p>
               </span>
               <span class="journal-fold__chevron" aria-hidden="true"></span>
             </button>
             <div class="journal-fold__panel" id="execFoldPanel" inert aria-hidden="true">
               <div class="journal-fold__inner">
                 <p class="journal-guide js-quick-only">明天只要做一件小到 5 分鐘內能完成的事。完成復盤後會進到側邊欄「執行力」清單，方便追蹤。</p>
-                <p class="journal-guide js-deep-only">既然已經看見了，明天你最想先做到哪些？</p>
+                <p class="journal-guide js-deep-only">選擇你想帶走的行動。勾選後會加入執行力。</p>
                 <div class="journal-split">
               <div class="journal-col">
                 <div class="js-deep-only">
                   <div class="check-loading" id="execPromptLoading" hidden>
-                    <p class="check-loading__label">✦ 正在替你整理明天做得到的小行動⋯</p>
+                    <p class="check-loading__label">正在整理今天的下一步…</p>
                     <div class="ai-thinking__bar"><i></i></div>
                   </div>
-                  <p class="deep-empty" id="execEmpty">寫完前面的看見後，再開始整理明天的一小步。</p>
-                  <button class="ai-check-btn" id="btnExecPrompts" type="button">✦ 開始今天的行動整理 <span class="plus-lock-badge">PLUS</span></button>
+                  <p class="deep-empty" id="execEmpty">寫完前面的看見後，再整理今天的下一步。</p>
+                  <button class="ai-check-btn" id="btnExecPrompts" type="button">整理今天的下一步 <span class="plus-lock-badge">PLUS</span></button>
                   <div id="execQuestions"></div>
                 </div>
                 <div class="exec-next">
@@ -664,7 +664,7 @@
                   <button class="ai-check-btn" id="btnExecAi" type="button" hidden>收下我的行動卡 <span class="plus-lock-badge">PLUS</span></button>
                 </div>
               </div>
-              <div class="journal-col js-deep-only">
+              <div class="journal-col js-deep-only" id="execCardCol" hidden>
                 <p class="journal-label">我的行動卡</p>
                 <p class="journal-guide journal-guide--tight">根據你選的行動，收成明天真的做得到的事。做完就勾起來。</p>
                 <div class="check-loading" id="execLoading" hidden>
@@ -989,7 +989,7 @@
               <div class="guide-step__body">
                 <p class="guide-step__label">執行力</p>
                 <h3 class="guide-step__title">留下明天真正做得到的行動</h3>
-                <p class="guide-step__text">把覺察變成下一步，不求做很多，只留下明天真正做得到的行動。</p>
+                <p class="guide-step__text">把今天的覺察，變成真正做得到的下一步。勾選後會加入執行力。</p>
                 <p class="guide-step__text">完成 01～06，就是一次完整的今日復盤。</p>
               </div>
             </li>
@@ -1233,13 +1233,13 @@
     <script src="analytics.js?v=4"></script>
     <script src="lib/text-integrity.js?v=6"></script>
     <script src="lib/body-coach-insight.js?v=1"></script>
-    <script src="lib/review-merge.js?v=9"></script>
-    <script src="lib/entitlement.js?v=2"></script>
-    <script src="lib/history-reading.js?v=4"></script>
+    <script src="lib/review-merge.js?v=10"></script>
+    <script src="lib/entitlement.js?v=3"></script>
+    <script src="lib/history-reading.js?v=5"></script>
     <script src="lib/history-summary.js?v=8"></script>
     <script src="lib/insight-highlight.js?v=5"></script>
     <script src="lib/user-mark.js?v=6"></script>
     <script src="lib/task-sidebar.js?v=1"></script>
-    <script src="app.js?v=246"></script>
+    <script src="app.js?v=247"></script>
   </body>
 </html>

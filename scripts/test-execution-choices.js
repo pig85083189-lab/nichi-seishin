@@ -45,12 +45,12 @@ const sleepOptions = [
   { id: "e3", text: "晚上 10 點後不再安排需要動腦的事情" },
 ];
 
-/* CASE A：04＋05 足夠時，prompt 要求直接給行動、不出問答 */
+/* CASE A：04＋05 足夠時，prompt 要求直接給 3 個行動、不出問答 */
 assert(EXECUTION_CHOICES_SYSTEM.includes("needFollowup 必須是 false"), "CASE A：足夠時禁止追問");
 assert(EXECUTION_CHOICES_SYSTEM.includes("不要再問一長串問題"), "CASE A：新版不是問答");
-assert(EXECUTION_CHOICES_SYSTEM.includes("不要為了看起來完整硬湊"), "CASE A：不要硬湊 3 個");
-assert(app.includes("executionContextEnough"), "CASE A：client 判斷 04／05 是否足夠");
-assert(app.includes("allowFollowup = !enough && !alreadyFollowed"), "CASE A：足夠時 client 忽略 followup");
+assert(EXECUTION_CHOICES_SYSTEM.includes("固定產出 3 個"), "CASE A：固定 3 個行動");
+assert(app.includes("executionContextEnough"), "CASE A：client 仍可判斷 04／05 是否足夠");
+assert(app.includes("optionsList.length < 3"), "CASE A：client 要求 3 個行動");
 
 const enoughPrompt = choicesUserPrompt({
   mode: "choices",
@@ -65,9 +65,9 @@ const enoughPrompt = choicesUserPrompt({
   },
 });
 assert(enoughPrompt.includes("【05 核心覺察】"), "CASE A：06 讀 05 核心覺察");
-assert(enoughPrompt.includes("【04 勾選】"), "CASE A：06 讀 04 勾選");
+assert(enoughPrompt.includes("【04 勾選／卡住的】") || enoughPrompt.includes("【04 真正卡住的】"), "CASE A：06 讀 04");
 assert(enoughPrompt.includes("needFollowup=false"), "CASE A：足夠時直接給行動");
-assert(enoughPrompt.includes("不要為了看起來完整硬湊 3 個"), "CASE A：user prompt 也不硬湊");
+assert(enoughPrompt.includes("固定生成 3 個下一步"), "CASE A：user prompt 固定 3 個");
 assert(!enoughPrompt.includes("人生願景"), "CASE A：06 不搶 07");
 
 /* CASE B：近義重複會被丟掉 */
@@ -84,7 +84,7 @@ assert(EXECUTION_CHOICES_SYSTEM.includes("禁止近義重複"), "CASE B：system
 
 /* CASE C：多選 1～3 */
 assert(app.includes('role="group"'), "CASE C：06 用 group／checkbox");
-assert(app.includes("可以選 1～3 件"), "CASE C：文案是多選");
+assert(app.includes("可以選 1～3 件") || app.includes("勾選後會加入執行力"), "CASE C：文案是多選");
 assert(app.includes('role="checkbox"'), "CASE C：checkbox role");
 assert(css.includes(".exec-step-list__item"), "CASE C：preview 用簡潔 list");
 assert(!css.includes('.choice-list[data-choice-kind="execution"] .choice-opt__box'), "CASE C：不再用 radio 圓點");
@@ -115,8 +115,9 @@ const selectedBag = normalizeExecutionChoiceBag({
 assert(selectedExecutionChoiceText(selectedBag) === sleepOptions[0].text, "CASE D：選中全文成為最小一步");
 assert(app.includes('markableP(chosen, field, "exec-step-list__text", date)'), "CASE D：選中後顯示明天的行動 list");
 assert(app.includes("明天，我先做到這些"), "CASE D：preview 標題改成明天我先做到這些");
-assert(app.includes("alignExecChoiceCheckItems"), "CASE D：收下後依選中行動各自成卡");
-assert(app.includes("addExecutionCheckItemsToSidebar"), "CASE D：收下後寫入獨立 task");
+assert(app.includes("alignExecChoiceCheckItems"), "CASE D：選中行動仍可成卡");
+assert(app.includes("addExecutionCheckItemsToSidebar"), "CASE D：勾選後寫入獨立 task");
+assert(app.includes("syncSelectedExecutionToSidebar"), "CASE D：勾選即加入執行力");
 assert(app.includes("usingExecChoices") && app.includes("no follow-up Q&A after a selected action"), "CASE E：選完不再追問");
 assert(html.includes("那你想為明天留下一個什麼小行動？") || app.includes("那你想為明天留下一個什麼小行動？"), "CASE F：自訂才出提示");
 
@@ -133,10 +134,10 @@ assert(selectedExecutionChoiceText(customBag) === "明天早餐後先散步 10 �
 assert(app.includes("execChoiceCustomId"), "CASE F：runtime 有 custom");
 assert(app.includes("ta.hidden = false"), "CASE F：選自己寫才出 textarea");
 
-/* CASE H／I：資料不足最多 1 題，答完不再第 2 題 */
-assert(EXECUTION_CHOICES_SYSTEM.includes("不要出第 2 題"), "CASE H：最多 1 追問");
-assert(app.includes("alreadyFollowed"), "CASE I：追問過就不再追問");
-assert(app.includes("btnExecChoiceFollow"), "CASE H：追問送出鈕");
+/* CASE H／I：初始不再追問；optional 06 深度思考最多 2 題 */
+assert(EXECUTION_CHOICES_SYSTEM.includes("不要出追問"), "CASE H：初始直接給行動");
+assert(app.includes("btnExecChoiceFollow"), "CASE H：舊追問送出鈕仍保留");
+assert(app.includes("function generateExecDeepAsk"), "CASE H：新的 optional 深度思考");
 assert(!app.includes("generateExecutionFollowup({ fromCards: true })") || app.includes("usingExecChoices"), "CASE I：新版不走舊第 2 題");
 
 /* CASE J：行動卡沿用 */
@@ -157,7 +158,7 @@ assert(EXECUTION_PROMPTS_SYSTEM.includes("最多 2 輪"), "CASE L：舊路徑 pr
 
 /* CASE M：reload hydrate */
 assert(app.includes("state.executionChoices = normalizeExecutionChoiceBag(data.executionChoices)"), "CASE M：fillJournal hydrate");
-assert(app.includes("executionChoices: serializeExecutionChoiceBag(state.executionChoices)"), "CASE M：collectJournal 寫回");
+assert(app.includes("executionChoices: serializeExecutionChoiceBag(withExecDeepDraft(state.executionChoices))") || app.includes("executionChoices: serializeExecutionChoiceBag(state.executionChoices)"), "CASE M：collectJournal 寫回");
 
 /* CASE N：空 bag 不覆蓋 */
 const kept = mergeExecutionChoiceBags(
@@ -244,7 +245,7 @@ assert(legacyOnly.length === 1 && !legacyOnly[0].detail, "舊的只有 text 的 
 assert(EXECUTION_CHOICES_SYSTEM.includes("禁止因為一次情緒事件就叫使用者分手"), "重大決定不可直接下指令");
 assert(EXECUTION_CHOICES_SYSTEM.includes("自我照顧"), "自我照顧仍可用，但有條件");
 assert(app.includes("passthroughExecChoiceCheckItems"), "收下行動卡時沿用已選 title／detail，不另造一套");
-assert(app.includes("optionsList.length < 1"), "API／client 接受 1～3 個");
+assert(app.includes("optionsList.length < 3"), "API／client 要求 3 個");
 const mergeJs = fs.readFileSync(path.join(root, "lib/review-merge.js"), "utf8");
 assert(mergeJs.includes("記下真正不舒服的瞬間"), "界線 fallback 不是感恩／靜坐");
 assert(mergeJs.includes("先推進卡住的那一件"), "工作 fallback 直接推進卡住的事");
@@ -256,7 +257,7 @@ assert(reviewJs.includes("不要為了輪數再問一次感受"), "挖到核心�
 const unseenBlob =
   "我今天覺得很努力，但重要的人沒有看見。感到失落、委屈。我平常習慣告訴自己「我自己知道就好」，但其實仍然希望被看見。";
 const unseenActions = insightExecutionFallbackOptions(unseenBlob);
-assert(unseenActions.length >= 1 && unseenActions.length <= 2, `被看見案例不要硬湊 3 個，實際 ${unseenActions.length}`);
+assert(unseenActions.length === 3, `被看見案例固定 3 個，實際 ${unseenActions.length}`);
 unseenActions.forEach((item, index) => {
   assert(item.text && item.detail, `被看見案例 action ${index + 1} 必須有 title + detail`);
   const blob = `${item.text}${item.detail}`;
@@ -290,7 +291,7 @@ assert(unseenPrompt.includes("希望被看見") || unseenPrompt.includes("自己
 assert(EXECUTION_CHOICES_SYSTEM.includes("渴望被看見"), "system 把被看見當核心，而不是自我打氣");
 assert(EXECUTION_CHOICES_SYSTEM.includes("相信自己"), "system 禁止只叫使用者相信自己");
 
-assert(html.includes("把覺察變成下一步，不求做很多，只留下明天真正做得到的行動。"), "使用說明 06 是行動，不是問答");
+assert(html.includes("把今天的覺察，變成真正做得到的下一步"), "使用說明 06 是行動，不是問答");
 assert(!html.includes("AI 會依今天的內容問你 1 題"), "使用說明不再寫舊問答");
 
 console.log("execution choices tests passed");

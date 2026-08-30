@@ -179,7 +179,7 @@ assert(deepFold.includes("看看這件事背後，對你真正代表什麼。"),
 assert(!deepFold.includes("勾選即可"), "04 收合不混操作說明");
 assert(awareFold.includes("經過今天這些事情，我看見了自己什麼。"), "05 收合說明：看見自己");
 assert(!awareFold.includes("勾選即可"), "05 收合不混操作說明");
-assert(execFold.includes("把今天的看見，變成明天真正做得到的一小步。"), "06 收合說明");
+assert(execFold.includes("把今天的覺察，變成真正做得到的下一步。"), "06 收合說明");
 assert(!execFold.includes("完成會同步到側邊欄"), "06 收合不寫系統同步");
 assert(app.includes("選出最有感的 1～2 個就好。"), "04／05 勾選區上方輕提示");
 assert(app.includes("function choiceListHtml") && app.slice(app.indexOf("function choiceListHtml"), app.indexOf("function renderAwarenessChoices")).includes("選出最有感的 1～2 個就好。"), "輕提示只在 04／05 choice list");

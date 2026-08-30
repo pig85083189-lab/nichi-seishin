@@ -97,6 +97,7 @@ plusFeatures.forEach((feature) => {
 assert(featureForReviewRequest({ mode: "bodycoach" }) === "body_ai", "bodycoach → body_ai");
 assert(featureForReviewRequest({ mode: "choices", kind: "awareness" }) === "awareness_ai", "awareness choices");
 assert(featureForReviewRequest({ mode: "choices", kind: "execution" }) === "execution_ai", "execution choices");
+assert(featureForReviewRequest({ mode: "choices", kind: "execution-deep" }) === "execution_ai", "execution deep");
 assert(featureForReviewRequest({ mode: "insight" }) === "think_ai", "insight → think_ai");
 assert(featureForReportType("month") === "monthly_report_full", "month report feature");
 assert(featureForReportType("week") === "weekly_report_full", "week report feature");

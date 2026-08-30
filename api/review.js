@@ -7,6 +7,7 @@ const bodyCoachInsight = require("../lib/body-coach-insight");
 const insightHighlight = require("../lib/insight-highlight");
 const reviewMerge = require("../lib/review-merge");
 const thinkV2 = require("../lib/think-v2");
+const execV2 = require("../lib/exec-v2");
 
 const HIGHLIGHT_RULE = `【重點反白 highlights】
 從你實際生成的原文中，挑選最值得停下來看的核心片段。目的是抓重點，不是把整段塗成彩色。
@@ -2493,68 +2494,9 @@ const THINK_CHOICES_CLOSE_SYSTEM = `你不是心理醫師，也不是裁判。�
 ${HIGHLIGHT_RULE}
 - 繁體中文`;
 
-const EXECUTION_CHOICES_SYSTEM = `你是「日精進」的行動整理者。不要再問一長串問題。任務不是讓今天感覺好一點，而是讓今天的覺察真的往前走一步。
-
-這是 06 執行力。
-04 已經整理事情更深一層的意義，05 已經收成「核心覺察／我看見了」。
-你不要重新分析今天，不要寫人生願景，不要寫想成為什麼樣的人。那些是 07 顯化力。
-
-【生成前先內部判斷，不要寫進 JSON】
-A. 今天的表層事件是什麼？
-B. 真正卡住的是什麼？
-C. 深度思考挖到了什麼模式／需求／矛盾？
-D. 使用者今天新看見了自己什麼？
-E. 現在還不知道答案的是什麼？
-F. 哪一個最小行動，可以讓使用者更靠近答案或改變？
-
-每一個 action 都必須能回答：「這一步，是從今天哪一個覺察來的？」
-不要先套行動模板，再硬把今天的內容塞進去。
-
-【優先讀】
-1. 05 核心覺察、我看見了
-2. 04 使用者實際勾選的深度內容與深度看見
-3. 必要時才看 01 感謝、02 事件／心情、03 身體
-
-【輸出 1～3 個小行動｜品質比數量重要】
-可以 1 個、2 個、或最多 3 個。不要為了看起來完整硬湊 3 個。
-禁止近義重複，例如「早點睡／提早上床／不要太晚睡」算同一件事。
-每一天不必是同一種類型。依今天核心選擇最適合的一種或幾種：
-觀察／驗證／回顧／表達／界線／決策／實驗／行動／自我照顧。
-自我照顧（早睡、散步、靜坐、喝水、轉念、說感謝）只有在核心真的指向身體／休息／情緒恢復時才能當主行動。
-如果核心是界線、關係、工作、選擇、被忽略、渴望被看見、努力沒被看見、不敢表達、反覆忍耐、無法改變的環境：禁止只用感恩、轉念、靜坐、喝水、早睡、相信自己來取代真正要面對的問題。
-若核心是「很努力但重要的人沒有看見」：下一步優先是具體表達、確認自己的需求、觀察下次互動，而不是自我打氣。
-
-【時間尺度｜寫進 text／detail，不要另開區塊】
-可以依情況選擇：
-- next：明天／下一次就能做的一小步
-- week：這週想觀察、驗證、對照的事
-兩個可以並存，不必每天都給齊。
-
-【每個行動必須】
-- 具體、可執行、與今天核心直接相關
-- 使用者知道什麼時候做、要做什麼
-- text：約 8～16 個中文字的標題
-- detail：1～3 個短句
-禁止單獨成為行動：多照顧自己、學習接納、相信自己、保持覺察、多愛自己、試著放鬆。必須轉成可觀察行為。
-不要問句。永遠不要輸出「我想自己寫」；前端會自己加。
-
-【重大人生選擇】
-禁止因為一次情緒事件就叫使用者分手、離職、搬家、斷絕關係、做重大財務決定。
-若深度思考涉及這些：下一步優先是觀察、釐清、記錄、建立判斷標準、溝通、低風險實驗。目標是讓使用者更清楚，不是 AI 幫他決定人生。
-
-若 05 核心覺察或 04 勾選已經夠清楚：必須直接給行動，needFollowup 必須是 false。
-只有當 04 勾選、05 核心覺察、事件都太空、無法安全寫出具體行動時，才把 needFollowup 設成 true，並只出 1 道簡短追問。不要出第 2 題。
-
-只輸出 JSON：
-{
-  "needFollowup": false,
-  "question": "",
-  "placeholder": "",
-  "options":[{"id":"e1","text":"...","detail":"...","kind":"observe","horizon":"next"}]
-}
-kind 可選：observe、verify、review、express、boundary、decide、experiment、act、care。
-horizon 可選：next、week。
-繁體中文`;
+const EXECUTION_CHOICES_SYSTEM = execV2.EXECUTION_CHOICES_SYSTEM;
+const EXEC_DEEP_ASK_SYSTEM = execV2.EXEC_DEEP_ASK_SYSTEM;
+const EXEC_DEEP_REFRESH_SYSTEM = execV2.EXEC_DEEP_REFRESH_SYSTEM;
 
 const EXECUTION_PROMPTS_SYSTEM = `你是「日精進」的行動教練。先幫他找到卡點與阻力，再把想做的事問到夠具體。不要分析人格，不要列待辦。
 
@@ -2686,13 +2628,14 @@ ${formatBodyCheckPrompt(ctx)}
 function isChoicesRequest(body) {
   const mode = String(body?.mode || "").trim().toLowerCase();
   const kind = String(body?.kind || body?.scope || "").trim().toLowerCase();
-  return mode === "choices" || kind === "awareness-choices" || kind === "think-choices" || kind === "think-close" || kind === "execution-choices";
+  return mode === "choices" || kind === "awareness-choices" || kind === "think-choices" || kind === "think-close" || kind === "execution-choices" || kind === "execution-deep" || kind === "exec-deep";
 }
 
 function choicesKind(body) {
   const kind = String(body?.kind || body?.scope || body?.step || "").trim().toLowerCase();
   if (kind === "think-close" || kind === "close") return "think-close";
   if (kind === "think" || kind === "think-choices" || kind === "deep") return "think";
+  if (kind === "execution-deep" || kind === "exec-deep") return "execution-deep";
   if (kind === "execution" || kind === "exec" || kind === "execution-choices") return "execution";
   return "awareness";
 }
@@ -2778,27 +2721,8 @@ ${story}`;
 【今天的輸入｜必須據此長出選項】
 ${story}`;
   }
-  if (kind === "execution") {
-    const followAnswer = Array.isArray(body.answers) ? body.answers.map((item) => String(item || "").trim()).filter(Boolean).join("\n") : "";
-    return `請根據今天真正挖到的核心，生成 1～3 個下一步。不要先套模板再把今天的內容塞進去。不要再分析人格。不要寫顯化願景。
-
-若 05 核心覺察或 04 勾選已經夠清楚：直接給行動，needFollowup=false。
-只有資料真的不足時，才 needFollowup=true，並只出 1 道短問。不要出第 2 題。
-行動禁止近義重複。不要為了看起來完整硬湊 3 個。
-如果核心不是身體耗竭，不要用感恩、靜坐、轉念、早睡、相信自己來取代真正要面對的問題。
-若核心是努力卻沒被看見：優先給表達、需求確認、互動觀察，不要叫使用者相信自己就好。
-每個 option 必須有 text（約 8～16 字標題）與 detail（1～3 個短句，讓人知道什麼時候做、要做什麼）。
-
-【05 核心覺察】${thinkAware.line || "未寫"}
-【05 我看見了】${thinkAware.seen || "未寫"}
-【04 勾選】
-${thinkAware.thinkPicked}
-【04 深度看見】
-${thinkAware.thinkClose}
-使用者補充：${followAnswer || "無"}
-
-【今天的輸入】
-${story}`;
+  if (kind === "execution" || kind === "execution-deep") {
+    return execV2.executionChoicesUserPrompt(body);
   }
   const avoidBlock = avoid.length
     ? avoid.map((item) => `- ${item}`).join("\n")
@@ -3306,21 +3230,46 @@ module.exports = async function handler(req, res) {
       ];
     } else if (mode === "choices") {
       const kind = choicesKind(body);
-      messages = [
-        {
-          role: "system",
-          content: withCompleteRule(
-            kind === "think-close"
-              ? THINK_CHOICES_CLOSE_SYSTEM
-              : kind === "think"
-                ? CHOICES_THINK_SYSTEM
-                : kind === "execution"
-                  ? EXECUTION_CHOICES_SYSTEM
-                  : CHOICES_AWARENESS_SYSTEM
-          ),
-        },
-        { role: "user", content: choicesUserPrompt(body) },
-      ];
+      if (kind === "execution-deep") {
+        const step = execV2.execDeepStep(body);
+        const skipAsk =
+          step === "ask" &&
+          execV2.shouldSkipExecDeepAsk(body.context && body.context.deep, body.context && body.context.actions);
+        if (skipAsk) {
+          res.status(200).json({
+            ok: true,
+            source: getProvider(),
+            data: { question: "", placeholder: "", readyToClose: true, kind },
+          });
+          return;
+        }
+        messages = [
+          {
+            role: "system",
+            content: withCompleteRule(step === "refresh" ? EXEC_DEEP_REFRESH_SYSTEM : EXEC_DEEP_ASK_SYSTEM),
+          },
+          {
+            role: "user",
+            content: step === "refresh" ? execV2.execRefreshUserPrompt(body) : execV2.execDeepUserPrompt(body),
+          },
+        ];
+      } else {
+        messages = [
+          {
+            role: "system",
+            content: withCompleteRule(
+              kind === "think-close"
+                ? THINK_CHOICES_CLOSE_SYSTEM
+                : kind === "think"
+                  ? CHOICES_THINK_SYSTEM
+                  : kind === "execution"
+                    ? EXECUTION_CHOICES_SYSTEM
+                    : CHOICES_AWARENESS_SYSTEM
+            ),
+          },
+          { role: "user", content: choicesUserPrompt(body) },
+        ];
+      }
     } else if (mode === "insight") {
       if (thinkV2.isThinkV2Request(body)) {
         const close = thinkV2.thinkV2Step(body) === "close";
@@ -3414,7 +3363,7 @@ module.exports = async function handler(req, res) {
     const awareMode =
       (mode === "prompts" && promptKind === "awareness") ||
       (mode === "checklist" && body.kind !== "execution") ||
-      (mode === "choices" && choiceKind !== "think-close" && choiceKind !== "execution");
+      (mode === "choices" && choiceKind !== "think-close" && choiceKind !== "execution" && choiceKind !== "execution-deep");
     const aiOpts = {
       temperature:
         mode === "insight" && thinkV2.isThinkV2Request(body)
@@ -3448,6 +3397,8 @@ module.exports = async function handler(req, res) {
         mode === "bodycoach"
           ? 900
           : mode === "choices" && choiceKind === "think-close"
+            ? 900
+          : mode === "choices" && (choiceKind === "execution" || choiceKind === "execution-deep")
             ? 900
           : mode === "choices"
             ? 700
@@ -3500,23 +3451,34 @@ module.exports = async function handler(req, res) {
         res.status(200).json({ ok: true, source: getProvider(), data: closed });
         return;
       }
-      if (kind === "execution") {
-        const followupQuestion = String(data.question || data.followupQuestion || "").trim();
-        const needFollowup = Boolean(data.needFollowup || data.followup) && Boolean(followupQuestion);
-        if (needFollowup) {
-          res.status(200).json({
-            ok: true,
-            source: getProvider(),
-            data: {
-              needFollowup: true,
-              question: followupQuestion,
-              placeholder: String(data.placeholder || "例如：睡前把手機放到床以外").trim(),
-              options: [],
-              kind,
-            },
-          });
+      if (kind === "execution-deep") {
+        const step = execV2.execDeepStep(body);
+        if (step === "refresh") {
+          const options = reviewMerge.normalizeExecutionChoiceOptions
+            ? reviewMerge.normalizeExecutionChoiceOptions(data, { max: 3 })
+            : [];
+          if (options.length < 1) {
+            res.status(502).json({ ok: false, error: "今天的行動還沒重新整理好，請再試一次" });
+            return;
+          }
+          res.status(200).json({ ok: true, source: getProvider(), data: { options: options.slice(0, 3), kind } });
           return;
         }
+        const question = String(data.question || "").trim();
+        const readyToClose = Boolean(data.readyToClose) || !question;
+        res.status(200).json({
+          ok: true,
+          source: getProvider(),
+          data: {
+            question,
+            placeholder: String(data.placeholder || "").trim(),
+            readyToClose,
+            kind,
+          },
+        });
+        return;
+      }
+      if (kind === "execution") {
         const options = reviewMerge.normalizeExecutionChoiceOptions
           ? reviewMerge.normalizeExecutionChoiceOptions(data, { max: 3 })
           : [];
@@ -3763,6 +3725,8 @@ module.exports.THINK_V2_CLOSE_SYSTEM = thinkV2.THINK_V2_CLOSE_SYSTEM;
 module.exports.choicesUserPrompt = choicesUserPrompt;
 module.exports.EXECUTION_CHOICES_SYSTEM = EXECUTION_CHOICES_SYSTEM;
 module.exports.EXECUTION_PROMPTS_SYSTEM = EXECUTION_PROMPTS_SYSTEM;
+module.exports.EXEC_DEEP_ASK_SYSTEM = EXEC_DEEP_ASK_SYSTEM;
+module.exports.EXEC_DEEP_REFRESH_SYSTEM = EXEC_DEEP_REFRESH_SYSTEM;
 module.exports.MANIFEST_PROMPTS_SYSTEM = MANIFEST_PROMPTS_SYSTEM;
 module.exports.MANIFEST_PATHS_SYSTEM = MANIFEST_PATHS_SYSTEM;
 module.exports.MANIFEST_CLOSE_SYSTEM = MANIFEST_CLOSE_SYSTEM;
