@@ -158,6 +158,60 @@ const bad = awarenessV3.evaluateAwarenessV3Quality(
 );
 assert(bad.issues.includes("a1-second-person") || bad.issues.includes("duplicate-items"), "第二人稱／重複必須 FAIL");
 
+const SAMPLE_ITEMS = [
+  { id: "a1", text: "我發現，真正讓我不舒服的不只是環境亂，而是我好像沒有生活選擇。" },
+  { id: "a2", text: "我看見自己習慣先接受現況，再把不舒服往身體裡收。" },
+  { id: "a3", text: "我很在意這段關係，所以才會把居住安排當成暫時不能動的事。" },
+];
+const parseCtx = { event: "家裡環境讓我很不舒服", bodyMindText: "胸口緊。", coreQuote: "也許值得看的是選擇。" };
+assert(awarenessV3.normalizeAwarenessV3Result({ items: SAMPLE_ITEMS }, parseCtx).items.length === 3, "contract items 可解析");
+assert(awarenessV3.normalizeAwarenessV3Result(SAMPLE_ITEMS, parseCtx).items.length === 3, "top-level array 不可整包 fail");
+assert(awarenessV3.normalizeAwarenessV3Result({ options: SAMPLE_ITEMS }, parseCtx).items.length === 3, "options alias 可解析");
+assert(awarenessV3.normalizeAwarenessV3Result({ data: { items: SAMPLE_ITEMS } }, parseCtx).items.length === 3, "nested data.items 可解析");
+assert(
+  awarenessV3.normalizeAwarenessV3Result(
+    { items: SAMPLE_ITEMS.map((item) => ({ id: item.id, awareness: item.text })) },
+    parseCtx
+  ).items.length === 3,
+  "item.awareness 欄位可 normalize"
+);
+assert(awarenessV3.normalizeAwarenessV3Result({ a1: SAMPLE_ITEMS[0].text, a2: SAMPLE_ITEMS[1].text, a3: SAMPLE_ITEMS[2].text }, parseCtx).items.length === 3, "a1/a2/a3 keyed object 可解析");
+assert(awarenessV3.normalizeAwarenessV3Result({}, parseCtx).items.length === 0, "空物件不可通過");
+assert(awarenessV3.normalizeAwarenessV3Result({ items: [] }, parseCtx).items.length === 0, "空 items 不可通過");
+assert(awarenessV3.normalizeAwarenessV3Result({ note: "ok" }, parseCtx).items.length === 0, "無關欄位不可當成成功");
+assert(!awarenessV3.AWARENESS_V3_SYSTEM.includes("再多看自己一點"), "05 generation prompt 未改");
+assert(
+  awarenessV3.awarenessV3Ready({
+    thanksText: "謝謝",
+    event: "今天開會",
+    mood: "悶",
+    bodyMindText: "胸口緊緊的。",
+    coreQuote: "也許值得看的是有沒有被接住。",
+    thinkQuestions: [{ text: "安靜時你先想到什麼？" }],
+  }),
+  "B: 04 只有 coreQuote + questions 就可視為 05 input"
+);
+assert(!awarenessV3.emptyAwarenessV3().items.length && !awarenessV3.emptyAwarenessV3().observationCue, "C: 首次生成不需既有 items / cue");
+const sigA = awarenessV3.awarenessV3SourceSig({
+  thanksText: "謝謝",
+  event: "今天開會",
+  mood: "悶",
+  bodyMindText: "胸口緊緊的。",
+  coreQuote: "也許值得看的是有沒有被接住。",
+  thinkQuestions: [{ text: "安靜時你先想到什麼？" }],
+  observationCue: { text: "不應進 sig", selectedSig: "x", generatedAt: "2026-08-31T00:00:00.000Z" },
+  generatedAt: "2026-08-31T00:00:00.000Z",
+});
+const sigB = awarenessV3.awarenessV3SourceSig({
+  thanksText: "謝謝",
+  event: "今天開會",
+  mood: "悶",
+  bodyMindText: "胸口緊緊的。",
+  coreQuote: "也許值得看的是有沒有被接住。",
+  thinkQuestions: [{ text: "安靜時你先想到什麼？" }],
+});
+assert(sigA === sigB, "G: sourceSig 不含 cue / generatedAt");
+
 assert(!awarenessV3.AWARENESS_V3_SYSTEM.includes("observationCue"), "05 生成 prompt 不改成一起出 cue");
 assert(awarenessV3.isAwarenessV3Request({ variant: "awareness-v3" }), "05 items request 仍是 awareness-v3");
 assert(!awarenessV3.isAwarenessV3Request({ variant: "awareness-v3-cue" }), "cue request 不可走 05 items");

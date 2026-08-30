@@ -3585,6 +3585,13 @@ module.exports = async function handler(req, res) {
       if (awarenessV3.isAwarenessV3Request(body)) {
         const result = awarenessV3.normalizeAwarenessV3Result(data, body.context || {});
         if (!result.items || result.items.length < 3) {
+          console.warn("[awareness-v3]", {
+            failureStage: "normalize-items",
+            itemCount: Array.isArray(result.items) ? result.items.length : 0,
+            rawType: Array.isArray(data) ? "array" : data && typeof data === "object" ? "object" : typeof data,
+            rawKeys: data && typeof data === "object" && !Array.isArray(data) ? Object.keys(data).slice(0, 8) : [],
+            model: getModel({ internal: internalUser }),
+          });
           res.status(502).json({ ok: false, error: "今天的覺察還沒整理好，請再試一次" });
           return;
         }
