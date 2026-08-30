@@ -6203,8 +6203,20 @@ textarea[hidden] + .journal-voice-hint,
   display: none;
 }
 
-#page-today.is-archived .body-mind-cta {
+#page-today.is-archived .body-mind-cta,
+#page-today.is-archived .body-mind-cta-hint {
   display: none !important;
+}
+
+.body-mind-cta-hint {
+  margin: 6px 0 0;
+  color: #8a7a6e;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.body-mind-cta-hint[hidden] {
+  display: none;
 }
 
 .body-mind .journal-guide {

@@ -123,6 +123,7 @@ const state = {
   journalBodyCoach: null,
   bodyMindBusy: false,
   bodyMindToken: 0,
+  bodyMindRequestText: "",
   journalBodyMind: null,
   journalInternalTestRuns: [],
   journalInternalResetAt: "",
@@ -5827,6 +5828,14 @@ function bodyMindSourceStale(mind, text) {
   return Boolean(current) && current !== source;
 }
 
+function showBodyMindCtaHint(message) {
+  const hint = document.getElementById("bodyMindCtaHint");
+  if (!hint) return;
+  const text = String(message || "").trim();
+  hint.textContent = text;
+  hint.hidden = !text || isCurrentJournalArchived();
+}
+
 function syncBodyMindCta() {
   const btn = document.getElementById("btnBodyMindInsight");
   const ta = document.getElementById("bodyMindText");
@@ -5838,10 +5847,11 @@ function syncBodyMindCta() {
   const mind = normalizeBodyMind(state.journalBodyMind);
   const hasResult = hasBodyMindResult(mind);
   const stale = hasResult && bodyMindSourceStale(mind, text);
-  const show = !archived && ready && (!hasResult || stale);
+  const show = !archived && (!hasResult || stale);
   btn.hidden = !show;
-  btn.disabled = Boolean(state.bodyMindBusy) || archived;
+  btn.disabled = Boolean(state.bodyMindBusy) || archived || !ready;
   btn.textContent = stale ? "內容有修改，重新看看 →" : "看看這個感受在提醒我什麼 →";
+  if (!ready) showBodyMindCtaHint("");
 }
 
 function normalizeBodyGroup(group) {
@@ -9311,7 +9321,7 @@ async function generateBodyCoach(options = {}) {
 
 function maybeAutoGenerateBodyCoach(journal) {
   if (state.journalHydrating || rejectArchivedJournalWrite({ auto: true })) return;
-  maybeAutoGenerateBodyMind(journal);
+  syncBodyMindCta();
 }
 
 function renderBodyMindInsight(mind) {
@@ -9350,15 +9360,26 @@ function setBodyMindLoading(loading) {
 }
 
 async function generateBodyMindInsight(options = {}) {
+  if (!options || options.confirmed !== true) return;
   if (options.auto) return;
   if (rejectArchivedJournalWrite(options)) return;
-  if (!ensurePlusFeature("body_ai", options)) return;
-  const journal = collectJournal();
-  const text = String((journal.bodyMind && journal.bodyMind.text) || "").trim();
+  if (isCurrentJournalArchived() || state.bodyMindBusy) return;
+  const liveEl = document.getElementById("bodyMindText");
+  const text = String(liveEl && liveEl.value != null ? liveEl.value : "").replace(/\s+/g, " ").trim();
   if (!bodyMindTextReady(text)) {
-    showToast("先寫下那個瞬間就好。");
+    showBodyMindCtaHint("再多寫一點這個瞬間，會更容易看見它在提醒你什麼。");
+    syncBodyMindCta();
     return;
   }
+  showBodyMindCtaHint("");
+  if (!ensurePlusFeature("body_ai", options)) return;
+  state.journalBodyMind = normalizeBodyMind({
+    ...(state.journalBodyMind || emptyBodyMind()),
+    text,
+  });
+  persistJournalQuietly();
+  const journal = collectJournal();
+  journal.bodyMind = normalizeBodyMind({ ...(journal.bodyMind || emptyBodyMind()), text });
   const sig = bodyMindSignature(journal);
   if (hasBodyMindResult(journal.bodyMind) && journal.bodyMind.sig === sig && !options.force) {
     renderBodyMindInsight(journal.bodyMind);
@@ -9367,6 +9388,7 @@ async function generateBodyMindInsight(options = {}) {
   if (state.bodyMindBusy) return;
   const token = (state.bodyMindToken || 0) + 1;
   state.bodyMindToken = token;
+  state.bodyMindRequestText = text;
   setBodyMindLoading(true);
   try {
     if (!state.user) throw new Error("請先登入，才能整理今天的覺察。");
@@ -9383,12 +9405,14 @@ async function generateBodyMindInsight(options = {}) {
       },
     });
     if (state.bodyMindToken !== token) return;
+    const currentText = String(document.getElementById("bodyMindText")?.value || "").replace(/\s+/g, " ").trim();
     const insight = String(remote.insight || "").replace(/\s+/g, " ").trim();
     const support = String(remote.support || "").replace(/\s+/g, " ").trim();
     if (!insight) throw new Error("今天的覺察還沒整理好，請再試一次。");
+    const matches = currentText === text;
     const next = normalizeBodyMind({
-      ...normalizeBodyMind(journal.bodyMind),
-      text,
+      ...normalizeBodyMind(state.journalBodyMind),
+      text: currentText || text,
       insight,
       support,
       generatedAt: new Date().toISOString(),
@@ -9396,7 +9420,7 @@ async function generateBodyMindInsight(options = {}) {
       internalDebug: takeInternalDebug(remote),
     });
     state.journalBodyMind = next;
-    state.journalMeta.bodyMindSig = sig;
+    if (matches) state.journalMeta.bodyMindSig = sig;
     renderBodyMindInsight(next);
     persistJournalQuietly();
   } catch (error) {
@@ -9404,20 +9428,14 @@ async function generateBodyMindInsight(options = {}) {
     if (isPlusRequiredError(error)) return;
     showToast(formatApiError(error) || "今天的覺察還沒整理好，請再試一次。");
   } finally {
-    if (state.bodyMindToken === token) setBodyMindLoading(false);
+    if (state.bodyMindToken === token) {
+      state.bodyMindRequestText = "";
+      setBodyMindLoading(false);
+    }
   }
 }
 
-function maybeAutoGenerateBodyMind(journal) {
-  if (state.bodyMindBusy) {
-    syncBodyMindCta();
-    return;
-  }
-  const data = journal || state.journalBodyMind;
-  if (hasBodyMindResult(data && data.bodyMind ? data.bodyMind : data)) {
-    renderBodyMindInsight(data && data.bodyMind ? data.bodyMind : data);
-    return;
-  }
+function maybeAutoGenerateBodyMind() {
   syncBodyMindCta();
 }
 
@@ -11921,7 +11939,6 @@ function persistJournalNow(options = {}) {
   clearTimeout(scheduleJournalAutosave.timer);
   scheduleJournalAutosave.timer = 0;
   persistJournalQuietly({ showHint: options.showHint !== false });
-  if (!options.skipBodyMind) maybeAutoGenerateBodyMind();
 }
 
 function scheduleJournalAutosave() {
@@ -16995,8 +17012,12 @@ function bindEvents() {
 
   document.getElementById("btnBodyMindInsight")?.addEventListener("click", (event) => {
     event.preventDefault();
+    event.stopPropagation();
     if (isCurrentJournalArchived() || state.bodyMindBusy) return;
-    generateBodyMindInsight();
+    generateBodyMindInsight({ confirmed: true });
+  });
+  document.getElementById("bodyMindText")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") event.stopPropagation();
   });
 
   document.getElementById("section-body")?.addEventListener("click", (event) => {
