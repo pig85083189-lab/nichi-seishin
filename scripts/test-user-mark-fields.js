@@ -21,6 +21,7 @@ assert(/addEventListener\(\s*["']selectionchange["']/.test(src), "有 selectionc
 assert(src.includes("renderCombinedHighlightedText"), "AI + userMark 一次 render");
 assert(src.includes("userMarkBag") && src.includes("userMarks:"), "仍沿用 journal.userMarks");
 assert(src.includes("bodyCoach.analysis") && src.includes("bodyCoach.title"), "身心小結可畫");
+assert(src.includes("bodyMind.insight") && src.includes("bodyMind.support"), "03 覺察與引導可畫");
 assert(src.includes("think.psychology") && src.includes("think.awareness") && src.includes("think.takeaway"), "深度思考可畫");
 assert(src.includes("awareness.seen") && src.includes("awareness.line"), "覺察結果可畫");
 assert(src.includes("exec.item.") && src.includes("exec.focus.title"), "行動卡與今日焦點可畫");

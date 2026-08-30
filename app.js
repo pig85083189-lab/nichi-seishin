@@ -9299,14 +9299,13 @@ function renderBodyMindInsight(mind) {
   }
   root.innerHTML = `
     <article class="body-mind-insight">
-      <p class="body-mind-insight__head">深度覺察</p>
       ${data.insight ? `<div class="body-mind-insight__line">
-        <p class="body-mind-insight__label">覺察一句話</p>
-        <p class="body-mind-insight__text">${escapeHtml(data.insight)}</p>
+        <p class="body-mind-insight__label">覺察</p>
+        ${markableP(data.insight, "bodyMind.insight", "body-mind-insight__text")}
       </div>` : ""}
       ${data.support ? `<div>
-        <p class="body-mind-insight__label">給今天的你</p>
-        <p class="body-mind-insight__support">${escapeHtml(data.support)}</p>
+        <p class="body-mind-insight__label">引導</p>
+        ${markableP(data.support, "bodyMind.support", "body-mind-insight__support")}
       </div>` : ""}
     </article>`;
   paintInternalModelDebug(root, data.internalDebug);
@@ -9337,7 +9336,7 @@ async function generateBodyMindInsight(options = {}) {
   state.bodyMindToken = token;
   setBodyMindLoading(true);
   try {
-    if (!state.user) throw new Error("請先登入，才能整理今天的深度覺察。");
+    if (!state.user) throw new Error("請先登入，才能整理今天的覺察。");
     const remote = await postReview({
       mode: "bodymind",
       date: currentIso(),
@@ -9353,7 +9352,7 @@ async function generateBodyMindInsight(options = {}) {
     if (state.bodyMindToken !== token) return;
     const insight = String(remote.insight || "").replace(/\s+/g, " ").trim();
     const support = String(remote.support || "").replace(/\s+/g, " ").trim();
-    if (!insight) throw new Error("今天的深度覺察還沒整理好，請再試一次。");
+    if (!insight) throw new Error("今天的覺察還沒整理好，請再試一次。");
     const next = normalizeBodyMind({
       ...normalizeBodyMind(journal.bodyMind),
       text,
@@ -9370,7 +9369,7 @@ async function generateBodyMindInsight(options = {}) {
   } catch (error) {
     if (state.bodyMindToken !== token) return;
     if (isPlusRequiredError(error)) return;
-    if (!options.auto) showToast(formatApiError(error) || "今天的深度覺察還沒整理好，請再試一次。");
+    if (!options.auto) showToast(formatApiError(error) || "今天的覺察還沒整理好，請再試一次。");
   } finally {
     if (state.bodyMindToken === token) setBodyMindLoading(false);
   }

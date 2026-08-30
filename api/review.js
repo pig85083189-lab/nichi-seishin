@@ -3484,8 +3484,10 @@ module.exports = async function handler(req, res) {
       timeoutMs: internalUser ? 55000 : promptKind === "awareness" || mode === "choices" ? 20000 : 22000,
       rejectPartial: true,
       maxTokens:
-        mode === "bodycoach" || mode === "bodymind"
+        mode === "bodycoach"
           ? 640
+          : mode === "bodymind"
+            ? 900
           : mode === "choices" && choiceKind === "think-close"
             ? 900
           : mode === "choices" && (choiceKind === "execution" || choiceKind === "execution-deep")
@@ -3784,7 +3786,7 @@ module.exports = async function handler(req, res) {
     if (mode === "bodymind") {
       const result = bodyMind.normalizeBodyMindInsight(data);
       if (!result.insight) {
-        res.status(502).json({ ok: false, error: "今天的深度覺察還沒整理好，請再試一次" });
+        res.status(502).json({ ok: false, error: "今天的覺察還沒整理好，請再試一次" });
         return;
       }
       res.status(200).json({ ok: true, source: getProvider(), data: result });

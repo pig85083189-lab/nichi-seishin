@@ -3,6 +3,7 @@ const path = require("path");
 const bodyMind = require("../lib/body-mind");
 const {
   mergeJournalObjects,
+  mergeBodyMind: mergeBodyMindBag,
   emptyExecutionChoiceBag,
   normalizeExecutionChoiceBag,
   hasMeaningfulExecutionChoices,
@@ -59,6 +60,17 @@ const merged = mergeJournalObjects(
 );
 assert(merged.bodyMind.insight.includes("關係位置"), "4/36. 空 bag 不丟 insight");
 
+const mergedDebug = bodyMind.mergeBodyMind(
+  { text: "胸口很悶", insight: "也許碰到關係位置。", support: "先不用急著判斷。", internalDebug: { provider: "anthropic", model: "claude-sonnet-5" } },
+  { text: "胸口很悶", insight: "也許碰到關係位置。", support: "先不用急著判斷。" }
+);
+assert(mergedDebug.internalDebug && mergedDebug.internalDebug.model === "claude-sonnet-5", "Internal debug 合併後仍在");
+const mergedDebugBag = mergeBodyMindBag(
+  { text: "胸口很悶", insight: "也許碰到關係位置。", support: "先不用急著判斷。", internalDebug: { provider: "anthropic", model: "claude-sonnet-5" } },
+  { text: "胸口很悶", insight: "也許碰到關係位置。", support: "先不用急著判斷。" }
+);
+assert(mergedDebugBag.internalDebug && mergedDebugBag.internalDebug.model === "claude-sonnet-5", "review-merge 也保留 Internal debug");
+
 const prompt = thinkV2.thinkV2UserPrompt({
   variant: "think-v2",
   context: {
@@ -108,6 +120,120 @@ assert(!app.includes("if (email ==="), "7. 無 frontend email hard-code");
 assert(reviewJs.includes("requireUser"), "29. Internal 仍要登入");
 
 assert(css.includes(".body-mind-insight") && css.includes("border-left: 2px solid #bca58f"), "F. editorial insight");
+assert(app.includes('kicker: "核心結論"') === true || app.includes("核心結論"), "04 close 未因 03 被拆");
+assert(app.includes('class="body-mind-insight__label">覺察</p>'), "UI 覺察標籤");
+assert(app.includes('class="body-mind-insight__label">引導</p>'), "UI 引導標籤");
+assert(!app.includes("覺察一句話"), "不再顯示舊 insight 標籤");
+assert(!app.includes("給今天的你"), "不再顯示舊 support 標籤");
+assert(bodyMind.BODY_MIND_SYSTEM.includes("為什麼這個瞬間值得被注意"), "覺察任務清楚");
+assert(bodyMind.BODY_MIND_SYSTEM.includes("不要搶 06"), "引導不搶 06");
+assert(bodyMind.BODY_MIND_SYSTEM.includes("不要找問題"), "正向不硬找問題");
+assert(!reviewJs.includes("ANTHROPIC_INTERNAL_MODEL"), "不改 routing 常數來源");
+assert(reviewJs.includes("internal: internalUser"), "Internal routing 仍在");
+
+const QUALITY = [
+  {
+    id: "A",
+    name: "家庭衝突",
+    text: "媽媽叫我搬出去，我當下胸口很悶。",
+    result: {
+      insight: "這個瞬間值得留意，也許不只是搬家這件事，而是關係裡的位置和界線，在這一刻被碰到了。",
+      support: "先承認胸口這股悶是有方向的。不必立刻決定對錯，也可以先看清楚自己在意的是被理解，還是被允許留下。",
+    },
+    forbid: /害怕被拋棄|缺乏安全感|童年創傷/,
+  },
+  {
+    id: "B",
+    name: "伴侶幸福",
+    text: "今天跟男友吃飯一直笑，覺得很舒服。",
+    result: {
+      insight: "這個瞬間值得被注意，也許不是因為做了什麼特別的事，而是相處時那種放鬆、有回應、可以一直笑的感覺，正是你真正想留下的。",
+      support: "今天不必急著找問題。值得帶著走的是：什麼條件讓你感到自在。也可以只是讓這份舒服停在心裡。",
+    },
+    forbid: /問題是|其實不快樂|陰影/,
+  },
+  {
+    id: "C",
+    name: "工作壓力",
+    text: "會議一路被加需求，回家後肩膀一直緊。",
+    result: {
+      insight: "肩膀發緊值得留意，可能不只是累，而是今天的節奏和標準一直被往後推，讓你很難停下來。",
+      support: "先把身體的緊當成像訊號，而不是自己不夠堅強。值得看的是：哪一項需求已經超過你可以承受的範圍。",
+    },
+  },
+  {
+    id: "D",
+    name: "運動後單純痠痛",
+    text: "今天健身後大腿很痠。",
+    result: {
+      insight: "這次比較像身體在回應運動後的負荷，不一定需要往情緒裡找答案。",
+      support: "先讓肌肉休息和恢復。如果只是運動後的痠，留意就好，不必解釋成更深的問題。",
+    },
+    forbid: /不安全感|被拋棄|童年|內心壓力/,
+  },
+  {
+    id: "E",
+    name: "被已讀不回",
+    text: "朋友已讀沒有回，我一直覺得怪怪的。",
+    result: {
+      insight: "這種怪怪的感覺值得留意，也許你在意的不是回得快不快，而是自己是不是被放在心上。",
+      support: "先承認等待本身就不好受。現在不必急著解釋對方的意思，也可以先看看自己需要的是一個回應，還是確定沒被放下。",
+    },
+    forbid: /你缺乏安全感|你害怕被拋棄|童年/,
+  },
+  {
+    id: "F",
+    name: "沒什麼感覺",
+    text: "今天沒什麼特別感覺。",
+    result: {
+      insight: "今天沒有特別強烈的感受，本身也是一種狀態，不必硬挖更深的意義。",
+      support: "可以就這樣讓今天過去。沒有特別感覺，不代表今天沒有被好好過完。",
+    },
+    forbid: /成長的一部分|相信自己|金句/,
+  },
+  {
+    id: "G",
+    name: "很生氣",
+    text: "我今天真的很生氣，當下整個人都熱起來。",
+    result: {
+      insight: "這股火值得被注意，也許是因為有什麼對你重要的界線或期待，在這一刻被碰到了。",
+      support: "先承認怒意是有方向的。不必立刻解決，也可以先看清楚自己在意的是哪一件事。",
+    },
+  },
+  {
+    id: "H",
+    name: "很安心",
+    text: "晚上回家看到燈是亮的，突然覺得好安心。",
+    result: {
+      insight: "這份安心值得被留下，也許觸動你的不是燈本身，而是有人在、有地方可以回去的感覺。",
+      support: "今天不必分析為什麼安心。值得保留的是這種被接住的條件，以及它讓你的身體可以鬆下來。",
+    },
+    forbid: /問題是|其實焦慮|陰影/,
+  },
+];
+
+QUALITY.forEach((spec) => {
+  const judged = bodyMind.evaluateBodyMindQuality(spec.result, { text: spec.text, forbid: spec.forbid });
+  assert(judged.ok, `${spec.id} ${spec.name} 應通過：${judged.issues.join("；")}`);
+});
+
+const badRestate = bodyMind.evaluateBodyMindQuality(
+  { insight: "媽媽叫我搬出去，你當下胸口很悶。", support: "先看看自己的感受。" },
+  { text: "媽媽叫我搬出去，我當下胸口很悶。" }
+);
+assert(badRestate.issues.includes("restate"), "重述必須 FAIL");
+
+const badPositive = bodyMind.evaluateBodyMindQuality(
+  { insight: "你其實不快樂，問題是你害怕失去。", support: "好好愛自己。" },
+  { text: "今天跟男友吃飯一直笑，覺得很舒服。" }
+);
+assert(badPositive.issues.includes("positive-problem-hunt") || badPositive.issues.includes("soup"), "幸福不該被硬找問題");
+
+const badChecklist = bodyMind.evaluateBodyMindQuality(
+  { insight: "也許界線被碰到了。", support: "晚上 8 點傳訊息給媽媽，寫下三件感受。" },
+  { text: "媽媽叫我搬出去，胸口很悶。" }
+);
+assert(badChecklist.issues.includes("support-is-checklist"), "引導不該偷做 06");
 assert(app.includes("persistArchivedUserMarks"), "33. userMarks 未拆");
 assert(app.includes("function generateThinkV2Ask"), "04 V2 未拆 workflow");
 assert(app.includes("if (!pointerOk && !keyboardOk) return true;") === false, "35. accordion fix");
