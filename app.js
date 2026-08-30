@@ -6996,6 +6996,19 @@ function renderAwarenessResultCard(result, checked) {
 }
 
 function renderAwareQuote(items, checked) {
+  if (usesAwarenessV3Path()) {
+    const root = document.getElementById("awareChecks");
+    if (root) {
+      root.innerHTML = "";
+      root.hidden = true;
+    }
+    const btn = document.getElementById("btnAwareAi");
+    if (btn) btn.hidden = true;
+    const hint = document.getElementById("awareQuoteLimitHint");
+    if (hint) hint.hidden = true;
+    lockNewDayAwareUi();
+    return;
+  }
   const root = document.getElementById("awareChecks");
   if (!root) return;
   const result = normalizeAwarenessResult(state.journalAwarenessResult, { keepSource: true });
@@ -7032,6 +7045,14 @@ function renderAwareQuote(items, checked) {
 }
 
 function syncAwareQuoteGate() {
+  if (usesAwarenessV3Path()) {
+    const btn = document.getElementById("btnAwareAi");
+    if (btn) btn.hidden = true;
+    const hint = document.getElementById("awareQuoteLimitHint");
+    if (hint) hint.hidden = true;
+    lockNewDayAwareUi();
+    return;
+  }
   const btn = document.getElementById("btnAwareAi");
   const hint = document.getElementById("awareQuoteLimitHint");
   if (!btn) return;
@@ -7266,6 +7287,7 @@ function refreshJournalChecklists(journal, options = {}) {
     renderManifestSentence(data.manifestSentence || state.journalManifestSentence, data.manifestHighlights || state.journalManifestHighlights);
     renderJournalManifestResult();
   }
+  if (usesAwarenessV3Path()) lockNewDayAwareUi();
 }
 
 function scheduleJournalChecklists() {
@@ -9837,7 +9859,11 @@ function syncCorePromptGate() {
   const execEmpty = document.getElementById("execEmpty");
   const awareBtn = document.getElementById("btnAwarePrompts");
   const execBtn = document.getElementById("btnExecPrompts");
-  if (awareEmpty) {
+  if (usesAwarenessV3Path()) {
+    if (awareEmpty) awareEmpty.hidden = true;
+    if (awareBtn) awareBtn.hidden = true;
+    lockNewDayAwareUi();
+  } else if (awareEmpty) {
     awareEmpty.textContent = AWARE_WAIT_COPY;
     awareEmpty.hidden = awareLoading || hasAware;
   }
@@ -9845,7 +9871,7 @@ function syncCorePromptGate() {
     execEmpty.textContent = EXEC_WAIT_COPY;
     execEmpty.hidden = execLoading || hasExec;
   }
-  if (awareBtn) {
+  if (!usesAwarenessV3Path() && awareBtn) {
     awareBtn.hidden = hasAware;
     if (!awareBtn.hidden) {
       awareBtn.disabled = false;
@@ -11078,11 +11104,19 @@ function usesExecutionV3Path(journal) {
 
 function lockNewDayAwareUi() {
   const v3 = usesAwarenessV3Path();
+  const section = document.getElementById("section-aware");
+  if (section) section.classList.toggle("is-aware-v3", v3);
   const card = document.getElementById("awareV3Card");
   if (card) card.hidden = !v3;
   document.querySelectorAll("#section-aware .js-legacy-aware-ui").forEach((node) => {
     node.hidden = v3;
   });
+  if (v3) {
+    ["awareEmpty", "btnAwarePrompts", "awareQuestions", "awarePromptLoading", "btnAwareAi", "awareChecks", "awareLoading", "awareQuoteLimitHint"].forEach((id) => {
+      const node = document.getElementById(id);
+      if (node) node.hidden = true;
+    });
+  }
 }
 
 function lockNewDayExecUi() {
@@ -11220,7 +11254,7 @@ function renderAwarenessObservationCueHtml(data) {
   if (selectedCount < 1) {
     return `
       <div class="aware-v3-cue is-helper">
-        <p class="aware-v3-cue__helper">勾選真正有說中你的內容，再多留意自己一點。</p>
+        <p class="aware-v3-cue__helper">勾選真正有說中你的內容，<br />再多留意自己一點。</p>
       </div>`;
   }
   if (match) {
@@ -11240,7 +11274,7 @@ function renderAwarenessObservationCueHtml(data) {
   return `
     <div class="aware-v3-cue${loading ? "" : " is-helper"}">
       ${loading ? `<p class="aware-v3-cue__label">再多看自己一點</p>` : ""}
-      <p class="aware-v3-cue__helper">${loading ? "正在整理這句觀察…" : "勾選真正有說中你的內容，再多留意自己一點。"}</p>
+      <p class="aware-v3-cue__helper">${loading ? "正在整理這句觀察…" : "勾選真正有說中你的內容，<br />再多留意自己一點。"}</p>
     </div>`;
 }
 
@@ -13184,6 +13218,8 @@ function applyJournalMode(mode, options = {}) {
   }
   syncCompleteButtonLabel();
   syncQuickModules(state.quickModules);
+  lockNewDayAwareUi();
+  lockNewDayExecUi();
   if (!state.journalHydrating) applyJournalFolds();
   if (!options.silent && !state.journalHydrating) persistJournalQuietly();
   renderInsightCard(state.journalInsight);

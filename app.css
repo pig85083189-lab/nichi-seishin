@@ -7308,9 +7308,26 @@ textarea[hidden] + .journal-voice-hint,
   display: none !important;
 }
 
+#section-aware.is-aware-v3 .js-legacy-aware-ui,
+#section-aware.is-aware-v3 .journal-split--aware,
+#section-aware.is-aware-v3 #awareEmpty,
+#section-aware.is-aware-v3 #btnAwarePrompts,
+#section-aware.is-aware-v3 #awareQuestions,
+#section-aware.is-aware-v3 #awarePromptLoading,
+#section-aware.is-aware-v3 #btnAwareAi,
+#section-aware.is-aware-v3 #awareChecks,
+#section-aware.is-aware-v3 #awareLoading,
+#section-aware.is-aware-v3 #awareQuoteLimitHint {
+  display: none !important;
+}
+
 .aware-v3,
 .exec-v3 {
   min-width: 0;
+}
+
+.aware-v3 {
+  max-width: 40rem;
 }
 
 .aware-v3-lead,
@@ -7360,6 +7377,12 @@ textarea[hidden] + .journal-voice-hint,
   text-align: left;
   cursor: pointer;
   color: inherit;
+}
+
+.aware-v3-item {
+  min-height: 44px;
+  padding: 12px 2px;
+  box-sizing: border-box;
 }
 
 .aware-v3-item__box,
@@ -8866,6 +8889,14 @@ summary [data-user-mark-field] {
   .aware-col {
     padding: 18px 16px 20px;
     gap: 14px;
+  }
+
+  .aware-v3,
+  .aware-v3-list,
+  .aware-v3-item,
+  .aware-v3-cue {
+    min-width: 0;
+    max-width: 100%;
   }
 
   .body-flag-btn {
