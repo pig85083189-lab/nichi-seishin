@@ -1334,12 +1334,19 @@ async function fetchWithTimeout(url, options, timeoutMs) {
   }
 }
 
-async function postReview(body, timeoutMs = 28000) {
-  return postAiApi(reviewApiUrl(), body, timeoutMs);
+function aiClientTimeout(timeoutMs) {
+  const explicit = Number(timeoutMs);
+  const hasExplicit = Number.isFinite(explicit) && explicit > 0;
+  if (isInternalMembership()) return hasExplicit ? Math.max(explicit, 58000) : 58000;
+  return hasExplicit ? explicit : 28000;
 }
 
-async function postChat(body, timeoutMs = 28000) {
-  return postAiApi(chatApiUrl(), body, timeoutMs);
+async function postReview(body, timeoutMs) {
+  return postAiApi(reviewApiUrl(), body, aiClientTimeout(timeoutMs));
+}
+
+async function postChat(body, timeoutMs) {
+  return postAiApi(chatApiUrl(), body, aiClientTimeout(timeoutMs));
 }
 
 async function postAiApi(url, body, timeoutMs = 28000) {

@@ -118,6 +118,9 @@ assert(app.includes("if (!isInternalMembership() || !debug || !debug.model) retu
 
 const debug = internalDebugMeta();
 assert(debug.provider && debug.model, "16. actual runtime model metadata");
+assert(internalDebugMeta({ internal: true }).model, "Internal debug 帶實際 model");
+assert(reviewJs.includes("internal: internalUser"), "review routes model from isInternal(row)");
+assert(reviewJs.includes("delete body.model"), "client cannot choose model");
 assert(canUseFeature("free", "think_ai") === false, "18. FREE unchanged");
 assert(canUseFeature("plus", "think_ai") === true, "19. PLUS unchanged");
 assert(canUseFeature("plus", "think_ai", { isInternal: false }) === true, "20. Trial/PLUS object still plus");

@@ -64,6 +64,8 @@ module.exports = async function handler(req, res) {
   }
 
   const body = readJsonBody(req);
+  delete body.model;
+  delete body.internal;
   if (isReviewPayload(body)) {
     return reviewHandler(req, res);
   }
@@ -96,7 +98,7 @@ module.exports = async function handler(req, res) {
   const origJson = res.json.bind(res);
   res.json = (payload) => {
     if (payload && payload.ok === true && internalUser) {
-      return origJson({ ...payload, _internalDebug: internalDebugMeta() });
+      return origJson({ ...payload, _internalDebug: internalDebugMeta({ internal: true }) });
     }
     return origJson(payload);
   };
@@ -109,8 +111,9 @@ module.exports = async function handler(req, res) {
 
   try {
     const data = await callOpenAI(messages, {
+      internal: internalUser,
       temperature: Number.isFinite(Number(body.temperature)) ? Number(body.temperature) : 0.7,
-      timeoutMs: 22000,
+      timeoutMs: internalUser ? 45000 : 22000,
       json: body.json !== false,
       maxTokens: Number(body.maxTokens) || 1024,
     });
@@ -118,7 +121,7 @@ module.exports = async function handler(req, res) {
       ok: true,
       source: getProvider(),
       provider: getProvider(),
-      model: getModel(),
+      model: getModel({ internal: internalUser }),
       data,
     });
   } catch (error) {

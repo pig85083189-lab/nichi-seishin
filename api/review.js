@@ -3100,6 +3100,8 @@ module.exports = async function handler(req, res) {
   const body = readJsonBody(req);
   delete body.user_id;
   delete body.userId;
+  delete body.model;
+  delete body.internal;
 
   let membershipRow = null;
   let internalUser = false;
@@ -3161,7 +3163,7 @@ module.exports = async function handler(req, res) {
   const origJson = res.json.bind(res);
   res.json = (payload) => {
     if (payload && payload.ok === true && internalUser) {
-      return origJson({ ...payload, _internalDebug: internalDebugMeta() });
+      return origJson({ ...payload, _internalDebug: internalDebugMeta({ internal: true }) });
     }
     return origJson(payload);
   };
@@ -3448,6 +3450,11 @@ module.exports = async function handler(req, res) {
       (mode === "checklist" && body.kind !== "execution") ||
       (mode === "choices" && choiceKind !== "think-close" && choiceKind !== "execution" && choiceKind !== "execution-deep");
     const aiOpts = {
+      internal: internalUser,
+      effort:
+        internalUser && mode === "insight" && thinkV2.isThinkV2Request(body)
+          ? "high"
+          : undefined,
       temperature:
         mode === "insight" && thinkV2.isThinkV2Request(body)
           ? thinkV2.thinkV2Step(body) === "close"
@@ -3474,7 +3481,7 @@ module.exports = async function handler(req, res) {
               : mode === "prompts"
                 ? 0.7
                 : 0.75,
-      timeoutMs: promptKind === "awareness" || mode === "choices" ? 20000 : 22000,
+      timeoutMs: internalUser ? 55000 : promptKind === "awareness" || mode === "choices" ? 20000 : 22000,
       rejectPartial: true,
       maxTokens:
         mode === "bodycoach" || mode === "bodymind"

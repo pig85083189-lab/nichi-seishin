@@ -197,7 +197,7 @@ function lines(list, max = 6) {
   return Array.isArray(list) ? list.map((item) => String(item || "").trim()).filter(Boolean).slice(0, max) : [];
 }
 
-async function buildAiReport({ type, fromIso, toIso, period, label, entries, stats, archived }) {
+async function buildAiReport({ type, fromIso, toIso, period, label, entries, stats, archived, internal }) {
   const digest = (entries || [])
     .map((item) => {
       const quotes = Array.isArray(item.quotes) ? item.quotes.filter(Boolean).join("／") : "";
@@ -238,7 +238,7 @@ async function buildAiReport({ type, fromIso, toIso, period, label, entries, sta
         content: `這是「${label}」成長報告（${fromIso} 至 ${toIso}），共 ${entries.length} 天復盤。\n請寫出結構完整的深度思考：① 今天的身心訊號 ② 客觀檢討與反思 ③ 具體突破建議（怎麼做會更好） ④ 本期核心重點整理。同時抓出跨天重複的隱性模式：身心連鎖（例如事情未如預期→腸胃／焦慮）、星期節奏（例如星期三決策拖延）、睡眠與執行力的連動。\n\n【三力數據】\n${formatStatsPrompt(stats)}\n\n【復盤摘要】\n${digest || "（這段期間沒有復盤摘要，請只根據三力數據寫）"}`,
       },
     ],
-    { timeoutMs: 25000, maxTokens: 2500 }
+    { timeoutMs: internal ? 45000 : 25000, maxTokens: 2500, internal: Boolean(internal) }
   );
 
   return {
@@ -348,6 +348,7 @@ async function handler(req, res, forced = {}) {
           entries,
           stats,
           archived,
+          internal: cronInternal,
         });
         await archiveUserReport(account.id, report);
         try {
@@ -391,13 +392,15 @@ async function handler(req, res, forced = {}) {
     }
 
     const reportFeature = featureForReportType(kind);
+    let reportInternal = false;
     const allowed = await enforcePlusEntitlement({
       feature: reportFeature,
       res,
       supabaseReady: supabaseAdminConfigured(),
       loadPlan: async () => {
         const row = await ensureTrial(user);
-        return { plan: effectivePlanFromRow(row), isInternal: isInternal(row) };
+        reportInternal = isInternal(row);
+        return { plan: effectivePlanFromRow(row), isInternal: reportInternal };
       },
     });
     if (!allowed) return;
@@ -449,6 +452,7 @@ async function handler(req, res, forced = {}) {
       entries,
       stats,
       archived,
+      internal: reportInternal,
     });
     await archiveUserReport(user.id, report);
     try {
