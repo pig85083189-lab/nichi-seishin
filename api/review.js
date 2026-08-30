@@ -3312,7 +3312,12 @@ module.exports = async function handler(req, res) {
         { role: "user", content: checklistUserPrompt(kind, body) },
       ];
     } else if (mode === "choices") {
-      if (awarenessV3.isAwarenessV3Request(body)) {
+      if (awarenessV3.isAwarenessV3CueRequest(body)) {
+        messages = [
+          { role: "system", content: withCompleteRule(awarenessV3.AWARENESS_V3_CUE_SYSTEM) },
+          { role: "user", content: awarenessV3.awarenessV3CueUserPrompt(body) },
+        ];
+      } else if (awarenessV3.isAwarenessV3Request(body)) {
         messages = [
           { role: "system", content: withCompleteRule(awarenessV3.AWARENESS_V3_SYSTEM) },
           { role: "user", content: awarenessV3.awarenessV3UserPrompt(body) },
@@ -3478,7 +3483,7 @@ module.exports = async function handler(req, res) {
       temperature:
         mode === "insight" && reflectionV3.isReflectionV3Request(body)
           ? 0.45
-        : mode === "choices" && (awarenessV3.isAwarenessV3Request(body) || executionV3.isExecutionV3Request(body))
+        : mode === "choices" && (awarenessV3.isAwarenessV3CueRequest(body) || awarenessV3.isAwarenessV3Request(body) || executionV3.isExecutionV3Request(body))
           ? 0.45
         : mode === "insight" && thinkV2.isThinkV2Request(body)
           ? thinkV2.thinkV2Step(body) === "close"
@@ -3512,6 +3517,8 @@ module.exports = async function handler(req, res) {
           ? 640
           : mode === "bodymind"
             ? 500
+          : mode === "choices" && awarenessV3.isAwarenessV3CueRequest(body)
+            ? 280
           : mode === "choices" && choiceKind === "think-close"
             ? 900
           : mode === "choices" && (choiceKind === "execution" || choiceKind === "execution-deep")
@@ -3561,6 +3568,20 @@ module.exports = async function handler(req, res) {
       data = await callOpenAI(messages, { ...aiOpts, _retried: true });
     }
     if (mode === "choices") {
+      if (awarenessV3.isAwarenessV3CueRequest(body)) {
+        const result = awarenessV3.normalizeObservationCueResult(data, body.context || {});
+        const judged = awarenessV3.evaluateObservationCueQuality(result.text, {
+          context: body.context || {},
+          selected: body.context && body.context.selectedAwareness,
+          unselected: body.context && body.context.unselectedAwareness,
+        });
+        if (!result.text || !judged.accept) {
+          res.status(502).json({ ok: false, error: "這句觀察還沒整理好，請再試一次" });
+          return;
+        }
+        res.status(200).json({ ok: true, source: getProvider(), data: { text: judged.text || result.text } });
+        return;
+      }
       if (awarenessV3.isAwarenessV3Request(body)) {
         const result = awarenessV3.normalizeAwarenessV3Result(data, body.context || {});
         if (!result.items || result.items.length < 3) {
@@ -3888,6 +3909,7 @@ module.exports.THINK_V2_ASK_SYSTEM = thinkV2.THINK_V2_ASK_SYSTEM;
 module.exports.THINK_V2_CLOSE_SYSTEM = thinkV2.THINK_V2_CLOSE_SYSTEM;
 module.exports.REFLECTION_V3_SYSTEM = reflectionV3.REFLECTION_V3_SYSTEM;
 module.exports.AWARENESS_V3_SYSTEM = awarenessV3.AWARENESS_V3_SYSTEM;
+module.exports.AWARENESS_V3_CUE_SYSTEM = awarenessV3.AWARENESS_V3_CUE_SYSTEM;
 module.exports.EXECUTION_V3_SYSTEM = executionV3.EXECUTION_V3_SYSTEM;
 module.exports.choicesUserPrompt = choicesUserPrompt;
 module.exports.EXECUTION_CHOICES_SYSTEM = EXECUTION_CHOICES_SYSTEM;

@@ -7388,6 +7388,41 @@ textarea[hidden] + .journal-voice-hint,
   overflow-wrap: anywhere;
 }
 
+.aware-v3-cue {
+  margin: 20px 0 0;
+  padding: 14px 0 0;
+  border-top: 1px solid rgba(196, 176, 158, 0.28);
+}
+
+.aware-v3-cue.is-helper {
+  margin-top: 16px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.aware-v3-cue__label {
+  margin: 0 0 6px;
+  color: #8a7a6e;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.aware-v3-cue__text {
+  margin: 0;
+  color: #5c5148;
+  font-size: 14px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+.aware-v3-cue__helper {
+  margin: 0;
+  color: #b3a79c;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
 .exec-v3-item__detail {
   margin: 4px 0 0;
   color: #7a6e62;

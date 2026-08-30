@@ -18,6 +18,8 @@ assert(app.includes("function generateExecutionV3"), "V3 generate 存在");
 assert(app.includes('variant: "execution-v3"'), "request 帶 execution-v3");
 assert(app.includes("generateExecutionV3({ confirmed: true })"), "只有 CTA confirmed 才生成");
 assert(!/function persistJournalNow[\s\S]{0,280}generateExecutionV3/.test(app), "autosave 不生成 06");
+assert(!/function executionV3SourceSig[\s\S]{0,500}observationCue/.test(app), "06 stale 不因 cue 改變");
+assert(!/function generateExecutionV3[\s\S]{0,240}observationCue/.test(app), "06 生成不讀 cue");
 assert(app.includes("function generateExecDeepAsk"), "legacy deep 未刪");
 assert(app.includes("function generateExecDeepFinal"), "legacy final 未刪");
 assert(app.includes("function generateExecutionChoices"), "legacy choices 未刪");

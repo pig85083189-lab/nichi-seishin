@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const awarenessV3 = require("../lib/awareness-v3");
+const reviewMerge = require("../lib/review-merge");
 
 function assert(cond, message) {
   if (!cond) throw new Error(message);
@@ -156,5 +157,150 @@ const bad = awarenessV3.evaluateAwarenessV3Quality(
   { context: { event: "開會沒人接話", bodyMindText: "胸口緊。", thinkQuestions: [{ text: "你在意的其實是被某個重要的人理解嗎？" }] } }
 );
 assert(bad.issues.includes("a1-second-person") || bad.issues.includes("duplicate-items"), "第二人稱／重複必須 FAIL");
+
+assert(!awarenessV3.AWARENESS_V3_SYSTEM.includes("observationCue"), "05 生成 prompt 不改成一起出 cue");
+assert(awarenessV3.isAwarenessV3Request({ variant: "awareness-v3" }), "05 items request 仍是 awareness-v3");
+assert(!awarenessV3.isAwarenessV3Request({ variant: "awareness-v3-cue" }), "cue request 不可走 05 items");
+assert(awarenessV3.isAwarenessV3CueRequest({ variant: "awareness-v3-cue", step: "observation-cue" }), "cue request 可辨識");
+assert(reviewJs.includes("awarenessV3.isAwarenessV3CueRequest"), "review 接 cue");
+assert(app.includes("function generateAwarenessObservationCue"), "selection 後才生成 cue");
+assert(app.includes("再多看自己一點"), "05 有觀察小標");
+assert(app.includes("勾選真正有說中你的內容，再多留意自己一點。"), "未勾選只有 helper");
+assert(!/function renderAwarenessObservationCueHtml[\s\S]{0,1200}textarea/.test(app), "cue 沒有 textarea");
+assert(!/function renderAwarenessObservationCueHtml[\s\S]{0,1200}<input/.test(app), "cue 沒有 input");
+assert(!/function generateAwarenessV3[\s\S]{0,1600}awareness-v3-cue/.test(app), "05 items 生成不呼叫 cue");
+assert(!/function generateExecutionV3[\s\S]{0,240}observationCue/.test(app), "06 生成不吃 cue");
+assert(!/function executionV3SourceSig[\s\S]{0,500}observationCue/.test(app), "06 stale sig 不含 cue");
+assert(/function generateAwarenessObservationCue[\s\S]{0,280}isCurrentJournalArchived/.test(app), "completed 不自動重打 cue");
+assert(app.includes("observationCue"), "cue persist 在 awarenessV3 JSON");
+
+const ITEMS = [
+  { id: "a1", text: "我發現自己很在意努力有沒有被重要的人看見。" },
+  { id: "a2", text: "我發現自己常常用『沒關係』讓自己先繼續往前。" },
+  { id: "a3", text: "我看見自己一想到又要解釋，身體就先緊起來。" },
+];
+
+const CUE_CASES = [
+  {
+    id: "A",
+    name: "只勾 1 個",
+    selected: ["我發現自己很在意努力有沒有被重要的人看見。"],
+    unselected: ["我發現自己常常用『沒關係』讓自己先繼續往前。"],
+    context: {
+      event: "做了很多，對方好像沒看見。",
+      bodyMindText: "胸口悶。",
+      thinkQuestions: [{ text: "今天真正值得重新思考的，是這份在意從哪裡來？" }],
+    },
+    text: "下一次你又很在意對方有沒有看見你的付出時，可以留意：你期待的是一句肯定，還是希望對方理解這份付出的意義？",
+  },
+  {
+    id: "B",
+    name: "勾 2 個",
+    selected: ["我發現自己很在意努力有沒有被重要的人看見。", "我發現自己常常用『沒關係』讓自己先繼續往前。"],
+    unselected: ["我看見自己一想到又要解釋，身體就先緊起來。"],
+    context: { event: "我又說沒關係。", bodyMindText: "肩膀沉。", thinkQuestions: [{ text: "沒關係的後面，還藏著什麼沒說出口？" }] },
+    text: "下次你又先說『沒關係』、又在意有沒有被看見時，可以留意：那一刻你是真的放下，還是先把自己放到後面？",
+  },
+  {
+    id: "C",
+    name: "勾 3 個",
+    selected: ITEMS.map((item) => item.text),
+    unselected: [],
+    context: { event: "又先往前走。", bodyMindText: "胸口緊。", thinkQuestions: [{ text: "這三次反應裡，哪一個最接近今天的核心？" }] },
+    text: "下次類似的時刻再出現，可以觀察：你是先說沒關係，還是先在意有沒有被看見？",
+  },
+  {
+    id: "F",
+    name: "positive day",
+    selected: ["我發現跟喜歡的人自在相處時，我很容易感到幸福。"],
+    unselected: ["我其實一直害怕失去。"],
+    context: {
+      thanksText: "有他在",
+      event: "跟男友吃飯一直笑，很幸福。",
+      bodyMindText: "整個人都很放鬆。",
+      thinkQuestions: [{ text: "讓你放鬆的是他做了什麼，還是你可以做自己？" }],
+    },
+    text: "下次再出現這種很自在的時刻，可以留意看看：當時有哪些小細節，讓你特別像自己？",
+  },
+  {
+    id: "G",
+    name: "relationship",
+    selected: ["我發現自己常常用『沒關係』讓自己先繼續往前。"],
+    context: { event: "跟對方吵架後我先說沒關係。", bodyMindText: "喉嚨緊。", thinkQuestions: [{ text: "這句沒關係，是給對方，還是給自己？" }] },
+    text: "下一次你又說『沒關係』時，留意一下：是真的已經放下了，還是只是先把自己的感受放到後面？",
+  },
+  {
+    id: "H",
+    name: "work",
+    selected: ["我發現，真正讓我煩的是標準沒對上，而不只是這一版不好看。"],
+    context: { event: "員工交出來的東西和我要的標準差很多。", bodyMindText: "太陽穴一直跳。", thinkQuestions: [{ text: "差很多，是技能、理解，還是決策權？" }] },
+    text: "下次再看到成果和標準對不上時，可以留意：你煩的是這一版，還是那把尺好像只有你自己拿著？",
+  },
+  {
+    id: "I",
+    name: "evidence 不足",
+    selected: ["我發現，今天有一份說不上來的空，我還不想急著解釋。"],
+    context: { event: "今天有點怪怪的，說不上來。", bodyMindText: "就是有點空。", thinkQuestions: [{ text: "這份空，比較像沒事，還是有事還沒命名？" }] },
+    text: "下次再出現這種說不上來的空，可以觀察：身體是安靜的，還是有一個還不想被命名的感覺？",
+  },
+];
+
+CUE_CASES.forEach((spec) => {
+  const judged = awarenessV3.evaluateObservationCueQuality(spec.text, {
+    context: spec.context,
+    selected: spec.selected,
+    unselected: spec.unselected || [],
+  });
+  assert(judged.ok, `cue ${spec.id} ${spec.name} 應通過：${judged.issues.join("；")}`);
+  assert(judged.text && !judged.text.includes("\n\n"), `cue ${spec.id} 只有一段`);
+});
+
+const none = { items: ITEMS, selectedIds: [] };
+assert(!awarenessV3.shouldShowPersonalizedObservationCue(none), "D 全不勾不顯示 personalized cue");
+assert(!awarenessV3.observationCueMatches({ ...none, observationCue: { text: "不該出現", selectedSig: "x" } }), "D 未勾選不算 match");
+
+const one = { items: ITEMS, selectedIds: ["a1"], observationCue: { text: CUE_CASES[0].text, selectedSig: awarenessV3.observationSelectedSig(["a1"], [ITEMS[0].text]) } };
+assert(awarenessV3.shouldShowPersonalizedObservationCue(one), "A 勾 1 個才顯示");
+assert(awarenessV3.observationCueMatches(one), "A 對應 selectedSig");
+
+const changed = { ...one, selectedIds: ["a2"] };
+assert(!awarenessV3.observationCueMatches(changed), "E 改勾選後舊 cue 必須 stale");
+
+const advice = awarenessV3.evaluateObservationCueQuality("你需要學會肯定自己的價值。", {
+  context: CUE_CASES[0].context,
+  selected: CUE_CASES[0].selected,
+});
+assert(advice.issues.includes("advice"), "禁止結論／建議");
+
+const action = awarenessV3.evaluateObservationCueQuality("明天試著跟對方談談，並列出三件你在意的事。", {
+  context: CUE_CASES[4].context,
+  selected: CUE_CASES[4].selected,
+});
+assert(action.issues.includes("action"), "禁止偷做 06");
+
+const copied04 = awarenessV3.evaluateObservationCueQuality("今天真正值得重新思考的，是這份在意從哪裡來？", {
+  context: CUE_CASES[0].context,
+  selected: CUE_CASES[0].selected,
+});
+assert(copied04.issues.includes("similar-to-04"), "禁止複製 04");
+
+const stolen = awarenessV3.evaluateObservationCueQuality("留意一下：你是不是常常用沒關係讓自己先繼續往前？", {
+  context: CUE_CASES[0].context,
+  selected: CUE_CASES[0].selected,
+  unselected: CUE_CASES[0].unselected,
+});
+assert(stolen.issues.includes("unselected-as-truth"), "未勾選不可當 truth");
+
+const hunt = awarenessV3.evaluateObservationCueQuality("下次幸福時，留意你是不是其實害怕失去、背後藏著陰影。", {
+  context: CUE_CASES[3].context,
+  selected: CUE_CASES[3].selected,
+});
+assert(hunt.issues.includes("positive-problem-hunt"), "positive 不可硬找問題");
+
+const merged = reviewMerge.mergeAwarenessV3(
+  { items: ITEMS, selectedIds: ["a1"], generatedAt: "2026-08-30T10:00:00.000Z", observationCue: one.observationCue },
+  { items: ITEMS, selectedIds: ["a1"], generatedAt: "2026-08-30T09:00:00.000Z" }
+);
+assert(merged.observationCue && merged.observationCue.text === one.observationCue.text, "cloud merge 保留 cue");
 
 console.log("awareness-v3 tests passed");
