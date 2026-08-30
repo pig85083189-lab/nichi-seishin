@@ -61,7 +61,9 @@ assert(html.includes("<span>04</span> 深度思考"), "畫面 04 是深度思考
 assert(html.includes("<span>05</span> 覺察力") || html.includes("<span>05</span>覺察"), "畫面 05 是覺察力");
 assert(html.includes("<span>06</span> 執行力"), "畫面 06 是執行力");
 assert(html.includes('id="guide-04"') && html.includes("深度思考"), "使用說明 04 是深度思考");
-assert(html.includes('id="guide-05"') && html.includes("核心覺察"), "使用說明 05 是覺察力收束");
+assert(html.includes('id="guide-05"') && html.includes("說中我"), "使用說明 05 是勾選覺察");
+assert(app.includes("function generateAwarenessV3"), "正式 05 主路徑已接 awareness-v3");
+assert(app.includes("function generateExecutionV3"), "正式 06 主路徑已接 execution-v3");
 
 const thinkFn = app.slice(app.indexOf("async function generateThinkChoices"), app.indexOf("async function generateThinkChoicesClose"));
 assert(!thinkFn.includes("state.awarenessChoices"), "CASE C：04 生成不可讀 awarenessChoices");

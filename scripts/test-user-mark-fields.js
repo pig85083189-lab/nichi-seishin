@@ -25,6 +25,7 @@ assert(src.includes("bodyMind.insight") && src.includes("bodyMind.support"), "03
 assert(src.includes("think.psychology") && src.includes("think.awareness") && src.includes("think.takeaway"), "深度思考可畫");
 assert(src.includes("think.coreQuote") && src.includes("think.question."), "04 V3 金句與三題可畫");
 assert(src.includes("awareness.seen") && src.includes("awareness.line"), "覺察結果可畫");
+assert(src.includes("awareness.item."), "05 V3 覺察可畫");
 assert(src.includes("exec.item.") && src.includes("exec.focus.title"), "行動卡與今日焦點可畫");
 assert(src.includes("manifest.sentence") && src.includes("manifest.path."), "顯化內容可畫");
 assert(src.includes("history-journal__text"), "歷史紀錄可畫");

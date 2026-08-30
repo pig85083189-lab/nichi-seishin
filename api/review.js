@@ -10,6 +10,8 @@ const insightHighlight = require("../lib/insight-highlight");
 const reviewMerge = require("../lib/review-merge");
 const thinkV2 = require("../lib/think-v2");
 const reflectionV3 = require("../lib/reflection-v3");
+const awarenessV3 = require("../lib/awareness-v3");
+const executionV3 = require("../lib/execution-v3");
 const execV2 = require("../lib/exec-v2");
 
 const HIGHLIGHT_RULE = `【重點反白 highlights】
@@ -3310,6 +3312,17 @@ module.exports = async function handler(req, res) {
         { role: "user", content: checklistUserPrompt(kind, body) },
       ];
     } else if (mode === "choices") {
+      if (awarenessV3.isAwarenessV3Request(body)) {
+        messages = [
+          { role: "system", content: withCompleteRule(awarenessV3.AWARENESS_V3_SYSTEM) },
+          { role: "user", content: awarenessV3.awarenessV3UserPrompt(body) },
+        ];
+      } else if (executionV3.isExecutionV3Request(body)) {
+        messages = [
+          { role: "system", content: withCompleteRule(executionV3.EXECUTION_V3_SYSTEM) },
+          { role: "user", content: executionV3.executionV3UserPrompt(body) },
+        ];
+      } else {
       const kind = choicesKind(body);
       if (kind === "execution-deep") {
         const step = execV2.execDeepStep(body);
@@ -3350,6 +3363,7 @@ module.exports = async function handler(req, res) {
           },
           { role: "user", content: choicesUserPrompt(body) },
         ];
+      }
       }
     } else if (mode === "insight") {
       if (reflectionV3.isReflectionV3Request(body)) {
@@ -3464,6 +3478,8 @@ module.exports = async function handler(req, res) {
       temperature:
         mode === "insight" && reflectionV3.isReflectionV3Request(body)
           ? 0.45
+        : mode === "choices" && (awarenessV3.isAwarenessV3Request(body) || executionV3.isExecutionV3Request(body))
+          ? 0.45
         : mode === "insight" && thinkV2.isThinkV2Request(body)
           ? thinkV2.thinkV2Step(body) === "close"
             ? 0.4
@@ -3504,6 +3520,8 @@ module.exports = async function handler(req, res) {
             ? 700
           : mode === "insight" && reflectionV3.isReflectionV3Request(body)
             ? 900
+          : mode === "choices" && (awarenessV3.isAwarenessV3Request(body) || executionV3.isExecutionV3Request(body))
+            ? 800
           : mode === "insight" && thinkV2.isThinkV2Request(body)
           ? thinkV2.thinkV2Step(body) === "close"
             ? 900
@@ -3543,6 +3561,24 @@ module.exports = async function handler(req, res) {
       data = await callOpenAI(messages, { ...aiOpts, _retried: true });
     }
     if (mode === "choices") {
+      if (awarenessV3.isAwarenessV3Request(body)) {
+        const result = awarenessV3.normalizeAwarenessV3Result(data, body.context || {});
+        if (!result.items || result.items.length < 3) {
+          res.status(502).json({ ok: false, error: "今天的覺察還沒整理好，請再試一次" });
+          return;
+        }
+        res.status(200).json({ ok: true, source: getProvider(), data: result });
+        return;
+      }
+      if (executionV3.isExecutionV3Request(body)) {
+        const result = executionV3.normalizeExecutionV3Result(data, body.context || {});
+        if (!result.actions || result.actions.length < 3) {
+          res.status(502).json({ ok: false, error: "今天的下一步還沒整理好，請再試一次" });
+          return;
+        }
+        res.status(200).json({ ok: true, source: getProvider(), data: result });
+        return;
+      }
       const kind = choicesKind(body);
       if (kind === "think-close") {
         const closed = normalizeThinkGuideClose(data);
@@ -3851,6 +3887,8 @@ module.exports.THINK_CHOICES_CLOSE_SYSTEM = THINK_CHOICES_CLOSE_SYSTEM;
 module.exports.THINK_V2_ASK_SYSTEM = thinkV2.THINK_V2_ASK_SYSTEM;
 module.exports.THINK_V2_CLOSE_SYSTEM = thinkV2.THINK_V2_CLOSE_SYSTEM;
 module.exports.REFLECTION_V3_SYSTEM = reflectionV3.REFLECTION_V3_SYSTEM;
+module.exports.AWARENESS_V3_SYSTEM = awarenessV3.AWARENESS_V3_SYSTEM;
+module.exports.EXECUTION_V3_SYSTEM = executionV3.EXECUTION_V3_SYSTEM;
 module.exports.choicesUserPrompt = choicesUserPrompt;
 module.exports.EXECUTION_CHOICES_SYSTEM = EXECUTION_CHOICES_SYSTEM;
 module.exports.EXECUTION_PROMPTS_SYSTEM = EXECUTION_PROMPTS_SYSTEM;

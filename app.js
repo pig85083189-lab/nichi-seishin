@@ -130,6 +130,7 @@ const state = {
   internalModelDebug: { think: null, awareness: null, execution: null },
   journalExecFocus: null,
   journalAwarenessResult: null,
+  journalAwarenessV3: { variant: "awareness-v3", sourceSig: "", items: [], selectedIds: [], generatedAt: "" },
   awarenessChoices: { sourceSig: "", options: [], selectedIds: [], generatedAt: "" },
   thinkChoices: { sourceSig: "", options: [], selectedIds: [], generatedAt: "" },
   executionChoices: { sourceSig: "", options: [], selectedId: "", selectedIds: [], custom: "", followupQuestion: "", followupPlaceholder: "", generatedAt: "", deep: { status: "", rounds: [], draftAnswer: "", refreshedAt: "", executionSummary: "", finalOptions: [], finalSelectedIds: [] } },
@@ -2752,6 +2753,7 @@ function serializeExecutionChoiceOption(item) {
 function serializeExecutionChoiceBag(raw) {
   const bag = normalizeExecutionChoiceBag(raw);
   return {
+    variant: bag.variant || "",
     sourceSig: bag.sourceSig,
     options: bag.options.map((item) => serializeExecutionChoiceOption(item)),
     selectedId: bag.selectedId,
@@ -3526,6 +3528,7 @@ function clearJournalMemory() {
   state.internalModelDebug = { think: null, awareness: null, execution: null };
   state.journalExecFocus = null;
   state.journalAwarenessResult = null;
+  state.journalAwarenessV3 = { variant: "awareness-v3", sourceSig: "", items: [], selectedIds: [], generatedAt: "" };
   state.journalManifestSentence = "";
   state.journalManifestHighlights = {};
   state.manifestPrompts = [];
@@ -9937,6 +9940,10 @@ function choiceListHtml(bag, kind) {
 }
 
 function renderAwarenessChoices(bag) {
+  if (usesAwarenessV3Path()) {
+    renderAwarenessV3();
+    return;
+  }
   const root = document.getElementById("awareQuestions");
   const empty = document.getElementById("awareEmpty");
   const genBtn = document.getElementById("btnAwarePrompts");
@@ -10199,6 +10206,10 @@ function renderExecDeep(data) {
 }
 
 function renderExecutionChoices(bag) {
+  if (usesExecutionV3Path()) {
+    renderExecutionV3();
+    return;
+  }
   const root = document.getElementById("execQuestions");
   const empty = document.getElementById("execEmpty");
   const genBtn = document.getElementById("btnExecPrompts");
@@ -10376,18 +10387,26 @@ function setChoicesLoading(kind, loading) {
   if (!state.choicesBusy) state.choicesBusy = { awareness: false, think: false, execution: false, executionDeep: false };
   state.choicesBusy[kind] = loading;
   if (kind === "awareness") {
-    const loader = document.getElementById("awarePromptLoading");
-    if (loader) loader.hidden = !loading;
-    renderAwarenessChoices(state.awarenessChoices);
+    if (usesAwarenessV3Path()) {
+      renderAwarenessV3();
+    } else {
+      const loader = document.getElementById("awarePromptLoading");
+      if (loader) loader.hidden = !loading;
+      renderAwarenessChoices(state.awarenessChoices);
+    }
   } else if (kind === "think") {
     const loader = document.getElementById("deepPromptLoading");
     if (loader) loader.hidden = !loading;
     renderThinkSection();
   } else if (kind === "execution" || kind === "executionDeep") {
-    const loader = document.getElementById("execPromptLoading");
-    if (loader && kind === "execution") loader.hidden = !loading;
-    renderExecutionChoices(state.executionChoices);
-    syncCorePromptGate();
+    if (usesExecutionV3Path()) {
+      renderExecutionV3();
+    } else {
+      const loader = document.getElementById("execPromptLoading");
+      if (loader && kind === "execution") loader.hidden = !loading;
+      renderExecutionChoices(state.executionChoices);
+      syncCorePromptGate();
+    }
   }
 }
 
@@ -10478,18 +10497,25 @@ function thinkBitsFrom(journal) {
     blindSpot: String((guide.close && guide.close.blindSpot) || "").trim(),
     improvementDirection: String((guide.close && guide.close.improvementDirection) || guide.direction || "").trim(),
     thinkVariant: isV2 ? "think-v2" : isV3 ? "reflection-v3" : "",
+    coreQuote: String(guide.coreQuote || "").trim(),
+    questions: Array.isArray(guide.questions) ? guide.questions : [],
   };
 }
 
 function awarenessBitsFrom(journal) {
   const bag = normalizeChoiceBag((journal && journal.awarenessChoices) || state.awarenessChoices);
   const result = normalizeAwarenessResult((journal && journal.awarenessResult) || state.journalAwarenessResult, { keepSource: true });
+  const v3 = normalizeAwarenessV3Bag((journal && journal.awarenessV3) || state.journalAwarenessV3);
+  const v3Selected = selectedAwarenessV3Texts(v3);
   return {
     bag,
-    selected: selectedChoiceTexts(bag),
+    selected: v3Selected.length ? v3Selected : selectedChoiceTexts(bag),
     none: Boolean(bag.none),
-    line: String(result.line || "").trim(),
-    seen: String(result.seen || "").trim(),
+    line: String(result.line || v3Selected[0] || "").trim(),
+    seen: String(result.seen || v3Selected.slice(1).join(" ") || "").trim(),
+    items: v3.items,
+    selectedIds: v3.selectedIds,
+    awarenessVariant: v3.items.length ? "awareness-v3" : "",
   };
 }
 
@@ -10509,10 +10535,15 @@ function priorThinkAwareContext(journal) {
     thinkCloseBlindSpot: think.blindSpot,
     thinkCloseImprovement: think.improvementDirection,
     thinkVariant: think.thinkVariant,
+    thinkCoreQuote: think.coreQuote,
+    thinkQuestions: think.questions,
     awarenessSelected: aware.selected,
     awarenessNone: aware.none,
     awarenessLine: aware.line,
     awarenessSeen: aware.seen,
+    awarenessItems: aware.items || [],
+    awarenessSelectedIds: aware.selectedIds || [],
+    awarenessVariant: aware.awarenessVariant || "",
   };
 }
 
@@ -10939,6 +10970,426 @@ async function generateReflectionV3(options = {}) {
       state.choicesBusy.think = false;
       setChoicesLoading("think", false);
       renderThinkV3();
+    }
+  }
+}
+
+function normalizeAwarenessV3Bag(raw) {
+  const api = reviewMergeApi();
+  if (typeof api.normalizeAwarenessV3Bag === "function") return api.normalizeAwarenessV3Bag(raw);
+  const src = raw && typeof raw === "object" ? raw : {};
+  const items = (Array.isArray(src.items) ? src.items : []).map((item, index) => {
+    const text = String((item && item.text) || "").replace(/\s+/g, " ").trim();
+    return text ? { id: String((item && item.id) || `a${index + 1}`), text } : null;
+  }).filter(Boolean).slice(0, 3);
+  const allowed = new Set(items.map((item) => item.id));
+  return {
+    variant: "awareness-v3",
+    sourceSig: String(src.sourceSig || "").trim(),
+    items,
+    selectedIds: (Array.isArray(src.selectedIds) ? src.selectedIds : []).filter((id) => allowed.has(id)),
+    generatedAt: String(src.generatedAt || "").trim(),
+  };
+}
+
+function selectedAwarenessV3Texts(raw) {
+  const api = reviewMergeApi();
+  if (typeof api.selectedAwarenessV3Texts === "function") return api.selectedAwarenessV3Texts(raw);
+  const data = normalizeAwarenessV3Bag(raw);
+  const map = new Map(data.items.map((item) => [item.id, item.text]));
+  return data.selectedIds.map((id) => map.get(id)).filter(Boolean);
+}
+
+function awarenessV3Context(journal) {
+  const data = journal || collectJournal();
+  const think = thinkBitsFrom(data);
+  const mind = normalizeBodyMind(data.bodyMind);
+  return {
+    thanksText: thanksTextFrom(data),
+    thanks: thanksTextFrom(data),
+    event: String(data.event || "").trim(),
+    mood: String(data.mood || "").trim(),
+    bodyMindText: mind.text,
+    bodyNote: mind.text || String(data.bodyNote || "").trim(),
+    bodyMindInsight: mind.insight,
+    bodyMindSupport: mind.support,
+    coreQuote: think.coreQuote,
+    thinkCoreQuote: think.coreQuote,
+    thinkQuestions: think.questions,
+  };
+}
+
+function awarenessV3SourceSig(journal) {
+  const ctx = awarenessV3Context(journal);
+  return [
+    String(ctx.thanksText || "").replace(/\s+/g, " ").trim(),
+    String(ctx.event || "").replace(/\s+/g, " ").trim(),
+    String(ctx.mood || "").trim(),
+    String(ctx.bodyMindText || "").replace(/\s+/g, " ").trim(),
+    String(ctx.bodyMindInsight || "").replace(/\s+/g, " ").trim(),
+    String(ctx.bodyMindSupport || "").replace(/\s+/g, " ").trim(),
+    String(ctx.coreQuote || "").replace(/\s+/g, " ").trim(),
+    (ctx.thinkQuestions || []).map((item) => String((item && (item.text || item.question)) || "").replace(/\s+/g, " ").trim()).filter(Boolean).join("|"),
+  ].join("\n");
+}
+
+function awarenessV3Ready(journal) {
+  const ctx = awarenessV3Context(journal);
+  return Boolean(thanksFilled(journal || collectJournal()) && ctx.event && ctx.mood && bodyMindTextReady(ctx.bodyMindText) && String(ctx.coreQuote || "").trim());
+}
+
+function usesAwarenessV3Path(journal) {
+  const mode = journal && journal.mode ? journal.mode : state.journalMode;
+  if (mode === "quick") return false;
+  const v3 = normalizeAwarenessV3Bag((journal && journal.awarenessV3) || state.journalAwarenessV3);
+  if (v3.items.length || v3.sourceSig) return true;
+  const bag = normalizeChoiceBag((journal && journal.awarenessChoices) || state.awarenessChoices);
+  if (hasMeaningfulChoices(bag)) return false;
+  const result = normalizeAwarenessResult((journal && journal.awarenessResult) || state.journalAwarenessResult, { keepSource: true });
+  if (hasAwarenessResult(result)) return false;
+  const prompts = (journal && journal.awarenessPrompts) || state.awarenessPrompts || [];
+  if (Array.isArray(prompts) && prompts.length) return false;
+  const answers = (journal && journal.awareness) || [];
+  if (Array.isArray(answers) && answers.some((item) => String(item || "").trim())) return false;
+  return true;
+}
+
+function usesExecutionV3Path(journal) {
+  const mode = journal && journal.mode ? journal.mode : state.journalMode;
+  if (mode === "quick") return false;
+  const bag = normalizeExecutionChoiceBag((journal && journal.executionChoices) || state.executionChoices);
+  if (bag.variant === "execution-v3") return true;
+  if (hasMeaningfulExecDeep(bag.deep)) return false;
+  if (bag.options.length || bag.followupQuestion || bag.selectedIds.length || bag.selectedId || bag.custom) return false;
+  const legacy = normalizeExecutionPrompts((journal && journal.executionPrompts) || state.executionPrompts);
+  return legacy.length === 0;
+}
+
+function lockNewDayAwareUi() {
+  const v3 = usesAwarenessV3Path();
+  const card = document.getElementById("awareV3Card");
+  if (card) card.hidden = !v3;
+  document.querySelectorAll("#section-aware .js-legacy-aware-ui").forEach((node) => {
+    node.hidden = v3;
+  });
+}
+
+function lockNewDayExecUi() {
+  const v3 = usesExecutionV3Path();
+  const card = document.getElementById("execV3Card");
+  if (card) card.hidden = !v3;
+  document.querySelectorAll("#section-exec .js-legacy-exec-ui").forEach((node) => {
+    node.hidden = v3;
+  });
+  if (v3) {
+    ["execEmpty", "btnExecPrompts", "execQuestions", "execPromptLoading", "btnExecAi", "execCardCol"].forEach((id) => {
+      const node = document.getElementById(id);
+      if (node) node.hidden = true;
+    });
+    const next = document.getElementById("execNext");
+    const hint = document.getElementById("execNextVoiceHint");
+    const label = document.getElementById("execStepLabel");
+    const stepHint = document.getElementById("execStepHint");
+    const stepResult = document.getElementById("execStepResult");
+    if (next) next.hidden = true;
+    if (hint) hint.hidden = true;
+    if (label) label.hidden = true;
+    if (stepHint) stepHint.hidden = true;
+    if (stepResult) stepResult.hidden = true;
+  }
+}
+
+function showAwareV3Hint(message) {
+  const hint = document.getElementById("awareV3Hint");
+  if (!hint) return;
+  const text = String(message || "").trim();
+  hint.textContent = text;
+  hint.hidden = !text || isCurrentJournalArchived();
+}
+
+function showExecV3Hint(message) {
+  const hint = document.getElementById("execV3Hint");
+  if (!hint) return;
+  const text = String(message || "").trim();
+  hint.textContent = text;
+  hint.hidden = !text || isCurrentJournalArchived();
+}
+
+function syncAwareV3Cta() {
+  lockNewDayAwareUi();
+  const btn = document.getElementById("btnAwarenessV3");
+  if (!btn) return;
+  const archived = isCurrentJournalArchived();
+  const ready = awarenessV3Ready();
+  const data = normalizeAwarenessV3Bag(state.journalAwarenessV3);
+  const hasResult = data.items.length >= 3;
+  const stale = hasResult && data.sourceSig && data.sourceSig !== awarenessV3SourceSig();
+  const show = usesAwarenessV3Path() && !archived && (!hasResult || stale);
+  btn.hidden = !show;
+  btn.disabled = Boolean(state.choicesBusy?.awareness) || archived || !ready;
+  btn.textContent = stale ? "前面的內容有修改，重新看看 →" : "看看今天真正看見了自己什麼 →";
+  if (!ready && show) showAwareV3Hint("先把今日感謝、事件、身心覺察和深度思考整理好。");
+  else if (ready) showAwareV3Hint("");
+}
+
+function executionV3Context(journal) {
+  const data = journal || collectJournal();
+  const aware = awarenessBitsFrom(data);
+  const think = thinkBitsFrom(data);
+  const mind = normalizeBodyMind(data.bodyMind);
+  return {
+    thanksText: thanksTextFrom(data),
+    thanks: thanksTextFrom(data),
+    event: String(data.event || "").trim(),
+    mood: String(data.mood || "").trim(),
+    bodyMindText: mind.text,
+    bodyNote: mind.text || String(data.bodyNote || "").trim(),
+    coreQuote: think.coreQuote,
+    thinkCoreQuote: think.coreQuote,
+    awarenessSelected: aware.selected,
+    awarenessSelectedIds: aware.selectedIds,
+    awarenessItems: aware.items,
+  };
+}
+
+function executionV3SourceSig(journal) {
+  const ctx = executionV3Context(journal);
+  return [
+    (ctx.awarenessSelectedIds || []).join(","),
+    (ctx.awarenessSelected || []).join("|"),
+    (ctx.awarenessItems || []).map((item) => String(item && item.text || "").trim()).join("|"),
+    String(ctx.event || "").replace(/\s+/g, " ").trim(),
+    String(ctx.bodyMindText || "").replace(/\s+/g, " ").trim(),
+    String(ctx.coreQuote || "").replace(/\s+/g, " ").trim(),
+  ].join("\n");
+}
+
+function executionV3Ready(journal) {
+  const data = normalizeAwarenessV3Bag((journal && journal.awarenessV3) || state.journalAwarenessV3);
+  return data.items.length >= 3 || awarenessV3Ready(journal);
+}
+
+function syncExecV3Cta() {
+  lockNewDayExecUi();
+  const btn = document.getElementById("btnExecutionV3");
+  if (!btn) return;
+  const archived = isCurrentJournalArchived();
+  const ready = executionV3Ready();
+  const bag = normalizeExecutionChoiceBag(state.executionChoices);
+  const hasResult = bag.variant === "execution-v3" && bag.options.length >= 3;
+  const stale = hasResult && bag.sourceSig && bag.sourceSig !== executionV3SourceSig();
+  const show = usesExecutionV3Path() && !archived && (!hasResult || stale);
+  btn.hidden = !show;
+  btn.disabled = Boolean(state.choicesBusy?.execution) || archived || !ready;
+  btn.textContent = stale ? "覺察有更新，重新整理下一步 →" : "把今天的覺察變成下一步 →";
+  if (!ready && show) showExecV3Hint("先看看今天真正看見了自己什麼。");
+  else if (ready) showExecV3Hint("");
+}
+
+function renderAwarenessV3() {
+  lockNewDayAwareUi();
+  const root = document.getElementById("awareV3Result");
+  const loader = document.getElementById("awareV3Loading");
+  const data = normalizeAwarenessV3Bag(state.journalAwarenessV3);
+  const loading = Boolean(state.choicesBusy?.awareness);
+  if (loader) loader.hidden = !loading;
+  syncAwareV3Cta();
+  if (!root) return;
+  if (loading || data.items.length < 3) {
+    if (!loading) root.innerHTML = "";
+    return;
+  }
+  const selected = new Set(data.selectedIds);
+  root.innerHTML = `
+    <div class="aware-v3-list">
+      ${data.items.map((item) => `
+        <button type="button" class="aware-v3-item${selected.has(item.id) ? " is-on" : ""}" data-aware-v3-id="${escapeHtml(item.id)}" role="checkbox" aria-checked="${selected.has(item.id) ? "true" : "false"}">
+          <span class="aware-v3-item__box" aria-hidden="true"></span>
+          <span class="aware-v3-item__copy">
+            ${markableP(item.text, `awareness.item.${item.id}`, "aware-v3-item__text")}
+          </span>
+        </button>`).join("")}
+    </div>`;
+  paintInternalModelDebug(root, state.internalModelDebug && state.internalModelDebug.awareness);
+}
+
+function renderExecutionV3() {
+  lockNewDayExecUi();
+  const root = document.getElementById("execV3Result");
+  const loader = document.getElementById("execV3Loading");
+  const bag = normalizeExecutionChoiceBag(state.executionChoices);
+  const loading = Boolean(state.choicesBusy?.execution);
+  if (loader) loader.hidden = !loading;
+  syncExecV3Cta();
+  if (!root) return;
+  if (loading || bag.variant !== "execution-v3" || bag.options.length < 3) {
+    if (!loading) root.innerHTML = "";
+    return;
+  }
+  const selected = new Set(bag.selectedIds);
+  root.innerHTML = `
+    <div class="exec-v3-list">
+      ${bag.options.map((item) => `
+        <button type="button" class="exec-v3-item${selected.has(item.id) ? " is-on" : ""}" data-choice-id="${escapeHtml(item.id)}" data-choice-kind="execution" role="checkbox" aria-checked="${selected.has(item.id) ? "true" : "false"}">
+          <span class="exec-v3-item__box" aria-hidden="true"></span>
+          <span class="exec-v3-item__copy">
+            ${markableP(item.text, `exec.item.${item.id}.title`, "exec-v3-item__title")}
+            ${item.detail ? markableP(item.detail, `exec.item.${item.id}.detail`, "exec-v3-item__detail") : ""}
+          </span>
+        </button>`).join("")}
+    </div>`;
+  paintInternalModelDebug(root, state.internalModelDebug && state.internalModelDebug.execution);
+}
+
+function toggleAwarenessV3(id) {
+  if (rejectArchivedJournalWrite()) return normalizeAwarenessV3Bag(state.journalAwarenessV3);
+  const data = normalizeAwarenessV3Bag(state.journalAwarenessV3);
+  if (!data.items.some((item) => item.id === id)) return data;
+  const has = data.selectedIds.includes(id);
+  data.selectedIds = has ? data.selectedIds.filter((item) => item !== id) : data.selectedIds.concat(id).slice(0, 3);
+  state.journalAwarenessV3 = data;
+  renderAwarenessV3();
+  persistJournalQuietly();
+  syncExecV3Cta();
+  return data;
+}
+
+async function generateAwarenessV3(options = {}) {
+  if (!options || options.confirmed !== true) return;
+  if (options.auto) return;
+  if (rejectArchivedJournalWrite(options)) return;
+  if (isCurrentJournalArchived() || state.choicesBusy?.awareness) return;
+  pinAwareFold();
+  const journal = collectJournal();
+  if (!awarenessV3Ready(journal)) {
+    showAwareV3Hint("先把今日感謝、事件、身心覺察和深度思考整理好。");
+    syncAwareV3Cta();
+    return;
+  }
+  if (!ensurePlusFeature("awareness_ai", options)) return;
+  const sig = awarenessV3SourceSig(journal);
+  const current = normalizeAwarenessV3Bag(state.journalAwarenessV3);
+  if (current.items.length >= 3 && current.sourceSig === sig && !options.force) {
+    renderAwarenessV3();
+    return;
+  }
+  const token = (state.choicesToken.awareness || 0) + 1;
+  state.choicesToken.awareness = token;
+  state.choicesBusy.awareness = true;
+  renderAwarenessV3();
+  try {
+    if (!state.user) throw new Error("請先登入，才能整理今天的覺察。");
+    const ctx = awarenessV3Context(journal);
+    const remote = await postReview({
+      mode: "choices",
+      kind: "awareness",
+      variant: "awareness-v3",
+      date: currentIso(),
+      text: ctx.event,
+      context: { variant: "awareness-v3", ...ctx },
+    });
+    if (state.choicesToken.awareness !== token) return;
+    const items = Array.isArray(remote.items)
+      ? remote.items.map((item, index) => ({
+          id: String((item && item.id) || `a${index + 1}`),
+          text: String((item && item.text) || "").replace(/\s+/g, " ").trim(),
+        })).filter((item) => item.text).slice(0, 3)
+      : [];
+    if (items.length < 3) throw new Error("今天的覺察還沒整理好，請再試一次。");
+    state.journalAwarenessV3 = {
+      variant: "awareness-v3",
+      status: "generated",
+      sourceSig: sig,
+      items,
+      selectedIds: [],
+      generatedAt: new Date().toISOString(),
+    };
+    if (!state.internalModelDebug) state.internalModelDebug = {};
+    state.internalModelDebug.awareness = takeInternalDebug(remote);
+    persistJournalQuietly();
+    renderAwarenessV3();
+    syncExecV3Cta();
+  } catch (error) {
+    if (state.choicesToken.awareness !== token) return;
+    if (isPlusRequiredError(error)) return;
+    showToast(formatApiError(error) || "今天的覺察還沒整理好，請再試一次。");
+    renderAwarenessV3();
+  } finally {
+    if (state.choicesToken.awareness === token) {
+      state.choicesBusy.awareness = false;
+      renderAwarenessV3();
+    }
+  }
+}
+
+async function generateExecutionV3(options = {}) {
+  if (!options || options.confirmed !== true) return;
+  if (options.auto) return;
+  if (rejectArchivedJournalWrite(options)) return;
+  if (isCurrentJournalArchived() || state.choicesBusy?.execution) return;
+  setJournalFoldOpen("section-exec", true, { manual: true });
+  const journal = collectJournal();
+  if (!executionV3Ready(journal)) {
+    showExecV3Hint("先看看今天真正看見了自己什麼。");
+    syncExecV3Cta();
+    return;
+  }
+  if (!ensurePlusFeature("execution_ai", options)) return;
+  const sig = executionV3SourceSig(journal);
+  const current = normalizeExecutionChoiceBag(state.executionChoices);
+  if (current.variant === "execution-v3" && current.options.length >= 3 && current.sourceSig === sig && !options.force) {
+    renderExecutionV3();
+    return;
+  }
+  const token = (state.choicesToken.execution || 0) + 1;
+  state.choicesToken.execution = token;
+  state.choicesBusy.execution = true;
+  renderExecutionV3();
+  try {
+    if (!state.user) throw new Error("請先登入，才能整理今天的下一步。");
+    const ctx = executionV3Context(journal);
+    const remote = await postReview({
+      mode: "choices",
+      kind: "execution",
+      variant: "execution-v3",
+      date: currentIso(),
+      text: ctx.event,
+      context: { variant: "execution-v3", ...ctx },
+    });
+    if (state.choicesToken.execution !== token) return;
+    const actions = Array.isArray(remote.actions)
+      ? remote.actions.map((item, index) => ({
+          id: String((item && item.id) || `e${index + 1}`),
+          text: String((item && (item.title || item.text)) || "").replace(/\s+/g, " ").trim(),
+          detail: String((item && item.detail) || "").replace(/\s+/g, " ").trim(),
+        })).filter((item) => item.text).slice(0, 3)
+      : [];
+    if (actions.length < 3) throw new Error("今天的下一步還沒整理好，請再試一次。");
+    state.executionChoices = serializeExecutionChoiceBag({
+      variant: "execution-v3",
+      sourceSig: sig,
+      options: actions,
+      selectedIds: [],
+      selectedId: "",
+      custom: "",
+      followupQuestion: "",
+      followupPlaceholder: "",
+      generatedAt: new Date().toISOString(),
+      deep: { status: "", rounds: [], draftAnswer: "", refreshedAt: "", executionSummary: "", finalOptions: [], finalSelectedIds: [] },
+    });
+    if (!state.internalModelDebug) state.internalModelDebug = {};
+    state.internalModelDebug.execution = takeInternalDebug(remote);
+    persistJournalQuietly();
+    renderExecutionV3();
+  } catch (error) {
+    if (state.choicesToken.execution !== token) return;
+    if (isPlusRequiredError(error)) return;
+    showToast(formatApiError(error) || "今天的下一步還沒整理好，請再試一次。");
+    renderExecutionV3();
+  } finally {
+    if (state.choicesToken.execution === token) {
+      state.choicesBusy.execution = false;
+      renderExecutionV3();
     }
   }
 }
@@ -11592,6 +12043,10 @@ function localThinkChoicesClose(journal, bag) {
 }
 
 function renderExecutionQuestions(prompts, options = {}) {
+  if (usesExecutionV3Path()) {
+    renderExecutionV3();
+    return;
+  }
   if (usesExecutionChoiceUi()) {
     renderExecutionChoices(state.executionChoices);
     return;
@@ -11932,7 +12387,17 @@ async function generateCorePrompts(options = {}) {
     options.scope === "execution" ? "execution" : options.scope === "core" ? "core" : "awareness";
   if (!ensurePlusFeature(scope === "execution" ? "execution_ai" : "awareness_ai", options)) return;
   if (scope === "awareness") {
+    if (usesAwarenessV3Path()) {
+      if (options.auto) return;
+      await generateAwarenessV3({ confirmed: true });
+      return;
+    }
     await generateAwarenessChoices(options);
+    return;
+  }
+  if (scope === "execution" && usesExecutionV3Path()) {
+    if (options.auto) return;
+    await generateExecutionV3({ confirmed: true });
     return;
   }
   if (scope === "execution" && usesExecutionChoiceUi()) {
@@ -12251,6 +12716,8 @@ function applyJournalArchiveLock() {
   syncJournalFooter();
   syncBodyMindCta();
   syncThinkV3Cta();
+  syncAwareV3Cta();
+  syncExecV3Cta();
 }
 
 function openInternalResetModal() {
@@ -12676,6 +13143,7 @@ function collectJournal() {
       return quotes.length ? quotes : normalizeAwarenessQuotes(checklistItems("awareChecks"));
     })(),
     awarenessResult: normalizeAwarenessResult(state.journalAwarenessResult, { keepSource: true }),
+    awarenessV3: normalizeAwarenessV3Bag(state.journalAwarenessV3),
     awarenessChoices: serializeChoiceBag(state.awarenessChoices),
     thinkChoices: serializeChoiceBag(state.thinkChoices),
     executionChoices: serializeExecutionChoiceBag(withExecDeepDraft(state.executionChoices)),
@@ -13155,6 +13623,8 @@ function applyFoldState(id, open, options = {}) {
   const panel = root.querySelector(":scope > .journal-fold__panel");
   root.classList.toggle("is-open", next);
   if (toggle) toggle.setAttribute("aria-expanded", next ? "true" : "false");
+  if (next && id === "section-aware") syncAwareV3Cta();
+  if (next && id === "section-exec") syncExecV3Cta();
   if (panel) {
     if (next) {
       panel.inert = false;
@@ -13278,6 +13748,7 @@ function fillJournal(journal) {
       : { think: null, awareness: null, execution: null };
   state.journalExecFocus = normalizeExecFocus(data.executionFocus, data.executionCheckItems, execRawSourcesFrom(data));
   state.journalAwarenessResult = normalizeAwarenessResult(data.awarenessResult, { keepSource: true });
+  state.journalAwarenessV3 = normalizeAwarenessV3Bag(data.awarenessV3);
   state.awarenessChoices = normalizeChoiceBag(data.awarenessChoices);
   state.thinkChoices = normalizeChoiceBag(data.thinkChoices);
   state.executionChoices = normalizeExecutionChoiceBag(data.executionChoices);
@@ -13322,8 +13793,10 @@ function fillJournal(journal) {
   renderManifestSentence(state.journalManifestSentence, state.journalManifestHighlights);
   renderJournalManifestResult();
   renderAwarenessQuestions(state.awarenessPrompts, { answers: data.awareness });
-  renderAwarenessChoices(state.awarenessChoices);
-  renderExecutionQuestions(state.executionPrompts, { answers: data.execution });
+  if (usesAwarenessV3Path(data)) renderAwarenessV3();
+  else renderAwarenessChoices(state.awarenessChoices);
+  if (usesExecutionV3Path(data)) renderExecutionV3();
+  else renderExecutionQuestions(state.executionPrompts, { answers: data.execution });
   const execNext = document.getElementById("execNext");
   if (execNext) {
     if (usesExecutionChoiceUi(data)) {
@@ -16502,9 +16975,30 @@ function handleTodayPointerClick(event) {
   }
   if (isCurrentJournalArchived()) return false;
 
+  if (node.closest("#btnAwarenessV3")) {
+    handled();
+    catchAsync(() => generateAwarenessV3({ confirmed: true }), "今天的覺察還沒整理好");
+    return true;
+  }
+  if (node.closest("#btnExecutionV3")) {
+    handled();
+    catchAsync(() => generateExecutionV3({ confirmed: true }), "今天的下一步還沒整理好");
+    return true;
+  }
+  const awareV3Btn = node.closest("[data-aware-v3-id]");
+  if (awareV3Btn) {
+    handled();
+    pinAwareFold();
+    toggleAwarenessV3(awareV3Btn.dataset.awareV3Id);
+    return true;
+  }
   if (node.closest("#btnAwarePrompts")) {
     handled();
     pinAwareFold();
+    if (usesAwarenessV3Path()) {
+      catchAsync(() => generateAwarenessV3({ confirmed: true }), "今天的覺察還沒整理好");
+      return true;
+    }
     catchAsync(() => generateAwarenessChoices(), "覺察選項生成失敗");
     return true;
   }
@@ -17313,6 +17807,8 @@ function bindEvents() {
       if (isJournalAutosaveField(target)) scheduleJournalAutosave();
       if (id === "bodyMindText") syncBodyMindCta();
       if (usesReflectionV3Path()) syncThinkV3Cta();
+      if (usesAwarenessV3Path()) syncAwareV3Cta();
+      if (usesExecutionV3Path()) syncExecV3Cta();
       scheduleJournalChecklists();
     }
   });

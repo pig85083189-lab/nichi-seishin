@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=222" />
+    <link rel="stylesheet" href="app.css?v=223" />
     <style>
       html.is-booting,
       html.is-booting body {
@@ -624,8 +624,18 @@
             </button>
             <div class="journal-fold__panel" id="awareFoldPanel" inert aria-hidden="true">
               <div class="journal-fold__inner">
-            <p class="journal-guide">今天也許藏著一些你還沒發現的自己。<br />這裡只問「我看見了自己什麼」：需要、反應、習慣、情緒。</p>
-            <div class="journal-split journal-split--aware">
+            <p class="journal-guide js-legacy-aware-ui">今天也許藏著一些你還沒發現的自己。<br />這裡只問「我看見了自己什麼」：需要、反應、習慣、情緒。</p>
+            <div class="aware-v3" id="awareV3Card" hidden>
+              <p class="aware-v3-lead">經過今天這些事情，我可能看見了自己：</p>
+              <button class="body-mind-cta aware-v3-cta" id="btnAwarenessV3" type="button" disabled>看看今天真正看見了自己什麼 →</button>
+              <p class="aware-v3-hint" id="awareV3Hint" hidden></p>
+              <div class="check-loading" id="awareV3Loading" hidden>
+                <p class="check-loading__label">正在整理今天可能看見的自己…</p>
+                <div class="ai-thinking__bar"><i></i></div>
+              </div>
+              <div id="awareV3Result"></div>
+            </div>
+            <div class="journal-split journal-split--aware js-legacy-aware-ui">
               <div class="journal-col aware-col aware-col--quiz">
                 <div class="check-loading" id="awarePromptLoading" hidden>
                   <p class="check-loading__label">正在整理今天的覺察選項…</p>
@@ -663,8 +673,18 @@
             <div class="journal-fold__panel" id="execFoldPanel" inert aria-hidden="true">
               <div class="journal-fold__inner">
                 <p class="journal-guide js-quick-only">明天只要做一件小到 5 分鐘內能完成的事。完成復盤後會進到側邊欄「執行力」清單，方便追蹤。</p>
-                <p class="journal-guide js-deep-only">選擇你想帶走的行動。勾選後會加入執行力。</p>
-                <div class="journal-split">
+                <p class="journal-guide js-deep-only js-legacy-exec-ui">選擇你想帶走的行動。勾選後會加入執行力。</p>
+            <div class="exec-v3" id="execV3Card" hidden>
+              <p class="exec-v3-lead">接下來，我可以：</p>
+              <button class="body-mind-cta exec-v3-cta" id="btnExecutionV3" type="button" disabled>把今天的覺察變成下一步 →</button>
+              <p class="exec-v3-hint" id="execV3Hint" hidden></p>
+              <div class="check-loading" id="execV3Loading" hidden>
+                <p class="check-loading__label">正在把今天的覺察變成下一步…</p>
+                <div class="ai-thinking__bar"><i></i></div>
+              </div>
+              <div id="execV3Result"></div>
+            </div>
+                <div class="journal-split js-legacy-exec-ui">
               <div class="journal-col">
                 <div class="js-deep-only">
                   <div class="check-loading" id="execPromptLoading" hidden>
@@ -1003,16 +1023,16 @@
               <span class="guide-step__num" aria-hidden="true">05</span>
               <div class="guide-step__body">
                 <p class="guide-step__label">覺察力</p>
-                <h3 class="guide-step__title">收成「核心覺察＋我看見了」</h3>
-                <p class="guide-step__text">把前面的感受與深度思考收成「核心覺察＋我看見了」。</p>
+                <h3 class="guide-step__title">勾選今天真正說中我的覺察</h3>
+                <p class="guide-step__text">系統會整理三個可能的看見。只有你自己勾選，才代表這個覺察真的有說中你。</p>
               </div>
             </li>
             <li class="guide-step" id="guide-06">
               <span class="guide-step__num" aria-hidden="true">06</span>
               <div class="guide-step__body">
                 <p class="guide-step__label">執行力</p>
-                <h3 class="guide-step__title">留下明天真正做得到的行動</h3>
-                <p class="guide-step__text">把今天的覺察，變成真正做得到的下一步。勾選後會加入執行力。</p>
+                <h3 class="guide-step__title">把今天的覺察變成下一步</h3>
+                <p class="guide-step__text">根據你確認的覺察，整理三個真正做得到的下一步。勾選後會加入執行力。</p>
                 <p class="guide-step__text">完成 01～06，就是一次完整的今日復盤。</p>
               </div>
             </li>
@@ -1268,13 +1288,13 @@
     <script src="lib/text-integrity.js?v=6"></script>
     <script src="lib/body-coach-insight.js?v=1"></script>
     <script src="lib/internal-test.js?v=1"></script>
-    <script src="lib/review-merge.js?v=15"></script>
+    <script src="lib/review-merge.js?v=16"></script>
     <script src="lib/entitlement.js?v=4"></script>
-    <script src="lib/history-reading.js?v=7"></script>
+    <script src="lib/history-reading.js?v=8"></script>
     <script src="lib/history-summary.js?v=9"></script>
     <script src="lib/insight-highlight.js?v=5"></script>
     <script src="lib/user-mark.js?v=6"></script>
     <script src="lib/task-sidebar.js?v=1"></script>
-    <script src="app.js?v=257"></script>
+    <script src="app.js?v=258"></script>
   </body>
 </html>
