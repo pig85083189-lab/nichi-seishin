@@ -27,6 +27,10 @@ assert(html.includes("id=\"bodyMindText\""), "2. 只有一個主 textarea");
 assert((html.match(/id="bodyMindText"/g) || []).length === 1, "2. textarea 只有一個");
 const visible03 = html.slice(html.indexOf("id=\"bodyMindCard\""), html.indexOf("js-legacy-body-ui"));
 assert(visible03.includes("今天有沒有哪一個瞬間"), "1. 唯一問題");
+assert(html.includes('id="btnBodyMindInsight"'), "CTA 存在");
+assert(html.includes("看看這個感受在提醒我什麼"), "CTA 文案");
+assert(html.includes("正在整理這個感受"), "loading 文案");
+assert(!html.includes("正在整理今天的覺察…"), "03 不用舊 loading");
 assert(!/class="journal-guide"(?![^>]*hidden)/.test(visible03), "3. 新 day 無可見 helper");
 assert(!visible03.includes("今日的心情"), "1. 新 day 不顯示重複 mood");
 assert(!visible03.includes("data-body-flag"), "1. 新 UI 無身體選項");
@@ -43,6 +47,16 @@ assert(app.includes("internal-reset-today"), "19. Internal reset 未拆");
 assert(app.includes("bodyMindText"), "3. raw autosave field");
 assert(app.includes("function generateBodyMindInsight"), "4. insight persist 路徑");
 assert(app.includes("hasBodyMindResult(journal.bodyMind) && journal.bodyMind.sig === sig"), "5. reload 不重打");
+assert(app.includes("if (options.auto) return"), "autosave 不可走 AI");
+assert(!/function maybeAutoGenerateBodyMind[\s\S]{0,900}generateBodyMindInsight\(/.test(app), "auto 函式不再生成");
+assert(!/function persistJournalNow[\s\S]{0,350}generateBodyMindInsight\(/.test(app), "persist 不生成");
+assert(!/function scheduleJournalAutosave[\s\S]{0,220}generateBodyMindInsight\(/.test(app), "900ms autosave 不生成");
+assert(app.includes("function syncBodyMindCta"), "CTA 狀態同步");
+assert(app.includes("內容有修改，重新看看"), "stale CTA");
+assert(app.includes('id === "bodyMindText") syncBodyMindCta'), "輸入只更新 CTA");
+assert(app.includes('getElementById("btnBodyMindInsight")') && app.includes("generateBodyMindInsight()"), "只有按 CTA 才生成");
+assert(app.includes("if (isCurrentJournalArchived() || state.bodyMindBusy) return"), "double click / completed 不重打");
+assert(app.includes("bodyMindText.readOnly = isCurrentJournalArchived()"), "completed textarea read-only");
 assert(app.includes("rejectArchivedJournalWrite"), "6. completed read-only");
 assert(app.includes("bodyMind"), "4. journal.bodyMind child");
 assert(!app.includes("CREATE TABLE") && !reviewJs.includes("ALTER TABLE"), "無 schema");
@@ -125,9 +139,13 @@ assert(app.includes('class="body-mind-insight__label">覺察</p>'), "UI 覺察�
 assert(app.includes('class="body-mind-insight__label">引導</p>'), "UI 引導標籤");
 assert(!app.includes("覺察一句話"), "不再顯示舊 insight 標籤");
 assert(!app.includes("給今天的你"), "不再顯示舊 support 標籤");
-assert(bodyMind.BODY_MIND_SYSTEM.includes("為什麼這個瞬間值得被注意"), "覺察任務清楚");
+assert(bodyMind.BODY_MIND_SYSTEM.includes("ONE CORE INSIGHT ONLY"), "只留一個核心");
+assert(bodyMind.BODY_MIND_SYSTEM.includes("25～55"), "覺察字數上限");
+assert(bodyMind.BODY_MIND_SYSTEM.includes("30～70"), "引導字數上限");
 assert(bodyMind.BODY_MIND_SYSTEM.includes("不要搶 06"), "引導不搶 06");
 assert(bodyMind.BODY_MIND_SYSTEM.includes("不要找問題"), "正向不硬找問題");
+assert(bodyMind.bodyMindSourceStale({ text: "舊文字", insight: "核心一句。", support: "往下看一眼。", sig: "舊文字\n事件\n心情" }, "改過的新文字"), "改字後 stale");
+assert(!bodyMind.bodyMindSourceStale({ text: "舊文字", insight: "核心一句。", support: "往下看一眼。", sig: "舊文字\n事件\n心情" }, "舊文字"), "同文不是 stale");
 assert(!reviewJs.includes("ANTHROPIC_INTERNAL_MODEL"), "不改 routing 常數來源");
 assert(reviewJs.includes("internal: internalUser"), "Internal routing 仍在");
 
@@ -137,18 +155,18 @@ const QUALITY = [
     name: "家庭衝突",
     text: "媽媽叫我搬出去，我當下胸口很悶。",
     result: {
-      insight: "這個瞬間值得留意，也許不只是搬家這件事，而是關係裡的位置和界線，在這一刻被碰到了。",
-      support: "先承認胸口這股悶是有方向的。不必立刻決定對錯，也可以先看清楚自己在意的是被理解，還是被允許留下。",
+      insight: "真正讓你不舒服的，可能不只是搬家，而是生活的選擇不完全在自己手上。",
+      support: "先分開看看：哪些真的無法改變，哪些只是現在還沒有重新選擇。",
     },
     forbid: /害怕被拋棄|缺乏安全感|童年創傷/,
   },
   {
     id: "B",
-    name: "伴侶幸福",
-    text: "今天跟男友吃飯一直笑，覺得很舒服。",
+    name: "幸福",
+    text: "今天跟男友吃飯一直笑，覺得很幸福。",
     result: {
-      insight: "這個瞬間值得被注意，也許不是因為做了什麼特別的事，而是相處時那種放鬆、有回應、可以一直笑的感覺，正是你真正想留下的。",
-      support: "今天不必急著找問題。值得帶著走的是：什麼條件讓你感到自在。也可以只是讓這份舒服停在心裡。",
+      insight: "讓你感到幸福的，可能不是做了什麼特別的事，而是你們相處時很放鬆、很有回應。",
+      support: "這種讓你自然做自己的時刻，本身就很值得記住。",
     },
     forbid: /問題是|其實不快樂|陰影/,
   },
@@ -157,65 +175,60 @@ const QUALITY = [
     name: "工作壓力",
     text: "會議一路被加需求，回家後肩膀一直緊。",
     result: {
-      insight: "肩膀發緊值得留意，可能不只是累，而是今天的節奏和標準一直被往後推，讓你很難停下來。",
-      support: "先把身體的緊當成像訊號，而不是自己不夠堅強。值得看的是：哪一項需求已經超過你可以承受的範圍。",
+      insight: "肩膀一直緊，可能不只是累，而是今天的節奏一直被往後推。",
+      support: "先看哪一件需求，已經超過你可以承受的範圍。",
     },
   },
   {
     id: "D",
-    name: "運動後單純痠痛",
+    name: "運動痠痛",
     text: "今天健身後大腿很痠。",
     result: {
-      insight: "這次比較像身體在回應運動後的負荷，不一定需要往情緒裡找答案。",
-      support: "先讓肌肉休息和恢復。如果只是運動後的痠，留意就好，不必解釋成更深的問題。",
+      insight: "今天最明顯的是身體真的累了，暫時不需要替它加上更深的解釋。",
+      support: "先把這個身體訊號記下來就好。",
     },
-    forbid: /不安全感|被拋棄|童年|內心壓力/,
+    forbid: /不安全感|被拋棄|童年|內心壓力|有效刺激/,
   },
   {
     id: "E",
-    name: "被已讀不回",
-    text: "朋友已讀沒有回，我一直覺得怪怪的。",
-    result: {
-      insight: "這種怪怪的感覺值得留意，也許你在意的不是回得快不快，而是自己是不是被放在心上。",
-      support: "先承認等待本身就不好受。現在不必急著解釋對方的意思，也可以先看看自己需要的是一個回應，還是確定沒被放下。",
-    },
-    forbid: /你缺乏安全感|你害怕被拋棄|童年/,
-  },
-  {
-    id: "F",
     name: "沒什麼感覺",
     text: "今天沒什麼特別感覺。",
     result: {
-      insight: "今天沒有特別強烈的感受，本身也是一種狀態，不必硬挖更深的意義。",
-      support: "可以就這樣讓今天過去。沒有特別感覺，不代表今天沒有被好好過完。",
+      insight: "今天沒有特別強烈的感受，本身也是一種狀態。",
+      support: "可以就這樣讓今天過去，不必硬挖更深的意義。",
     },
     forbid: /成長的一部分|相信自己|金句/,
   },
   {
-    id: "G",
-    name: "很生氣",
+    id: "F",
+    name: "生氣",
     text: "我今天真的很生氣，當下整個人都熱起來。",
     result: {
-      insight: "這股火值得被注意，也許是因為有什麼對你重要的界線或期待，在這一刻被碰到了。",
-      support: "先承認怒意是有方向的。不必立刻解決，也可以先看清楚自己在意的是哪一件事。",
+      insight: "這股火值得注意，也許是對你重要的界線，在這一刻被碰到了。",
+      support: "先承認怒意是有方向的，不必立刻解決。",
     },
-  },
-  {
-    id: "H",
-    name: "很安心",
-    text: "晚上回家看到燈是亮的，突然覺得好安心。",
-    result: {
-      insight: "這份安心值得被留下，也許觸動你的不是燈本身，而是有人在、有地方可以回去的感覺。",
-      support: "今天不必分析為什麼安心。值得保留的是這種被接住的條件，以及它讓你的身體可以鬆下來。",
-    },
-    forbid: /問題是|其實焦慮|陰影/,
+    forbid: /童年創傷|內在小孩|依附風格/,
   },
 ];
 
 QUALITY.forEach((spec) => {
   const judged = bodyMind.evaluateBodyMindQuality(spec.result, { text: spec.text, forbid: spec.forbid });
   assert(judged.ok, `${spec.id} ${spec.name} 應通過：${judged.issues.join("；")}`);
+  assert(bodyMind.countBodyMindSentences(spec.result.insight) <= 2, `${spec.id} insight 1～2 句`);
+  assert(bodyMind.countBodyMindSentences(spec.result.support) <= 2, `${spec.id} support 1～2 句`);
+  assert(bodyMind.compactBodyMindChars(spec.result.insight) <= 80, `${spec.id} insight 夠短`);
+  assert(bodyMind.compactBodyMindChars(spec.result.support) <= 95, `${spec.id} support 夠短`);
 });
+
+const tooLong = bodyMind.evaluateBodyMindQuality(
+  {
+    insight: "你今天因為媽媽說了這句話，所以感到難過，也希望被理解，同時你可能感受到失去選擇權，因此內心產生焦慮。",
+    support: "先花十分鐘寫下三件感受，再跟對方說一句話，晚上 8 點傳訊息確認。",
+  },
+  { text: "媽媽叫我搬出去，胸口很悶。" }
+);
+assert(tooLong.issues.includes("insight-too-long") || tooLong.issues.includes("stacked-insight"), "長篇分析必須 FAIL");
+assert(tooLong.issues.includes("support-is-checklist") || tooLong.issues.includes("support-too-long"), "長引導必須 FAIL");
 
 const badRestate = bodyMind.evaluateBodyMindQuality(
   { insight: "媽媽叫我搬出去，你當下胸口很悶。", support: "先看看自己的感受。" },

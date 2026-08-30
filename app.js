@@ -5819,6 +5819,31 @@ function bodyMindSignature(journal) {
   return [mind.text || data.bodyNote || "", String(data.event || "").trim(), String(data.mood || "").trim()].join("\n");
 }
 
+function bodyMindSourceStale(mind, text) {
+  const data = normalizeBodyMind(mind);
+  if (!hasBodyMindResult(data)) return false;
+  const current = String(text != null ? text : collectBodyMindText()).replace(/\s+/g, " ").trim();
+  const source = String(data.sig ? String(data.sig).split("\n")[0] : data.text || "").replace(/\s+/g, " ").trim();
+  return Boolean(current) && current !== source;
+}
+
+function syncBodyMindCta() {
+  const btn = document.getElementById("btnBodyMindInsight");
+  const ta = document.getElementById("bodyMindText");
+  const archived = isCurrentJournalArchived();
+  if (ta) ta.readOnly = archived;
+  if (!btn) return;
+  const text = collectBodyMindText();
+  const ready = bodyMindTextReady(text);
+  const mind = normalizeBodyMind(state.journalBodyMind);
+  const hasResult = hasBodyMindResult(mind);
+  const stale = hasResult && bodyMindSourceStale(mind, text);
+  const show = !archived && ready && (!hasResult || stale);
+  btn.hidden = !show;
+  btn.disabled = Boolean(state.bodyMindBusy) || archived;
+  btn.textContent = stale ? "內容有修改，重新看看 →" : "看看這個感受在提醒我什麼 →";
+}
+
 function normalizeBodyGroup(group) {
   const data = group && typeof group === "object" ? group : {};
   return {
@@ -9295,6 +9320,7 @@ function renderBodyMindInsight(mind) {
   const data = normalizeBodyMind(mind || state.journalBodyMind);
   if (!data.insight && !data.support) {
     root.innerHTML = "";
+    syncBodyMindCta();
     return;
   }
   root.innerHTML = `
@@ -9309,21 +9335,28 @@ function renderBodyMindInsight(mind) {
       </div>` : ""}
     </article>`;
   paintInternalModelDebug(root, data.internalDebug);
+  syncBodyMindCta();
 }
 
 function setBodyMindLoading(loading) {
   state.bodyMindBusy = loading;
   const loader = document.getElementById("bodyMindLoading");
+  const insight = document.getElementById("bodyMindInsight");
   if (loader) loader.hidden = !loading;
+  if (insight) insight.hidden = loading;
+  const btn = document.getElementById("btnBodyMindInsight");
+  if (btn) btn.disabled = Boolean(loading) || isCurrentJournalArchived();
+  if (!loading) syncBodyMindCta();
 }
 
 async function generateBodyMindInsight(options = {}) {
+  if (options.auto) return;
   if (rejectArchivedJournalWrite(options)) return;
   if (!ensurePlusFeature("body_ai", options)) return;
   const journal = collectJournal();
   const text = String((journal.bodyMind && journal.bodyMind.text) || "").trim();
   if (!bodyMindTextReady(text)) {
-    if (!options.auto) showToast("先寫下那個瞬間就好。");
+    showToast("先寫下那個瞬間就好。");
     return;
   }
   const sig = bodyMindSignature(journal);
@@ -9331,7 +9364,7 @@ async function generateBodyMindInsight(options = {}) {
     renderBodyMindInsight(journal.bodyMind);
     return;
   }
-  if (state.bodyMindBusy && !options.force) return;
+  if (state.bodyMindBusy) return;
   const token = (state.bodyMindToken || 0) + 1;
   state.bodyMindToken = token;
   setBodyMindLoading(true);
@@ -9369,25 +9402,23 @@ async function generateBodyMindInsight(options = {}) {
   } catch (error) {
     if (state.bodyMindToken !== token) return;
     if (isPlusRequiredError(error)) return;
-    if (!options.auto) showToast(formatApiError(error) || "今天的覺察還沒整理好，請再試一次。");
+    showToast(formatApiError(error) || "今天的覺察還沒整理好，請再試一次。");
   } finally {
     if (state.bodyMindToken === token) setBodyMindLoading(false);
   }
 }
 
 function maybeAutoGenerateBodyMind(journal) {
-  if (state.journalHydrating || rejectArchivedJournalWrite({ auto: true })) return;
-  if (!canUsePlusFeature("body_ai")) return;
-  if (state.journalMode === "quick" && !state.quickModules?.body) return;
-  const data = journal || collectJournal();
-  const text = String((data.bodyMind && data.bodyMind.text) || "").trim();
-  if (!bodyMindTextReady(text)) return;
-  const sig = bodyMindSignature(data);
-  if (hasBodyMindResult(data.bodyMind) && (data.bodyMind.sig === sig || state.journalMeta.bodyMindSig === sig)) {
-    renderBodyMindInsight(data.bodyMind);
+  if (state.bodyMindBusy) {
+    syncBodyMindCta();
     return;
   }
-  generateBodyMindInsight({ auto: true });
+  const data = journal || state.journalBodyMind;
+  if (hasBodyMindResult(data && data.bodyMind ? data.bodyMind : data)) {
+    renderBodyMindInsight(data && data.bodyMind ? data.bodyMind : data);
+    return;
+  }
+  syncBodyMindCta();
 }
 
 const LEGACY_AWARENESS_PROMPTS = [CORE_AWARENESS_PROMPT];
@@ -11966,6 +11997,7 @@ function applyJournalArchiveLock() {
   if (page) page.classList.toggle("is-archived", archived);
   lockNewDayBodyUi();
   syncJournalFooter();
+  syncBodyMindCta();
 }
 
 function openInternalResetModal() {
@@ -13025,8 +13057,12 @@ function fillJournal(journal) {
   setActiveButtons("moodRow", ".mood-btn", data.mood ? [data.mood] : []);
   fillBodyCheck(normalizeBodyCheck(data.bodyCheck, data.bodyTags, data.bodyNote));
   const bodyMindText = document.getElementById("bodyMindText");
-  if (bodyMindText) bodyMindText.value = state.journalBodyMind.text || "";
+  if (bodyMindText) {
+    bodyMindText.value = state.journalBodyMind.text || "";
+    bodyMindText.readOnly = isCurrentJournalArchived();
+  }
   renderBodyMindInsight(state.journalBodyMind);
+  syncBodyMindCta();
   const manifestVision = document.getElementById("manifestVision");
   if (manifestVision) manifestVision.value = data.manifest || "";
   renderManifestQuestions(state.manifestPrompts, { answers: data.manifestThink });
@@ -16957,6 +16993,12 @@ function bindEvents() {
     maybeAutoGenerateCorePrompts(journal);
   });
 
+  document.getElementById("btnBodyMindInsight")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    if (isCurrentJournalArchived() || state.bodyMindBusy) return;
+    generateBodyMindInsight();
+  });
+
   document.getElementById("section-body")?.addEventListener("click", (event) => {
     if (isCurrentJournalArchived()) return;
     const sleep = event.target.closest(".sleep-chip");
@@ -17003,6 +17045,7 @@ function bindEvents() {
         }
       }
       if (isJournalAutosaveField(target)) scheduleJournalAutosave();
+      if (id === "bodyMindText") syncBodyMindCta();
       scheduleJournalChecklists();
     }
   });

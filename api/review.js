@@ -3487,7 +3487,7 @@ module.exports = async function handler(req, res) {
         mode === "bodycoach"
           ? 640
           : mode === "bodymind"
-            ? 900
+            ? 500
           : mode === "choices" && choiceKind === "think-close"
             ? 900
           : mode === "choices" && (choiceKind === "execution" || choiceKind === "execution-deep")

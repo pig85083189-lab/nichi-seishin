@@ -6176,6 +6176,37 @@ textarea[hidden] + .journal-voice-hint,
   min-height: 132px;
 }
 
+.body-mind-cta {
+  display: inline-flex;
+  align-items: center;
+  margin: 10px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #7a685c;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.body-mind-cta:hover:not(:disabled) {
+  color: #4f433c;
+}
+
+.body-mind-cta:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.body-mind-cta[hidden] {
+  display: none;
+}
+
+#page-today.is-archived .body-mind-cta {
+  display: none !important;
+}
+
 .body-mind .journal-guide {
   margin: 8px 0 0;
   color: var(--muted);
