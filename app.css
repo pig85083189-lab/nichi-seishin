@@ -4931,6 +4931,12 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   min-width: 0;
 }
 
+.exec-deep--final {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
 .exec-deep__label {
   margin: 0 0 8px;
   font-size: 13px;
@@ -4990,6 +4996,32 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
 
 .exec-deep .ai-check-btn {
   margin-top: 12px;
+}
+
+.exec-summary {
+  margin: 8px 0 16px;
+  padding: 12px 16px 13px 16px;
+  background: rgba(251, 247, 242, 0.45);
+  border-left: 2px solid #bca58f;
+  border-radius: 0 8px 8px 0;
+}
+
+.exec-summary__label {
+  margin: 0 0 6px;
+  color: #806d5e;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.exec-summary__text {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.65;
+  color: #342c27;
+  overflow-wrap: anywhere;
 }
 
 #section-exec #execPromptLoading {

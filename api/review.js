@@ -2496,6 +2496,7 @@ ${HIGHLIGHT_RULE}
 
 const EXECUTION_CHOICES_SYSTEM = execV2.EXECUTION_CHOICES_SYSTEM;
 const EXEC_DEEP_ASK_SYSTEM = execV2.EXEC_DEEP_ASK_SYSTEM;
+const EXEC_DEEP_CLOSE_SYSTEM = execV2.EXEC_DEEP_CLOSE_SYSTEM;
 const EXEC_DEEP_REFRESH_SYSTEM = execV2.EXEC_DEEP_REFRESH_SYSTEM;
 
 const EXECUTION_PROMPTS_SYSTEM = `你是「日精進」的行動教練。先幫他找到卡點與阻力，再把想做的事問到夠具體。不要分析人格，不要列待辦。
@@ -3246,11 +3247,11 @@ module.exports = async function handler(req, res) {
         messages = [
           {
             role: "system",
-            content: withCompleteRule(step === "refresh" ? EXEC_DEEP_REFRESH_SYSTEM : EXEC_DEEP_ASK_SYSTEM),
+            content: withCompleteRule(step === "close" ? EXEC_DEEP_CLOSE_SYSTEM : EXEC_DEEP_ASK_SYSTEM),
           },
           {
             role: "user",
-            content: step === "refresh" ? execV2.execRefreshUserPrompt(body) : execV2.execDeepUserPrompt(body),
+            content: step === "close" ? execV2.execCloseUserPrompt(body) : execV2.execDeepUserPrompt(body),
           },
         ];
       } else {
@@ -3453,15 +3454,22 @@ module.exports = async function handler(req, res) {
       }
       if (kind === "execution-deep") {
         const step = execV2.execDeepStep(body);
-        if (step === "refresh") {
+        if (step === "close") {
           const options = reviewMerge.normalizeExecutionChoiceOptions
-            ? reviewMerge.normalizeExecutionChoiceOptions(data, { max: 3 })
+            ? reviewMerge.normalizeExecutionChoiceOptions(data.options || data, { max: 3 })
             : [];
-          if (options.length < 1) {
-            res.status(502).json({ ok: false, error: "今天的行動還沒重新整理好，請再試一次" });
+          const executionSummary = execV2.normalizeExecutionSummary
+            ? execV2.normalizeExecutionSummary(data.executionSummary || data.summary)
+            : String(data.executionSummary || "").trim();
+          if (options.length < 3 || !executionSummary) {
+            res.status(502).json({ ok: false, error: "今天的執行力還沒整理好，請再試一次" });
             return;
           }
-          res.status(200).json({ ok: true, source: getProvider(), data: { options: options.slice(0, 3), kind } });
+          res.status(200).json({
+            ok: true,
+            source: getProvider(),
+            data: { executionSummary, options: options.slice(0, 3).map((item, index) => ({ ...item, id: `f${index + 1}` })), kind },
+          });
           return;
         }
         const question = String(data.question || "").trim();
@@ -3726,6 +3734,7 @@ module.exports.choicesUserPrompt = choicesUserPrompt;
 module.exports.EXECUTION_CHOICES_SYSTEM = EXECUTION_CHOICES_SYSTEM;
 module.exports.EXECUTION_PROMPTS_SYSTEM = EXECUTION_PROMPTS_SYSTEM;
 module.exports.EXEC_DEEP_ASK_SYSTEM = EXEC_DEEP_ASK_SYSTEM;
+module.exports.EXEC_DEEP_CLOSE_SYSTEM = EXEC_DEEP_CLOSE_SYSTEM;
 module.exports.EXEC_DEEP_REFRESH_SYSTEM = EXEC_DEEP_REFRESH_SYSTEM;
 module.exports.MANIFEST_PROMPTS_SYSTEM = MANIFEST_PROMPTS_SYSTEM;
 module.exports.MANIFEST_PATHS_SYSTEM = MANIFEST_PATHS_SYSTEM;

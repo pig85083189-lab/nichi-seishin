@@ -124,7 +124,7 @@ const state = {
   journalAwarenessResult: null,
   awarenessChoices: { sourceSig: "", options: [], selectedIds: [], generatedAt: "" },
   thinkChoices: { sourceSig: "", options: [], selectedIds: [], generatedAt: "" },
-  executionChoices: { sourceSig: "", options: [], selectedId: "", selectedIds: [], custom: "", followupQuestion: "", followupPlaceholder: "", generatedAt: "", deep: { status: "", rounds: [], draftAnswer: "", refreshedAt: "" } },
+  executionChoices: { sourceSig: "", options: [], selectedId: "", selectedIds: [], custom: "", followupQuestion: "", followupPlaceholder: "", generatedAt: "", deep: { status: "", rounds: [], draftAnswer: "", refreshedAt: "", executionSummary: "", finalOptions: [], finalSelectedIds: [] } },
   choicesBusy: { awareness: false, think: false, execution: false, executionDeep: false },
   choicesToken: { awareness: 0, think: 0, thinkClose: 0, execution: 0, executionDeep: 0 },
   journalUserMarks: { items: [], updatedAt: "" },
@@ -2495,7 +2495,7 @@ function serializeChoiceBag(raw) {
 function emptyExecDeep() {
   const api = reviewMergeApi();
   if (typeof api.emptyExecDeep === "function") return api.emptyExecDeep();
-  return { status: "", rounds: [], draftAnswer: "", refreshedAt: "" };
+  return { status: "", rounds: [], draftAnswer: "", refreshedAt: "", executionSummary: "", finalOptions: [], finalSelectedIds: [] };
 }
 
 function normalizeExecDeep(raw) {
@@ -2520,19 +2520,41 @@ function normalizeExecDeep(raw) {
   const asking = rounds.some((item) => item.question && !item.answer);
   const answeredAll = rounds.length > 0 && rounds.every((item) => item.answer) && !asking;
   const closed = String(src.status || "") === "closed" || (rounds.length >= 2 && answeredAll);
+  const finalOptions = (Array.isArray(src.finalOptions) ? src.finalOptions : [])
+    .map((item, index) => {
+      if (!item || typeof item !== "object") return null;
+      const text = String(item.text || item.title || "").trim();
+      if (!text) return null;
+      const next = { id: String(item.id || `f${index + 1}`), text };
+      if (item.detail) next.detail = String(item.detail).trim();
+      return next;
+    })
+    .filter(Boolean)
+    .slice(0, 3);
+  const finalIds = new Set(finalOptions.map((item) => item.id));
   return {
     status: closed ? "closed" : asking || (src.status === "asking" && !closed) ? "asking" : "",
     rounds,
     draftAnswer: String(src.draftAnswer || "").trim(),
     refreshedAt: String(src.refreshedAt || "").trim(),
+    executionSummary: String(src.executionSummary || "").replace(/\s+/g, " ").trim(),
+    finalOptions,
+    finalSelectedIds: (Array.isArray(src.finalSelectedIds) ? src.finalSelectedIds : []).filter((id) => finalIds.has(id)),
   };
+}
+
+function hasExecDeepFinal(deep) {
+  const api = reviewMergeApi();
+  if (typeof api.hasExecDeepFinal === "function") return api.hasExecDeepFinal(deep);
+  const data = normalizeExecDeep(deep);
+  return Boolean(data.executionSummary) && data.finalOptions.length >= 3;
 }
 
 function hasMeaningfulExecDeep(value) {
   const api = reviewMergeApi();
   if (typeof api.hasMeaningfulExecDeep === "function") return api.hasMeaningfulExecDeep(value);
   const deep = normalizeExecDeep(value);
-  return deep.rounds.length > 0 || Boolean(deep.draftAnswer) || Boolean(deep.status);
+  return deep.rounds.length > 0 || Boolean(deep.draftAnswer) || Boolean(deep.status) || Boolean(deep.executionSummary) || (deep.finalOptions && deep.finalOptions.length);
 }
 
 function execDeepAnsweredRounds(deep) {
@@ -9831,14 +9853,18 @@ function renderExecDeep(data) {
       ${archived ? "" : `<button class="ai-check-btn" id="btnExecDeepNext" type="button" ${loading ? "disabled" : ""}>${loading ? "正在整理…" : "繼續"}</button>`}
     </div>`;
   }
-  if (closed) {
+  if (closed && !hasExecDeepFinal(deep)) {
     return `<div class="exec-deep" id="execDeep">
       ${past}
-      ${
-        archived
-          ? ""
-          : `<button class="exec-deep__quiet" id="btnExecDeepRefresh" type="button" ${loading ? "disabled" : ""}>${loading ? "正在重新整理行動…" : "依照剛剛的回答，重新整理行動"}</button>`
-      }
+      <p class="check-loading__label">${loading ? "正在整理今天的下一步…" : "這次還沒整理好。"}</p>
+      ${loading ? `<div class="ai-thinking__bar"><i></i></div>` : ""}
+      ${archived || loading ? "" : `<button class="exec-deep__quiet" id="btnExecDeepFinal" type="button">再整理一次</button>`}
+    </div>`;
+  }
+  if (closed) {
+    return `<div class="exec-deep exec-deep--final" id="execDeep">
+      ${past}
+      <p class="exec-deep__label">深度思考完成</p>
     </div>`;
   }
   return `<div class="exec-deep" id="execDeep">
@@ -9889,16 +9915,18 @@ function renderExecutionChoices(bag) {
     syncExecStepUi();
     return;
   }
+  const deep = normalizeExecDeep(data.deep);
+  const showFinal = hasExecDeepFinal(deep);
   const customId = execChoiceCustomId();
-  const selected = new Set(data.selectedIds);
-  const options = data.options.concat([{ id: customId, text: execChoiceCustomText(), custom: true }]);
-  root.innerHTML = `
-    <div class="choice-list" data-choice-kind="execution" role="group" aria-label="選擇你想帶走的行動">
-      ${options
+  const list = showFinal ? deep.finalOptions : data.options.concat([{ id: customId, text: execChoiceCustomText(), custom: true }]);
+  const selected = new Set(showFinal ? deep.finalSelectedIds : data.selectedIds);
+  const choiceList = `
+    <div class="choice-list" data-choice-kind="${showFinal ? "execution-final" : "execution"}" role="group" aria-label="選擇你想帶走的行動">
+      ${list
         .map((item) => {
           const on = selected.has(item.id);
           return `
-            <button type="button" class="choice-opt${on ? " is-on" : ""}${item.custom ? " choice-opt--none" : ""}" data-choice-id="${escapeHtml(item.id)}" data-choice-kind="execution" role="checkbox" aria-checked="${on ? "true" : "false"}">
+            <button type="button" class="choice-opt${on ? " is-on" : ""}${item.custom ? " choice-opt--none" : ""}" data-choice-id="${escapeHtml(item.id)}" data-choice-kind="${showFinal ? "execution-final" : "execution"}" role="checkbox" aria-checked="${on ? "true" : "false"}">
               <span class="choice-opt__row">
                 <span class="choice-opt__box" aria-hidden="true"></span>
                 <span class="choice-opt__copy">
@@ -9911,9 +9939,16 @@ function renderExecutionChoices(bag) {
         })
         .join("")}
       <p class="choice-hint">勾選後會加入執行力。可以選 1～3 件。</p>
-    </div>
-    ${renderExecDeep(data)}
-  `;
+    </div>`;
+  root.innerHTML = showFinal
+    ? `${renderExecDeep(data)}
+        <article class="exec-summary">
+          <p class="exec-summary__label">執行力總結</p>
+          <p class="exec-summary__text">${escapeHtml(deep.executionSummary)}</p>
+        </article>
+        <p class="journal-label" id="execFinalLabel">接下來可以這樣做</p>
+        ${choiceList}`
+    : `${choiceList}${renderExecDeep(data)}`;
   if (checkBtn) checkBtn.hidden = true;
   syncExecStepUi();
 }
@@ -9924,6 +9959,27 @@ function toggleJournalChoice(kind, id) {
     const bag = normalizeExecutionChoiceBag(state.executionChoices);
     const customId = execChoiceCustomId();
     const max = execChoiceMaxSelected();
+    const deep = normalizeExecDeep(bag.deep);
+    if (hasExecDeepFinal(deep) && deep.finalOptions.some((item) => item.id === id)) {
+      const selectedIds = Array.isArray(deep.finalSelectedIds) ? deep.finalSelectedIds.slice() : [];
+      const has = selectedIds.includes(id);
+      if (has) deep.finalSelectedIds = selectedIds.filter((item) => item !== id);
+      else {
+        if (selectedIds.length >= max) {
+          showToast("明天先留 3 件就好。");
+          return bag;
+        }
+        deep.finalSelectedIds = selectedIds.concat(id);
+        trackProduct("execution_choice_selected", { source: "journal", mode: "deep", variant: "final" });
+      }
+      bag.deep = deep;
+      const next = serializeExecutionChoiceBag(bag);
+      state.executionChoices = next;
+      renderExecutionChoices(next);
+      if (!has) syncSelectedExecutionToSidebar(next);
+      persistJournalQuietly();
+      return next;
+    }
     if (!id || (id !== customId && !bag.options.some((item) => item.id === id))) return bag;
     const selectedIds = Array.isArray(bag.selectedIds) ? bag.selectedIds.slice() : [];
     const has = selectedIds.includes(id);
@@ -9981,7 +10037,13 @@ function toggleJournalChoice(kind, id) {
 
 function syncSelectedExecutionToSidebar(bag) {
   const actions = selectedExecutionChoiceActions(bag);
-  addExecutionCheckItemsToSidebar(passthroughExecChoiceCheckItems(actions));
+  const items = passthroughExecChoiceCheckItems(actions);
+  const iso = currentIso();
+  const tasks = typeof getTasks === "function" ? getTasks() : [];
+  const lookSimilar = typeof reviewMergeApi().choicesLookSimilar === "function" ? reviewMergeApi().choicesLookSimilar.bind(reviewMergeApi()) : () => false;
+  addExecutionCheckItemsToSidebar(
+    items.filter((item) => !tasks.some((task) => task && task.date === iso && lookSimilar(String(task.title || ""), item.title)))
+  );
 }
 
 function setChoicesLoading(kind, loading) {
@@ -10741,6 +10803,7 @@ async function generateExecDeepAsk(options = {}) {
     return;
   }
   if (execDeepClosed(bag.deep) || execDeepAnsweredRounds(bag.deep).length >= 2) {
+    if (!hasExecDeepFinal(bag.deep) && execDeepAnsweredRounds(bag.deep).length) return generateExecDeepFinal(options);
     renderExecutionChoices(bag);
     return;
   }
@@ -10750,9 +10813,8 @@ async function generateExecDeepAsk(options = {}) {
   }
   if (shouldSkipExecDeepAsk(bag.deep, bag.options)) {
     patchExecDeep({ status: "closed", draftAnswer: "" });
-    renderExecutionChoices(state.executionChoices);
     persistJournalQuietly();
-    return;
+    return generateExecDeepFinal(options);
   }
   const journal = collectJournal();
   const token = (state.choicesToken.executionDeep || 0) + 1;
@@ -10779,15 +10841,15 @@ async function generateExecDeepAsk(options = {}) {
     const question = String(remote.question || "").trim();
     if (!question || remote.readyToClose) {
       patchExecDeep({ status: "closed", draftAnswer: "" });
-      renderExecutionChoices(state.executionChoices);
       persistJournalQuietly();
+      await generateExecDeepFinal({ ...options, allowBusy: true });
       return;
     }
     const deep = normalizeExecDeep(bag.deep);
     if (deep.rounds.length >= 2) {
       patchExecDeep({ status: "closed", draftAnswer: "" });
-      renderExecutionChoices(state.executionChoices);
       persistJournalQuietly();
+      await generateExecDeepFinal({ ...options, allowBusy: true });
       return;
     }
     deep.rounds = deep.rounds.concat([{ id: `d${deep.rounds.length + 1}`, question, placeholder: String(remote.placeholder || "").trim(), answer: "" }]).slice(0, 2);
@@ -10825,8 +10887,8 @@ async function submitExecDeepAnswer(options = {}) {
   if (answered.length >= 2 || shouldSkipExecDeepAsk(deep, bag.options)) {
     deep.status = "closed";
     patchExecDeep(deep);
-    renderExecutionChoices(state.executionChoices);
     persistJournalQuietly();
+    await generateExecDeepFinal(options);
     return;
   }
   deep.status = "asking";
@@ -10835,16 +10897,20 @@ async function submitExecDeepAnswer(options = {}) {
   await generateExecDeepAsk(options);
 }
 
-async function refreshExecActions(options = {}) {
+async function generateExecDeepFinal(options = {}) {
   if (rejectArchivedJournalWrite(options)) return;
   if (!ensurePlusFeature("execution_ai", options)) return;
-  if (state.choicesBusy?.executionDeep || state.choicesBusy?.execution) {
-    if (!options.auto) showToast("還在整理，請稍候。");
+  const bag = normalizeExecutionChoiceBag(state.executionChoices);
+  if (hasExecDeepFinal(bag.deep) && !options.force) {
+    renderExecutionChoices(bag);
     return;
   }
-  const bag = normalizeExecutionChoiceBag(state.executionChoices);
   if (!execDeepAnsweredRounds(bag.deep).length) {
-    if (!options.auto) showToast("先回答深度思考，再重新整理。");
+    renderExecutionChoices(bag);
+    return;
+  }
+  if (state.choicesBusy?.executionDeep && !options.allowBusy) {
+    if (!options.auto) showToast("還在整理，請稍候。");
     return;
   }
   const journal = collectJournal();
@@ -10853,17 +10919,17 @@ async function refreshExecActions(options = {}) {
   setChoicesLoading("executionDeep", true);
   try {
     if (!state.user) throw new Error("請先登入，才能使用雲端出題。");
-    const kept = selectedExecutionChoiceActions(bag);
+    const kept = selectedExecutionChoiceActions({ ...bag, deep: { ...bag.deep, finalSelectedIds: [] } });
     const remote = await postReview({
       mode: "choices",
       kind: "execution-deep",
-      step: "refresh",
+      step: "close",
       date: currentIso(),
       text: journal.event,
       context: {
         ...choicesContext(journal, priorThinkAwareContext(journal)),
         variant: "exec-deep",
-        step: "refresh",
+        step: "close",
         actions: bag.options,
         keptActions: kept,
         deep: bag.deep,
@@ -10871,21 +10937,33 @@ async function refreshExecActions(options = {}) {
       progress: { streak: collectGrowthProgress().streak },
     });
     if (state.choicesToken.executionDeep !== token) return;
-    const incoming = normalizeExecutionChoiceBag({ options: remote.options }).options;
-    const merged = mergeRefreshedExecOptions(bag.options, bag.selectedIds, incoming);
-    if (merged.length < 1) throw new Error("行動還沒重新整理好，請再試一次。");
+    const incoming = normalizeExecutionChoiceBag({ options: remote.options }).options.map((item, index) => ({
+      ...item,
+      id: `f${index + 1}`,
+    }));
+    const summary = String(remote.executionSummary || "").replace(/\s+/g, " ").trim();
+    if (incoming.length < 3 || !summary) throw new Error("今天的執行力還沒整理好，請再試一次。");
+    const lookSimilar = typeof reviewMergeApi().choicesLookSimilar === "function" ? reviewMergeApi().choicesLookSimilar.bind(reviewMergeApi()) : () => false;
+    const finalSelectedIds = incoming
+      .filter((item) => kept.some((sel) => lookSimilar(sel.text, item.text)))
+      .map((item) => item.id);
     state.executionChoices = serializeExecutionChoiceBag({
       ...bag,
-      options: merged,
-      deep: { ...normalizeExecDeep(bag.deep), status: "closed", refreshedAt: new Date().toISOString() },
+      deep: {
+        ...normalizeExecDeep(bag.deep),
+        status: "closed",
+        executionSummary: summary,
+        finalOptions: incoming.slice(0, 3),
+        finalSelectedIds,
+        refreshedAt: new Date().toISOString(),
+      },
     });
     renderExecutionChoices(state.executionChoices);
     persistJournalQuietly();
-    if (!options.auto) showToast("尚未選走的行動已依剛剛的回答更新。");
   } catch (error) {
     if (state.choicesToken.executionDeep !== token) return;
     if (isPlusRequiredError(error)) return;
-    if (!options.auto) showToast(formatApiError(error) || "這次沒有重新整理好，已保留你選過的行動。");
+    if (!options.auto) showToast(formatApiError(error) || "這次還沒整理好，請再試一次。");
   } finally {
     if (state.choicesToken.executionDeep === token) setChoicesLoading("executionDeep", false);
   }
@@ -15765,9 +15843,9 @@ function handleTodayPointerClick(event) {
     catchAsync(() => submitExecDeepAnswer(), "這次回答還沒送出");
     return true;
   }
-  if (node.closest("#btnExecDeepRefresh")) {
+  if (node.closest("#btnExecDeepFinal")) {
     handled();
-    catchAsync(() => refreshExecActions(), "行動還沒重新整理好");
+    catchAsync(() => generateExecDeepFinal({ force: true }), "今天的執行力還沒整理好");
     return true;
   }
   if (node.closest("#btnExecChoiceFollow")) {
@@ -15851,7 +15929,7 @@ function handleTodayPointerClick(event) {
     handled();
     const kind = choiceBtn.dataset.choiceKind === "think"
       ? "think"
-      : choiceBtn.dataset.choiceKind === "execution"
+      : choiceBtn.dataset.choiceKind === "execution" || choiceBtn.dataset.choiceKind === "execution-final"
         ? "execution"
         : "awareness";
     if (kind === "awareness") pinAwareFold();

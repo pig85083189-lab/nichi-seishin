@@ -12,6 +12,7 @@ const {
 const {
   EXECUTION_CHOICES_SYSTEM,
   EXEC_DEEP_ASK_SYSTEM,
+  EXEC_DEEP_CLOSE_SYSTEM,
   EXEC_DEEP_REFRESH_SYSTEM,
   choicesKind,
   choicesUserPrompt,
@@ -22,6 +23,7 @@ const {
   return {
     EXECUTION_CHOICES_SYSTEM: review.EXECUTION_CHOICES_SYSTEM,
     EXEC_DEEP_ASK_SYSTEM: review.EXEC_DEEP_ASK_SYSTEM,
+    EXEC_DEEP_CLOSE_SYSTEM: review.EXEC_DEEP_CLOSE_SYSTEM,
     EXEC_DEEP_REFRESH_SYSTEM: review.EXEC_DEEP_REFRESH_SYSTEM,
     choicesKind: review.choicesKind,
     choicesUserPrompt: review.choicesUserPrompt,
@@ -55,7 +57,12 @@ assert(EXECUTION_CHOICES_SYSTEM.includes("needFollowup 必須是 false"), "初�
 assert(EXEC_DEEP_ASK_SYSTEM.includes("最多 2 題"), "11. 最多 2");
 assert(EXEC_DEEP_ASK_SYSTEM.includes("絕對沒有第 3 題") || EXEC_DEEP_ASK_SYSTEM.includes("禁止第 3 題"), "13. 沒有 Q3");
 assert(EXEC_DEEP_ASK_SYSTEM.includes("你真正的感受是什麼"), "06 deep 不重做 04");
-assert(EXEC_DEEP_REFRESH_SYSTEM.includes("已經被使用者選走的行動不要改寫"), "15. refresh 不覆蓋已選");
+assert(EXEC_DEEP_CLOSE_SYSTEM.includes("executionSummary"), "close 一次回 summary");
+assert(EXEC_DEEP_CLOSE_SYSTEM.includes("剛好 3 個最終行動") || EXEC_DEEP_CLOSE_SYSTEM.includes("options：剛好 3"), "close 一次回 3 actions");
+assert(EXEC_DEEP_CLOSE_SYSTEM.includes("不是原本行動換句話說") || EXEC_DEEP_CLOSE_SYSTEM.includes("不要只是把原本 3 個換句話說"), "final 不是換句話說");
+assert(EXEC_DEEP_REFRESH_SYSTEM === EXEC_DEEP_CLOSE_SYSTEM, "舊 refresh 走同一份 close");
+assert(execV2.execDeepStep({ step: "refresh" }) === "close", "refresh step 映射 close");
+assert(execV2.execDeepStep({ step: "final" }) === "close", "final step 映射 close");
 
 assert(choicesKind({ kind: "execution-deep" }) === "execution-deep", "deep kind 獨立");
 assert(featureForReviewRequest({ mode: "choices", kind: "execution-deep" }) === "execution_ai", "deep 仍走 execution_ai");
@@ -91,6 +98,71 @@ const journalMerged = mergeJournalObjects(
   { executionChoices: emptyExecutionChoiceBag() }
 );
 assert(journalMerged.executionChoices.deep.rounds[0].answer === "先確認理解。", "cloud merge 不丟 Q1");
+
+const soup = execV2.normalizeExecutionSummary("相信自己，勇敢踏出下一步。");
+assert(soup === "", "5. 雞湯 summary 被拒絕");
+const goodSummary = execV2.normalizeExecutionSummary("這次不是再說更多，而是先確認彼此真正沒對上的地方。");
+assert(goodSummary.length >= 18 && goodSummary.length <= 35, "5. summary 一句適長");
+assert(!goodSummary.includes("\n"), "5. summary 一句");
+
+const finalBag = normalizeExecutionChoiceBag({
+  options,
+  selectedIds: ["e1"],
+  deep: {
+    status: "closed",
+    rounds: [{ question: "哪一件最可能讓事情不一樣？", answer: "先確認她聽到的是不是同一件事。" }],
+    executionSummary: "這次不是再說更多，而是先確認彼此真正沒對上的地方。",
+    finalOptions: [
+      { id: "f1", text: "先問她聽到的是哪一句", detail: "下次只請她複述她聽到的重點，對上再往下說。" },
+      { id: "f2", text: "寫下這次沒對上的點", detail: "談完後用一句話記下真正的落差，不要再補一長串解釋。" },
+      { id: "f3", text: "分開理解與改變期待", detail: "先標出這次只要被聽懂，還是也要做法改變。" },
+    ],
+    finalSelectedIds: ["f1"],
+  },
+});
+assert(execV2.hasExecDeepFinal(finalBag.deep), "6. final result 完整");
+assert(finalBag.deep.finalOptions.length === 3, "7. finalOptions 固定 3");
+assert(finalBag.deep.finalOptions.every((item) => item.text && item.detail), "8. final 有 title + detail");
+assert(finalBag.deep.executionSummary, "6. executionSummary 不為空");
+
+const mergedFinal = mergeExecutionChoiceBags(finalBag, emptyExecutionChoiceBag());
+assert(mergedFinal.deep.executionSummary === finalBag.deep.executionSummary, "12. 空 bag 不丟 summary");
+assert(mergedFinal.deep.finalOptions.length === 3, "12. 空 bag 不丟 finalOptions");
+assert(mergedFinal.deep.finalSelectedIds[0] === "f1", "12. 空 bag 不丟 finalSelectedIds");
+
+const journalFinal = mergeJournalObjects(
+  { executionChoices: finalBag },
+  { executionChoices: emptyExecutionChoiceBag() }
+);
+assert(journalFinal.executionChoices.deep.finalOptions.length === 3, "12. cloud merge 不丟 final");
+
+const selectedFinal = selectedExecutionChoiceActions(finalBag);
+assert(selectedFinal.some((item) => item.id === "e1"), "13. 原本已選仍在");
+assert(selectedFinal.some((item) => item.id === "f1"), "9. final 已選也算 selected");
+assert(selectedFinal.length === 2, "14. 不同內容不互相覆蓋");
+
+const similarFinal = normalizeExecutionChoiceBag({
+  options,
+  selectedIds: ["e2"],
+  deep: {
+    status: "closed",
+    executionSummary: "現在缺的不是再說一次，而是先確認她理解到哪。",
+    finalOptions: [
+      { id: "f1", text: "先確認對方理解到哪裡", detail: "幾乎同一句，不該再加一筆。" },
+      { id: "f2", text: "記下這次沒對上的一句", detail: "談完只留一句真正落差。" },
+      { id: "f3", text: "下次只講一件事", detail: "開口前先選一件最想被聽懂的。" },
+    ],
+    finalSelectedIds: ["f1"],
+  },
+});
+const similarSelected = selectedExecutionChoiceActions(similarFinal);
+assert(similarSelected.length === 1, "14. 高度相似不重複進 History／Execution");
+assert(similarSelected[0].text === options[1].text, "14. 沿用已加入的原文");
+
+const legacyBag = normalizeExecutionChoiceBag({ options, selectedId: "e2" });
+assert(legacyBag.selectedIds[0] === "e2", "17. legacy selectedId 相容");
+assert(legacyBag.deep.finalOptions.length === 0, "17. legacy 沒有 final 也不壞");
+assert(execV2.hasExecDeepFinal(legacyBag.deep) === false, "17. legacy 不算已完成 deep");
 
 const already = execV2.extractAlreadyDone({
   event: "我已經跟媽媽說了，可是她還是沒有理解。",
@@ -136,10 +208,32 @@ assert(reading.actions.length === 2, "16. History ④ = selected");
 assert(reading.actions[0].text === options[0].text, "16. History 用同一份 title");
 assert(reading.actions[0].detail === options[0].detail, "16. History 帶 detail");
 
+const readingFinal = buildHistoryReading({
+  journal: {
+    event: "想跟媽媽好好說話",
+    executionChoices: finalBag,
+  },
+});
+assert(readingFinal.actions.some((item) => item.text === options[0].text), "15. History ④ 含原本已選");
+assert(readingFinal.actions.some((item) => item.text === finalBag.deep.finalOptions[0].text), "15. History ④ 含 final 已選");
+assert(!readingFinal.actions.some((item) => item.text === finalBag.deep.executionSummary), "15. History 不自己生成 summary 當行動");
+
 assert(app.includes("function generateExecDeepAsk"), "10. deep Q1");
 assert(app.includes("function submitExecDeepAnswer"), "deep 作答");
-assert(app.includes("function refreshExecActions"), "refresh");
+assert(app.includes("function generateExecDeepFinal"), "deep close 自動 final");
+assert(!app.includes("function refreshExecActions"), "不再手動 refresh");
+assert(!app.includes("btnExecDeepRefresh"), "4. 不再出現 refresh button");
+assert(!app.includes("依照剛剛的回答，重新整理行動"), "4. 不再出現 refresh 文案");
 assert(app.includes("syncSelectedExecutionToSidebar"), "6. 勾選加入 Execution");
+assert(app.includes("data-choice-kind=\"${showFinal ? \"execution-final\" : \"execution\"}\"") || app.includes("execution-final"), "9. final 可勾選");
+assert(app.includes("hasExecDeepFinal(bag.deep) && !options.force"), "10. reload 有 final 不重打 model");
+assert(app.includes("step: \"close\""), "10. final 一次 close request");
+assert(app.includes("executionSummary"), "5. 有執行力總結");
+assert(app.includes("執行力總結"), "5. UI label");
+assert(app.includes("接下來可以這樣做"), "final checklist 標題");
+assert(app.includes("深度思考完成"), "deep close 標題");
+assert(css.includes(".exec-summary") && css.includes(".exec-summary__text"), "總結 editorial");
+assert(!css.includes("exec-summary") || !/\.exec-summary[^{]*{[^}]*box-shadow:\s*(?!none)/.test(css), "總結無重陰影");
 assert(app.includes("rejectArchivedJournalWrite"), "17. completed read-only");
 assert(app.includes("choicesBusy?.executionDeep"), "request lock");
 assert(app.includes("withExecDeepDraft"), "14. deep draft autosave");
@@ -149,8 +243,16 @@ assert(app.includes("function generateAwarenessChoices"), "20. 05 仍在");
 assert(app.includes("persistArchivedUserMarks"), "21. userMarks 未拆");
 assert(css.includes(".exec-deep") && css.includes("overflow-wrap: anywhere"), "mobile 換行");
 assert(app.includes("function generateExecutionChoices"), "legacy executionChoices 主函式仍在");
+const initialFn = app.match(/async function generateExecutionChoices[\s\S]*?\nasync function generateExecDeepAsk/);
+assert(initialFn && initialFn[0].includes('kind: "execution"'), "1. 不做 deep 仍只打初始 execution");
+assert(initialFn && !initialFn[0].includes("generateExecDeepFinal"), "1. 不做 deep 不自動 final");
+assert(/if \(shouldSkipExecDeepAsk\(bag\.deep, bag\.options\)\)[\s\S]{0,240}generateExecDeepFinal/.test(app), "2. Q1 early close 自動 final");
+assert(/answered\.length >= 2 \|\| shouldSkipExecDeepAsk[\s\S]{0,220}generateExecDeepFinal/.test(app), "3. Q2 close 自動 final");
+assert(/function generateExecDeepFinal[\s\S]{0,2800}persistJournalQuietly/.test(app), "11. final result autosave");
 assert(reviewJs.includes("EXECUTION_PROMPTS_SYSTEM"), "18. 舊 Q&A prompt 仍在");
 assert(!app.includes("CREATE TABLE") && !reviewJs.includes("ALTER TABLE"), "schema 零修改");
+assert(!/generateExecDeepFinal[\s\S]{0,1800}removeTask|generateExecDeepFinal[\s\S]{0,1800}deleteTask/.test(app), "13. final 不刪既有 task");
+assert(app.includes("lookSimilar(String(task.title || \"\"), item.title)"), "14. 高度相似不重複加入");
 
 const prompt = choicesUserPrompt({
   mode: "choices",
@@ -184,5 +286,20 @@ const deepPrompt = execV2.execDeepUserPrompt({
 assert(deepPrompt.includes("第 2/2 題"), "Q2 才是最後一題");
 assert(deepPrompt.includes("不要重做 04"), "deep 不重做 04");
 assert(deepPrompt.includes("禁止第 3 題"), "沒有 Q3 路徑");
+
+const closePrompt = execV2.execCloseUserPrompt({
+  context: {
+    actions: options,
+    keptActions: [options[0]],
+    awarenessLine: "真正缺的是對上，不是再說一次。",
+    thinkCloseAwareness: "卡住的不是沒說，是說了對不上。",
+    event: "我已經跟媽媽說了，可是她還是沒有理解。",
+    deep: { rounds: [{ question: "最希望改變的是理解還是做法？", answer: "先確認她聽到的是不是同一件事。" }] },
+  },
+});
+assert(closePrompt.includes("executionSummary"), "close prompt 要 summary");
+assert(closePrompt.includes("3 個新的最終行動"), "close prompt 要 3 finals");
+assert(closePrompt.includes("先確認她聽到的是不是同一件事"), "close 讀 Q1 answer");
+assert(closePrompt.includes(options[0].text), "close 讀原本 actions");
 
 console.log("exec v2 tests passed");
