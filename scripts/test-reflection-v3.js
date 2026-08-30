@@ -254,4 +254,45 @@ assert(
   "01-03 修改後 stale"
 );
 
+assert(reflectionV3.REFLECTION_V3_SYSTEM.includes("LEADING QUESTION CHECK"), "prompt 有 leading check");
+assert(reflectionV3.REFLECTION_V3_SYSTEM.includes("OPEN THE THINKING"), "prompt 要求打開思考");
+assert(reflectionV3.REFLECTION_V3_SYSTEM.includes("還沒被檢查的結論"), "prompt 會檢查關鍵句");
+assert(reflectionV3.REFLECTION_V3_SYSTEM.includes("也許／可能／或許"), "prompt 要求金句對沖推論");
+
+assert(
+  reflectionV3.looksLeadingQuestion("如果全力以赴本來就是你對自己的標準，那別人有沒有看到，是不是已經不是最重要的事？"),
+  "暗示正確答案的題必須被抓到"
+);
+assert(
+  !reflectionV3.looksLeadingQuestion("如果全力以赴本來就是你對自己的標準，那現在真正讓你難受的，是付出沒有被看見，還是某個重要的人沒有理解這份付出的意義？"),
+  "兩種答案都能成立的題不該被抓"
+);
+
+const leading = reflectionV3.evaluateReflectionV3Quality(
+  {
+    coreQuote: "你很珍惜別人默默付出的部分，卻擔心自己的付出換不到被看見。",
+    questions: [
+      { id: "q1", text: "如果全力以赴本來就是你對自己的標準，那別人有沒有看到，是不是已經不是最重要的事？" },
+      { id: "q2", text: "你現在說沒關係，是真的放下了，還是你只是決定先往前走？" },
+      { id: "q3", text: "這份付出裡，有沒有哪一塊其實是你自己先認定必須被看見的？" },
+    ],
+  },
+  { context: { thanksText: "有人默默幫忙", event: "沒關係，這是磨練。我已經很努力了。", bodyMindText: "胸口有點悶。" } }
+);
+assert(leading.issues.includes("quote-unhedged"), "原文沒說擔心時，金句不能寫成確定擔心");
+assert(leading.issues.includes("q1-leading"), "leading question 必須 FAIL");
+
+const openKey = reflectionV3.evaluateReflectionV3Quality(
+  {
+    coreQuote: "真正值得看的或許是：這句沒關係，是放下，還是先往前走。",
+    questions: [
+      { id: "q1", text: "這句『沒關係』是真的讓你放下了，還是你只是決定先往前走？" },
+      { id: "q2", text: "如果全力以赴本來就是你對自己的標準，那現在真正讓你難受的，是付出沒有被看見，還是某個重要的人沒有理解這份付出的意義？" },
+      { id: "q3", text: "這份磨練裡，有哪些是你願意交換的，哪些其實還不想當成必須接受？" },
+    ],
+  },
+  { context: { thanksText: "有人默默幫忙", event: "沒關係，這是磨練。我已經很努力了。", bodyMindText: "胸口有點悶。" } }
+);
+assert(openKey.ok, `開放題應通過：${openKey.issues.join("；")}`);
+
 console.log("reflection-v3 tests passed");
