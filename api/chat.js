@@ -2,7 +2,7 @@ const reviewHandler = require("./review");
 const { requireUser } = require("../lib/auth");
 const { ensureTrial, effectivePlanFromRow, supabaseAdminConfigured, isInternal } = require("../lib/supabase");
 const { enforcePlusEntitlement } = require("../lib/entitlement");
-const { getApiKey, getModel, getProvider, usesClaude, callOpenAI } = require("../lib/openai");
+const { getApiKey, getModel, getProvider, internalDebugMeta, usesClaude, callOpenAI } = require("../lib/openai");
 
 function readJsonBody(req) {
   const raw = req.body;
@@ -71,16 +71,35 @@ module.exports = async function handler(req, res) {
   const user = await requireUser(req, res);
   if (!user) return;
 
+  let membershipRow = null;
+  let internalUser = false;
+  if (supabaseAdminConfigured()) {
+    try {
+      membershipRow = await ensureTrial(user);
+      internalUser = isInternal(membershipRow);
+    } catch (error) {
+      console.error("ensureTrial in chat:", error && error.message ? error.message : error);
+    }
+  }
+
   const allowed = await enforcePlusEntitlement({
     feature: "think_ai",
     res,
     supabaseReady: supabaseAdminConfigured(),
     loadPlan: async () => {
-      const row = await ensureTrial(user);
+      const row = membershipRow || (await ensureTrial(user));
       return { plan: effectivePlanFromRow(row), isInternal: isInternal(row) };
     },
   });
   if (!allowed) return;
+
+  const origJson = res.json.bind(res);
+  res.json = (payload) => {
+    if (payload && payload.ok === true && internalUser) {
+      return origJson({ ...payload, _internalDebug: internalDebugMeta() });
+    }
+    return origJson(payload);
+  };
 
   const messages = Array.isArray(body.messages) ? body.messages : [];
   if (!messages.length) {

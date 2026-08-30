@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=216" />
+    <link rel="stylesheet" href="app.css?v=217" />
     <style>
       html.is-booting,
       html.is-booting body {
@@ -772,6 +772,7 @@
             <div class="journal-footer__complete" id="journalFooterComplete" hidden>
               <p class="journal-footer__done">✓ 今天的復盤完成了。</p>
               <p class="journal-footer__note">看見自己，也留下明天真正做得到的一步。</p>
+              <button class="btn btn--ghost journal-footer__internal-reset" id="btnInternalResetToday" type="button" hidden>重新測試今天</button>
             </div>
           </div>
 
@@ -1159,6 +1160,17 @@
       </form>
     </dialog>
 
+    <dialog class="modal" id="internalResetModal" aria-labelledby="internalResetTitle">
+      <form method="dialog" class="modal__card" id="internalResetForm">
+        <h3 class="modal__title" id="internalResetTitle">重新開始今天的測試？</h3>
+        <p class="modal__desc">目前這次測試內容會保留在內部測試紀錄，並重新開啟一份空白的今日復盤。</p>
+        <div class="form-actions complete-confirm-actions">
+          <button class="btn btn--ghost" id="btnCancelInternalReset" value="cancel" type="submit">取消</button>
+          <button class="btn" id="btnConfirmInternalReset" value="confirm" type="button">重新開始測試</button>
+        </div>
+      </form>
+    </dialog>
+
     <dialog class="modal" id="reminderModal">
       <form method="dialog" class="modal__card" id="reminderForm">
         <h3 class="modal__title">設定復盤提醒</h3>
@@ -1244,13 +1256,14 @@
     <script src="analytics.js?v=4"></script>
     <script src="lib/text-integrity.js?v=6"></script>
     <script src="lib/body-coach-insight.js?v=1"></script>
-    <script src="lib/review-merge.js?v=12"></script>
+    <script src="lib/internal-test.js?v=1"></script>
+    <script src="lib/review-merge.js?v=13"></script>
     <script src="lib/entitlement.js?v=4"></script>
     <script src="lib/history-reading.js?v=6"></script>
     <script src="lib/history-summary.js?v=9"></script>
     <script src="lib/insight-highlight.js?v=5"></script>
     <script src="lib/user-mark.js?v=6"></script>
     <script src="lib/task-sidebar.js?v=1"></script>
-    <script src="app.js?v=249"></script>
+    <script src="app.js?v=250"></script>
   </body>
 </html>

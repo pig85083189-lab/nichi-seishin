@@ -2,7 +2,8 @@ const { requireUser, bearerToken } = require("../lib/auth");
 const { ensureTrial, effectivePlanFromRow, supabaseAdminConfigured, isInternal } = require("../lib/supabase");
 const bodyMind = require("../lib/body-mind");
 const { featureForReviewRequest, enforcePlusEntitlement } = require("../lib/entitlement");
-const { getApiKey, getModel, getProvider, usesClaude, callOpenAI } = require("../lib/openai");
+const { getApiKey, getModel, getProvider, internalDebugMeta, usesClaude, callOpenAI } = require("../lib/openai");
+const internalTest = require("../lib/internal-test");
 const textIntegrity = require("../lib/text-integrity");
 const bodyCoachInsight = require("../lib/body-coach-insight");
 const insightHighlight = require("../lib/insight-highlight");
@@ -3087,16 +3088,70 @@ module.exports = async function handler(req, res) {
   delete body.user_id;
   delete body.userId;
 
+  let membershipRow = null;
+  let internalUser = false;
+  if (supabaseAdminConfigured()) {
+    try {
+      membershipRow = await ensureTrial(user);
+      internalUser = isInternal(membershipRow);
+    } catch (error) {
+      console.error("ensureTrial in review:", error && error.message ? error.message : error);
+    }
+  }
+
+  if (String(body.mode || "") === "internal-reset-today") {
+    if (!internalUser) {
+      res.status(403).json({ ok: false, error: "internal_required", message: "Internal test reset requires an internal account." });
+      return;
+    }
+    const iso = String(body.date || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+      res.status(400).json({ ok: false, error: "invalid_date" });
+      return;
+    }
+    const resetAt = new Date().toISOString();
+    let nextReview = null;
+    try {
+      const { loadReviews, mergeReviews, cloudStoreConfigured } = require("../lib/store");
+      const storedMap = cloudStoreConfigured() ? await loadReviews(user.id) : {};
+      const stored = storedMap && storedMap[iso] ? storedMap[iso] : null;
+      const incoming = body.review && typeof body.review === "object" ? { ...body.review, date: iso, userId: user.id } : null;
+      const latest = reviewMerge.pickReview(stored, incoming) || incoming || stored || { date: iso, userId: user.id };
+      nextReview = internalTest.applyInternalTodayReset(latest, { resetAt, date: iso, userId: user.id });
+      if (cloudStoreConfigured()) {
+        await mergeReviews(user.id, { [iso]: { ...nextReview, userId: user.id, date: iso } });
+      }
+    } catch (error) {
+      console.error("internal-reset-today persist:", error && error.message ? error.message : error);
+      nextReview = internalTest.applyInternalTodayReset(body.review || { date: iso }, { resetAt, date: iso, userId: user.id });
+    }
+    res.status(200).json({
+      ok: true,
+      allowed: true,
+      resetAt,
+      data: { allowed: true, resetAt, date: iso, review: nextReview },
+    });
+    return;
+  }
+
   const allowed = await enforcePlusEntitlement({
     feature: featureForReviewRequest(body),
     res,
     supabaseReady: supabaseAdminConfigured(),
     loadPlan: async () => {
-      const row = await ensureTrial(user);
+      const row = membershipRow || (await ensureTrial(user));
       return { plan: effectivePlanFromRow(row), isInternal: isInternal(row) };
     },
   });
   if (!allowed) return;
+
+  const origJson = res.json.bind(res);
+  res.json = (payload) => {
+    if (payload && payload.ok === true && internalUser) {
+      return origJson({ ...payload, _internalDebug: internalDebugMeta() });
+    }
+    return origJson(payload);
+  };
 
   try {
     if (body.mode === "checklist" || body.mode === "prompts" || body.mode === "choices") {

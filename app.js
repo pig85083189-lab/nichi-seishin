@@ -124,6 +124,9 @@ const state = {
   bodyMindBusy: false,
   bodyMindToken: 0,
   journalBodyMind: null,
+  journalInternalTestRuns: [],
+  journalInternalResetAt: "",
+  internalModelDebug: { think: null, awareness: null, execution: null },
   journalExecFocus: null,
   journalAwarenessResult: null,
   awarenessChoices: { sourceSig: "", options: [], selectedIds: [], generatedAt: "" },
@@ -202,6 +205,32 @@ function isInternalMembership(membership = state.membership) {
   if (access === "internal") return true;
   const status = String(membership.status || membership.subscriptionStatus || "").trim().toLowerCase();
   return status === "internal";
+}
+
+function internalTestApi() {
+  return (typeof globalThis !== "undefined" && globalThis.NichiInternalTest) || {};
+}
+
+function normalizeInternalTestRuns(value) {
+  const api = internalTestApi();
+  if (typeof api.normalizeInternalTestRuns === "function") return api.normalizeInternalTestRuns(value);
+  return Array.isArray(value) ? value.filter((item) => item && typeof item === "object") : [];
+}
+
+function takeInternalDebug(remote) {
+  const debug = remote && remote._internalDebug;
+  if (!debug || !debug.model) return null;
+  return { provider: String(debug.provider || "").trim(), model: String(debug.model || "").trim() };
+}
+
+function paintInternalModelDebug(root, debug) {
+  if (!root) return;
+  root.querySelectorAll(".internal-model-debug").forEach((node) => node.remove());
+  if (!isInternalMembership() || !debug || !debug.model) return;
+  const line = document.createElement("p");
+  line.className = "internal-model-debug";
+  line.textContent = `Internal Test · ${debug.model}`;
+  root.appendChild(line);
 }
 
 function trackMembershipSignals(membership) {
@@ -1342,11 +1371,19 @@ async function postAiApi(url, body, timeoutMs = 28000) {
     err.feature = payload.feature || "";
     throw err;
   }
+  if (payload && payload.error === "internal_required") {
+    const err = new Error("internal_required");
+    err.code = "internal_required";
+    throw err;
+  }
   if (applyPaywallFromPayload(response, payload) || !response.ok || payload.ok === false) {
     throw new Error(payload.error || `HTTP ${response.status}`);
   }
   if (!payload.data || typeof payload.data !== "object") {
     throw new Error("雲端回傳格式不完整");
+  }
+  if (payload._internalDebug && payload.data && typeof payload.data === "object") {
+    payload.data._internalDebug = payload._internalDebug;
   }
   return payload.data;
 }
@@ -3476,6 +3513,9 @@ function clearJournalMemory() {
   state.journalInsight = null;
   state.journalBodyCoach = null;
   state.journalBodyMind = null;
+  state.journalInternalTestRuns = [];
+  state.journalInternalResetAt = "";
+  state.internalModelDebug = { think: null, awareness: null, execution: null };
   state.journalExecFocus = null;
   state.journalAwarenessResult = null;
   state.journalManifestSentence = "";
@@ -4157,6 +4197,7 @@ async function refreshAuth(options = {}) {
     applyAccessLock();
     trackMembershipSignals(state.membership);
     syncPlanUi();
+    syncJournalFooter();
     maybeConstrainJournalModeForPlan();
     if (state.user && !preview) trackProduct("app_open", { source: "auth" });
     maybeShowPlusEndedNotice();
@@ -5664,6 +5705,8 @@ function emptyJournal() {
     quickModules: emptyQuickModules(),
     userMarks: { items: [], updatedAt: "" },
     manifestHighlights: {},
+    internalTestRuns: [],
+    internalResetAt: "",
   };
 }
 
@@ -5731,6 +5774,9 @@ function normalizeBodyMind(raw) {
     support: String(src.support || "").replace(/\s+/g, " ").trim(),
     generatedAt: String(src.generatedAt || "").trim(),
     sig: String(src.sig || "").trim(),
+    internalDebug: src.internalDebug && src.internalDebug.model
+      ? { provider: String(src.internalDebug.provider || ""), model: String(src.internalDebug.model || "") }
+      : null,
   };
 }
 
@@ -9228,6 +9274,7 @@ function renderBodyMindInsight(mind) {
         <p class="body-mind-insight__support">${escapeHtml(data.support)}</p>
       </div>` : ""}
     </article>`;
+  paintInternalModelDebug(root, data.internalDebug);
 }
 
 function setBodyMindLoading(loading) {
@@ -9279,6 +9326,7 @@ async function generateBodyMindInsight(options = {}) {
       support,
       generatedAt: new Date().toISOString(),
       sig,
+      internalDebug: takeInternalDebug(remote),
     });
     state.journalBodyMind = next;
     state.journalMeta.bodyMindSig = sig;
@@ -9818,6 +9866,7 @@ function renderAwarenessChoices(bag) {
   if (empty) empty.hidden = true;
   if (genBtn) genBtn.hidden = true;
   root.innerHTML = choiceListHtml(data, "awareness");
+  paintInternalModelDebug(root, state.internalModelDebug && state.internalModelDebug.awareness);
   syncAwareQuoteGate();
 }
 
@@ -10095,6 +10144,7 @@ function renderExecutionChoices(bag) {
         <p class="journal-label" id="execFinalLabel">接下來可以這樣做</p>
         ${choiceList}`
     : `${choiceList}${renderExecDeep(data)}`;
+  paintInternalModelDebug(root, state.internalModelDebug && state.internalModelDebug.execution);
   if (checkBtn) checkBtn.hidden = true;
   syncExecStepUi();
 }
@@ -10393,6 +10443,8 @@ async function generateAwarenessChoices(options = {}) {
       selectedIds: [],
       generatedAt: new Date().toISOString(),
     });
+    if (!state.internalModelDebug) state.internalModelDebug = {};
+    state.internalModelDebug.awareness = takeInternalDebug(remote);
     renderAwarenessChoices(state.awarenessChoices);
     persistJournalQuietly();
     if (!options.auto) showToast("今天的覺察選項已經準備好了。");
@@ -10617,6 +10669,7 @@ function renderThinkV2() {
       </article>`;
   }
   root.innerHTML = `<div class="think-v2 think-guide">${doneCards}${active}</div>`;
+  paintInternalModelDebug(root, state.internalModelDebug && state.internalModelDebug.think);
   renderThinkChoiceResult(state.journalInsight);
 }
 
@@ -10689,6 +10742,8 @@ async function generateThinkV2Ask(options = {}) {
       round: rounds.length,
       draftAnswer: "",
     });
+    if (!state.internalModelDebug) state.internalModelDebug = {};
+    state.internalModelDebug.think = takeInternalDebug(remote);
     persistJournalQuietly();
     renderThinkV2();
   } catch (error) {
@@ -10794,6 +10849,8 @@ async function generateThinkV2Close(options = {}) {
       direction: String(remote.direction || "").trim(),
       draftAnswer: "",
     });
+    if (!state.internalModelDebug) state.internalModelDebug = {};
+    state.internalModelDebug.think = takeInternalDebug(remote);
     persistJournalQuietly();
     renderThinkV2();
     if (!options.auto && !options.fromAsk) showToast("今天的深度看見，已經整理好了。");
@@ -10908,6 +10965,8 @@ async function generateExecutionChoices(options = {}) {
       generatedAt: new Date().toISOString(),
       deep: existing.deep,
     });
+    if (!state.internalModelDebug) state.internalModelDebug = {};
+    state.internalModelDebug.execution = takeInternalDebug(remote);
     renderExecutionChoices(state.executionChoices);
     persistJournalQuietly();
     trackProduct("execution_choices_generated", { source: "journal", mode: "deep" });
@@ -11013,6 +11072,8 @@ async function generateExecDeepAsk(options = {}) {
     deep.status = "asking";
     deep.draftAnswer = "";
     patchExecDeep(deep);
+    if (!state.internalModelDebug) state.internalModelDebug = {};
+    state.internalModelDebug.execution = takeInternalDebug(remote);
     renderExecutionChoices(state.executionChoices);
     persistJournalQuietly();
   } catch (error) {
@@ -11115,6 +11176,8 @@ async function generateExecDeepFinal(options = {}) {
         refreshedAt: new Date().toISOString(),
       },
     });
+    if (!state.internalModelDebug) state.internalModelDebug = {};
+    state.internalModelDebug.execution = takeInternalDebug(remote);
     renderExecutionChoices(state.executionChoices);
     persistJournalQuietly();
   } catch (error) {
@@ -11799,10 +11862,12 @@ function syncJournalFooter() {
   const actions = document.getElementById("journalFooterActions");
   const complete = document.getElementById("journalFooterComplete");
   const hint = document.getElementById("journalAutosaveHint");
+  const resetBtn = document.getElementById("btnInternalResetToday");
   const archived = isCurrentJournalArchived();
   if (footer) footer.classList.toggle("is-complete", archived);
   if (actions) actions.hidden = archived;
   if (complete) complete.hidden = !archived;
+  if (resetBtn) resetBtn.hidden = !(archived && isInternalMembership());
   if (hint && archived) {
     hint.hidden = true;
     hint.classList.remove("is-on");
@@ -11815,6 +11880,65 @@ function applyJournalArchiveLock() {
   const archived = isCurrentJournalArchived();
   if (page) page.classList.toggle("is-archived", archived);
   syncJournalFooter();
+}
+
+function openInternalResetModal() {
+  const modal = document.getElementById("internalResetModal");
+  if (modal && typeof modal.showModal === "function") modal.showModal();
+}
+
+function closeInternalResetModal() {
+  const modal = document.getElementById("internalResetModal");
+  if (modal && typeof modal.close === "function" && modal.open) modal.close();
+}
+
+async function confirmInternalResetToday() {
+  if (!isInternalMembership()) {
+    showToast("只有內部帳號可以使用重新測試。");
+    return;
+  }
+  const iso = currentIso();
+  const prev = getReview(iso) || {};
+  try {
+    const remote = await postReview({
+      mode: "internal-reset-today",
+      date: iso,
+      review: {
+        ...prev,
+        date: iso,
+        userId: (state.user && state.user.id) || prev.userId || "",
+      },
+    });
+    const api = internalTestApi();
+    const resetAt = (remote && remote.resetAt) || new Date().toISOString();
+    const next =
+      (remote && remote.review) ||
+      (typeof api.applyInternalTodayReset === "function"
+        ? api.applyInternalTodayReset(prev, { resetAt, date: iso, userId: (state.user && state.user.id) || "" })
+        : { ...prev, completedAt: "", organize: null, journal: { internalTestRuns: prev.journal && prev.journal.internalTestRuns } });
+    const reviews = getReviews();
+    reviews[iso] = { ...next, date: iso, userId: (state.user && state.user.id) || next.userId || "", completedAt: "", organize: null };
+    saveReviews(reviews);
+    state.bodyMindToken = (state.bodyMindToken || 0) + 1;
+    state.insightToken = (state.insightToken || 0) + 1;
+    state.choicesToken.think += 1;
+    state.choicesToken.thinkClose += 1;
+    state.choicesToken.awareness += 1;
+    state.choicesToken.execution += 1;
+    state.choicesToken.executionDeep += 1;
+    state.internalModelDebug = { think: null, awareness: null, execution: null };
+    closeInternalResetModal();
+    loadReviewForDate(iso);
+    applyJournalArchiveLock();
+    flushCloudNow({ reason: "internal-reset" }).catch(() => {});
+    showToast("已重新開啟今天的測試。");
+  } catch (error) {
+    if (error && error.code === "internal_required") {
+      showToast("只有內部帳號可以使用重新測試。");
+      return;
+    }
+    showToast(formatApiError(error) || "這次沒有重開成功，請再試一次。");
+  }
 }
 
 function rejectArchivedJournalWrite(options = {}) {
@@ -12236,6 +12360,17 @@ function collectJournal() {
     quickModules: normalizeQuickModules(state.quickModules),
     userMarks: userMarkBag(state.journalUserMarks),
     manifestHighlights: state.journalManifestHighlights && typeof state.journalManifestHighlights === "object" ? state.journalManifestHighlights : {},
+    internalTestRuns: normalizeInternalTestRuns(
+      (state.journalInternalTestRuns && state.journalInternalTestRuns.length
+        ? state.journalInternalTestRuns
+        : getReview(currentIso()) && getReview(currentIso()).journal && getReview(currentIso()).journal.internalTestRuns) || []
+    ),
+    internalResetAt: String(
+      state.journalInternalResetAt ||
+        (getReview(currentIso()) && (getReview(currentIso()).internalResetAt || (getReview(currentIso()).journal && getReview(currentIso()).journal.internalResetAt))) ||
+        ""
+    ).trim(),
+    internalModelDebug: state.internalModelDebug && typeof state.internalModelDebug === "object" ? state.internalModelDebug : { think: null, awareness: null, execution: null },
   };
   return journal;
 }
@@ -12759,6 +12894,16 @@ function fillJournal(journal) {
   const incomingMind = normalizeBodyMind(data.bodyMind);
   if (!incomingMind.text && String(data.bodyNote || "").trim()) incomingMind.text = String(data.bodyNote || "").trim();
   state.journalBodyMind = incomingMind;
+  state.journalInternalTestRuns = normalizeInternalTestRuns(data.internalTestRuns);
+  state.journalInternalResetAt = String(data.internalResetAt || "").trim();
+  state.internalModelDebug =
+    data.internalModelDebug && typeof data.internalModelDebug === "object"
+      ? {
+          think: data.internalModelDebug.think || null,
+          awareness: data.internalModelDebug.awareness || null,
+          execution: data.internalModelDebug.execution || null,
+        }
+      : { think: null, awareness: null, execution: null };
   state.journalExecFocus = normalizeExecFocus(data.executionFocus, data.executionCheckItems, execRawSourcesFrom(data));
   state.journalAwarenessResult = normalizeAwarenessResult(data.awarenessResult, { keepSource: true });
   state.awarenessChoices = normalizeChoiceBag(data.awarenessChoices);
@@ -16666,6 +16811,14 @@ function bindEvents() {
     organizeBtn.disabled = false;
     organizeBtn.addEventListener("click", runOrganize);
   }
+  document.getElementById("btnInternalResetToday")?.addEventListener("click", () => {
+    if (!isInternalMembership() || !isCurrentJournalArchived()) return;
+    openInternalResetModal();
+  });
+  document.getElementById("btnConfirmInternalReset")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    confirmInternalResetToday();
+  });
   document.getElementById("btnCompleteToday")?.addEventListener("click", () => {
     catchAsync(() => completeToday(), "完成今日復盤時發生問題");
   });

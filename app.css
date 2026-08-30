@@ -8048,6 +8048,18 @@ summary [data-user-mark-field] {
   line-height: 1.7;
 }
 
+.journal-footer__internal-reset {
+  margin-top: 10px;
+}
+
+.internal-model-debug {
+  margin: 10px 0 0;
+  color: #a89888;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+}
+
 .complete-confirm-actions {
   display: flex;
   flex-wrap: wrap;
