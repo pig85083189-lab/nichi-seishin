@@ -5104,6 +5104,7 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
   font: inherit;
   text-align: left;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .journal-fold__toggle:hover {
@@ -5190,6 +5191,7 @@ body[data-journal-mode="quick"][data-quick-exec="on"] #section-exec .js-quick-on
 
 .journal-fold.is-open > .journal-fold__panel > .journal-fold__inner {
   overflow: visible;
+  min-height: min-content;
 }
 
 .journal-fold .ai-check-btn,

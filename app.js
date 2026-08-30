@@ -11638,8 +11638,14 @@ function isJournalEditField(el) {
   return Boolean(el.closest?.(JOURNAL_EDIT_SELECTOR));
 }
 
+function eventTargetElement(node) {
+  if (!node) return null;
+  if (typeof node.closest === "function") return node;
+  return node.parentElement || null;
+}
+
 function journalFoldRootFrom(node) {
-  return node?.closest?.(".journal-fold") || null;
+  return eventTargetElement(node)?.closest?.(".journal-fold") || null;
 }
 
 function clearJournalFoldCollapseTimer() {
@@ -11729,13 +11735,14 @@ function bindJournalFoldEditGuards() {
   page.addEventListener(
     "pointerdown",
     (event) => {
-      const toggle = event.target.closest?.("[data-journal-fold]");
-      if (toggle && page.contains(toggle) && !event.target.closest(".journal-fold__panel")) {
+      const from = eventTargetElement(event.target);
+      const toggle = from?.closest?.("[data-journal-fold]");
+      if (toggle && page.contains(toggle) && !from.closest(".journal-fold__panel")) {
         const root = toggle.closest(".journal-fold");
         foldTogglePointer = { id: root?.id || "", at: Date.now() };
       }
-      const field = event.target.closest?.(JOURNAL_EDIT_SELECTOR);
-      if (field && event.target.closest(".journal-fold__panel")) {
+      const field = from?.closest?.(JOURNAL_EDIT_SELECTOR);
+      if (field && from.closest(".journal-fold__panel")) {
         event.stopPropagation();
       }
     },
@@ -15073,7 +15080,7 @@ function catchAsync(run, fallbackMessage) {
 }
 
 function handleTodayPointerClick(event) {
-  const node = event?.target;
+  const node = eventTargetElement(event?.target);
   if (!node || typeof node.closest !== "function") return false;
   if (event._nichiTodayHandled) return false;
   if (!node.closest("#page-today")) return false;
@@ -15089,9 +15096,6 @@ function handleTodayPointerClick(event) {
     const root = foldBtn.closest(".journal-fold");
     handled();
     if (!root?.id) return true;
-    const pointerOk = foldTogglePointer.id === root.id && Date.now() - foldTogglePointer.at < 800;
-    const keyboardOk = foldBtn === document.activeElement || foldBtn.contains(document.activeElement);
-    if (!pointerOk && !keyboardOk) return true;
     foldTogglePointer = { id: "", at: 0 };
     toggleJournalFold(root.id);
     return true;

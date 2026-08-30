@@ -50,8 +50,8 @@ assert(app.includes("NichiTaskSidebar") && html.includes("lib/task-sidebar.js"),
 assert(css.includes("complete-confirm-actions"), "CASE AC：confirm 按鈕排版");
 assert(!app.includes("CREATE TABLE") && !app.includes("ALTER TABLE"), "CASE AE：無 schema");
 assert(!html.includes("billing") || app.includes("function trackProduct"), "CASE AF：billing 路徑未當這次主改");
-assert(html.includes("app.js?v=244"), "cache app.js v=244");
-assert(html.includes("app.css?v=211"), "cache app.css v=211");
+assert(html.includes("app.js?v=245"), "cache app.js v=245");
+assert(html.includes("app.css?v=212"), "cache app.css v=212");
 assert(html.includes("lib/review-merge.js?v=9"), "cache review-merge v=9");
 
 assert(reviewIsFinalized({ completedAt: "2026-08-01T10:00:00.000Z" }) === true, "CASE X：有 completedAt 即完成");
@@ -125,5 +125,13 @@ assert(!noneBlock.includes(".journal-fold__toggle"), "archived pointer-events no
 assert(!noneBlock.includes(".journal-fold {"), "archived 不整張 card pointer-events none");
 assert(css.includes("#page-today.is-archived .journal-fold__toggle"), "archived accordion 明確可點");
 assert(html.includes('data-journal-fold') && html.includes("id=\"section-thanks\"") && html.includes("id=\"section-exec\""), "CASE A：01～06 fold trigger 仍在");
+assert(app.includes("function eventTargetElement"), "fold click 可從 text node 找到 header");
+assert(!clickFn.includes("if (!pointerOk && !keyboardOk) return true;"), "iOS／LINE：header click 不再要求 pointerdown");
+assert(clickFn.includes("toggleJournalFold(root.id)"), "header／chevron click 直接 toggle");
+assert(app.includes('if (saved == null) return { open: "section-thanks" }'), "新帳號沒有 fold prefs 時預設展開 01");
+assert(css.includes("touch-action: manipulation"), "accordion header 避免 iOS 點擊延遲");
+assert(css.includes("min-height: min-content"), "open 時 inner 不被 Safari 0fr 算成 0 高");
+assert(app.includes("renderCombinedHighlightedText") && app.includes("userMarkBag"), "highlight 路徑未因 fold fix 改掉");
+assert(app.includes("bindCloudLiveSync"), "cloud sync 初始化仍在");
 
 console.log("journal complete / autosave tests passed");

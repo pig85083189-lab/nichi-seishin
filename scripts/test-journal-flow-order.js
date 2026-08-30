@@ -190,6 +190,11 @@ assert(app.includes("function journalVoiceHintHtml") && app.includes("think-guid
 assert(!app.includes("getUserMedia") && !app.includes("webkitSpeechRecognition") && !app.includes("SpeechRecognition"), "不新增錄音／語音辨識 API");
 assert(css.includes(".journal-voice-hint") && !html.includes("id=\"btnVoice") && !html.includes("語音輸入</button>"), "提示是輕量文字不是按鈕");
 
+assert(thanksFold.includes("data-journal-fold") && eventFold.includes("data-journal-fold") && bodyFold.includes("data-journal-fold") && deepFold.includes("data-journal-fold") && awareFold.includes("data-journal-fold") && execFold.includes("data-journal-fold"), "01～06 header 都可點");
+assert(html.includes('id="section-thanks"') && html.includes("journal-fold is-open"), "空畫面預設 01 展開");
+assert(app.includes("function journalFoldPrefs") && app.includes('return { open: "section-thanks" }'), "新帳號 fold prefs 預設 01");
+assert(!app.includes("if (!pointerOk && !keyboardOk) return true;"), "新帳號／iOS 點 header 不會被 pointerdown 門檻吃掉");
+
 assert(!html.includes("CREATE TABLE") && !app.includes("ALTER TABLE"), "CASE T：沒有 schema SQL");
 assert(!/UPDATE\s+reviews/i.test(app), "CASE T：沒有批次 UPDATE 舊 reviews");
 
