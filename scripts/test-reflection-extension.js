@@ -427,8 +427,87 @@ const reset = internalTest.applyInternalTodayReset({
 assert(reset.journal.internalTestRuns[0].snapshot.journal.insight.guide.extension.rounds.length === 2, "internal reset snapshot 含 extension");
 assert(!reset.journal.insight, "fresh run 清空 extension");
 
-assert(html.includes("app.js?v=261"), "cache js");
+assert(html.includes("app.js?v=262"), "cache js");
 assert(html.includes("app.css?v=226"), "cache css");
-assert(html.includes("lib/review-merge.js?v=18"), "cache merge");
+assert(html.includes("lib/review-merge.js?v=19"), "cache merge");
+
+assert(app.includes("id=\"btnThinkExtStart\""), "A: CTA id");
+assert(app.includes('node.closest("#btnThinkExtStart")'), "A: delegated handler 有 extension case");
+assert(app.includes("generateThinkExtensionAsk({ confirmed: true })"), "A: click 進 ask");
+assert(app.includes("正在往裡面整理…"), "B: click 後立即 loading 文案");
+assert(app.includes("${loading ? \"disabled\" : \"\"}"), "B: loading 時 CTA disabled");
+assert(app.includes('mode: "insight"') && app.includes('variant: "reflection-extension-v1"') && app.includes('step: "ask"'), "C: 一次 insight extension ask");
+assert(reviewJs.includes("reflectionExt.isReflectionExtensionRequest"), "D: server 支援 frontend mode");
+assert(app.includes("if (questions.length < 3)"), "E: 必須 3 題");
+assert(app.includes("upsertThinkExtensionRound"), "F: persist 用 upsert 不會丢掉 draft");
+assert(app.includes('role="radiogroup"') && app.includes('type="radio"'), "G: 三題 single-select");
+assert(app.includes("state.choicesBusy?.thinkExt") && app.includes("state.choicesToken.thinkExt"), "H: 生成中同一 round 一個 request");
+assert(app.includes("persistJournalNow();") && app.includes("function renderThinkExtension"), "I: persist 後可 reload");
+
+const firstDraft = reviewMerge.normalizeReflectionExtension({
+  rounds: [{ id: "ext_first", questions: [], selectedQuestionId: "", answer: "", deepConclusion: "" }],
+});
+assert(firstDraft.rounds.length === 1 && firstDraft.rounds[0].id === "ext_first", "J: extension 不存在／空 draft 可建立第一次");
+assert(reviewMerge.completedExtensionCount({}) === 0, "J: extension 不存在 completedCount=0");
+assert(reviewMerge.completedExtensionCount(firstDraft) === 0, "J: 空 draft 不算完成");
+assert(reflectionExt.extensionAskAllowed(firstDraft, "ext_first"), "J: 第一次一定可用");
+
+const oneDone = reviewMerge.normalizeReflectionExtension({
+  rounds: [
+    {
+      id: "ext1",
+      questions: [{ id: "eq1", text: "一？" }, { id: "eq2", text: "二？" }, { id: "eq3", text: "三？" }],
+      selectedQuestionId: "eq1",
+      answer: "我已經寫下真正想到的答案了。",
+      deepConclusion: "你看見的是選擇正在被交換。",
+      completedAt: "2026-08-31T01:00:00.000Z",
+    },
+  ],
+});
+assert(reviewMerge.completedExtensionCount(oneDone) === 1, "K: 完成 1 次");
+assert(reflectionExt.extensionAskAllowed(oneDone, "ext2"), "K: 第二次可用");
+
+const twoDone = reviewMerge.normalizeReflectionExtension({
+  rounds: [
+    oneDone.rounds[0],
+    {
+      id: "ext2",
+      questions: [{ id: "eq1", text: "四？" }, { id: "eq2", text: "五？" }, { id: "eq3", text: "六？" }],
+      selectedQuestionId: "eq2",
+      answer: "第二次我也認真回答了這件事。",
+      deepConclusion: "你看見的是界線還沒被說出口。",
+      completedAt: "2026-08-31T02:00:00.000Z",
+    },
+  ],
+});
+assert(reviewMerge.completedExtensionCount(twoDone) === 2, "L: 完成 2 次");
+assert(!reflectionExt.extensionAskAllowed(twoDone, "ext3"), "L: 2/2 才禁止再延伸");
+
+const produced = [
+  { id: "eq1", text: "這段安排裡，有沒有把最省事和長期交換混在一起？" },
+  { id: "eq2", text: "如果男友這件事消失，家裡的不舒服還在嗎？" },
+  { id: "eq3", text: "你比較不能接受的是環境，還是自己沒有位置？" },
+];
+const dropped = reviewMerge.normalizeReflectionExtension({
+  rounds: [{ id: "ext_click", questions: [], answer: "", deepConclusion: "" }],
+});
+const oldMap = {
+  variant: "reflection-extension-v1",
+  rounds: dropped.rounds.map((item) => (item.id === "missing" ? { ...item, questions: produced } : item)),
+};
+assert(oldMap.rounds.every((item) => !item.questions.length) || dropped.rounds.length === 1, "舊 map 路徑在空 rounds 時會丢掉題");
+const saved = reviewMerge.upsertReflectionExtensionRound(dropped, {
+  id: "ext_click",
+  questions: produced,
+  sourceSig: "thanks\nevent\nmood\nbody\n\n\nquote\nq1|q2|q3",
+});
+assert(saved.rounds.length === 1, "F: upsert 後仍是 1 round");
+assert(saved.rounds[0].questions.length === 3, "E/F: 三題寫回同一 draft");
+assert(reviewMerge.completedExtensionCount(saved) === 0, "完成數仍為 0，尚未有結論");
+
+assert(app.includes("reportThinkExtDebug"), "Internal debug 存在");
+assert(app.includes("這次沒有整理完成，再試一次。"), "失敗 toast");
+assert(css.includes(".think-ext-cta") && css.includes("min-height: 44px"), "M: CTA touch friendly");
+assert(!/pointer-events:\s*none/.test(css.split(".think-ext-cta")[1].slice(0, 80) || ""), "M: CTA 沒有 pointer-events none");
 
 console.log("reflection-extension tests passed");

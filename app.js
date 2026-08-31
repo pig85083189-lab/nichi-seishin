@@ -11065,6 +11065,33 @@ function applyThinkExtension(extension) {
   return insight;
 }
 
+function upsertThinkExtensionRound(extension, round) {
+  const api = reviewMergeApi();
+  if (typeof api.upsertReflectionExtensionRound === "function") {
+    return api.upsertReflectionExtensionRound(extension, round);
+  }
+  const ext = normalizeReflectionExtension(extension);
+  const next = { id: String((round && round.id) || newThinkExtensionRoundId()), ...(round || {}) };
+  const index = ext.rounds.findIndex((item) => item.id === next.id);
+  const rounds = ext.rounds.slice();
+  if (index >= 0) rounds[index] = { ...rounds[index], ...next };
+  else rounds.push(next);
+  return { variant: "reflection-extension-v1", rounds: rounds.slice(0, 2) };
+}
+
+function reportThinkExtDebug(info) {
+  if (typeof isInternalMembership === "function" && !isInternalMembership()) return;
+  const payload = {
+    extensionClick: Boolean(info && info.extensionClick),
+    handlerEntered: Boolean(info && info.handlerEntered),
+    requestMode: String((info && info.requestMode) || ""),
+    httpStatus: String((info && info.httpStatus) || ""),
+    failureStage: String((info && info.failureStage) || ""),
+    actualModel: String((info && info.actualModel) || ""),
+  };
+  console.info("[ING][extension]", payload);
+}
+
 function newThinkExtensionRoundId() {
   return `ext_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -11180,8 +11207,8 @@ function renderThinkExtension() {
       current.deepConclusion &&
       (current.conclusionStale || (answerValue && thinkExtensionAnswerSig(answerValue) !== current.answerSig))
   );
-  const showEntry = !archived && !loading && completedCount === 0 && !(current && current.questions.length);
-  const showAgain = !archived && !loading && completedCount === 1 && !incomplete && ext.rounds.length < 2;
+  const showStart = !archived && completedCount === 0 && !(current && current.questions.length);
+  const showAgain = !archived && completedCount === 1 && !incomplete && ext.rounds.length < 2;
   const radios = current && current.questions.length
     ? current.questions
         .map((item, index) => {
@@ -11201,9 +11228,9 @@ function renderThinkExtension() {
   root.hidden = false;
   root.innerHTML = `
     <section class="think-ext-block">
-      ${showEntry ? `
+      ${showStart ? `
         <p class="think-ext-lead">想再往裡面看一點？</p>
-        <button class="body-mind-cta think-ext-cta" id="btnThinkExtStart" type="button">延伸深度思考 →</button>` : ""}
+        <button class="body-mind-cta think-ext-cta" id="btnThinkExtStart" type="button" ${loading ? "disabled" : ""}>${loading ? "正在往裡面整理…" : "延伸深度思考 →"}</button>` : ""}
       ${current && current.questions.length ? `
         <p class="think-ext-kicker">延伸深度思考</p>
         <p class="think-ext-prompt">如果想再往裡面看一點，<br />哪一題最讓你停下來？</p>
@@ -11225,11 +11252,11 @@ function renderThinkExtension() {
           </div>` : ""}` : ""}
       ${loading ? `
         <div class="check-loading" id="thinkExtLoading">
-          <p class="check-loading__label">${current && current.selectedQuestionId && answerMeaningful && !showEntry ? "正在整理這次的深度思考…" : "正在整理延伸深度思考…"}</p>
+          <p class="check-loading__label">${current && current.selectedQuestionId && answerMeaningful && !showStart ? "正在整理這次的深度思考…" : "正在往裡面整理…"}</p>
           <div class="ai-thinking__bar"><i></i></div>
         </div>` : ""}
       ${completedCount ? `<p class="think-ext-count">今日已完成 ${completedCount} / 2 次延伸思考</p>` : ""}
-      ${showAgain ? `<button class="think-ext-text-btn" id="btnThinkExtAgain" type="button">再延伸一次 →</button>` : ""}
+      ${showAgain ? `<button class="think-ext-text-btn" id="btnThinkExtAgain" type="button" ${loading ? "disabled" : ""}>${loading ? "正在往裡面整理…" : "再延伸一次 →"}</button>` : ""}
     </section>`;
   paintInternalModelDebug(root, state.internalModelDebug && state.internalModelDebug.thinkExt);
 }
@@ -11284,12 +11311,16 @@ function selectThinkExtensionQuestion(questionId) {
 async function generateThinkExtensionAsk(options = {}) {
   if (!options || options.confirmed !== true) return;
   if (options.auto) return;
+  reportThinkExtDebug({ handlerEntered: true, failureStage: "ELIGIBILITY" });
   if (rejectArchivedJournalWrite(options)) return;
   if (isCurrentJournalArchived() || state.choicesBusy?.thinkExt) return;
   if (!ensurePlusFeature("think_ai", options)) return;
   const journal = collectJournal();
   const guide = normalizeThinkGuide(((journal.insight || state.journalInsight || {}).guide));
-  if (!(guide.coreQuote && guide.questions.length >= 3)) return;
+  if (!(guide.variant === "reflection-v3" && guide.coreQuote && guide.questions.length >= 3)) {
+    reportThinkExtDebug({ handlerEntered: true, failureStage: "ELIGIBILITY" });
+    return;
+  }
   const ext = normalizeReflectionExtension(guide.extension);
   const completedCount = ext.rounds.filter(isThinkExtensionRoundCompleted).length;
   const draft = ext.rounds.find((item) => !isThinkExtensionRoundCompleted(item));
@@ -11299,7 +11330,10 @@ async function generateThinkExtensionAsk(options = {}) {
   }
   let current = draft;
   if (!current) {
-    if (completedCount >= 2 || ext.rounds.length >= 2) return;
+    if (completedCount >= 2) {
+      reportThinkExtDebug({ handlerEntered: true, failureStage: "ELIGIBILITY" });
+      return;
+    }
     current = {
       id: newThinkExtensionRoundId(),
       questions: [],
@@ -11312,12 +11346,11 @@ async function generateThinkExtensionAsk(options = {}) {
       stale: false,
       conclusionStale: false,
     };
-    ext.rounds = ext.rounds.concat(current).slice(0, 2);
   }
   const token = (state.choicesToken.thinkExt || 0) + 1;
   state.choicesToken.thinkExt = token;
   state.choicesBusy.thinkExt = true;
-  applyThinkExtension(ext);
+  applyThinkExtension(upsertThinkExtensionRound(ext, current));
   persistJournalNow();
   renderThinkExtension();
   try {
@@ -11326,6 +11359,7 @@ async function generateThinkExtensionAsk(options = {}) {
     ctx.roundId = current.id;
     ctx.persistedExtension = thinkExtensionFrom();
     if (options.refresh) ctx.force = true;
+    reportThinkExtDebug({ handlerEntered: true, requestMode: "insight", failureStage: "REQUEST" });
     const remote = await postReview({
       mode: "insight",
       variant: "reflection-extension-v1",
@@ -11339,39 +11373,53 @@ async function generateThinkExtensionAsk(options = {}) {
       },
     });
     if (state.choicesToken.thinkExt !== token) return;
+    reportThinkExtDebug({
+      handlerEntered: true,
+      requestMode: "insight",
+      httpStatus: "200",
+      actualModel: remote && remote._internalDebug && remote._internalDebug.model,
+      failureStage: "PARSE",
+    });
     const questions = Array.isArray(remote.questions)
       ? remote.questions.map((item, index) => ({
           id: String((item && item.id) || `eq${index + 1}`),
           text: String((item && (item.text || item.question)) || "").replace(/\s+/g, " ").trim(),
         })).filter((item) => item.text).slice(0, 3)
       : [];
-    if (questions.length < 3) throw new Error("延伸深度思考還沒整理好，請再試一次。");
+    if (questions.length < 3) throw new Error("這次沒有整理完成，再試一次。");
     const latest = thinkExtensionFrom();
     const kept = latest.rounds.find((item) => item.id === current.id) || current;
-    applyThinkExtension({
-      ...latest,
-      rounds: latest.rounds.map((item) =>
-        item.id === current.id
-          ? {
-              ...kept,
-              questions,
-              selectedQuestionId: kept.questions.some((q) => q.id === kept.selectedQuestionId)
-                ? kept.selectedQuestionId
-                : "",
-              sourceSig: reflectionExtensionSourceSig(collectJournal()),
-              stale: false,
-            }
-          : item
-      ),
-    });
+    applyThinkExtension(
+      upsertThinkExtensionRound(latest, {
+        ...kept,
+        id: current.id,
+        questions,
+        selectedQuestionId: kept.questions.some((q) => q.id === kept.selectedQuestionId) ? kept.selectedQuestionId : "",
+        sourceSig: reflectionExtensionSourceSig(collectJournal()),
+        stale: false,
+      })
+    );
     if (!state.internalModelDebug) state.internalModelDebug = {};
     state.internalModelDebug.thinkExt = takeInternalDebug(remote);
     persistJournalNow();
+    reportThinkExtDebug({
+      handlerEntered: true,
+      requestMode: "insight",
+      httpStatus: "200",
+      actualModel: remote && remote._internalDebug && remote._internalDebug.model,
+      failureStage: "RENDER",
+    });
     renderThinkExtension();
   } catch (error) {
     if (state.choicesToken.thinkExt !== token) return;
+    reportThinkExtDebug({
+      handlerEntered: true,
+      requestMode: "insight",
+      httpStatus: error && error.status ? String(error.status) : "error",
+      failureStage: "SERVER",
+    });
     if (isPlusRequiredError(error)) return;
-    showToast(formatApiError(error) || "延伸深度思考還沒整理好，請再試一次。");
+    showToast(formatApiError(error) || "這次沒有整理完成，再試一次。");
     renderThinkExtension();
   } finally {
     if (state.choicesToken.thinkExt === token) {
@@ -11426,21 +11474,17 @@ async function generateThinkExtensionClose(options = {}) {
     if (!deepConclusion) throw new Error("這次的深度結論還沒整理好，請再試一次。");
     const latest = thinkExtensionFrom();
     const kept = latest.rounds.find((item) => item.id === current.id) || current;
-    applyThinkExtension({
-      ...latest,
-      rounds: latest.rounds.map((item) =>
-        item.id === current.id
-          ? {
-              ...kept,
-              answer,
-              answerSig: thinkExtensionAnswerSig(answer),
-              deepConclusion,
-              completedAt: kept.completedAt || new Date().toISOString(),
-              conclusionStale: false,
-            }
-          : item
-      ),
-    });
+    applyThinkExtension(
+      upsertThinkExtensionRound(latest, {
+        ...kept,
+        id: current.id,
+        answer,
+        answerSig: thinkExtensionAnswerSig(answer),
+        deepConclusion,
+        completedAt: kept.completedAt || new Date().toISOString(),
+        conclusionStale: false,
+      })
+    );
     if (!state.internalModelDebug) state.internalModelDebug = {};
     state.internalModelDebug.thinkExt = takeInternalDebug(remote);
     persistJournalNow();
@@ -17679,7 +17723,8 @@ function handleTodayPointerClick(event) {
   }
   if (node.closest("#btnThinkExtStart") || node.closest("#btnThinkExtAgain")) {
     handled();
-    catchAsync(() => generateThinkExtensionAsk({ confirmed: true }), "延伸深度思考還沒整理好");
+    reportThinkExtDebug({ extensionClick: true, handlerEntered: true, failureStage: "CLICK" });
+    catchAsync(() => generateThinkExtensionAsk({ confirmed: true }), "這次沒有整理完成，再試一次。");
     return true;
   }
   if (node.closest("#btnThinkExtRefresh")) {
