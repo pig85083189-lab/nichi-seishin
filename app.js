@@ -6221,7 +6221,10 @@ function thinkV2Closed(guide) {
 
 function thinkGuideDone(guide) {
   const data = normalizeThinkGuide(guide);
-  if (data.variant === "reflection-v3") return Boolean(data.coreQuote && data.questions.length >= 2);
+  if (data.variant === "reflection-v3") {
+    if (data.status === "empty" && data.sourceSig) return true;
+    return Boolean(data.coreQuote || (data.questions && data.questions.length >= 1));
+  }
   if (data.variant === "think-v2") return thinkV2Closed(data);
   const answered = data.rounds.filter((item) => item.answer).length >= 3;
   if (!answered) return false;
@@ -10857,7 +10860,8 @@ function reflectionV3Ready(journal) {
 
 function reflectionV3Stale(guide, journal) {
   const data = normalizeThinkGuide(guide);
-  if (data.variant !== "reflection-v3" || !data.coreQuote || data.questions.length < 2 || !data.sourceSig) return false;
+  if (data.variant !== "reflection-v3" || !data.sourceSig) return false;
+  if (!(data.coreQuote || data.status === "empty" || data.questions.length >= 1)) return false;
   return data.sourceSig !== reflectionV3SourceSig(journal);
 }
 
@@ -10895,7 +10899,7 @@ function syncThinkV3Cta() {
   const archived = isCurrentJournalArchived();
   const ready = reflectionV3Ready();
   const guide = normalizeThinkGuide((state.journalInsight || {}).guide);
-  const hasResult = guide.variant === "reflection-v3" && guide.coreQuote && guide.questions.length >= 2;
+  const hasResult = guide.variant === "reflection-v3" && guide.sourceSig && (guide.coreQuote || guide.status === "empty" || guide.questions.length >= 1);
   const stale = hasResult && reflectionV3Stale(guide);
   const show = usesReflectionV3Path() && !archived && (!hasResult || stale);
   btn.hidden = !show;
@@ -10970,7 +10974,7 @@ async function generateReflectionV3(options = {}) {
   if (!ensurePlusFeature("think_ai", options)) return;
   const sig = reflectionV3SourceSig(journal);
   const current = normalizeThinkGuide((state.journalInsight || {}).guide);
-  if (current.variant === "reflection-v3" && current.coreQuote && current.questions.length >= 2 && current.sourceSig === sig && !options.force) {
+  if (current.variant === "reflection-v3" && current.sourceSig === sig && (current.coreQuote || current.status === "empty" || current.questions.length >= 1) && !options.force) {
     renderThinkV3();
     return;
   }
@@ -11000,7 +11004,19 @@ async function generateReflectionV3(options = {}) {
       Array.isArray(remote.items) && remote.items.length ? remote.items : remote.questions,
       "q"
     );
-    if (!coreQuote || questions.length < 2) throw new Error("今天的深度思考還沒整理好，請再試一次。");
+    if (remote && remote.status === "empty") {
+      applyReflectionV3Guide({
+        status: "empty",
+        sourceSig: sig,
+        coreQuote: "",
+        questions: [],
+        generatedAt: new Date().toISOString(),
+      });
+      persistJournalQuietly();
+      renderThinkV3();
+      return;
+    }
+    if (!coreQuote && questions.length < 1) throw new Error("今天的深度思考還沒整理好，請再試一次。");
     applyReflectionV3Guide({
       status: "generated",
       sourceSig: sig,
@@ -11314,7 +11330,7 @@ function renderThinkExtension() {
   if (!root) return;
   const archived = isCurrentJournalArchived();
   const guide = normalizeThinkGuide((state.journalInsight || {}).guide);
-  const hasLayer = guide.variant === "reflection-v3" && Boolean(guide.coreQuote) && guide.questions.length >= 2;
+  const hasLayer = guide.variant === "reflection-v3" && Boolean(guide.coreQuote) && guide.questions.length >= 1;
   const ext = normalizeReflectionExtension(guide.extension);
   const loading = Boolean(state.choicesBusy?.thinkExt);
   const completedRounds = ext.rounds.filter(isThinkExtensionRoundCompleted);
@@ -11502,7 +11518,7 @@ async function generateThinkExtensionAsk(options = {}) {
   if (!ensurePlusFeature("think_ai", options)) return;
   const journal = collectJournal();
   const guide = normalizeThinkGuide(((journal.insight || state.journalInsight || {}).guide));
-  if (!(guide.variant === "reflection-v3" && guide.coreQuote && guide.questions.length >= 2)) {
+  if (!(guide.variant === "reflection-v3" && guide.coreQuote && guide.questions.length >= 1)) {
     reportThinkExtDebug({ handlerEntered: true, failureStage: "ELIGIBILITY" });
     return;
   }
@@ -11578,7 +11594,7 @@ async function generateThinkExtensionAsk(options = {}) {
       Array.isArray(remote.items) && remote.items.length ? remote.items : remote.questions,
       "eq"
     );
-    if (questions.length < 3) throw new Error("這次沒有整理完成，再試一次。");
+    if (questions.length < 1) throw new Error("這次沒有整理完成，再試一次。");
     const latest = thinkExtensionFrom();
     const kept = latest.rounds.find((item) => item.id === current.id) || current;
     applyThinkExtension(

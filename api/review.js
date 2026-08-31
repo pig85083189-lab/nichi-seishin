@@ -15,6 +15,7 @@ const awarenessV3 = require("../lib/awareness-v3");
 const executionV3 = require("../lib/execution-v3");
 const execV2 = require("../lib/exec-v2");
 const reflectionHistory = require("../lib/reflection-history-retrieval");
+const insightReason = require("../lib/insight-reason");
 
 const HIGHLIGHT_RULE = `【重點反白 highlights】
 從你實際生成的原文中，挑選最值得停下來看的核心片段。目的是抓重點，不是把整段塗成彩色。
@@ -3437,7 +3438,7 @@ module.exports = async function handler(req, res) {
       } else if (reflectionExt.isReflectionExtensionRequest(body)) {
         const quote = String(ctx.coreQuote || ctx.thinkCoreQuote || "").trim();
         const layerQs = Array.isArray(ctx.thinkQuestions) ? ctx.thinkQuestions : Array.isArray(ctx.questions) ? ctx.questions : [];
-        if (!quote || layerQs.length < 3) {
+        if (!quote || layerQs.length < 1) {
           res.status(400).json({ ok: false, error: "請先完成今天的深度思考" });
           return;
         }
@@ -3807,6 +3808,90 @@ module.exports = async function handler(req, res) {
     if (mode === "insight" && thinkV2.isThinkV2Request(body) && thinkV2.shouldSkipThinkV2Ask(body)) {
       const skipped = thinkV2.normalizeThinkV2Ask({ readyToClose: true, question: "", unknown: "", unknownWouldChangeCore: false }, body);
       res.status(200).json({ ok: true, source: "local-stop", data: skipped });
+      return;
+    }
+    const reasonPipeline =
+      mode === "insight" &&
+      (reflectionV3.isReflectionV3Request(body) ||
+        (reflectionExt.isReflectionExtensionRequest(body) && reflectionExt.reflectionExtensionStep(body) !== "close"));
+    if (reasonPipeline) {
+      const kind = reflectionExt.isReflectionExtensionRequest(body) ? "extension" : "layer";
+      const ctx = body.context && typeof body.context === "object" ? body.context : {};
+      const callAi = (msgs, stage) =>
+        callOpenAI(msgs, {
+          ...aiOpts,
+          timeoutMs: internalUser ? 26000 : Math.min(Number(aiOpts.timeoutMs) || 22000, 22000),
+          maxTokens: stage === "write" ? 800 : 1600,
+          _retried: stage === "reason-retry",
+        });
+      const pipeline = await insightReason.runReasonWritePipeline({
+        callAi,
+        ctx,
+        kind,
+        reasonMessages: [
+          { role: "system", content: withCompleteRule(insightReason.REASONING_SYSTEM) },
+          { role: "user", content: insightReason.reasoningUserPrompt(body, kind) },
+        ],
+        writeSystem: withCompleteRule(
+          kind === "extension" ? reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM : reflectionV3.REFLECTION_V3_SYSTEM
+        ),
+      });
+      const meta = pipeline.meta || {};
+      if (kind === "layer") {
+        const gated = pipeline.empty
+          ? { coreQuote: "", questions: [], sourceSig: reflectionV3.reflectionV3SourceSig(ctx) }
+          : reflectionV3.gateReflectionV3Result(pipeline.written, ctx);
+        const empty = !gated.coreQuote && !(gated.questions && gated.questions.length);
+        const result = {
+          coreQuote: gated.coreQuote || "",
+          questions: gated.questions || [],
+          sourceSig: gated.sourceSig,
+          ...(empty ? { status: "empty" } : {}),
+        };
+        res.status(200).json({
+          ok: true,
+          source: getProvider(),
+          data: result,
+          ...(internalUser ? { _internalReason: meta } : {}),
+        });
+        return;
+      }
+      const retrieval = round1History && round1History.retrieval ? round1History.retrieval : { sourceSig: "", selectedPast: [] };
+      if (pipeline.empty) {
+        res.status(502).json({ ok: false, error: "延伸深度思考還沒整理好，請再試一次" });
+        return;
+      }
+      const asked = reflectionExt.normalizeExtensionAskResult(pipeline.written);
+      const gatedAsk = require("../lib/insight-value-gate").gateItems(asked.questions, ctx, "insight");
+      asked.questions = gatedAsk.kept;
+      if (!asked.questions.length) {
+        res.status(502).json({ ok: false, error: "延伸深度思考還沒整理好，請再試一次" });
+        return;
+      }
+      res.status(200).json({
+        ok: true,
+        source: getProvider(),
+        data: { ...asked, retrieval },
+        ...(internalUser && round1History
+          ? {
+              _internalRetrieval: {
+                count: (round1History.retrieved || []).length,
+                usedCount: (round1History.used || []).length,
+                references: retrieval.selectedPast || [],
+                timings: round1History.timings || {},
+                line: reflectionExt.formatInternalRetrievalLine({
+                  retrieved: round1History.retrieved,
+                  used: round1History.used,
+                  retrievedCount: (round1History.retrieved || []).length,
+                  usedCount: (round1History.used || []).length,
+                }),
+              },
+              _internalReason: meta,
+            }
+          : internalUser
+            ? { _internalReason: meta }
+            : {}),
+      });
       return;
     }
     let data;

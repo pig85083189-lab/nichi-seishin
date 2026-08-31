@@ -79,7 +79,7 @@ assert(reviewJs.includes("isHistoryRetrievalRequest"), "retrieval 走獨立 inte
 assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("TODAY FIRST"), "Round 1 今天優先");
 assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("HISTORICAL VALUE CHECK"), "歷史要再過 value gate");
 assert(reflectionExt.REFLECTION_EXTENSION_CLOSE_SYSTEM.includes("不要讀過往日期"), "結論仍不讀歷史");
-assert(html.includes("app.js?v=273"), "cache js");
+assert(html.includes("app.js?v=274"), "cache js");
 assert(html.includes("lib/review-merge.js?v=25"), "cache merge");
 assert(app.includes("document.getElementById(\"thinkExtAnswer\")"), "close 讀 current textarea");
 assert(app.includes("今日已完成"), "完成次數文案");
@@ -88,7 +88,7 @@ assert(app.includes("回答有修改，重新整理深度結論"), "answer stale
 assert(app.includes("readonly") && app.includes("thinkExtAnswer"), "completed 可 read-only");
 assert(internalTest.applyInternalTodayReset, "internal reset 仍在");
 
-assert(reflectionSrc.includes("OPEN THE THINKING"), "第一層 prompt 未拆");
+assert(reflectionV3.REFLECTION_V3_SYSTEM.includes("OPEN THE THINKING"), "第一層 prompt 未拆");
 assert(reflectionV3.REFLECTION_V3_SYSTEM.includes("LEADING QUESTION CHECK"), "第一層 leading 仍在");
 assert(app.includes("function generateAwarenessV3"), "05 未拆");
 assert(app.includes("function generateExecutionV3"), "06 未拆");
@@ -742,8 +742,8 @@ const reset = internalTest.applyInternalTodayReset({
 assert(reset.journal.internalTestRuns[0].snapshot.journal.insight.guide.extension.rounds.length === 2, "internal reset snapshot 含 extension");
 assert(!reset.journal.insight, "fresh run 清空 extension");
 
-assert(html.includes("app.js?v=273"), "cache js");
-assert(html.includes("app.css?v=229"), "cache css");
+assert(html.includes("app.js?v=274"), "cache js");
+assert(html.includes("app.css?v=230"), "cache css");
 assert(html.includes("lib/review-merge.js?v=25"), "cache merge");
 
 assert(app.includes("id=\"btnThinkExtStart\""), "A: CTA id");
@@ -753,7 +753,7 @@ assert(app.includes("正在往裡面整理…"), "B: click 後立即 loading 文
 assert(app.includes("${loading ? \"disabled\" : \"\"}"), "B: loading 時 CTA disabled");
 assert(app.includes('mode: "insight"') && app.includes('variant: "reflection-extension-v1"') && app.includes('step: "ask"'), "C: 一次 insight extension ask");
 assert(reviewJs.includes("reflectionExt.isReflectionExtensionRequest"), "D: server 支援 frontend mode");
-assert(app.includes("if (questions.length < 3)"), "E: 必須 3 題");
+assert(/async function generateThinkExtensionAsk[\s\S]{0,5000}if \(questions.length < 1\)/.test(app), "E: extension 允許 1 題");
 assert(app.includes("upsertThinkExtensionRound"), "F: persist 用 upsert 不會丢掉 draft");
 assert(app.includes('role="radiogroup"') && app.includes('type="radio"'), "G: 三題 single-select");
 assert(app.includes("state.choicesBusy?.thinkExt") && app.includes("state.choicesToken.thinkExt"), "H: 生成中同一 round 一個 request");

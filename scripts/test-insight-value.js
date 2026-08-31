@@ -8,6 +8,7 @@ const awarenessV3 = require("../lib/awareness-v3");
 const executionV3 = require("../lib/execution-v3");
 const reviewMerge = require("../lib/review-merge");
 const valueGate = require("../lib/insight-value-gate");
+const insightReason = require("../lib/insight-reason");
 
 function assert(cond, message) {
   if (!cond) throw new Error(message);
@@ -31,8 +32,8 @@ const REFERENCE_CTX = {
   bodyMindText: "心情很好，可是身體比較累。",
 };
 
-assert(html.includes("app.js?v=273"), "cache app.js");
-assert(html.includes("app.css?v=229"), "cache css");
+assert(html.includes("app.js?v=274"), "cache app.js");
+assert(html.includes("app.css?v=230"), "cache css");
 assert(html.includes("lib/review-merge.js?v=25"), "cache merge");
 assert(!html.includes("CREATE TABLE") && !app.includes("ALTER TABLE"), "zero schema");
 
@@ -394,16 +395,20 @@ const awareKeep = awarenessV3.normalizeAwarenessV3Result(
 );
 assert(awareKeep.items.length === 2, `05 gate 應丟掉空話、留下 2 句：${awareKeep.items.length}`);
 
-assert(reviewJs.includes("gateReflectionV3Result"), "04 production 必須執行 value gate");
-assert(reviewJs.includes("reflectionV3ValueGateRetryPrompt"), "04 fail 只 regen 一次");
+assert(reviewJs.includes("runReasonWritePipeline"), "04/extension 走 reasoning pipeline");
+assert(reviewJs.includes("insightReason.REASONING_SYSTEM"), "Call 1 是 Reasoning Engine");
+assert(reviewJs.includes('stage === "write"'), "Call 2 是 Mentor Writer");
+assert(reviewJs.includes("gateReflectionV3Result"), "Writer 輸出仍過 value gate");
 assert(reviewJs.includes("gateAwarenessV3Result"), "05 production 必須執行 value gate");
 assert(reviewJs.includes("awarenessV3ValueGateRetryPrompt"), "05 fail 只 regen 一次");
-assert(reviewJs.includes("questions.length < 2"), "04 允許 2 題，低於 2 才 502");
+assert(reviewJs.includes('status: "empty"'), "0 pass 允許 empty fallback");
 assert(!reviewJs.includes("result.questions.length < 3"), "04 不再為湊 3 把垃圾放行");
-assert(app.includes("if (questions.length < 3)"), "extension 仍要 3 題");
-assert(app.includes("if (!coreQuote || questions.length < 2)"), "client 04 接受 2 題");
+assert(app.includes("if (questions.length < 1)"), "04/extension 允許 1 題");
+assert(app.includes('remote && remote.status === "empty"'), "client 接受 0-item empty");
 assert(voice.VALUE_ENGINE_BLOCK.includes("想睡 → 累"), "prompt 有 trivial kill-list");
 assert(!voice.VALUE_ENGINE_BLOCK.includes("不代表身體就不需要休息"), "不再把想睡不衝突當好例子");
+assert(insightReason.REASONING_SYSTEM.includes("不要寫 title"), "Reasoning 不寫文案");
+assert(insightReason.WRITER_SYSTEM.includes("只寫 PASS"), "Writer 不看 DROP");
 
 const retry = reflectionV3.reflectionV3ValueGateRetryPrompt(mixed.dropped);
 assert(retry.includes("不要撿回來"), "retry 不可把 failed candidate 留回");

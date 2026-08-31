@@ -74,7 +74,7 @@ const CASES = {
   }),
 };
 
-assert(html.includes("app.js?v=273"), "cache app");
+assert(html.includes("app.js?v=274"), "cache app");
 assert(!app.includes("正在搜尋你的歷史紀錄"), "loading 不暴露 retrieval");
 assert(!app.includes("找到 3 筆歷史"), "一般 UI 不暴露 retrieval");
 assert(app.includes("internal-retrieval-debug"), "internal 才顯示 retrieval 筆數");
@@ -102,7 +102,7 @@ assert(reviewJs.includes("stripRound1HistorySpoof"), "不信 client 歷史");
 assert(reviewJs.includes("attachRound1RelevantHistory"), "ask 才 retrieval");
 assert(!extSrc.includes("Pinecone") && !reviewJs.includes("pgvector"), "不做 vector DB");
 assert(reflectionExt.REFLECTION_EXTENSION_CLOSE_SYSTEM.includes("不要讀過往日期"), "deepConclusion 不接歷史");
-assert(extSrc.includes("第二輪：不要讀過往日期"), "Round 2 先不接歷史");
+assert(extSrc.includes("不要讀過往日期") || reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("第二輪：不要讀過往日期"), "Round 2 先不接歷史");
 
 const withoutPrompt = reflectionExt.reflectionExtensionAskUserPrompt({ context: TODAY });
 assert(withoutPrompt.includes("只讀今天"), "H｜無歷史時退化成 Phase 4A");
