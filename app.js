@@ -11054,13 +11054,33 @@ function thinkExtensionFrom(guide) {
 function isThinkExtensionRoundCompleted(round) {
   const api = reviewMergeApi();
   if (typeof api.isExtensionRoundCompleted === "function") return api.isExtensionRoundCompleted(round);
-  return Boolean(
-    round &&
-      String(round.deepConclusion || "").trim() &&
-      String(round.completedAt || "").trim() &&
-      String(round.selectedQuestionId || "").trim() &&
-      String(round.answer || "").replace(/\s+/g, "").trim().length >= 8
-  );
+  return Boolean(round && String(round.deepConclusion || "").replace(/\s+/g, " ").trim() && String(round.completedAt || "").trim());
+}
+
+function thinkExtensionCanStartRound2(extension, options = {}) {
+  const api = reviewMergeApi();
+  if (typeof api.canStartExtensionRound2 === "function") return api.canStartExtensionRound2(extension, options);
+  const ext = normalizeReflectionExtension(extension);
+  const completed = ext.rounds.filter(isThinkExtensionRoundCompleted).length;
+  if (options.archived || options.busy) return false;
+  return completed === 1 && ext.rounds.length >= 1;
+}
+
+function emptyThinkExtensionRound(id) {
+  return {
+    id: String(id || newThinkExtensionRoundId()),
+    coreThread: "",
+    questions: [],
+    selectedQuestionId: "",
+    selectedQuestionText: "",
+    answer: "",
+    answerSig: "",
+    deepConclusion: "",
+    completedAt: "",
+    sourceSig: "",
+    stale: false,
+    conclusionStale: false,
+  };
 }
 
 function thinkExtensionCompletedCount(extension) {
@@ -11120,6 +11140,47 @@ function reportInternalRetrievalDebug(info) {
       used: item && item.used === true,
     })),
     retrievalMs: info && info.timings ? Number(info.timings.retrievalMs) || 0 : 0,
+  });
+}
+
+function paintInternalExtensionDebug(root, info) {
+  if (!root) return;
+  root.querySelectorAll(".internal-extension-debug").forEach((node) => node.remove());
+  if (typeof isInternalMembership === "function" && !isInternalMembership()) return;
+  const data = info && typeof info === "object" ? info : {};
+  const summary = document.createElement("p");
+  summary.className = "internal-model-debug internal-extension-debug";
+  summary.textContent = `Internal Extension · rounds ${Number(data.roundsLength) || 0} · completed ${Number(data.completedCount) || 0}/2 · canRound2 ${data.canStartRound2 ? "yes" : "no"}`;
+  const box = document.createElement("pre");
+  box.className = "internal-model-debug internal-extension-debug";
+  box.textContent = [
+    "Extension Debug",
+    `rounds.length = ${Number(data.roundsLength) || 0}`,
+    `completedCount = ${Number(data.completedCount) || 0}`,
+    `round[0].id = ${data.round0Id || "(none)"}`,
+    `round[0].questions = ${Number(data.round0Questions) || 0}`,
+    `round[0].answer = ${Boolean(data.round0HasAnswer)}`,
+    `round[0].deepConclusion = ${Boolean(data.round0HasDeepConclusion)}`,
+    `round[0].completedAt = ${Boolean(data.round0HasCompletedAt)}`,
+    `canStartRound2 = ${Boolean(data.canStartRound2)}`,
+    `round2CTA rendered = ${Boolean(data.round2CtaRendered)}`,
+    `round2CTA disabled = ${Boolean(data.round2CtaDisabled)}`,
+    `dailyLimitReached = ${Boolean(data.dailyLimitReached)}`,
+  ].join("\n");
+  root.appendChild(summary);
+  root.appendChild(box);
+  console.info("[ING][extension-state]", {
+    roundsLength: Number(data.roundsLength) || 0,
+    completedCount: Number(data.completedCount) || 0,
+    round0Id: data.round0Id || "",
+    round0Questions: Number(data.round0Questions) || 0,
+    round0HasAnswer: Boolean(data.round0HasAnswer),
+    round0HasDeepConclusion: Boolean(data.round0HasDeepConclusion),
+    round0HasCompletedAt: Boolean(data.round0HasCompletedAt),
+    canStartRound2: Boolean(data.canStartRound2),
+    round2CtaRendered: Boolean(data.round2CtaRendered),
+    round2CtaDisabled: Boolean(data.round2CtaDisabled),
+    dailyLimitReached: Boolean(data.dailyLimitReached),
   });
 }
 
@@ -11288,6 +11349,9 @@ function renderThinkExtension() {
   const completedCount = completedRounds.length;
   const incomplete = ext.rounds.find((item) => item.questions.length && !isThinkExtensionRoundCompleted(item));
   const current = incomplete || null;
+  const canStartRound2 = thinkExtensionCanStartRound2(ext, { archived, busy: loading });
+  const dailyLimitReached = completedCount >= 2;
+  const round2Active = ext.rounds.some((item, index) => index > 0 && item.questions.length && !isThinkExtensionRoundCompleted(item));
   const sourceSig = hasLayer ? reflectionExtensionSourceSig() : "";
   const questionsStale = Boolean(current && current.questions.length && current.sourceSig && current.sourceSig !== sourceSig);
   if (current && questionsStale && !current.stale) {
@@ -11310,7 +11374,7 @@ function renderThinkExtension() {
       (current.conclusionStale || (answerValue && thinkExtensionAnswerSig(answerValue) !== current.answerSig))
   );
   const showStart = !archived && completedCount === 0 && !(current && current.questions.length);
-  const showAgain = !archived && !loading && completedCount === 1 && !incomplete;
+  const showAgain = canStartRound2 && !round2Active;
   const records = completedRounds.map((round, index) => renderThinkExtensionRecord(round, index)).join("");
   const radios = current && current.questions.length
     ? current.questions
@@ -11369,6 +11433,20 @@ function renderThinkExtension() {
     </section>`;
   paintInternalModelDebug(root, state.internalModelDebug && state.internalModelDebug.thinkExt);
   paintInternalRetrievalDebug(root, current);
+  const againBtn = document.getElementById("btnThinkExtAgain");
+  paintInternalExtensionDebug(root, {
+    roundsLength: ext.rounds.length,
+    completedCount,
+    round0Id: ext.rounds[0] ? String(ext.rounds[0].id || "") : "",
+    round0Questions: ext.rounds[0] ? ext.rounds[0].questions.length : 0,
+    round0HasAnswer: Boolean(ext.rounds[0] && String(ext.rounds[0].answer || "").trim()),
+    round0HasDeepConclusion: Boolean(ext.rounds[0] && String(ext.rounds[0].deepConclusion || "").trim()),
+    round0HasCompletedAt: Boolean(ext.rounds[0] && String(ext.rounds[0].completedAt || "").trim()),
+    canStartRound2,
+    round2CtaRendered: Boolean(againBtn),
+    round2CtaDisabled: Boolean(againBtn && againBtn.disabled),
+    dailyLimitReached,
+  });
 }
 
 function syncThinkExtAnswerChrome() {
@@ -11472,36 +11550,38 @@ async function generateThinkExtensionAsk(options = {}) {
   }
   const ext = normalizeReflectionExtension(guide.extension);
   const completedCount = ext.rounds.filter(isThinkExtensionRoundCompleted).length;
-  const draft = ext.rounds.find((item) => !isThinkExtensionRoundCompleted(item));
-  if (completedCount >= 2) {
-    reportThinkExtDebug({ handlerEntered: true, failureStage: "ELIGIBILITY" });
-    renderThinkExtension();
-    return;
-  }
-  if (!options.refresh && draft && draft.questions.length) {
-    renderThinkExtension();
-    return;
-  }
-  let current = draft;
-  if (!current) {
-    if (completedCount >= 2) {
+  const firstId = String((ext.rounds[0] && ext.rounds[0].id) || "");
+  let current = null;
+  if (options.startNextRound) {
+    if (!thinkExtensionCanStartRound2(ext, { archived: false, busy: false })) {
       reportThinkExtDebug({ handlerEntered: true, failureStage: "ELIGIBILITY" });
+      renderThinkExtension();
       return;
     }
-    current = {
-      id: newThinkExtensionRoundId(),
-      coreThread: "",
-      questions: [],
-      selectedQuestionId: "",
-      selectedQuestionText: "",
-      answer: "",
-      answerSig: "",
-      deepConclusion: "",
-      completedAt: "",
-      sourceSig: "",
-      stale: false,
-      conclusionStale: false,
-    };
+    const extra = ext.rounds.filter((item) => item.id !== firstId);
+    const round2 = extra[0] || null;
+    if (round2 && round2.questions.length) {
+      renderThinkExtension();
+      return;
+    }
+    current = round2 && round2.id && round2.id !== firstId ? round2 : emptyThinkExtensionRound();
+    if (current.id === firstId) current = emptyThinkExtensionRound();
+  } else {
+    const draft = ext.rounds.find((item) => !isThinkExtensionRoundCompleted(item));
+    if (completedCount >= 2) {
+      reportThinkExtDebug({ handlerEntered: true, failureStage: "ELIGIBILITY" });
+      renderThinkExtension();
+      return;
+    }
+    if (!options.refresh && draft && draft.questions.length) {
+      renderThinkExtension();
+      return;
+    }
+    current = draft;
+    if (!current) current = emptyThinkExtensionRound();
+  }
+  if (completedCount >= 1 && current.id === firstId && firstId) {
+    current = emptyThinkExtensionRound();
   }
   const token = (state.choicesToken.thinkExt || 0) + 1;
   state.choicesToken.thinkExt = token;
@@ -17893,10 +17973,16 @@ function handleTodayPointerClick(event) {
     catchAsync(() => generateReflectionV3({ confirmed: true }), "今天的深度思考還沒整理好");
     return true;
   }
-  if (node.closest("#btnThinkExtStart") || node.closest("#btnThinkExtAgain")) {
+  if (node.closest("#btnThinkExtStart")) {
     handled();
     reportThinkExtDebug({ extensionClick: true, handlerEntered: true, failureStage: "CLICK" });
     catchAsync(() => generateThinkExtensionAsk({ confirmed: true }), "這次沒有整理完成，再試一次。");
+    return true;
+  }
+  if (node.closest("#btnThinkExtAgain")) {
+    handled();
+    reportThinkExtDebug({ extensionClick: true, handlerEntered: true, failureStage: "CLICK" });
+    catchAsync(() => generateThinkExtensionAsk({ confirmed: true, startNextRound: true }), "這次沒有整理完成，再試一次。");
     return true;
   }
   if (node.closest("#btnThinkExtRefresh")) {

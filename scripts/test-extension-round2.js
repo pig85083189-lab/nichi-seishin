@@ -93,7 +93,10 @@ const done1 = reviewMerge.normalizeReflectionExtension({ rounds: [round1Complete
 assert(reviewMerge.completedExtensionCount(done1) === 1, "F: deepConclusion + completedAt → 1");
 assert(done1.rounds[0].completedAt, "F: completedAt persisted");
 assert(reflectionExt.extensionAskAllowed(done1, "ext2"), "F: 第二次 ask 可用");
-assert(/completedCount === 1 && !incomplete/.test(app), "F: 再延伸一次看 completedCount===1");
+assert(reviewMerge.canStartExtensionRound2(done1), "F: canStartRound2 true");
+assert(!reviewMerge.extensionDailyLimitReached(done1), "F: dailyLimitReached false");
+assert(app.includes("startNextRound: true"), "F: 再延伸一次傳 startNextRound");
+assert(app.includes("canStartRound2 && !round2Active"), "F: CTA 看 canStartRound2 不是 incomplete Round 1");
 assert(!/completedCount === 1 && !incomplete && ext\.rounds\.length < 2/.test(app), "F: 不再用 rounds.length 擋第二輪");
 
 const ghost = reviewMerge.normalizeReflectionExtension({
@@ -193,13 +196,84 @@ assert(app.includes("document.getElementById(\"page-today\")?.addEventListener(\
 assert(app.includes('id="btnThinkExtAgain"') && app.includes('type="button"'), "再延伸一次是 button");
 assert(!/function generateThinkExtensionAsk[\s\S]{0,900}selectedPast/.test(app) || /function generateThinkExtensionAsk[\s\S]{0,2200}isRound1Ask/.test(fs.readFileSync(path.join(root, "api/review.js"), "utf8")), "Round 2 不另接 retrieval");
 assert(app.includes("completedAt: kept.completedAt || new Date().toISOString()"), "close persist completedAt");
-assert(/function renderThinkExtension[\s\S]{0,2800}renderThinkExtensionRecord/.test(app), "完成後顯示第一輪內容");
+assert(/function renderThinkExtension[\s\S]{0,4500}renderThinkExtensionRecord/.test(app), "完成後顯示第一輪內容");
 assert(app.includes("今日已完成 ${completedCount} / 2 次延伸思考"), "1/2 文案");
+assert(app.includes("paintInternalExtensionDebug"), "internal extension debug 存在");
+assert(app.includes("Internal Extension · rounds"), "internal 低調摘要");
+assert(app.includes("if (typeof isInternalMembership === \"function\" && !isInternalMembership()) return") && app.includes("internal-extension-debug"), "一般使用者看不到 extension debug");
+assert(app.includes("if (completedCount >= 1 && current.id === firstId"), "Round 2 不 reuse round[0].id");
+
+const prodState = reviewMerge.normalizeReflectionExtension({
+  rounds: [
+    {
+      id: "r1",
+      questions: QS,
+      selectedQuestionId: "eq1",
+      selectedQuestionText: QS[0].text,
+      answer: "meaningful answer",
+      deepConclusion: "meaningful conclusion",
+      completedAt: "2026-08-31T06:00:00.000Z",
+    },
+  ],
+});
+assert(reviewMerge.completedExtensionCount(prodState) === 1, "production fixture completedCount = 1");
+assert(reviewMerge.canStartExtensionRound2(prodState) === true, "production fixture canStartRound2 = true");
+assert(reviewMerge.extensionDailyLimitReached(prodState) === false, "production fixture dailyLimitReached = false");
+assert(reflectionExt.completedExtensionCount(prodState) === 1, "server completedCount 與 client 相同");
+assert(reflectionExt.canStartExtensionRound2(prodState) === true, "server canStartRound2 與 client 相同");
+assert(reflectionExt.extensionAskAllowed(prodState, "r2"), "production fixture 可送 Round 2 ask");
+
+const afterAskOnly = reviewMerge.normalizeReflectionExtension({
+  rounds: [{ id: "r1", questions: QS, selectedQuestionId: "eq1", answer: "meaningful answer" }],
+});
+assert(reviewMerge.completedExtensionCount(afterAskOnly) === 0, "Round 1 questions generation 不算 completed");
+assert(reviewMerge.completedExtensionCount(prodState) === 1, "questions + deepConclusion 仍只算 1 round");
+
+const missingSelect = reviewMerge.normalizeReflectionExtension({
+  rounds: [
+    {
+      id: "r1",
+      questions: QS,
+      selectedQuestionId: "",
+      answer: "",
+      deepConclusion: "meaningful conclusion",
+      completedAt: "2026-08-31T06:00:00.000Z",
+    },
+  ],
+});
+assert(missingSelect.rounds[0].completedAt === "2026-08-31T06:00:00.000Z", "normalize 不因缺 selectedQuestionId 清掉 completedAt");
+assert(reviewMerge.completedExtensionCount(missingSelect) === 1, "canonical completed 只看 conclusion + completedAt");
+assert(reviewMerge.canStartExtensionRound2(missingSelect) === true, "缺 selectedQuestionId 仍可進 Round 2");
+
+const round2Append = reviewMerge.upsertReflectionExtensionRound(prodState, {
+  id: "r2",
+  questions: [
+    { id: "eq1", text: "被接住之後，你還怕失去什麼？" },
+    { id: "eq2", text: "如果對方聽懂了但不改，你真正要面對的是哪一層？" },
+    { id: "eq3", text: "這條線對你自己意味著什麼？" },
+  ],
+});
+assert(round2Append.rounds.length === 2, "click Round 2 → rounds.length = 2");
+assert(round2Append.rounds[0].id === "r1", "rounds[0] id 不變");
+assert(round2Append.rounds[0].deepConclusion === prodState.rounds[0].deepConclusion, "rounds[0] conclusion 不變");
+assert(round2Append.rounds[0].completedAt === prodState.rounds[0].completedAt, "rounds[0] completedAt 不變");
+assert(round2Append.rounds[1].id === "r2", "rounds[1] 是新 id");
+assert(round2Append.rounds[1].questions.length === 3, "rounds[1].questions.length = 3");
+assert(reviewMerge.completedExtensionCount(round2Append) === 1, "Round 2 questions 仍是 1/2");
+assert(round2Append.rounds[1].id !== round2Append.rounds[0].id, "不能 reuse round[0].id");
+
+const reloadProd = reviewMerge.mergeInsightObjects(
+  { guide: { variant: "reflection-v3", coreQuote: "金句", questions: [{ text: "第一層？" }], extension: prodState } },
+  { guide: { variant: "reflection-v3", coreQuote: "金句", questions: [{ text: "第一層？" }], extension: prodState } }
+);
+assert(reviewMerge.completedExtensionCount(reloadProd.guide.extension) === 1, "reload fixture completedCount = 1");
+assert(reviewMerge.canStartExtensionRound2(reloadProd.guide.extension) === true, "reload fixture canStartRound2 = true");
+assert(!reviewMerge.extensionDailyLimitReached(reloadProd.guide.extension), "reload 不是 2/2");
 
 assert(/\.think-ext-text-btn\s*\{[^}]*min-height:\s*44px/.test(css), "再延伸一次 touch target");
 assert(!/#page-today[\s\S]{0,80}\.think-ext-text-btn[\s\S]{0,80}pointer-events:\s*none/.test(css), "再延伸一次沒有 pointer-events none");
 
-assert(html.includes("app.js?v=268"), "cache app.js");
-assert(html.includes("lib/review-merge.js?v=23"), "cache review-merge");
+assert(html.includes("app.js?v=269"), "cache app.js");
+assert(html.includes("lib/review-merge.js?v=24"), "cache review-merge");
 
 console.log("extension-round2 tests passed");
