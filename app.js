@@ -11310,7 +11310,7 @@ function renderThinkExtension() {
       (current.conclusionStale || (answerValue && thinkExtensionAnswerSig(answerValue) !== current.answerSig))
   );
   const showStart = !archived && completedCount === 0 && !(current && current.questions.length);
-  const showAgain = !archived && completedCount === 1 && !incomplete && ext.rounds.length < 2;
+  const showAgain = !archived && !loading && completedCount === 1 && !incomplete;
   const records = completedRounds.map((round, index) => renderThinkExtensionRecord(round, index)).join("");
   const radios = current && current.questions.length
     ? current.questions
@@ -11473,6 +11473,11 @@ async function generateThinkExtensionAsk(options = {}) {
   const ext = normalizeReflectionExtension(guide.extension);
   const completedCount = ext.rounds.filter(isThinkExtensionRoundCompleted).length;
   const draft = ext.rounds.find((item) => !isThinkExtensionRoundCompleted(item));
+  if (completedCount >= 2) {
+    reportThinkExtDebug({ handlerEntered: true, failureStage: "ELIGIBILITY" });
+    renderThinkExtension();
+    return;
+  }
   if (!options.refresh && draft && draft.questions.length) {
     renderThinkExtension();
     return;
