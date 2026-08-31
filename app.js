@@ -11094,6 +11094,53 @@ function upsertThinkExtensionRound(extension, round) {
   return { variant: "reflection-extension-v1", rounds: rounds.slice(0, 2) };
 }
 
+function reportInternalRetrievalDebug(info) {
+  if (typeof isInternalMembership === "function" && !isInternalMembership()) return;
+  const refs = Array.isArray(info && info.references) ? info.references : [];
+  console.info("[ING][retrieval]", {
+    retrievedCount: Number(info && info.count) || 0,
+    usedCount: Number(info && info.usedCount) || 0,
+    used: refs.filter((item) => item && item.used === true).map((item) => ({
+      date: String(item.date || ""),
+      connectionType: String(item.connectionType || ""),
+      score: Number(item.score) || 0,
+    })),
+    retrieved: refs.map((item) => ({
+      date: String((item && item.date) || ""),
+      connectionType: String((item && item.connectionType) || ""),
+      score: Number(item && item.score) || 0,
+      used: item && item.used === true,
+    })),
+    retrievalMs: info && info.timings ? Number(info.timings.retrievalMs) || 0 : 0,
+  });
+}
+
+function paintInternalRetrievalDebug(root, round) {
+  if (!root) return;
+  root.querySelectorAll(".internal-retrieval-debug").forEach((node) => node.remove());
+  if (typeof isInternalMembership === "function" && !isInternalMembership()) return;
+  const live = state.internalRetrievalDebug;
+  const refs = (live && Array.isArray(live.references) && live.references.length
+    ? live.references
+    : round && round.retrieval && Array.isArray(round.retrieval.selectedPast)
+      ? round.retrieval.selectedPast
+      : []);
+  const used = refs.filter((item) => item && item.used === true);
+  const retrievedCount = live && live.count != null ? Number(live.count) : refs.length;
+  const usedCount = live && live.usedCount != null ? Number(live.usedCount) : used.length;
+  if (!live && !refs.length) return;
+  const line =
+    live && live.line
+      ? String(live.line)
+      : `Internal Retrieval · retrieved ${retrievedCount} · used ${usedCount}${
+          used.length ? ` · ${used.map((item) => `${item.date}${item.connectionType ? ` ${item.connectionType}` : ""}`).join(" · ")}` : ""
+        }`;
+  const node = document.createElement("p");
+  node.className = "internal-model-debug internal-retrieval-debug";
+  node.textContent = line;
+  root.appendChild(node);
+}
+
 function reportThinkExtDebug(info) {
   if (typeof isInternalMembership === "function" && !isInternalMembership()) return;
   const payload = {
@@ -11313,16 +11360,7 @@ function renderThinkExtension() {
       ${showAgain ? `<button class="think-ext-text-btn" id="btnThinkExtAgain" type="button" ${loading ? "disabled" : ""}>${loading ? "正在往裡面整理…" : "再延伸一次 →"}</button>` : ""}
     </section>`;
   paintInternalModelDebug(root, state.internalModelDebug && state.internalModelDebug.thinkExt);
-  if (isInternalMembership()) {
-    root.querySelectorAll(".internal-retrieval-debug").forEach((node) => node.remove());
-    const retrievalLine = state.internalRetrievalDebug && state.internalRetrievalDebug.line;
-    if (retrievalLine) {
-      const line = document.createElement("p");
-      line.className = "internal-model-debug internal-retrieval-debug";
-      line.textContent = String(retrievalLine);
-      root.appendChild(line);
-    }
-  }
+  paintInternalRetrievalDebug(root, current);
 }
 
 function syncThinkExtAnswerChrome() {
@@ -11511,11 +11549,14 @@ async function generateThinkExtensionAsk(options = {}) {
     state.internalModelDebug.thinkExt = takeInternalDebug(remote);
     state.internalRetrievalDebug = remote && remote._internalRetrieval
       ? {
-          line: String(remote._internalRetrieval.line || `Internal Retrieval · ${Number(remote._internalRetrieval.usedCount || 0)} relevant days`),
+          line: String(remote._internalRetrieval.line || ""),
           count: Number(remote._internalRetrieval.count || 0),
           usedCount: Number(remote._internalRetrieval.usedCount || 0),
+          references: Array.isArray(remote._internalRetrieval.references) ? remote._internalRetrieval.references : [],
+          timings: remote._internalRetrieval.timings || {},
         }
       : null;
+    if (state.internalRetrievalDebug) reportInternalRetrievalDebug(state.internalRetrievalDebug);
     persistJournalNow();
     reportThinkExtDebug({
       handlerEntered: true,

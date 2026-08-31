@@ -74,10 +74,21 @@ const CASES = {
   }),
 };
 
-assert(html.includes("app.js?v=265"), "cache app");
+assert(html.includes("app.js?v=266"), "cache app");
 assert(!app.includes("正在搜尋你的歷史紀錄"), "loading 不暴露 retrieval");
 assert(!app.includes("找到 3 筆歷史"), "一般 UI 不暴露 retrieval");
 assert(app.includes("internal-retrieval-debug"), "internal 才顯示 retrieval 筆數");
+assert(app.includes("reportInternalRetrievalDebug"), "internal console 有 retrieved/used");
+assert(app.includes("[ING][retrieval]"), "console 不 dump 日記原文");
+assert(reflectionExt.formatInternalRetrievalLine({
+  retrieved: [{ date: "2026-07-12", connectionType: "same-tension" }, { date: "2026-05-20", connectionType: "same-person" }],
+  used: [{ date: "2026-07-12", connectionType: "same-tension" }],
+}).includes("retrieved 2 · used 1 · 2026-07-12 same-tension"), "debug 可判斷 used date");
+assert(reflectionExt.formatInternalRetrievalLine({ retrieved: [], used: [] }).includes("retrieved 0 · used 0"), "無歷史 debug 為 0");
+assert(!reflectionExt.formatInternalRetrievalLine({
+  retrieved: [{ date: "2026-07-12", connectionType: "same-tension", userRaw: { event: "秘密日記不該出現" } }],
+  used: [{ date: "2026-07-12", connectionType: "same-tension" }],
+}).includes("秘密日記"), "debug 不含私人原文");
 assert(app.includes("retrieval: remote && remote.retrieval"), "Round 1 persist snapshot");
 assert(app.includes("reflectionExtensionSourceSig(collectJournal())"), "stale 仍依今天 01～04");
 assert(!/sourceSig[\s\S]{0,80}selectedPast/.test(app), "history 新增不讓已生成 Round 1 stale");

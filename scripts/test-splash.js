@@ -40,6 +40,6 @@ assert(!app.includes("CREATE TABLE") && !html.includes("ALTER TABLE"), "CASE P�
 assert(!/setTimeout\(\s*\(\)\s*=>\s*(hideSplash|dismissSplash)/.test(app), "不是無條件關閉");
 
 assert(html.includes("app.css?v=228"), "cache css");
-assert(html.includes("app.js?v=265"), "cache js");
+assert(html.includes("app.js?v=266"), "cache js");
 
 console.log("splash position and transition tests passed");

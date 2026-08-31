@@ -3987,7 +3987,12 @@ module.exports = async function handler(req, res) {
                   usedCount: (round1History.used || []).length,
                   references: retrieval.selectedPast || [],
                   timings: round1History.timings || {},
-                  line: reflectionHistory.internalRetrievalLine(round1History.used),
+                  line: reflectionExt.formatInternalRetrievalLine({
+                    retrieved: round1History.retrieved,
+                    used: round1History.used,
+                    retrievedCount: (round1History.retrieved || []).length,
+                    usedCount: (round1History.used || []).length,
+                  }),
                 },
               }
             : {}),
