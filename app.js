@@ -11148,20 +11148,24 @@ function paintInternalRetrievalDebug(root, round) {
   root.querySelectorAll(".internal-retrieval-debug").forEach((node) => node.remove());
   if (typeof isInternalMembership === "function" && !isInternalMembership()) return;
   const live = state.internalRetrievalDebug;
-  const refs = (live && Array.isArray(live.references) && live.references.length
+  const retrieval = round && round.retrieval && typeof round.retrieval === "object" ? round.retrieval : null;
+  const refs = live && Array.isArray(live.references) && live.references.length
     ? live.references
-    : round && round.retrieval && Array.isArray(round.retrieval.selectedPast)
-      ? round.retrieval.selectedPast
-      : []);
+    : retrieval && Array.isArray(retrieval.selectedPast)
+      ? retrieval.selectedPast
+      : [];
   const used = refs.filter((item) => item && item.used === true);
   const retrievedCount = live && live.count != null ? Number(live.count) : refs.length;
   const usedCount = live && live.usedCount != null ? Number(live.usedCount) : used.length;
-  if (!live && !refs.length) return;
+  if (!live && !retrieval) return;
+  const usedBits = used
+    .map((item) => `${String((item && item.date) || "").trim()}${item && item.connectionType ? ` ${item.connectionType}` : ""}`)
+    .filter((bit) => bit.trim());
   const line =
-    live && live.line
-      ? String(live.line)
+    live && String(live.line || "").trim()
+      ? String(live.line).trim()
       : `Internal Retrieval · retrieved ${retrievedCount} · used ${usedCount}${
-          used.length ? ` · ${used.map((item) => `${item.date}${item.connectionType ? ` ${item.connectionType}` : ""}`).join(" · ")}` : ""
+          usedCount > 0 && usedBits.length ? ` · ${usedBits.join(" · ")}` : ""
         }`;
   const node = document.createElement("p");
   node.className = "internal-model-debug internal-retrieval-debug";
@@ -11390,7 +11394,7 @@ function renderThinkExtension() {
       ${showAgain ? `<button class="think-ext-text-btn" id="btnThinkExtAgain" type="button" ${loading ? "disabled" : ""}>${loading ? "正在往裡面整理…" : "再延伸一次 →"}</button>` : ""}
     </section>`;
   paintInternalModelDebug(root, state.internalModelDebug && state.internalModelDebug.thinkExt);
-  paintInternalRetrievalDebug(root, current);
+  paintInternalRetrievalDebug(root, ext.rounds.find((item) => item && item.retrieval) || current || ext.rounds[0] || null);
 }
 
 function syncThinkExtAnswerChrome() {

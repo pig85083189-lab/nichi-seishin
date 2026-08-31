@@ -205,6 +205,8 @@ assert(!app.includes("[ING][extension-state]"), "extension-state console panel �
 assert(!css.includes("internal-extension-debug"), "debug CSS 已移除");
 assert(app.includes("paintInternalRetrievalDebug"), "Internal Retrieval 仍保留");
 assert(app.includes("Internal Retrieval · retrieved"), "4B-2 retrieval 驗收行仍在");
+assert(app.includes("if (!live && !retrieval) return"), "retrieved 0 仍顯示 Internal Retrieval");
+assert(app.includes("ext.rounds.find((item) => item && item.retrieval)"), "完成後仍畫 Round 1 retrieval");
 assert(app.includes("startNextRound: true"), "startNextRound 仍在");
 assert(app.includes("if (completedCount >= 1 && current.id === firstId"), "Round 2 不 reuse round[0].id");
 
@@ -278,7 +280,7 @@ assert(!reviewMerge.extensionDailyLimitReached(reloadProd.guide.extension), "rel
 assert(/\.think-ext-text-btn\s*\{[^}]*min-height:\s*44px/.test(css), "再延伸一次 touch target");
 assert(!/#page-today[\s\S]{0,80}\.think-ext-text-btn[\s\S]{0,80}pointer-events:\s*none/.test(css), "再延伸一次沒有 pointer-events none");
 
-assert(html.includes("app.js?v=270"), "cache app.js");
+assert(html.includes("app.js?v=271"), "cache app.js");
 assert(html.includes("lib/review-merge.js?v=24"), "cache review-merge");
 
 console.log("extension-round2 tests passed");

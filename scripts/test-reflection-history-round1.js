@@ -74,12 +74,17 @@ const CASES = {
   }),
 };
 
-assert(html.includes("app.js?v=270"), "cache app");
+assert(html.includes("app.js?v=271"), "cache app");
 assert(!app.includes("正在搜尋你的歷史紀錄"), "loading 不暴露 retrieval");
 assert(!app.includes("找到 3 筆歷史"), "一般 UI 不暴露 retrieval");
 assert(app.includes("internal-retrieval-debug"), "internal 才顯示 retrieval 筆數");
 assert(app.includes("reportInternalRetrievalDebug"), "internal console 有 retrieved/used");
 assert(app.includes("[ING][retrieval]"), "console 不 dump 日記原文");
+assert(app.includes("if (!live && !retrieval) return"), "retrieved 0 / used 0 仍顯示");
+assert(!app.includes("if (!live && !refs.length) return"), "不再因 empty selectedPast 隱藏 retrieval 行");
+assert(app.includes("ext.rounds.find((item) => item && item.retrieval) || current || ext.rounds[0]"), "完成 Round 1 後仍讀 rounds[0].retrieval");
+assert(app.includes("isInternalMembership()) return") && app.includes("internal-retrieval-debug"), "normal user 看不到 retrieval 行");
+assert(!app.includes("paintInternalExtensionDebug"), "不恢復 Extension Debug");
 assert(reflectionExt.formatInternalRetrievalLine({
   retrieved: [{ date: "2026-07-12", connectionType: "same-tension" }, { date: "2026-05-20", connectionType: "same-person" }],
   used: [{ date: "2026-07-12", connectionType: "same-tension" }],
