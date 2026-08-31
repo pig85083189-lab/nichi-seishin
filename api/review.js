@@ -55,6 +55,76 @@ async function loadPersistedJournalForDate(user, date) {
   }
 }
 
+function stripRound1HistorySpoof(body) {
+  if (!body || typeof body !== "object") return body;
+  delete body.selectedPast;
+  delete body.reviews;
+  delete body.past;
+  delete body.usedPast;
+  if (body.context && typeof body.context === "object") {
+    delete body.context.selectedPast;
+    delete body.context.reviews;
+    delete body.context.past;
+    delete body.context.usedPast;
+    delete body.context.serverPast;
+  }
+  return body;
+}
+
+function journalFromExtensionContext(ctx) {
+  const data = ctx && typeof ctx === "object" ? ctx : {};
+  return {
+    thanksText: data.thanksText || data.thanks || "",
+    event: data.event || "",
+    mood: data.mood || "",
+    bodyMind: {
+      text: data.bodyMindText || data.bodyNote || "",
+      insight: data.bodyMindInsight || "",
+      support: data.bodyMindSupport || "",
+    },
+    insight: {
+      guide: {
+        variant: "reflection-v3",
+        coreQuote: data.coreQuote || data.thinkCoreQuote || "",
+        questions: data.thinkQuestions || data.questions || [],
+      },
+    },
+  };
+}
+
+async function attachRound1RelevantHistory(user, body) {
+  const empty = { retrieved: [], used: [], retrieval: { sourceSig: "", selectedPast: [] }, timings: { retrievalMs: 0 } };
+  if (!reflectionExt.isRound1Ask(body)) return empty;
+  const started = Date.now();
+  try {
+    const { loadReviews, cloudStoreConfigured } = require("../lib/store");
+    const reviews = user && user.id && cloudStoreConfigured() ? await loadReviews(user.id) : {};
+    if (!body.context || typeof body.context !== "object") body.context = {};
+    const result = await reflectionHistory.retrieveRelevantHistory({
+      reviews,
+      currentDate: String(body.date || "").trim(),
+      currentJournal: journalFromExtensionContext(body.context),
+    });
+    const enriched = reflectionHistory.snippetsForSelectedPast(reviews, result.selectedPast || []);
+    const gated = reflectionExt.gateRound1Past(body.context, enriched);
+    body.context.usedPast = gated.used;
+    return {
+      retrieved: gated.retrieved,
+      used: gated.used,
+      retrieval: reflectionExt.persistableRound1Retrieval(result.debug && result.debug.sourceSig, gated),
+      timings: {
+        retrievalMs: Date.now() - started,
+        extractMs: result.debug && result.debug.timings ? result.debug.timings.extractMs : 0,
+        stage1Ms: result.debug && result.debug.timings ? result.debug.timings.stage1Ms : 0,
+        stage2Ms: result.debug && result.debug.timings ? result.debug.timings.stage2Ms : 0,
+      },
+    };
+  } catch (error) {
+    console.error("round1 history:", error && error.message ? error.message : error);
+    return { ...empty, timings: { retrievalMs: Date.now() - started } };
+  }
+}
+
 function persistedExtensionFromJournal(journal) {
   const insight = journal && journal.insight && typeof journal.insight === "object" ? journal.insight : {};
   const guide = insight.guide && typeof insight.guide === "object" ? insight.guide : {};
@@ -3156,6 +3226,11 @@ module.exports = async function handler(req, res) {
   delete body.internal;
   delete body.completedCount;
   delete body.completedRounds;
+  delete body.selectedPast;
+  delete body.reviews;
+  delete body.past;
+  delete body.usedPast;
+  delete body.historicalContext;
   if (body.context && typeof body.context === "object") {
     delete body.context.completedCount;
     delete body.context.completedRounds;
@@ -3163,6 +3238,12 @@ module.exports = async function handler(req, res) {
     delete body.context.userId;
     delete body.context.model;
     delete body.context.internal;
+    delete body.context.selectedPast;
+    delete body.context.reviews;
+    delete body.context.past;
+    delete body.context.usedPast;
+    delete body.context.serverPast;
+    delete body.context.historicalContext;
   }
 
   let membershipRow = null;
@@ -3293,6 +3374,7 @@ module.exports = async function handler(req, res) {
   };
 
   try {
+    let round1History = null;
     if (body.mode === "checklist" || body.mode === "prompts" || body.mode === "choices") {
       await attachCloudAwarenessHistory(user, body, {
         userToken: bearerToken(req, body),
@@ -3514,6 +3596,10 @@ module.exports = async function handler(req, res) {
     } else if (mode === "insight") {
       if (reflectionExt.isReflectionExtensionRequest(body)) {
         const close = reflectionExt.reflectionExtensionStep(body) === "close";
+        if (!close) {
+          stripRound1HistorySpoof(body);
+          round1History = await attachRound1RelevantHistory(user, body);
+        }
         messages = [
           {
             role: "system",
@@ -3889,7 +3975,23 @@ module.exports = async function handler(req, res) {
           res.status(502).json({ ok: false, error: "延伸深度思考還沒整理好，請再試一次" });
           return;
         }
-        res.status(200).json({ ok: true, source: getProvider(), data: asked });
+        const retrieval = round1History && round1History.retrieval ? round1History.retrieval : { sourceSig: "", selectedPast: [] };
+        res.status(200).json({
+          ok: true,
+          source: getProvider(),
+          data: { ...asked, retrieval },
+          ...(internalUser && round1History
+            ? {
+                _internalRetrieval: {
+                  count: (round1History.retrieved || []).length,
+                  usedCount: (round1History.used || []).length,
+                  references: retrieval.selectedPast || [],
+                  timings: round1History.timings || {},
+                  line: reflectionHistory.internalRetrievalLine(round1History.used),
+                },
+              }
+            : {}),
+        });
         return;
       }
       if (reflectionV3.isReflectionV3Request(body)) {

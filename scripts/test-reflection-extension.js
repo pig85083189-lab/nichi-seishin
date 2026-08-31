@@ -71,9 +71,16 @@ assert(reviewJs.includes("reflectionV3.isReflectionV3Request"), "review 仍接�
 assert(reviewJs.includes("delete body.completedCount"), "不信 client completedCount");
 assert(reviewJs.includes("enforceExtensionRoundLimit"), "server 用 persisted journal 限 2 次");
 assert(reviewJs.includes("loadPersistedJournalForDate"), "只讀當天 journal");
-assert(!/isReflectionExtensionRequest[\s\S]{0,800}retrieveRelevantHistory/.test(reviewJs), "extension 生成不接 history retrieval");
+assert(reviewJs.includes("attachRound1RelevantHistory"), "Round 1 ask 才接 retrieval");
+assert(reviewJs.includes("stripRound1HistorySpoof"), "不信 client selectedPast");
+assert(!/reflectionExtensionCloseUserPrompt[\s\S]{0,200}usedPast/.test(reviewJs), "deepConclusion 不接歷史");
 assert(!/isReflectionV3Request[\s\S]{0,800}retrieveRelevantHistory/.test(reviewJs), "04 第一層不接 history retrieval");
 assert(reviewJs.includes("isHistoryRetrievalRequest"), "retrieval 走獨立 internal mode");
+assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("TODAY FIRST"), "Round 1 今天優先");
+assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("HISTORICAL VALUE CHECK"), "歷史要再過 value gate");
+assert(reflectionExt.REFLECTION_EXTENSION_CLOSE_SYSTEM.includes("不要讀過往日期"), "結論仍不讀歷史");
+assert(html.includes("app.js?v=265"), "cache js");
+assert(html.includes("lib/review-merge.js?v=21"), "cache merge");
 assert(app.includes("document.getElementById(\"thinkExtAnswer\")"), "close 讀 current textarea");
 assert(app.includes("今日已完成"), "完成次數文案");
 assert(app.includes("前面的內容有修改，這次延伸思考是依照修改前的內容產生"), "stale 提示");
@@ -735,9 +742,9 @@ const reset = internalTest.applyInternalTodayReset({
 assert(reset.journal.internalTestRuns[0].snapshot.journal.insight.guide.extension.rounds.length === 2, "internal reset snapshot 含 extension");
 assert(!reset.journal.insight, "fresh run 清空 extension");
 
-assert(html.includes("app.js?v=264"), "cache js");
+assert(html.includes("app.js?v=265"), "cache js");
 assert(html.includes("app.css?v=228"), "cache css");
-assert(html.includes("lib/review-merge.js?v=20"), "cache merge");
+assert(html.includes("lib/review-merge.js?v=21"), "cache merge");
 
 assert(app.includes("id=\"btnThinkExtStart\""), "A: CTA id");
 assert(app.includes('node.closest("#btnThinkExtStart")'), "A: delegated handler 有 extension case");

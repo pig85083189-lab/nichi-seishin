@@ -166,7 +166,7 @@ assert(!html.includes("history-retrieval"), "index 不掛 retrieval UI");
 assert(extSrc.includes("不要讀過往日期"), "04 extension 仍只讀今天");
 assert(v3Src.includes("使用者今天已經寫完 01 感謝"), "04 第一層仍只讀今天");
 assert(!/generateReflectionV3[\s\S]{0,400}retrieveRelevantHistory/.test(app), "04 生成不接 retrieval");
-assert(!/generateThinkExtensionAsk[\s\S]{0,400}retrieveRelevantHistory/.test(app), "Round 1 不接 retrieval");
+assert(!/generateThinkExtensionAsk[\s\S]{0,400}retrieveRelevantHistory/.test(app), "client 不自己跑 retrieval");
 assert(!/generateThinkExtensionClose[\s\S]{0,400}retrieveRelevantHistory/.test(app), "deepConclusion 不接 retrieval");
 assert(reviewJs.includes("isHistoryRetrievalRequest"), "internal API path 存在");
 assert(reviewJs.includes("internal_required"), "retrieval 要求 internal");

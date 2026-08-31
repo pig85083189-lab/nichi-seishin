@@ -1395,6 +1395,9 @@ async function postAiApi(url, body, timeoutMs = 28000) {
   if (payload._internalDebug && payload.data && typeof payload.data === "object") {
     payload.data._internalDebug = payload._internalDebug;
   }
+  if (payload._internalRetrieval && payload.data && typeof payload.data === "object") {
+    payload.data._internalRetrieval = payload._internalRetrieval;
+  }
   return payload.data;
 }
 
@@ -11033,6 +11036,7 @@ function normalizeReflectionExtension(raw) {
       sourceSig: String(row.sourceSig || "").trim(),
       stale: Boolean(row.stale),
       conclusionStale: Boolean(row.conclusionStale),
+      retrieval: row.retrieval && typeof row.retrieval === "object" ? row.retrieval : null,
     };
   });
   return { variant: "reflection-extension-v1", rounds };
@@ -11309,6 +11313,16 @@ function renderThinkExtension() {
       ${showAgain ? `<button class="think-ext-text-btn" id="btnThinkExtAgain" type="button" ${loading ? "disabled" : ""}>${loading ? "正在往裡面整理…" : "再延伸一次 →"}</button>` : ""}
     </section>`;
   paintInternalModelDebug(root, state.internalModelDebug && state.internalModelDebug.thinkExt);
+  if (isInternalMembership()) {
+    root.querySelectorAll(".internal-retrieval-debug").forEach((node) => node.remove());
+    const retrievalLine = state.internalRetrievalDebug && state.internalRetrievalDebug.line;
+    if (retrievalLine) {
+      const line = document.createElement("p");
+      line.className = "internal-model-debug internal-retrieval-debug";
+      line.textContent = String(retrievalLine);
+      root.appendChild(line);
+    }
+  }
 }
 
 function syncThinkExtAnswerChrome() {
@@ -11490,10 +11504,18 @@ async function generateThinkExtensionAsk(options = {}) {
         selectedQuestionText: kept.questions.some((q) => q.id === kept.selectedQuestionId) ? kept.selectedQuestionText : "",
         sourceSig: reflectionExtensionSourceSig(collectJournal()),
         stale: false,
+        retrieval: remote && remote.retrieval && typeof remote.retrieval === "object" ? remote.retrieval : kept.retrieval || null,
       })
     );
     if (!state.internalModelDebug) state.internalModelDebug = {};
     state.internalModelDebug.thinkExt = takeInternalDebug(remote);
+    state.internalRetrievalDebug = remote && remote._internalRetrieval
+      ? {
+          line: String(remote._internalRetrieval.line || `Internal Retrieval · ${Number(remote._internalRetrieval.usedCount || 0)} relevant days`),
+          count: Number(remote._internalRetrieval.count || 0),
+          usedCount: Number(remote._internalRetrieval.usedCount || 0),
+        }
+      : null;
     persistJournalNow();
     reportThinkExtDebug({
       handlerEntered: true,
