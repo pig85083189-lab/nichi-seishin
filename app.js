@@ -11143,47 +11143,6 @@ function reportInternalRetrievalDebug(info) {
   });
 }
 
-function paintInternalExtensionDebug(root, info) {
-  if (!root) return;
-  root.querySelectorAll(".internal-extension-debug").forEach((node) => node.remove());
-  if (typeof isInternalMembership === "function" && !isInternalMembership()) return;
-  const data = info && typeof info === "object" ? info : {};
-  const summary = document.createElement("p");
-  summary.className = "internal-model-debug internal-extension-debug";
-  summary.textContent = `Internal Extension · rounds ${Number(data.roundsLength) || 0} · completed ${Number(data.completedCount) || 0}/2 · canRound2 ${data.canStartRound2 ? "yes" : "no"}`;
-  const box = document.createElement("pre");
-  box.className = "internal-model-debug internal-extension-debug";
-  box.textContent = [
-    "Extension Debug",
-    `rounds.length = ${Number(data.roundsLength) || 0}`,
-    `completedCount = ${Number(data.completedCount) || 0}`,
-    `round[0].id = ${data.round0Id || "(none)"}`,
-    `round[0].questions = ${Number(data.round0Questions) || 0}`,
-    `round[0].answer = ${Boolean(data.round0HasAnswer)}`,
-    `round[0].deepConclusion = ${Boolean(data.round0HasDeepConclusion)}`,
-    `round[0].completedAt = ${Boolean(data.round0HasCompletedAt)}`,
-    `canStartRound2 = ${Boolean(data.canStartRound2)}`,
-    `round2CTA rendered = ${Boolean(data.round2CtaRendered)}`,
-    `round2CTA disabled = ${Boolean(data.round2CtaDisabled)}`,
-    `dailyLimitReached = ${Boolean(data.dailyLimitReached)}`,
-  ].join("\n");
-  root.appendChild(summary);
-  root.appendChild(box);
-  console.info("[ING][extension-state]", {
-    roundsLength: Number(data.roundsLength) || 0,
-    completedCount: Number(data.completedCount) || 0,
-    round0Id: data.round0Id || "",
-    round0Questions: Number(data.round0Questions) || 0,
-    round0HasAnswer: Boolean(data.round0HasAnswer),
-    round0HasDeepConclusion: Boolean(data.round0HasDeepConclusion),
-    round0HasCompletedAt: Boolean(data.round0HasCompletedAt),
-    canStartRound2: Boolean(data.canStartRound2),
-    round2CtaRendered: Boolean(data.round2CtaRendered),
-    round2CtaDisabled: Boolean(data.round2CtaDisabled),
-    dailyLimitReached: Boolean(data.dailyLimitReached),
-  });
-}
-
 function paintInternalRetrievalDebug(root, round) {
   if (!root) return;
   root.querySelectorAll(".internal-retrieval-debug").forEach((node) => node.remove());
@@ -11350,7 +11309,6 @@ function renderThinkExtension() {
   const incomplete = ext.rounds.find((item) => item.questions.length && !isThinkExtensionRoundCompleted(item));
   const current = incomplete || null;
   const canStartRound2 = thinkExtensionCanStartRound2(ext, { archived, busy: loading });
-  const dailyLimitReached = completedCount >= 2;
   const round2Active = ext.rounds.some((item, index) => index > 0 && item.questions.length && !isThinkExtensionRoundCompleted(item));
   const sourceSig = hasLayer ? reflectionExtensionSourceSig() : "";
   const questionsStale = Boolean(current && current.questions.length && current.sourceSig && current.sourceSig !== sourceSig);
@@ -11433,20 +11391,6 @@ function renderThinkExtension() {
     </section>`;
   paintInternalModelDebug(root, state.internalModelDebug && state.internalModelDebug.thinkExt);
   paintInternalRetrievalDebug(root, current);
-  const againBtn = document.getElementById("btnThinkExtAgain");
-  paintInternalExtensionDebug(root, {
-    roundsLength: ext.rounds.length,
-    completedCount,
-    round0Id: ext.rounds[0] ? String(ext.rounds[0].id || "") : "",
-    round0Questions: ext.rounds[0] ? ext.rounds[0].questions.length : 0,
-    round0HasAnswer: Boolean(ext.rounds[0] && String(ext.rounds[0].answer || "").trim()),
-    round0HasDeepConclusion: Boolean(ext.rounds[0] && String(ext.rounds[0].deepConclusion || "").trim()),
-    round0HasCompletedAt: Boolean(ext.rounds[0] && String(ext.rounds[0].completedAt || "").trim()),
-    canStartRound2,
-    round2CtaRendered: Boolean(againBtn),
-    round2CtaDisabled: Boolean(againBtn && againBtn.disabled),
-    dailyLimitReached,
-  });
 }
 
 function syncThinkExtAnswerChrome() {

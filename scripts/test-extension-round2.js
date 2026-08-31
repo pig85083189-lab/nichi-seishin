@@ -198,9 +198,14 @@ assert(!/function generateThinkExtensionAsk[\s\S]{0,900}selectedPast/.test(app) 
 assert(app.includes("completedAt: kept.completedAt || new Date().toISOString()"), "close persist completedAt");
 assert(/function renderThinkExtension[\s\S]{0,4500}renderThinkExtensionRecord/.test(app), "完成後顯示第一輪內容");
 assert(app.includes("今日已完成 ${completedCount} / 2 次延伸思考"), "1/2 文案");
-assert(app.includes("paintInternalExtensionDebug"), "internal extension debug 存在");
-assert(app.includes("Internal Extension · rounds"), "internal 低調摘要");
-assert(app.includes("if (typeof isInternalMembership === \"function\" && !isInternalMembership()) return") && app.includes("internal-extension-debug"), "一般使用者看不到 extension debug");
+assert(!app.includes("paintInternalExtensionDebug"), "extension debug UI 已移除");
+assert(!app.includes("Internal Extension · rounds"), "Internal Extension 摘要已移除");
+assert(!app.includes("internal-extension-debug"), "extension debug class 已移除");
+assert(!app.includes("[ING][extension-state]"), "extension-state console panel 已移除");
+assert(!css.includes("internal-extension-debug"), "debug CSS 已移除");
+assert(app.includes("paintInternalRetrievalDebug"), "Internal Retrieval 仍保留");
+assert(app.includes("Internal Retrieval · retrieved"), "4B-2 retrieval 驗收行仍在");
+assert(app.includes("startNextRound: true"), "startNextRound 仍在");
 assert(app.includes("if (completedCount >= 1 && current.id === firstId"), "Round 2 不 reuse round[0].id");
 
 const prodState = reviewMerge.normalizeReflectionExtension({
@@ -273,7 +278,7 @@ assert(!reviewMerge.extensionDailyLimitReached(reloadProd.guide.extension), "rel
 assert(/\.think-ext-text-btn\s*\{[^}]*min-height:\s*44px/.test(css), "再延伸一次 touch target");
 assert(!/#page-today[\s\S]{0,80}\.think-ext-text-btn[\s\S]{0,80}pointer-events:\s*none/.test(css), "再延伸一次沒有 pointer-events none");
 
-assert(html.includes("app.js?v=269"), "cache app.js");
+assert(html.includes("app.js?v=270"), "cache app.js");
 assert(html.includes("lib/review-merge.js?v=24"), "cache review-merge");
 
 console.log("extension-round2 tests passed");

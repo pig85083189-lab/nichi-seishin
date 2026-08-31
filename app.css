@@ -8572,12 +8572,6 @@ summary [data-user-mark-field] {
   line-height: 1.5;
 }
 
-pre.internal-extension-debug {
-  margin-top: 6px;
-  white-space: pre-wrap;
-  font-family: inherit;
-}
-
 .complete-confirm-actions {
   display: flex;
   flex-wrap: wrap;
