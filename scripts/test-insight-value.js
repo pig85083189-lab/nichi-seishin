@@ -7,6 +7,7 @@ const reflectionExt = require("../lib/reflection-extension");
 const awarenessV3 = require("../lib/awareness-v3");
 const executionV3 = require("../lib/execution-v3");
 const reviewMerge = require("../lib/review-merge");
+const valueGate = require("../lib/insight-value-gate");
 
 function assert(cond, message) {
   if (!cond) throw new Error(message);
@@ -16,6 +17,7 @@ const root = path.join(__dirname, "..");
 const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
 const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const css = fs.readFileSync(path.join(root, "app.css"), "utf8");
+const reviewJs = fs.readFileSync(path.join(root, "api/review.js"), "utf8");
 
 const GRANDMA = `今天跟阿嬤發生了一些事情，其實...
 後來我開始換一個角度去想，
@@ -29,7 +31,7 @@ const REFERENCE_CTX = {
   bodyMindText: "心情很好，可是身體比較累。",
 };
 
-assert(html.includes("app.js?v=272"), "cache app.js");
+assert(html.includes("app.js?v=273"), "cache app.js");
 assert(html.includes("app.css?v=229"), "cache css");
 assert(html.includes("lib/review-merge.js?v=25"), "cache merge");
 assert(!html.includes("CREATE TABLE") && !app.includes("ALTER TABLE"), "zero schema");
@@ -98,14 +100,8 @@ const referenceGood = reflectionV3.evaluateReflectionV3Quality(
       {
         id: "q2",
         title: "你要的幸福其實很日常",
-        insight: "你今天提到一起吃飯、聊天、有人幫你切水果，這些都不是大事。放在一起看，你在意的好像就是喜歡的人真的在身邊。",
+        insight: "你今天提到一起吃飯、聊天、有人幫你切水果，這些都不是大事。放在一起看，你在意的可能不只是有人陪，而是對方真的有參與在你的日常裡。",
         question: "你很喜歡這種被放在心上的小小陪伴。這會不會也是你最想讓身邊的人，甚至你的客人感受到的東西？",
-      },
-      {
-        id: "q3",
-        title: "心情很好，身體還是會累",
-        insight: "你今天心情很好，可是身體還是累。這兩件事可以同時存在，你其實已經開始注意到了。",
-        question: "",
       },
     ],
   },
@@ -163,9 +159,8 @@ const positive = reflectionV3.evaluateReflectionV3Quality(
   {
     coreQuote: "今天值得留下的，也許是那些很小、卻讓你覺得被放在心上的瞬間。",
     items: [
-      { id: "q1", title: "你要的幸福其實很日常", insight: "吃飯、聊天、切水果都讓你覺得幸福。你要的好像一直都不是多大的事情。", question: "" },
+      { id: "q1", title: "你要的幸福其實很日常", insight: "吃飯、聊天、切水果都讓你覺得被放在心上。放在一起看，你在意的可能不只是有人陪，而是對方真的有參與在你的日常裡。", question: "" },
       { id: "q2", title: "你其實一直有在往前走", insight: "學習、工作、閱讀同時出現，比較像每天替自己多累積一點。", question: "" },
-      { id: "q3", title: "心情很好，身體還是會累", insight: "開心和身體累可以同時存在，你已經開始注意到這件事。", question: "" },
     ],
   },
   { context: REFERENCE_CTX, requireValueEngine: true, forbid: /創傷|害怕失去|依附|隱藏問題/ }
@@ -226,9 +221,9 @@ assert(awareBag.items[0].title === "幸福其實很簡單", "05 merge 保留 tit
 const awareGood = awarenessV3.evaluateAwarenessV3Quality(
   {
     items: [
-      { id: "a1", title: "幸福其實很簡單", text: "我發現，對我來說幸福不一定要做什麼特別的事，喜歡的人在身邊我就會很滿足。" },
+      { id: "a1", title: "幸福其實很簡單", text: "我發現，對我來說幸福不一定要做什麼特別的事，喜歡的人真的有參與在日常裡我就會很滿足。" },
       { id: "a2", title: "我很喜歡從生活裡累積", text: "我發現，學習、工作、閱讀這些小事，會讓我覺得自己有在往前走。" },
-      { id: "a3", title: "我同時在意心情和身體", text: "我發現，心情很好的時候，身體還是會累，這兩件事可以同時存在。" },
+      { id: "a3", title: "我想把被打動的感覺帶出去", text: "我發現，我希望客人被照顧的方式，其實很像我自己被切水果時被打動的那種感覺。" },
     ],
   },
   { context: REFERENCE_CTX, requireTitle: true }
@@ -256,5 +251,162 @@ assert(app.includes("function mapInsightQuestionItems"), "client 保留 extra fi
 assert(reflectionExt.canStartExtensionRound2({ rounds: [{ id: "ext1", deepConclusion: "看見了", completedAt: "2026-08-31T01:00:00.000Z", questions: [{ id: "eq1", text: "題" }] }] }) === true, "Round 2 仍用 completedAt");
 assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("不是把 Round 1 question 改寫") || reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("Round 1 USER ANSWER") || reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("第一輪 user answer"), "Round 2 最高權重回答");
 assert(executionV3.EXECUTION_V3_SYSTEM.includes("自然下一步"), "06 要求 insight 的下一步");
+assert(executionV3.EXECUTION_V3_SYSTEM.includes("被淘汰"), "06 不從低價值 candidate 生 action");
+assert(executionV3.EXECUTION_V3_SYSTEM.includes("通過價值閘門"), "06 來源必須過 value gate");
+
+const PRODUCTION_CTX = {
+  thanksText: "最近每天都有在覺察。今天跟 Baby 聊了很多，第三次一起吃拉麵，他還幫我切奇異果，我覺得很幸福。",
+  event: "今天特別開心，也跟 Baby 多了很多可以聊的東西。",
+  mood: "開心",
+  bodyMindText: "今天特別想睡覺。",
+};
+
+const failHappinessQ = {
+  id: "q-fail-happy",
+  title: "幸福藏在日常裡",
+  insight: "會不會這種重複、日常的陪伴，才是你真正注意的幸福感？",
+  question: "會不會這種重複、日常的陪伴，才是你真正注意的幸福感？",
+};
+const failSleep = {
+  id: "q-fail-sleep",
+  title: "心情很好也可以累",
+  insight: "心情很好跟想睡不衝突。",
+  question: "這是身體在說今天做得夠多了，還是單純就是累？",
+};
+const failRestateHappy = {
+  id: "q-fail-restate",
+  title: "你很重視幸福",
+  insight: "你很重視幸福。日常陪伴可能就是你的幸福。",
+  question: "日常陪伴就是你的幸福嗎？",
+};
+const failTired = {
+  id: "q-fail-tired",
+  title: "身體在說話",
+  insight: "想睡可能代表身體累了。",
+  question: "你今天是不是很累？",
+};
+const passRelation = {
+  id: "q-pass-relation",
+  title: "你的覺察開始走進關係裡了",
+  insight: "你最近做的覺察，好像不只讓你更了解自己。你今天特別提到，跟 Baby 也因此多了很多可以聊的東西。這代表你的改變，可能已經開始影響你們相處的方式。",
+  question: "最近有沒有哪一次，你明顯感覺自己跟以前的回應方式不一樣了？",
+};
+const passRamen = {
+  id: "q-pass-ramen",
+  title: "你記住的幸福，常常都很小",
+  insight: "你沒有特別記住多大的安排，反而記得第三次一起吃拉麵、他幫你切奇異果。放在一起看，你在意的可能不只是有人陪，而是對方真的有參與在你的日常裡。",
+  question: "",
+};
+
+const judgedHappy = valueGate.evaluateInsightCandidate(failHappinessQ, PRODUCTION_CTX);
+assert(!judgedHappy.ok, "Production：日常陪伴才是幸福？必須 FAIL");
+assert(judgedHappy.issues.some((item) => /so-what|trivial|low-value-question|no-new-information/.test(item)), `幸福重述 issues：${judgedHappy.issues.join(",")}`);
+
+const judgedSleep = valueGate.evaluateInsightCandidate(failSleep, PRODUCTION_CTX);
+assert(!judgedSleep.ok, "Production：想睡不衝突必須 FAIL");
+assert(judgedSleep.issues.includes("trivial-inference") || judgedSleep.issues.includes("forced-body"), `想睡 issues：${judgedSleep.issues.join(",")}`);
+
+const judgedRestate = valueGate.evaluateInsightCandidate(failRestateHappy, PRODUCTION_CTX);
+assert(!judgedRestate.ok, "重述幸福必須 FAIL");
+const judgedTired = valueGate.evaluateInsightCandidate(failTired, PRODUCTION_CTX);
+assert(!judgedTired.ok, "想睡→累必須 FAIL");
+
+const judgedRelation = valueGate.evaluateInsightCandidate(passRelation, PRODUCTION_CTX);
+assert(judgedRelation.ok, `覺察走進關係應通過：${judgedRelation.issues.join("；")}`);
+assert(judgedRelation.newInformation, "高價值 insight 必須有 NEW_INFORMATION");
+const judgedRamen = valueGate.evaluateInsightCandidate(passRamen, PRODUCTION_CTX);
+assert(judgedRamen.ok, `拉麵參與日常應通過：${judgedRamen.issues.join("；")}`);
+assert(!passRamen.question, "沒有更值得問時可以 STOP");
+
+const mixed = valueGate.gateItems(
+  [failHappinessQ, failSleep, failRestateHappy, failTired, passRelation, passRamen],
+  PRODUCTION_CTX,
+  "insight"
+);
+assert(mixed.kept.length === 2, `gate 只留過關項，不可把垃圾撿回：kept=${mixed.kept.length}`);
+assert(mixed.kept.every((item) => item.id === "q-pass-relation" || item.id === "q-pass-ramen"), "留下的必須是新 connection");
+assert(mixed.dropped.length >= 4, "Production fail examples 必須被 drop");
+
+const onlyBad = reflectionV3.normalizeReflectionV3Result(
+  {
+    coreQuote: "日常的陪伴，也許就是你真正在意的幸福。",
+    items: [failHappinessQ, failSleep, failTired],
+  },
+  PRODUCTION_CTX
+);
+assert(onlyBad.questions.length === 0, "全低價值時 final 不可放行");
+
+const gatedGood = reflectionV3.normalizeReflectionV3Result(
+  {
+    coreQuote: "你的覺察，好像已經開始走進你們的相處裡。",
+    items: [failHappinessQ, passRelation, failSleep, passRamen],
+  },
+  PRODUCTION_CTX
+);
+assert(gatedGood.questions.length === 2, "2 個過關即可，不必湊 3");
+assert(!gatedGood.dropped, "client payload 不含 dropped");
+assert(gatedGood.questions.every((item) => /開始影響|參與在你的日常|不只是有人陪|走進關係/.test(`${item.title || ""} ${item.insight || item.text || ""}`)), "留下的必須有新關係");
+
+const twoOk = reflectionV3.evaluateReflectionV3Quality(gatedGood, {
+  context: PRODUCTION_CTX,
+  valueGate: true,
+  requireValueEngine: true,
+});
+assert(twoOk.ok, `2 個高價值 item 應通過 evaluate：${twoOk.issues.join("；")}`);
+
+const prodEvalFail = reflectionV3.evaluateReflectionV3Quality(
+  {
+    coreQuote: "日常陪伴就是幸福。",
+    items: [failHappinessQ, failSleep, failTired],
+  },
+  { context: PRODUCTION_CTX, valueGate: true }
+);
+assert(!prodEvalFail.ok, "evaluator + valueGate 必須擋 Production FAIL");
+
+const awareTautology = awarenessV3.evaluateAwarenessV3Quality(
+  {
+    items: [
+      { id: "a1", title: "我發現我很開心", text: "我發現我開心的時候會覺得開心。" },
+      { id: "a2", title: "我想睡所以累", text: "我發現今天特別想睡，所以身體可能累了。" },
+    ],
+  },
+  { context: PRODUCTION_CTX, requireTitle: true }
+);
+assert(!awareTautology.ok, "05 SO WHAT／想睡→累必須 FAIL");
+
+const awareKeep = awarenessV3.normalizeAwarenessV3Result(
+  {
+    items: [
+      { id: "a1", title: "我發現我很開心", text: "我發現我開心的時候會覺得開心。" },
+      {
+        id: "a2",
+        title: "覺察走進關係裡了",
+        text: "我發現，最近每天覺察之後，跟 Baby 也因此多了很多可以聊的東西，改變好像已經開始影響相處。",
+      },
+      {
+        id: "a3",
+        title: "我在意的是他有參與",
+        text: "我發現，我記住的不是多大的安排，而是他真的有參與在拉麵和切奇異果這種日常裡。",
+      },
+    ],
+  },
+  PRODUCTION_CTX
+);
+assert(awareKeep.items.length === 2, `05 gate 應丟掉空話、留下 2 句：${awareKeep.items.length}`);
+
+assert(reviewJs.includes("gateReflectionV3Result"), "04 production 必須執行 value gate");
+assert(reviewJs.includes("reflectionV3ValueGateRetryPrompt"), "04 fail 只 regen 一次");
+assert(reviewJs.includes("gateAwarenessV3Result"), "05 production 必須執行 value gate");
+assert(reviewJs.includes("awarenessV3ValueGateRetryPrompt"), "05 fail 只 regen 一次");
+assert(reviewJs.includes("questions.length < 2"), "04 允許 2 題，低於 2 才 502");
+assert(!reviewJs.includes("result.questions.length < 3"), "04 不再為湊 3 把垃圾放行");
+assert(app.includes("if (questions.length < 3)"), "extension 仍要 3 題");
+assert(app.includes("if (!coreQuote || questions.length < 2)"), "client 04 接受 2 題");
+assert(voice.VALUE_ENGINE_BLOCK.includes("想睡 → 累"), "prompt 有 trivial kill-list");
+assert(!voice.VALUE_ENGINE_BLOCK.includes("不代表身體就不需要休息"), "不再把想睡不衝突當好例子");
+
+const retry = reflectionV3.reflectionV3ValueGateRetryPrompt(mixed.dropped);
+assert(retry.includes("不要撿回來"), "retry 不可把 failed candidate 留回");
+assert(retry.includes("寧願 2"), "retry 不為湊 3");
 
 console.log("insight value engine fixtures ok");

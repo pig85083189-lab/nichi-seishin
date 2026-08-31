@@ -3832,13 +3832,27 @@ module.exports = async function handler(req, res) {
         return;
       }
       if (awarenessV3.isAwarenessV3Request(body)) {
-        const result = awarenessV3.normalizeAwarenessV3Result(data, body.context || {});
-        if (!result.items || result.items.length < 3) {
+        let gated = awarenessV3.gateAwarenessV3Result(data, body.context || {});
+        if (!gated.items || gated.items.length < 2) {
+          try {
+            data = await callOpenAI(
+              messages.concat([
+                { role: "assistant", content: JSON.stringify({ items: Array.isArray(data && data.items) ? data.items : data }) },
+                { role: "user", content: awarenessV3.awarenessV3ValueGateRetryPrompt(gated.dropped) },
+              ]),
+              { ...aiOpts, _retried: true }
+            );
+            gated = awarenessV3.gateAwarenessV3Result(data, body.context || {});
+          } catch (error) {
+            console.warn("[awareness-v3]", { failureStage: "value-gate-retry", error: String(error && error.message || error) });
+          }
+        }
+        const result = { items: gated.items, sourceSig: gated.sourceSig };
+        if (!result.items || result.items.length < 2) {
           console.warn("[awareness-v3]", {
-            failureStage: "normalize-items",
+            failureStage: "value-gate",
             itemCount: Array.isArray(result.items) ? result.items.length : 0,
-            rawType: Array.isArray(data) ? "array" : data && typeof data === "object" ? "object" : typeof data,
-            rawKeys: data && typeof data === "object" && !Array.isArray(data) ? Object.keys(data).slice(0, 8) : [],
+            dropped: Array.isArray(gated.dropped) ? gated.dropped.length : 0,
             model: getModel({ internal: internalUser }),
           });
           res.status(502).json({ ok: false, error: "今天的覺察還沒整理好，請再試一次" });
@@ -4000,8 +4014,33 @@ module.exports = async function handler(req, res) {
         return;
       }
       if (reflectionV3.isReflectionV3Request(body)) {
-        const result = reflectionV3.normalizeReflectionV3Result(data, body.context || {});
-        if (!result.coreQuote || result.questions.length < 3) {
+        let gated = reflectionV3.gateReflectionV3Result(data, body.context || {});
+        if (!gated.coreQuote || gated.questions.length < 2) {
+          try {
+            data = await callOpenAI(
+              messages.concat([
+                {
+                  role: "assistant",
+                  content: JSON.stringify({
+                    coreQuote: gated.coreQuote,
+                    items: Array.isArray(data && data.items) ? data.items : data && data.questions ? data.questions : [],
+                  }),
+                },
+                { role: "user", content: reflectionV3.reflectionV3ValueGateRetryPrompt(gated.dropped) },
+              ]),
+              { ...aiOpts, _retried: true }
+            );
+            gated = reflectionV3.gateReflectionV3Result(data, body.context || {});
+          } catch (error) {
+            console.warn("[reflection-v3]", { failureStage: "value-gate-retry", error: String(error && error.message || error) });
+          }
+        }
+        const result = {
+          coreQuote: gated.coreQuote,
+          questions: gated.questions,
+          sourceSig: gated.sourceSig,
+        };
+        if (!result.coreQuote || result.questions.length < 2) {
           res.status(502).json({ ok: false, error: "今天的深度思考還沒整理好，請再試一次" });
           return;
         }

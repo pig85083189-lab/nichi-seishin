@@ -6221,7 +6221,7 @@ function thinkV2Closed(guide) {
 
 function thinkGuideDone(guide) {
   const data = normalizeThinkGuide(guide);
-  if (data.variant === "reflection-v3") return Boolean(data.coreQuote && data.questions.length >= 3);
+  if (data.variant === "reflection-v3") return Boolean(data.coreQuote && data.questions.length >= 2);
   if (data.variant === "think-v2") return thinkV2Closed(data);
   const answered = data.rounds.filter((item) => item.answer).length >= 3;
   if (!answered) return false;
@@ -10857,7 +10857,7 @@ function reflectionV3Ready(journal) {
 
 function reflectionV3Stale(guide, journal) {
   const data = normalizeThinkGuide(guide);
-  if (data.variant !== "reflection-v3" || !data.coreQuote || data.questions.length < 3 || !data.sourceSig) return false;
+  if (data.variant !== "reflection-v3" || !data.coreQuote || data.questions.length < 2 || !data.sourceSig) return false;
   return data.sourceSig !== reflectionV3SourceSig(journal);
 }
 
@@ -10895,7 +10895,7 @@ function syncThinkV3Cta() {
   const archived = isCurrentJournalArchived();
   const ready = reflectionV3Ready();
   const guide = normalizeThinkGuide((state.journalInsight || {}).guide);
-  const hasResult = guide.variant === "reflection-v3" && guide.coreQuote && guide.questions.length >= 3;
+  const hasResult = guide.variant === "reflection-v3" && guide.coreQuote && guide.questions.length >= 2;
   const stale = hasResult && reflectionV3Stale(guide);
   const show = usesReflectionV3Path() && !archived && (!hasResult || stale);
   btn.hidden = !show;
@@ -10970,7 +10970,7 @@ async function generateReflectionV3(options = {}) {
   if (!ensurePlusFeature("think_ai", options)) return;
   const sig = reflectionV3SourceSig(journal);
   const current = normalizeThinkGuide((state.journalInsight || {}).guide);
-  if (current.variant === "reflection-v3" && current.coreQuote && current.questions.length >= 3 && current.sourceSig === sig && !options.force) {
+  if (current.variant === "reflection-v3" && current.coreQuote && current.questions.length >= 2 && current.sourceSig === sig && !options.force) {
     renderThinkV3();
     return;
   }
@@ -11000,7 +11000,7 @@ async function generateReflectionV3(options = {}) {
       Array.isArray(remote.items) && remote.items.length ? remote.items : remote.questions,
       "q"
     );
-    if (!coreQuote || questions.length < 3) throw new Error("今天的深度思考還沒整理好，請再試一次。");
+    if (!coreQuote || questions.length < 2) throw new Error("今天的深度思考還沒整理好，請再試一次。");
     applyReflectionV3Guide({
       status: "generated",
       sourceSig: sig,
@@ -11314,7 +11314,7 @@ function renderThinkExtension() {
   if (!root) return;
   const archived = isCurrentJournalArchived();
   const guide = normalizeThinkGuide((state.journalInsight || {}).guide);
-  const hasLayer = guide.variant === "reflection-v3" && Boolean(guide.coreQuote) && guide.questions.length >= 3;
+  const hasLayer = guide.variant === "reflection-v3" && Boolean(guide.coreQuote) && guide.questions.length >= 2;
   const ext = normalizeReflectionExtension(guide.extension);
   const loading = Boolean(state.choicesBusy?.thinkExt);
   const completedRounds = ext.rounds.filter(isThinkExtensionRoundCompleted);
@@ -11502,7 +11502,7 @@ async function generateThinkExtensionAsk(options = {}) {
   if (!ensurePlusFeature("think_ai", options)) return;
   const journal = collectJournal();
   const guide = normalizeThinkGuide(((journal.insight || state.journalInsight || {}).guide));
-  if (!(guide.variant === "reflection-v3" && guide.coreQuote && guide.questions.length >= 3)) {
+  if (!(guide.variant === "reflection-v3" && guide.coreQuote && guide.questions.length >= 2)) {
     reportThinkExtDebug({ handlerEntered: true, failureStage: "ELIGIBILITY" });
     return;
   }
@@ -11878,7 +11878,7 @@ function syncAwareV3Cta() {
   const archived = isCurrentJournalArchived();
   const ready = awarenessV3Ready();
   const data = normalizeAwarenessV3Bag(state.journalAwarenessV3);
-  const hasResult = data.items.length >= 3;
+  const hasResult = data.items.length >= 2;
   const stale = hasResult && data.sourceSig && data.sourceSig !== awarenessV3SourceSig();
   const show = usesAwarenessV3Path() && !archived && (!hasResult || stale);
   btn.hidden = !show;
@@ -11922,7 +11922,7 @@ function executionV3SourceSig(journal) {
 
 function executionV3Ready(journal) {
   const data = normalizeAwarenessV3Bag((journal && journal.awarenessV3) || state.journalAwarenessV3);
-  return data.items.length >= 3 || awarenessV3Ready(journal);
+  return data.items.length >= 2 || awarenessV3Ready(journal);
 }
 
 function syncExecV3Cta() {
@@ -11998,7 +11998,7 @@ function renderAwarenessV3() {
   if (loader) loader.hidden = !loading;
   syncAwareV3Cta();
   if (!root) return;
-  if (loading || data.items.length < 3) {
+  if (loading || data.items.length < 2) {
     if (!loading) root.innerHTML = "";
     return;
   }
@@ -12087,7 +12087,7 @@ async function generateAwarenessObservationCue(options = {}) {
   if (options.auto) return;
   if (isCurrentJournalArchived() || state.journalHydrating) return;
   const data = normalizeAwarenessV3Bag(state.journalAwarenessV3);
-  if (data.items.length < 3 || data.selectedIds.length < 1) return;
+  if (data.items.length < 2 || data.selectedIds.length < 1) return;
   const sig = observationSelectedSigFromBag(data);
   if (observationCueMatchesBag(data)) return;
   if (state.awarenessCueAttemptSig === sig && !options.force && !state.choicesBusy?.awarenessCue) return;
@@ -12161,7 +12161,7 @@ async function generateAwarenessV3(options = {}) {
   if (!ensurePlusFeature("awareness_ai", options)) return;
   const sig = awarenessV3SourceSig(journal);
   const current = normalizeAwarenessV3Bag(state.journalAwarenessV3);
-  if (current.items.length >= 3 && current.sourceSig === sig && !options.force) {
+  if (current.items.length >= 2 && current.sourceSig === sig && !options.force) {
     renderAwarenessV3();
     return;
   }
@@ -12191,7 +12191,7 @@ async function generateAwarenessV3(options = {}) {
           return out;
         }).filter(Boolean).slice(0, 3)
       : [];
-    if (items.length < 3) throw new Error("今天的覺察還沒整理好，請再試一次。");
+    if (items.length < 2) throw new Error("今天的覺察還沒整理好，請再試一次。");
     state.journalAwarenessV3 = {
       variant: "awareness-v3",
       status: "generated",

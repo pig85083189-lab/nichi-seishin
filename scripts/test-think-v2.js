@@ -26,7 +26,7 @@ assert(reviewJs.includes('body?.variant === "think-guide"'), "legacy think-guide
 assert(reviewJs.includes("thinkV2.isThinkV2Request"), "review 有獨立 V2 路由");
 assert(reviewJs.includes("CHOICES_THINK_SYSTEM"), "CURRENT 04 prompt 仍在");
 assert(!reviewJs.includes("CREATE TABLE") && !reviewJs.includes("ALTER TABLE"), "V2 不改 schema");
-assert(html.includes("app.js?v=272") && html.includes("app.css?v=229"), "cache 已 bump");
+assert(html.includes("app.js?v=273") && html.includes("app.css?v=229"), "cache 已 bump");
 
 assert(thinkV2.MIN_ROUNDS === 1 && thinkV2.MAX_ROUNDS === 3, "V2 最少 1 最多 3");
 assert(thinkV2.THINK_V2_ASK_SYSTEM.includes("【優先順序"), "ask 有優先順序");
