@@ -55,11 +55,11 @@ assert(!reviewJs.includes("attachCloudAwarenessHistory") || /mode === "checklist
 assert(!reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("embeddings"), "不提 embeddings");
 assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("不要讀過往日期"), "prompt 只讀今天");
 assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("ONE CORE THREAD"), "先找單一核心");
-assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("30～70"), "問題要簡潔");
+assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("40～180"), "問題含前因可以稍長");
 assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("NEXT LAYER"), "第二輪往下一層");
 assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("UNRESOLVED TENSION"), "第二輪先找未解張力");
 assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("PARALLEL ANGLE"), "第二輪不是平行角度");
-assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("25～60"), "第二輪問題更短");
+assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("前因"), "問題必須有前因");
 assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("ALREADY EXPLORED"), "第二輪先做 coverage");
 assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("user answer"), "第二輪權重含回答");
 assert(reflectionExt.REFLECTION_EXTENSION_CLOSE_SYSTEM.includes("不要讀過往日期"), "結論也只讀今天");
