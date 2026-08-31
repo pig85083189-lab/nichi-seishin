@@ -82,5 +82,14 @@ if (openai.usesClaude()) {
 assert(openaiSrc.includes("if (usesClaude() && !wantsOpenAI(opts)) return callClaude"), "default 仍 Claude-first；Lab 才 force OpenAI");
 assert(openai.LAB_GPT_MODEL === "gpt-5.6-sol", "Lab GPT 固定 gpt-5.6-sol");
 assert(reviewJs.includes("delete body.forceProvider"), "production review 丟掉 forceProvider");
+const labGptPayload = openai.buildOpenAIPayload(
+  [{ role: "user", content: "lab" }],
+  { lab: true, effort: "high", json: true, maxTokens: 700 },
+  "gpt-5.6-sol"
+);
+assert(labGptPayload.model === "gpt-5.6-sol", "Lab GPT payload model");
+assert(labGptPayload.reasoning_effort === "high", "Lab Chat Completions 用 reasoning_effort=high");
+assert(!("reasoning" in labGptPayload), "Lab 不走 Responses reasoning object");
+assert(!reviewJs.includes("forceProvider: \"openai\"") && !reviewJs.includes("forceProvider: 'openai'"), "正式 03-06 不 force GPT");
 
 console.log("internal model routing tests passed");

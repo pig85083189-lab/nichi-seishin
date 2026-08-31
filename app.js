@@ -437,7 +437,7 @@ function renderLabReveal(exp) {
     .map((row) => {
       const debug = row.debug || {};
       const scores = row.scores || {};
-      return `<p>版本 ${escapeLab(row.slot)} 實際：${escapeLab(row.label || row.pipeline)}<br />provider ${escapeLab(debug.provider)} · model ${escapeLab(debug.model)} · pipeline ${escapeLab(debug.pipeline)} · ${Number(debug.latencyMs || 0)}ms · calls ${Number(debug.callCount || 0)} · tokens ${Number((debug.usage && debug.usage.total) || 0)}${debug.failed ? ` · failed ${escapeLab(debug.error)}` : ""}</p>
+      return `<p>版本 ${escapeLab(row.slot)} 實際：${escapeLab(row.label || row.pipeline)}<br />provider ${escapeLab(debug.provider)} · model ${escapeLab(debug.model)} · reasoning effort ${escapeLab(debug.reasoningEffort || "—")} · pipeline ${escapeLab(debug.pipeline)} · ${Number(debug.latencyMs || 0)}ms · calls ${Number(debug.callCount || 0)} · tokens ${Number((debug.usage && debug.usage.total) || 0)}${debug.failed ? ` · failed ${escapeLab(debug.error)}` : ""}</p>
       <p class="lab-scores">Novelty ${scores.novelty ?? "—"} · Evidence ${scores.evidence ?? "—"} · Usefulness ${scores.usefulness ?? "—"} · Human ${scores.human ?? "—"} · Non-paraphrase ${scores.nonParaphrase ?? "—"}</p>`;
     })
     .join("");

@@ -18,7 +18,7 @@ const review = fs.readFileSync(path.join(root, "api/review.js"), "utf8");
 const v3 = fs.readFileSync(path.join(root, "lib/insight-reason.js"), "utf8");
 const bodyMind = fs.readFileSync(path.join(root, "lib/body-mind.js"), "utf8");
 
-assert(html.includes("app.js?v=275"), "cache app.js");
+assert(html.includes("app.js?v=276"), "cache app.js");
 assert(html.includes("app.css?v=231"), "cache css");
 assert(html.includes('id="insightLabLink"'), "sidebar Insight Lab");
 assert(html.includes("Internal"), "Internal badge");
@@ -43,6 +43,19 @@ assert(!/thanksText|USER RAW|bodyMindText/.test(api.split("handler")[1] || api) 
 assert(openaiSrc.includes("if (usesClaude() && !wantsOpenAI(opts)) return callClaude"), "default routing still Claude first");
 assert(openai.LAB_GPT_MODEL === "gpt-5.6-sol", "Lab GPT model pinned server-side");
 assert(openai.getModel({ forceProvider: "openai", lab: true }) === "gpt-5.6-sol", "lab force GPT");
+assert(insightLab.LAB_GPT_EFFORT === "high", "Lab GPT effort is high");
+assert(insightLab.gptOpts().effort === "high", "B/C gptOpts effort high");
+assert(insightLab.gptOpts().effort !== "medium", "B/C not default medium");
+const gptReq = insightLab.labGptRequestConfig();
+assert(gptReq.endpoint === "https://api.openai.com/v1/chat/completions", "Chat Completions endpoint");
+assert(gptReq.model === "gpt-5.6-sol", "request model sol");
+assert(gptReq.reasoningEffortField === "reasoning_effort", "Chat Completions field name");
+assert(gptReq.reasoningEffort === "high", "request reasoning_effort high");
+assert(gptReq.hasNestedReasoningObject === false, "not Responses reasoning object");
+const labPayload = openai.buildOpenAIPayload([{ role: "user", content: "x" }], insightLab.gptOpts(), "gpt-5.6-sol");
+assert(labPayload.reasoning_effort === "high", "payload.reasoning_effort = high");
+assert(!("reasoning" in labPayload), "Chat Completions does not send reasoning:{}");
+assert(app.includes("reasoning effort"), "reveal shows reasoning effort");
 assert(review.includes("runReasonWritePipeline"), "production 04 pipeline untouched");
 assert(!review.includes("insight-lab"), "review API does not host Lab");
 assert(v3.includes("REASONING_SYSTEM"), "4B-2.7 reasoning still in place");
@@ -87,7 +100,7 @@ function mockCallAi(overrides = {}) {
   return async (messages, opts, stage) => {
     const system = String(messages && messages[0] && messages[0].content) || "";
     const user = String(messages && messages[1] && messages[1].content) || "";
-    if (overrides.capture) overrides.capture.push({ stage, system, user, force: opts && opts.forceProvider });
+    if (overrides.capture) overrides.capture.push({ stage, system, user, force: opts && opts.forceProvider, effort: opts && opts.effort });
     if (overrides.failGpt && opts && opts.forceProvider === "openai" && stage === "gpt") throw new Error("GPT failed");
     if (overrides.failClaude && !(opts && opts.forceProvider === "openai")) throw new Error("Claude failed");
     if (overrides.failTimeout && stage === "gpt") {
@@ -177,7 +190,15 @@ function mockCallAi(overrides = {}) {
   assert(revealed && revealed.mapping.length === 3, "reveal mapping after unseal");
   assert(revealed.mapping.every((row) => row.slot && row.pipeline), "slot→pipeline mapping");
   assert(revealed.hidden.every((row) => row.debug && row.debug.model), "internal debug after reveal");
+  assert(revealed.hidden.every((row) => row.debug && row.debug.reasoningEffort), "reveal includes reasoning effort");
   assert(revealed.hidden[0].scores && "novelty" in revealed.hidden[0].scores, "evaluator scores exist");
+  const gptCalls = capture.filter((item) => item.force === "openai");
+  assert(gptCalls.length >= 2, "GPT Independent + GPT Critic both called");
+  assert(gptCalls.every((item) => item.effort === "high"), "B and C critic use high, not medium");
+  const gptHidden = revealed.hidden.find((row) => row.pipeline === "gpt");
+  const councilHidden = revealed.hidden.find((row) => row.pipeline === "council");
+  assert(gptHidden.debug.reasoningEffort === "high", "B reveal effort high");
+  assert(String(councilHidden.debug.reasoningEffort).includes("high"), "C reveal includes high");
 
   const emptyGpt = await insightLab.runLabExperiment({
     fixtureId: "fx-sparse",
