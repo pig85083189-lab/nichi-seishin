@@ -8584,6 +8584,123 @@ summary [data-user-mark-field] {
   line-height: 1.5;
 }
 
+.side-internal-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid #d8c8b8;
+  border-radius: 999px;
+  color: #8a7464;
+  font-size: 10px;
+  font-style: normal;
+  letter-spacing: 0.04em;
+  vertical-align: 1px;
+}
+
+.page--lab {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.lab-kicker {
+  margin: 0 0 6px;
+  color: #a89888;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.lab-row,
+.lab-card,
+.lab-vote,
+.lab-reveal {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.lab-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 0 18px;
+}
+
+.lab-toolbar select,
+.lab-toolbar button,
+.lab-vote button {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.lab-card {
+  margin: 0 0 16px;
+  padding: 16px 14px;
+  border: 1px solid #eadfd4;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.lab-card h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+
+.lab-card h4 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.lab-card p {
+  margin: 0 0 8px;
+  color: #3b322c;
+  font-size: 15px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.lab-empty {
+  color: #8a7464;
+}
+
+.lab-reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+
+.lab-reasons label {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  min-width: 0;
+  color: #5c5048;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.lab-reveal {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #eadfd4;
+  color: #5c5048;
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.lab-scores {
+  margin-top: 6px;
+  color: #8a7464;
+  font-size: 12px;
+}
+
+@media (max-width: 430px) {
+  .lab-card {
+    padding: 14px 12px;
+  }
+}
+
 .complete-confirm-actions {
   display: flex;
   flex-wrap: wrap;
@@ -9129,6 +9246,9 @@ summary [data-user-mark-field] {
   .think-v3-result,
   .think-v3-list,
   .think-v3-q,
+  .page--lab,
+  .lab-card,
+  .lab-vote,
   .aware-v3,
   .aware-v3-list,
   .aware-v3-item,

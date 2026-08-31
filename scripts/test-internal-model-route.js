@@ -13,6 +13,7 @@ const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
 const thinkV2 = fs.readFileSync(path.join(root, "lib/think-v2.js"), "utf8");
 const bodyMind = fs.readFileSync(path.join(root, "lib/body-mind.js"), "utf8");
 const execV2 = fs.readFileSync(path.join(root, "lib/exec-v2.js"), "utf8");
+const openaiSrc = fs.readFileSync(path.join(root, "lib/openai.js"), "utf8");
 
 assert(openai.DEFAULT_CLAUDE_MODEL === "claude-haiku-4-5-20251001", "Normal default 仍是 Haiku 4.5");
 assert(openai.INTERNAL_CLAUDE_MODEL === "claude-sonnet-5", "Internal 固定 Sonnet 5");
@@ -77,5 +78,9 @@ if (openai.usesClaude()) {
   assert(debugNormal.model === openai.resolveClaudeModel(), "normal debug = Haiku path");
   assert(debugInternal.model === "claude-sonnet-5", "Internal debug = claude-sonnet-5");
 }
+
+assert(openaiSrc.includes("if (usesClaude() && !wantsOpenAI(opts)) return callClaude"), "default 仍 Claude-first；Lab 才 force OpenAI");
+assert(openai.LAB_GPT_MODEL === "gpt-5.6-sol", "Lab GPT 固定 gpt-5.6-sol");
+assert(reviewJs.includes("delete body.forceProvider"), "production review 丟掉 forceProvider");
 
 console.log("internal model routing tests passed");

@@ -264,6 +264,271 @@ async function probeAdminAnalyticsLink() {
   }
 }
 
+const LAB_REASON_OPTIONS = [
+  { id: "new-angle", label: "有新的角度" },
+  { id: "connection", label: "真的有連起我寫的不同事情" },
+  { id: "no-paraphrase", label: "沒有重述我的話" },
+  { id: "want-answer", label: "問題讓我真的想回答" },
+  { id: "human", label: "語氣比較像人" },
+  { id: "filler", label: "太像廢話" },
+  { id: "overreach", label: "太會腦補" },
+  { id: "abstract", label: "太抽象" },
+  { id: "psych", label: "太像心理分析" },
+  { id: "other", label: "其他" },
+];
+
+function syncInsightLabLink() {
+  const link = document.getElementById("insightLabLink");
+  if (!link) return;
+  const allowed = isInternalMembership();
+  link.hidden = !allowed;
+  if (!allowed && state.page === "lab") switchPage("today", { replaceHash: true });
+}
+
+function labStorageKey() {
+  return cloudStoreKey("insightLab");
+}
+
+function readLabExperiment() {
+  try {
+    const raw = localStorage.getItem(labStorageKey());
+    const data = raw ? JSON.parse(raw) : null;
+    return data && typeof data === "object" ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLabExperiment(data) {
+  try {
+    if (!data) {
+      localStorage.removeItem(labStorageKey());
+      return;
+    }
+    localStorage.setItem(labStorageKey(), JSON.stringify(data));
+  } catch {
+    /* ignore quota */
+  }
+}
+
+function labRawFromJournal(journal) {
+  const data = journal && typeof journal === "object" ? journal : {};
+  const mind = data.bodyMind && typeof data.bodyMind === "object" ? data.bodyMind : {};
+  return {
+    thanksText: thanksTextFrom(data),
+    event: String(data.event || "").trim(),
+    mood: String(data.mood || "").trim(),
+    bodyMindText: String(mind.text || data.bodyNote || "").trim(),
+  };
+}
+
+function labHasRaw(raw) {
+  return Boolean(String((raw && (raw.thanksText || raw.event || raw.bodyMindText)) || "").trim());
+}
+
+function labDayOptions() {
+  const reviews = state.reviews && typeof state.reviews === "object" ? state.reviews : {};
+  const days = Object.keys(reviews)
+    .filter((iso) => /^\d{4}-\d{2}-\d{2}$/.test(iso) && labHasRaw(labRawFromJournal(reviews[iso] && reviews[iso].journal)))
+    .sort()
+    .reverse();
+  const todayIso = currentIso();
+  if (!days.includes(todayIso) && labHasRaw(labRawFromJournal(collectJournal()))) days.unshift(todayIso);
+  return days;
+}
+
+function escapeLab(text) {
+  return String(text || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function renderLabItem(item) {
+  if (!item || !item.hasInsight) return `<p class="lab-empty">這次沒有新的洞察</p>`;
+  return `
+    ${item.title ? `<h4>${escapeLab(item.title)}</h4>` : ""}
+    <p>${escapeLab(item.insight)}</p>
+    ${item.question ? `<p>${escapeLab(item.question)}</p>` : ""}
+  `;
+}
+
+function renderInsightLab() {
+  const root = document.getElementById("labRoot");
+  if (!root) return;
+  if (!isInternalMembership()) {
+    root.innerHTML = `<p class="lab-empty">Insight Lab 僅限 Internal。</p>`;
+    return;
+  }
+  const days = labDayOptions();
+  const exp = readLabExperiment() || {};
+  const selected = exp.date || days[0] || currentIso();
+  const fixtureId = exp.fixtureId || "";
+  const slots = Array.isArray(exp.slots) ? exp.slots : [];
+  const voted = Boolean(exp.vote);
+  root.innerHTML = `
+    <div class="lab-toolbar">
+      <label>
+        <span class="sr-only">選擇日期</span>
+        <select id="labDate">
+          ${days.map((iso) => `<option value="${iso}" ${iso === selected ? "selected" : ""}>${iso}</option>`).join("") || `<option value="${currentIso()}">${currentIso()}</option>`}
+        </select>
+      </label>
+      <label>
+        <span class="sr-only">Benchmark</span>
+        <select id="labFixture">
+          <option value="">使用當天原文</option>
+          <option value="fx-baby" ${fixtureId === "fx-baby" ? "selected" : ""}>Benchmark：覺察 × Baby</option>
+          <option value="fx-sparse" ${fixtureId === "fx-sparse" ? "selected" : ""}>Benchmark：資訊不足</option>
+          <option value="fx-positive" ${fixtureId === "fx-positive" ? "selected" : ""}>Benchmark：正向日</option>
+        </select>
+      </label>
+      <button class="btn btn-primary" id="labRun" type="button">${exp.running ? "產生中…" : "產生三個版本"}</button>
+    </div>
+    <p id="labStatus" class="lab-empty">${exp.error ? escapeLab(exp.error) : ""}</p>
+    <div id="labSlots">
+      ${slots
+        .map(
+          (slot) => `
+        <article class="lab-card" data-lab-slot="${escapeLab(slot.key)}">
+          <h3>版本 ${escapeLab(slot.key)}</h3>
+          ${(Array.isArray(slot.items) ? slot.items : []).map(renderLabItem).join("")}
+        </article>`
+        )
+        .join("")}
+    </div>
+    ${
+      slots.length
+        ? `
+      <form class="lab-vote" id="labVoteForm">
+        <p>哪一個真的讓你多看見自己一點？</p>
+        <label><input type="radio" name="labPick" value="A" ${exp.vote === "A" ? "checked" : ""} ${voted ? "disabled" : ""} /> A</label>
+        <label><input type="radio" name="labPick" value="B" ${exp.vote === "B" ? "checked" : ""} ${voted ? "disabled" : ""} /> B</label>
+        <label><input type="radio" name="labPick" value="C" ${exp.vote === "C" ? "checked" : ""} ${voted ? "disabled" : ""} /> C</label>
+        <label><input type="radio" name="labPick" value="none" ${exp.vote === "none" ? "checked" : ""} ${voted ? "disabled" : ""} /> 都沒有</label>
+        <p>為什麼？</p>
+        <div class="lab-reasons">
+          ${LAB_REASON_OPTIONS.map(
+            (item) => `
+            <label>
+              <input type="checkbox" name="labReason" value="${item.id}" ${(exp.reasons || []).includes(item.id) ? "checked" : ""} ${voted ? "disabled" : ""} />
+              <span>${item.label}</span>
+            </label>`
+          ).join("")}
+        </div>
+        <input class="input" id="labOther" type="text" placeholder="其他（選填）" value="${escapeLab(exp.whyOther || "")}" ${voted ? "disabled" : ""} />
+        ${voted ? "" : `<button class="btn btn-primary" type="submit">送出投票</button>`}
+      </form>`
+        : ""
+    }
+    <div class="lab-reveal" id="labReveal" ${voted && exp.revealed ? "" : "hidden"}>
+      ${voted && exp.revealed ? renderLabReveal(exp) : ""}
+    </div>
+  `;
+  document.getElementById("labRun")?.addEventListener("click", runInsightLab);
+  document.getElementById("labVoteForm")?.addEventListener("submit", submitInsightLabVote);
+}
+
+function renderLabReveal(exp) {
+  const revealed = exp && exp.revealed && typeof exp.revealed === "object" ? exp.revealed : {};
+  const hidden = Array.isArray(revealed.hidden) ? revealed.hidden : [];
+  return hidden
+    .map((row) => {
+      const debug = row.debug || {};
+      const scores = row.scores || {};
+      return `<p>版本 ${escapeLab(row.slot)} 實際：${escapeLab(row.label || row.pipeline)}<br />provider ${escapeLab(debug.provider)} · model ${escapeLab(debug.model)} · pipeline ${escapeLab(debug.pipeline)} · ${Number(debug.latencyMs || 0)}ms · calls ${Number(debug.callCount || 0)} · tokens ${Number((debug.usage && debug.usage.total) || 0)}${debug.failed ? ` · failed ${escapeLab(debug.error)}` : ""}</p>
+      <p class="lab-scores">Novelty ${scores.novelty ?? "—"} · Evidence ${scores.evidence ?? "—"} · Usefulness ${scores.usefulness ?? "—"} · Human ${scores.human ?? "—"} · Non-paraphrase ${scores.nonParaphrase ?? "—"}</p>`;
+    })
+    .join("");
+}
+
+async function runInsightLab() {
+  if (!isInternalMembership()) return;
+  const date = String(document.getElementById("labDate")?.value || currentIso()).trim();
+  const fixtureId = String(document.getElementById("labFixture")?.value || "").trim();
+  const review = (state.reviews && state.reviews[date]) || (date === currentIso() ? { journal: collectJournal() } : null);
+  const raw = fixtureId ? {} : labRawFromJournal(review && review.journal);
+  if (!fixtureId && !labHasRaw(raw)) {
+    showToast("這天沒有 01～03 原文");
+    return;
+  }
+  writeLabExperiment({ date, fixtureId, running: true, slots: [], vote: "", reasons: [], revealed: null });
+  renderInsightLab();
+  try {
+    const response = await fetchWithTimeout(
+      `${location.origin}/api/insight-lab`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "run", date, fixtureId, raw: fixtureId ? undefined : raw }),
+      },
+      59000
+    );
+    const payload = await response.json().catch(() => ({}));
+    if (response.status === 403) {
+      writeLabExperiment({ date, fixtureId, error: "沒有 Internal 權限", slots: [] });
+      renderInsightLab();
+      return;
+    }
+    if (!response.ok || !payload.ok || !payload.data) {
+      throw new Error(payload.error || `HTTP ${response.status}`);
+    }
+    writeLabExperiment({
+      date,
+      fixtureId,
+      fingerprint: payload.data.fingerprint,
+      slots: payload.data.slots,
+      seal: payload.data.seal,
+      vote: "",
+      reasons: [],
+      whyOther: "",
+      revealed: null,
+    });
+    renderInsightLab();
+  } catch (error) {
+    writeLabExperiment({ date, fixtureId, error: String(error && error.message ? error.message : error), slots: [] });
+    renderInsightLab();
+  }
+}
+
+async function submitInsightLabVote(event) {
+  event.preventDefault();
+  if (!isInternalMembership()) return;
+  const exp = readLabExperiment();
+  if (!exp || !exp.seal || exp.vote) return;
+  const pick = String(event.target.querySelector("input[name=labPick]:checked")?.value || "").trim();
+  if (!pick) {
+    showToast("請先選一個版本");
+    return;
+  }
+  const reasons = Array.from(event.target.querySelectorAll("input[name=labReason]:checked")).map((node) => node.value);
+  const whyOther = String(document.getElementById("labOther")?.value || "").trim();
+  try {
+    const response = await fetchWithTimeout(
+      `${location.origin}/api/insight-lab`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reveal", seal: exp.seal }),
+      },
+      12000
+    );
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || "無法顯示對照");
+    writeLabExperiment({
+      ...exp,
+      vote: pick,
+      reasons,
+      whyOther,
+      revealed: payload.data,
+    });
+    renderInsightLab();
+  } catch (error) {
+    showToast(String(error && error.message ? error.message : error));
+  }
+}
+
 /* =============================================================================
  * 工具
  * =========================================================================== */
@@ -4218,6 +4483,7 @@ async function refreshAuth(options = {}) {
     if (state.user && !preview) trackProduct("app_open", { source: "auth" });
     maybeShowPlusEndedNotice();
     probeAdminAnalyticsLink();
+    syncInsightLabLink();
     if (preview) {
       stopCloudLiveSync();
     } else if (state.user && !options.skipCloud) await syncAccountCloud();
@@ -4228,6 +4494,7 @@ async function refreshAuth(options = {}) {
     state.authReady = true;
     renderAuth();
     applyAccessLock();
+    syncInsightLabLink();
   }
 }
 
@@ -4923,6 +5190,7 @@ const PAGE_HASH = {
   manifest: "vision",
   history: "history",
   guide: "guide",
+  lab: "lab",
 };
 
 const HASH_PAGE = {
@@ -4933,6 +5201,7 @@ const HASH_PAGE = {
   vision: "today",
   history: "history",
   guide: "guide",
+  lab: "lab",
 };
 
 function historyDetailIso(value) {
@@ -5058,6 +5327,7 @@ function applyAppLocation() {
 function switchPage(page, options = {}) {
   if (!page) return;
   if (page === "manifest") page = "today";
+  if (page === "lab" && !isInternalMembership()) page = "today";
   if (page !== "history" || !options.keepDetail) {
     state.historyDetailDate = "";
     state.historyOpen = "";
@@ -5094,6 +5364,7 @@ function switchPage(page, options = {}) {
     }
     if (window.NichiAnalytics) window.NichiAnalytics.trackOnceSession("history_viewed", { source: "nav" }, "history");
   }
+  if (page === "lab") renderInsightLab();
   if (!options.skipHash) {
     syncAppHash(page, page === "history" ? state.historyDetailDate : "", { replace: Boolean(options.replaceHash) });
   }

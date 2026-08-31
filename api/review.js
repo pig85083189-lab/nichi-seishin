@@ -3225,6 +3225,8 @@ module.exports = async function handler(req, res) {
   delete body.userId;
   delete body.model;
   delete body.internal;
+  delete body.forceProvider;
+  delete body.provider;
   delete body.completedCount;
   delete body.completedRounds;
   delete body.selectedPast;

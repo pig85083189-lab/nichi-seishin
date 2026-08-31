@@ -7,6 +7,9 @@
     "api/review.js": {
       "maxDuration": 60
     },
+    "api/insight-lab.js": {
+      "maxDuration": 60
+    },
     "api/chat.js": {
       "maxDuration": 60
     },

@@ -30,7 +30,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.8.0/dist/driver.css" />
-    <link rel="stylesheet" href="app.css?v=230" />
+    <link rel="stylesheet" href="app.css?v=231" />
     <style>
       html.is-booting,
       html.is-booting body {
@@ -177,6 +177,14 @@
               <path d="M9.8 9.4a2.2 2.2 0 1 1 3.4 1.85c-.7.42-1.2.9-1.2 1.75" />
             </svg>
             <span>使用說明</span>
+          </a>
+          <a class="side-item" id="insightLabLink" data-page="lab" href="#lab" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 3h6" />
+              <path d="M10 3v4l-4 7v4h12v-4l-4-7V3" />
+              <path d="M9 18h6" />
+            </svg>
+            <span>Insight Lab <em class="side-internal-badge">Internal</em></span>
           </a>
           <a class="side-item" id="adminAnalyticsLink" href="/admin/analytics" hidden>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -934,6 +942,15 @@
           <div class="history-detail" id="historyDetailView" hidden></div>
         </section>
 
+        <section class="page page--lab" id="page-lab" data-page="lab" hidden>
+          <header class="page__header">
+            <p class="lab-kicker">Internal</p>
+            <h2 class="page__title">Insight Lab</h2>
+            <p class="page__subtitle">同一份 01～03 原文，盲測三種思考方式。結果不會寫入正式日記。</p>
+          </header>
+          <div id="labRoot"></div>
+        </section>
+
         <section class="page page--guide" id="page-guide" data-page="guide" hidden>
           <header class="guide-hero">
             <p class="guide-kicker">使用說明</p>
@@ -1296,6 +1313,6 @@
     <script src="lib/insight-highlight.js?v=5"></script>
     <script src="lib/user-mark.js?v=6"></script>
     <script src="lib/task-sidebar.js?v=1"></script>
-    <script src="app.js?v=274"></script>
+    <script src="app.js?v=275"></script>
   </body>
 </html>

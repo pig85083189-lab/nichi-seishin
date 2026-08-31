@@ -66,6 +66,8 @@ module.exports = async function handler(req, res) {
   const body = readJsonBody(req);
   delete body.model;
   delete body.internal;
+  delete body.forceProvider;
+  delete body.provider;
   if (isReviewPayload(body)) {
     return reviewHandler(req, res);
   }
