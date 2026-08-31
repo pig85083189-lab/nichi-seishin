@@ -6157,7 +6157,7 @@ function normalizeThinkGuide(raw) {
   const improvementDirection = String(
     storedClose.improvementDirection || data.improvementDirection || data.direction || ""
   ).trim();
-  return {
+  const next = {
     ...data,
     round: round || (summary ? 4 : rounds.length),
     rounds,
@@ -6187,6 +6187,8 @@ function normalizeThinkGuide(raw) {
     generatedAt: String(data.generatedAt || "").trim(),
     extension: normalizeReflectionExtension(data.extension),
   };
+  delete next.retrieval;
+  return next;
 }
 
 function thinkV2Closed(guide) {
@@ -10908,6 +10910,8 @@ function renderThinkV3() {
   const loading = Boolean(state.choicesBusy?.think);
   if (loader) loader.hidden = !loading;
   syncThinkV3Cta();
+  syncAwareV3Cta();
+  syncExecV3Cta();
   if (!root) return;
   if (loading || !guide.coreQuote) {
     if (!loading) root.innerHTML = "";
@@ -11071,6 +11075,10 @@ function applyThinkExtension(extension) {
   const prevExt = normalizeReflectionExtension(prevGuide.extension);
   insight.guide = normalizeThinkGuide({
     ...prevGuide,
+    variant: prevGuide.variant,
+    coreQuote: prevGuide.coreQuote,
+    questions: prevGuide.questions,
+    sourceSig: prevGuide.sourceSig,
     extension: normalizeReflectionExtension({
       ...prevExt,
       ...(extension && typeof extension === "object" ? extension : {}),
