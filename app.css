@@ -7445,6 +7445,57 @@ textarea[hidden] + .journal-voice-hint,
   cursor: pointer;
 }
 
+.think-ext-record {
+  margin: 22px 0 0;
+  min-width: 0;
+}
+
+.think-ext-record + .think-ext-record,
+.think-ext-record + .think-ext-kicker,
+.think-ext-record + .think-ext-text-btn {
+  margin-top: 26px;
+}
+
+.think-ext-record__q,
+.think-ext-record__a {
+  margin: 10px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.think-ext-record__q {
+  font-family: var(--serif);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.7;
+  color: #342c27;
+}
+
+.think-ext-record__a {
+  color: #5c5149;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.think-ext-more {
+  margin: 12px 0 0;
+}
+
+.think-ext-more summary {
+  cursor: pointer;
+  color: #8a7a6e;
+  font-size: 12px;
+  line-height: 1.6;
+  min-height: 32px;
+}
+
+.think-ext-more__q {
+  margin: 8px 0 0;
+  color: #8a7a6e;
+  font-size: 13px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
 .think-ext-conclusion {
   margin: 20px 0 0;
 }
@@ -9069,6 +9120,7 @@ summary [data-user-mark-field] {
   .aware-v3-cue,
   .think-ext,
   .think-ext-block,
+  .think-ext-record,
   .think-ext-options,
   .think-ext-opt,
   .think-ext-answer {

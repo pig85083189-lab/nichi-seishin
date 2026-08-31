@@ -24,6 +24,11 @@ assert(app.includes("function generateReflectionV3"), "第一層 generate 仍在
 assert(app.includes("function generateThinkExtensionAsk"), "延伸 ask 存在");
 assert(app.includes("function generateThinkExtensionClose"), "延伸 close 存在");
 assert(app.includes("想再往裡面看一點"), "入口文案");
+assert(app.includes("第一次") && app.includes("renderThinkExtensionRecord"), "完成後保留第一次");
+assert(app.includes("延伸深度思考｜第二次"), "第二次不覆蓋第一次");
+assert(app.includes("其他題目"), "未選題次要化");
+assert(app.includes("coreThread"), "persist coreThread");
+assert(app.includes("selectedQuestionText"), "persist selectedQuestionText");
 assert(app.includes("延伸深度思考 →"), "入口 CTA");
 assert(app.includes("整理這次的深度思考 →"), "結論 CTA");
 assert(app.includes("再延伸一次 →"), "第二輪 CTA");
@@ -49,7 +54,15 @@ assert(!/function loadReviewForDate[\s\S]{0,900}generateThinkExtensionAsk/.test(
 assert(!reviewJs.includes("attachCloudAwarenessHistory") || /mode === "checklist" \|\| body.mode === "prompts" \|\| body.mode === "choices"/.test(reviewJs), "insight 不掛歷史");
 assert(!reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("embeddings"), "不提 embeddings");
 assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("不要讀過往日期"), "prompt 只讀今天");
+assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("ONE CORE THREAD"), "先找單一核心");
+assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("30～70"), "問題要簡潔");
+assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("NEXT LAYER"), "第二輪往下一層");
+assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("ALREADY EXPLORED"), "第二輪先做 coverage");
+assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("user answer"), "第二輪權重含回答");
 assert(reflectionExt.REFLECTION_EXTENSION_CLOSE_SYSTEM.includes("不要讀過往日期"), "結論也只讀今天");
+assert(reflectionExt.REFLECTION_EXTENSION_CLOSE_SYSTEM.includes("ONE CORE CONCLUSION"), "結論聚焦");
+assert(reflectionExt.REFLECTION_EXTENSION_CLOSE_SYSTEM.includes("多看見了什麼"), "第二輪結論往下一層");
+assert(reflectionExt.reflectionExtensionAskUserPrompt({ context: { priorRound: { answer: "我很在意被看見", deepConclusion: "你在意特定的人", coreThread: "被看見", selectedQuestion: "你在意被看見嗎？", questions: [{ text: "你在意被看見嗎？" }] } } }).includes("第一輪她親自回答"), "Round 2 prompt 放回答");
 assert(reviewJs.includes("reflectionExt.isReflectionExtensionRequest"), "review 接 extension");
 assert(reviewJs.includes("reflectionV3.isReflectionV3Request"), "review 仍接第一層");
 assert(reviewJs.includes("delete body.completedCount"), "不信 client completedCount");
@@ -90,10 +103,11 @@ const QUALITY = [
     name: "家庭衝突",
     context: { ...layer },
     result: {
+      coreThread: "接受現況 vs 真正選擇",
       questions: [
-        { id: "eq1", text: "這段『只能住這裡』裡，有沒有把『現在最省事的安排』和『你願意長期用選擇去換的生活』混成同一件事？" },
-        { id: "eq2", text: "如果男友這件事明天消失，家裡的不舒服還會不會同樣讓你覺得自己沒有出口？" },
-        { id: "eq3", text: "你比較不能接受的，是這個環境本身，還是自己在這個環境裡越來越沒有位置？" },
+        { id: "eq1", text: "這句「只能住這裡」，有沒有把省事和你願意長期交換的生活混在一起？" },
+        { id: "eq2", text: "如果男友這件事消失，家裡的不舒服還會讓你覺得自己沒有出口嗎？" },
+        { id: "eq3", text: "你比較不能接受的，是這個環境本身，還是自己越來越沒有位置？" },
       ],
     },
     forbid: /童年創傷|依附|討好型人格/,
@@ -114,10 +128,11 @@ const QUALITY = [
       ],
     },
     result: {
+      coreThread: "被聽見 vs 被放在一邊",
       questions: [
-        { id: "eq1", text: "這次沉默裡，你是在保護關係，還是在等對方先承認你的位置？" },
-        { id: "eq2", text: "如果這件小事其實不重要，那真正讓胃緊起來的，是被誤解，還是被放在一邊？" },
-        { id: "eq3", text: "你比較想要的，是這次趕快和好，還是以後吵架時不必用沉默來證明自己受傷？" },
+        { id: "eq1", text: "這次沉默，是在保護關係，還是在等對方先承認你的位置？" },
+        { id: "eq2", text: "真正讓胃緊的，是這件小事，還是自己又被放在一邊？" },
+        { id: "eq3", text: "你比較想要的，是趕快和好，還是以後不必用沉默證明自己受傷？" },
       ],
     },
   },
@@ -137,10 +152,11 @@ const QUALITY = [
       ],
     },
     result: {
+      coreThread: "工作標準 vs 自己一個人補完",
       questions: [
-        { id: "eq1", text: "這個標準裡，有多少是工作真正需要的，有多少其實是你對『自己看起來專業』的要求？" },
-        { id: "eq2", text: "你比較受不了的，是品質不夠，還是這份落差讓你覺得自己又得獨自補完？" },
-        { id: "eq3", text: "如果把標準再講一次，對方仍只到七成，你會把這當成訓練成本，還是人選問題？" },
+        { id: "eq1", text: "這個標準裡，有多少是工作需要，有多少是你不想看起來隨便？" },
+        { id: "eq2", text: "你比較受不了的，是品質不夠，還是又得自己一個人補完？" },
+        { id: "eq3", text: "如果標準再講一次仍只到七成，你會看成訓練成本，還是人選問題？" },
       ],
     },
     forbid: /害怕不被肯定|討好型人格/,
@@ -161,9 +177,10 @@ const QUALITY = [
       ],
     },
     result: {
+      coreThread: "被理解 vs 開口後站得住",
       questions: [
-        { id: "eq1", text: "如果她理解了事實，但不改變態度，你還會覺得這次溝通算成功嗎？" },
-        { id: "eq2", text: "你已經知道要說，那『還沒說』是在等更好的時機，還是在等自己比較不會受傷的版本？" },
+        { id: "eq1", text: "如果她理解事實但不改態度，你還會覺得這次溝通算成功嗎？" },
+        { id: "eq2", text: "還沒說出口，是在等時機，還是在等自己比較不會受傷的版本？" },
         { id: "eq3", text: "這次你比較需要的，是被理解，還是自己先能在開口時站得住？" },
       ],
     },
@@ -185,10 +202,11 @@ const QUALITY = [
       ],
     },
     result: {
+      coreThread: "承認只是累 vs 還要再擠效率",
       questions: [
-        { id: "eq1", text: "如果先承認今天就是累，你還會不會覺得自己應該再擠出一點效率？" },
-        { id: "eq2", text: "這份痠比較像『做完了可以停』，還是『停下來會覺得自己沒做夠』？" },
-        { id: "eq3", text: "明天若工作還是很多，你比較想保住的是產出，還是身體還能回來的那種力氣？" },
+        { id: "eq1", text: "如果先承認今天就是累，你還會覺得自己應該再擠一點效率嗎？" },
+        { id: "eq2", text: "這份痠比較像做完了可以停，還是停下來會覺得自己沒做夠？" },
+        { id: "eq3", text: "明天工作還很多時，你比較想保住產出，還是身體還能回來的力氣？" },
       ],
     },
     forbid: /童年|討好|不安全感/,
@@ -209,10 +227,11 @@ const QUALITY = [
       ],
     },
     result: {
+      coreThread: "在關係裡可以很像自己",
       questions: [
-        { id: "eq1", text: "這頓飯裡，讓你最像自己的，是被接住，還是你自己也沒有用力表現？" },
-        { id: "eq2", text: "這種放鬆，是因為事情剛好順利，還是因為你在他旁邊不必先證明自己？" },
-        { id: "eq3", text: "如果這種狀態值得保留，你真正想留下的是氣氛，還是你們相處時那個不必緊繃的自己？" },
+        { id: "eq1", text: "這頓飯裡，讓你最像自己的，是被接住，還是你自己不必用力表現？" },
+        { id: "eq2", text: "這種放鬆，是事情剛好順利，還是在他旁邊不必先證明自己？" },
+        { id: "eq3", text: "如果這份狀態值得留，你想留下的是氣氛，還是那個不必緊繃的自己？" },
       ],
     },
     forbid: /創傷|害怕失去|依附|隱藏問題/,
@@ -233,10 +252,11 @@ const QUALITY = [
       ],
     },
     result: {
+      coreThread: "客觀環境 vs 仍用平常標準要求自己",
       questions: [
-        { id: "eq1", text: "在熱到頭昏的時候，你還把『應該專心』當成自己可以完全控制的事嗎？" },
+        { id: "eq1", text: "熱到頭昏時，你還把「應該專心」當成自己能完全控制的事嗎？" },
         { id: "eq2", text: "你比較煩的是工作被打斷，還是自己明明不舒服還繼續撐？" },
-        { id: "eq3", text: "如果環境暫時改不了，你願意把今天的產出標準往下放一點，還是仍用平常的自己要求自己？" },
+        { id: "eq3", text: "環境暫時改不了時，你願意把今天標準放下一點，還是仍用平常要求自己？" },
       ],
     },
     forbid: /不安全感|討好|童年/,
@@ -257,9 +277,10 @@ const QUALITY = [
       ],
     },
     result: {
+      coreThread: "先讓這份怪怪的停著",
       questions: [
-        { id: "eq1", text: "這份『怪怪的』，你比較想立刻解釋清楚，還是先讓它只是一種還不成形的感覺？" },
-        { id: "eq2", text: "如果今天其實沒有需要被解決的問題，你還能接受這樣過完一天嗎？" },
+        { id: "eq1", text: "這份怪怪的，你比較想立刻解釋清楚，還是先讓它只是還不成形的感覺？" },
+        { id: "eq2", text: "如果今天沒有需要被解決的問題，你還能接受這樣過完一天嗎？" },
         { id: "eq3", text: "這份空比較像休息，還是像你習慣在平靜裡找一件值得分析的事？" },
       ],
     },
@@ -281,10 +302,11 @@ const QUALITY = [
       ],
     },
     result: {
+      coreThread: "選穩定 vs 站到自己比較想過的生活",
       questions: [
-        { id: "eq1", text: "如果兩年後回頭看，你比較怕的是選錯，還是從來沒有真正站在自己比較想過的那種生活上？" },
-        { id: "eq2", text: "胸口緊的時候，你是在怕失去穩定，還是在怕自己選了想做的之後沒有退路？" },
-        { id: "eq3", text: "這次決定裡，有沒有把『家人會怎麼看』和『你自己願意過的日子』疊成同一個標準？" },
+        { id: "eq1", text: "兩年後回頭看，你比較怕選錯，還是從來沒站到自己比較想過的生活上？" },
+        { id: "eq2", text: "胸口緊時，你是怕失去穩定，還是怕選了想做的之後沒有退路？" },
+        { id: "eq3", text: "這次決定裡，有沒有把家人怎麼看，和你願意過的日子疊成同一標準？" },
       ],
     },
   },
@@ -293,10 +315,11 @@ const QUALITY = [
     name: "第一層已經問得很完整",
     context: { ...layer },
     result: {
+      coreThread: "看清現實 vs 繼續不選",
       questions: [
-        { id: "eq1", text: "如果三年後你還住在這裡，你比較不能接受的是環境沒變，還是自己已經不再問有沒有別的路？" },
-        { id: "eq2", text: "這段安排裡，有沒有一個界線是你其實已經隱約知道，只是還沒準備用它來衡量關係？" },
-        { id: "eq3", text: "你現在說家人不一定會改，這句話是幫你看清現實，還是讓你比較容易繼續不選？" },
+        { id: "eq1", text: "三年後還住這裡，你比較不能接受環境沒變，還是自己不再問有沒有別的路？" },
+        { id: "eq2", text: "這段安排裡，有沒有一條界線你已經隱約知道，只是還沒用來衡量關係？" },
+        { id: "eq3", text: "家人不一定會改這句話，是幫你看清現實，還是讓你比較容易繼續不選？" },
       ],
     },
   },
@@ -372,6 +395,103 @@ const closeAction = reflectionExt.evaluateExtensionCloseQuality(
 );
 assert(closeAction.issues.includes("conclusion-action") || !closeAction.deepConclusion, "結論不能偷做 06");
 
+const scattered = reflectionExt.evaluateExtensionAskQuality(
+  {
+    coreThread: "被看見",
+    questions: [
+      { id: "eq1", text: "你是不是其實在懷疑自己的價值感？" },
+      { id: "eq2", text: "你這次有沒有已經全力以赴了？" },
+      { id: "eq3", text: "有沒有別的方法讓過程被更多人知道？" },
+    ],
+  },
+  { context: { event: "做了很多事，但好像沒人看見。", thinkQuestions: [{ text: "你真正在意的是成果，還是被看見？" }] } }
+);
+assert(!scattered.ok && scattered.issues.includes("thread-ignored"), "三題不能各走各的主題");
+
+const priorSeen = {
+  coreThread: "被看見 vs 特定重要的人",
+  selectedQuestion: "你真正在意的，是一般人的肯定，還是特定重要的人有沒有看見你的努力？",
+  selectedQuestionText: "你真正在意的，是一般人的肯定，還是特定重要的人有沒有看見你的努力？",
+  answer: "我發現我真的很在意重要的人有沒有看見我的努力。",
+  deepConclusion: "真正影響你的可能不是一般人的肯定，而是特定重要人物是否理解你的付出。",
+  questions: [
+    { text: "你真正在意的，是一般人的肯定，還是特定重要的人有沒有看見你的努力？" },
+    { text: "被看見對你來說，比較像成績被承認，還是關係上的靠近？" },
+    { text: "如果努力沒被看見，你還能自己確認這份努力有位置嗎？" },
+  ],
+};
+const round2ok = reflectionExt.evaluateExtensionAskQuality(
+  {
+    coreThread: "如果那個人看不見，被看見還能是什麼",
+    questions: [
+      { id: "eq1", text: "如果那個人永遠沒辦法用你期待的方式理解你，你會怎麼重新定義被看見？" },
+      { id: "eq2", text: "你想從那份理解裡得到的，比較是肯定、認同，還是關係上的靠近？" },
+      { id: "eq3", text: "當被看見不再來自那個人，你還能用什麼方式確認自己的努力有位置？" },
+    ],
+  },
+  { context: { ...layer, priorRound: priorSeen } }
+);
+assert(round2ok.ok, `Round 2 next layer 應通過：${round2ok.issues.join("；")}`);
+
+const round2repeat = reflectionExt.evaluateExtensionAskQuality(
+  {
+    coreThread: "被看見",
+    questions: [
+      { id: "eq1", text: priorSeen.selectedQuestion },
+      { id: "eq2", text: "重要的人有沒有看見你的努力，對你來說還重不重要？" },
+      { id: "eq3", text: "你是不是其實很需要被肯定？" },
+    ],
+  },
+  { context: { ...layer, priorRound: priorSeen } }
+);
+assert(
+  round2repeat.issues.some((item) => item.includes("repeat-prior") || item.includes("repeat-answer") || item.includes("repeat-conclusion")),
+  "Round 2 重問已回答內容必須 FAIL"
+);
+
+const persistedRound = reflectionExt.normalizeReflectionExtensionRound(
+  {
+    id: "ext_keep",
+    coreThread: "接受現況 vs 真正選擇",
+    questions: [
+      { id: "eq1", text: "這句只能住這裡，有沒有把省事和長期交換混在一起？" },
+      { id: "eq2", text: "男友這件事消失後，不舒服還在嗎？" },
+      { id: "eq3", text: "你比較不能接受環境，還是自己沒有位置？" },
+    ],
+    selectedQuestionId: "eq1",
+    selectedQuestionText: "這句只能住這裡，有沒有把省事和長期交換混在一起？",
+    answer: "我想了一下，其實不是完全沒有選擇。",
+    deepConclusion: "你看見的也許是選擇正在被交換。",
+    completedAt: "2026-08-31T01:00:00.000Z",
+    sourceSig: "sig",
+  },
+  0
+);
+assert(persistedRound.coreThread === "接受現況 vs 真正選擇", "coreThread 會保存");
+assert(persistedRound.selectedQuestionText.includes("只能住這裡"), "selectedQuestionText 會保存");
+const twoKept = reviewMerge.normalizeReflectionExtension({
+  rounds: [
+    persistedRound,
+    {
+      id: "ext_next",
+      coreThread: "如果那個人看不見",
+      questions: [
+        { id: "eq1", text: "如果他永遠不理解，你會怎麼重新定義被看見？" },
+        { id: "eq2", text: "你想從理解裡得到的是肯定還是靠近？" },
+        { id: "eq3", text: "被看見不再來自他時，你還能怎麼確認努力有位置？" },
+      ],
+      selectedQuestionId: "eq2",
+      selectedQuestionText: "你想從理解裡得到的是肯定還是靠近？",
+      answer: "我比較想要的是靠近。",
+      deepConclusion: "比第一輪再往下，你要的不是被評分，是關係上的位置。",
+      completedAt: "2026-08-31T02:00:00.000Z",
+    },
+  ],
+});
+assert(twoKept.rounds.length === 2, "兩輪都保留");
+assert(twoKept.rounds[0].coreThread && twoKept.rounds[1].coreThread, "兩輪 coreThread 都在");
+assert(twoKept.rounds[0].selectedQuestionText && twoKept.rounds[1].answer, "第一輪選題與第二輪回答都在");
+
 const emptyExt = reflectionExt.normalizeReflectionExtension({});
 assert(emptyExt.rounds.length === 0, "空 extension 安全");
 assert(reviewMerge.normalizeAwarenessV3Bag({ items: [{ id: "a1", text: "我看見自己會先忍。" }, { id: "a2", text: "我看見自己在意位置。" }, { id: "a3", text: "我看見自己很少開口。" }], selectedIds: ["a1"] }).items.length === 3, "05 不因 extension 崩潰");
@@ -429,9 +549,9 @@ const reset = internalTest.applyInternalTodayReset({
 assert(reset.journal.internalTestRuns[0].snapshot.journal.insight.guide.extension.rounds.length === 2, "internal reset snapshot 含 extension");
 assert(!reset.journal.insight, "fresh run 清空 extension");
 
-assert(html.includes("app.js?v=263"), "cache js");
-assert(html.includes("app.css?v=227"), "cache css");
-assert(html.includes("lib/review-merge.js?v=19"), "cache merge");
+assert(html.includes("app.js?v=264"), "cache js");
+assert(html.includes("app.css?v=228"), "cache css");
+assert(html.includes("lib/review-merge.js?v=20"), "cache merge");
 
 assert(app.includes("id=\"btnThinkExtStart\""), "A: CTA id");
 assert(app.includes('node.closest("#btnThinkExtStart")'), "A: delegated handler 有 extension case");

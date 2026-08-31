@@ -11018,10 +11018,14 @@ function normalizeReflectionExtension(raw) {
       })
       .filter(Boolean)
       .slice(0, 3);
+    const selectedQuestionId = String(row.selectedQuestionId || "");
+    const selectedFromList = questions.find((item) => item.id === selectedQuestionId);
     return {
       id: String(row.id || `ext${index + 1}`),
+      coreThread: String(row.coreThread || "").replace(/\s+/g, " ").trim(),
       questions,
-      selectedQuestionId: String(row.selectedQuestionId || ""),
+      selectedQuestionId,
+      selectedQuestionText: String((selectedFromList && selectedFromList.text) || row.selectedQuestionText || "").replace(/\s+/g, " ").trim(),
       answer: String(row.answer || "").trim(),
       answerSig: String(row.answerSig || "").trim(),
       deepConclusion: String(row.deepConclusion || "").trim(),
@@ -11111,14 +11115,16 @@ function thinkExtensionAnswerMeaningful(answer) {
   return String(answer || "").replace(/\s+/g, "").trim().length >= 8;
 }
 
-function reflectionExtensionContext(journal) {
+function reflectionExtensionContext(journal, options = {}) {
   const data = journal || collectJournal();
   const think = thinkBitsFrom(data);
   const mind = normalizeBodyMind(data.bodyMind);
   const ext = normalizeReflectionExtension(((data.insight && data.insight.guide) || {}).extension || thinkExtensionFrom());
+  const skipId = String((options && options.roundId) || "").trim();
   const completed = ext.rounds.filter(isThinkExtensionRoundCompleted);
-  const prior = completed[0] || null;
+  const prior = completed.find((item) => item.id !== skipId) || null;
   const selected = prior && prior.questions.find((item) => item.id === prior.selectedQuestionId);
+  const selectedText = String((prior && prior.selectedQuestionText) || (selected && selected.text) || "").trim();
   return {
     thanksText: thanksTextFrom(data),
     thanks: thanksTextFrom(data),
@@ -11134,9 +11140,10 @@ function reflectionExtensionContext(journal) {
     questions: think.questions,
     priorRound: prior
       ? {
+          coreThread: String(prior.coreThread || "").trim(),
           questions: prior.questions,
-          selectedQuestion: selected ? selected.text : "",
-          selectedQuestionText: selected ? selected.text : "",
+          selectedQuestion: selectedText,
+          selectedQuestionText: selectedText,
           answer: prior.answer,
           deepConclusion: prior.deepConclusion,
         }
@@ -11169,6 +11176,34 @@ function selectedThinkExtensionQuestion(round) {
   return (round.questions || []).find((item) => item.id === round.selectedQuestionId) || null;
 }
 
+function thinkExtensionSelectedText(round) {
+  const selected = selectedThinkExtensionQuestion(round);
+  return String((round && round.selectedQuestionText) || (selected && selected.text) || "").trim();
+}
+
+function renderThinkExtensionRecord(round, index) {
+  if (!round) return "";
+  const label = index === 0 ? "第一次" : "第二次";
+  const selectedText = thinkExtensionSelectedText(round);
+  const others = (round.questions || []).filter((item) => item.id !== round.selectedQuestionId && item.text);
+  return `
+    <article class="think-ext-record">
+      <p class="think-ext-kicker">延伸深度思考｜${label}</p>
+      ${selectedText ? `<p class="think-ext-record__q">${escapeHtml(selectedText)}</p>` : ""}
+      ${round.answer ? `<p class="think-ext-record__a">${escapeHtml(round.answer)}</p>` : ""}
+      ${round.deepConclusion ? `
+        <div class="think-ext-conclusion">
+          <p class="think-ext-conclusion__label">深度結論</p>
+          ${markableP(round.deepConclusion, `think.extension.${round.id}.conclusion`, "think-ext-conclusion__text")}
+        </div>` : ""}
+      ${others.length ? `
+        <details class="think-ext-more">
+          <summary>其他題目</summary>
+          ${others.map((item) => `<p class="think-ext-more__q">${escapeHtml(item.text)}</p>`).join("")}
+        </details>` : ""}
+    </article>`;
+}
+
 function flushThinkExtensionAnswer() {
   const ta = document.getElementById("thinkExtAnswer");
   if (!ta) return thinkExtensionFrom();
@@ -11190,9 +11225,10 @@ function renderThinkExtension() {
   const hasLayer = guide.variant === "reflection-v3" && Boolean(guide.coreQuote) && guide.questions.length >= 3;
   const ext = normalizeReflectionExtension(guide.extension);
   const loading = Boolean(state.choicesBusy?.thinkExt);
-  const completedCount = ext.rounds.filter(isThinkExtensionRoundCompleted).length;
+  const completedRounds = ext.rounds.filter(isThinkExtensionRoundCompleted);
+  const completedCount = completedRounds.length;
   const incomplete = ext.rounds.find((item) => item.questions.length && !isThinkExtensionRoundCompleted(item));
-  const current = incomplete || ext.rounds[ext.rounds.length - 1] || null;
+  const current = incomplete || null;
   const sourceSig = hasLayer ? reflectionExtensionSourceSig() : "";
   const questionsStale = Boolean(current && current.questions.length && current.sourceSig && current.sourceSig !== sourceSig);
   if (current && questionsStale && !current.stale) {
@@ -11216,6 +11252,7 @@ function renderThinkExtension() {
   );
   const showStart = !archived && completedCount === 0 && !(current && current.questions.length);
   const showAgain = !archived && completedCount === 1 && !incomplete && ext.rounds.length < 2;
+  const records = completedRounds.map((round, index) => renderThinkExtensionRecord(round, index)).join("");
   const radios = current && current.questions.length
     ? current.questions
         .map((item, index) => {
@@ -11240,8 +11277,9 @@ function renderThinkExtension() {
       ${showStart ? `
         <p class="think-ext-lead">想再往裡面看一點？</p>
         <button class="body-mind-cta think-ext-cta" id="btnThinkExtStart" type="button" ${loading ? "disabled" : ""}>${loading ? "正在往裡面整理…" : "延伸深度思考 →"}</button>` : ""}
+      ${records}
       ${current && current.questions.length ? `
-        <p class="think-ext-kicker">延伸深度思考</p>
+        <p class="think-ext-kicker">${completedCount ? "延伸深度思考｜第二次" : "延伸深度思考"}</p>
         <p class="think-ext-prompt">如果想再往裡面看一點，<br />哪一題最讓你停下來？</p>
         <div class="think-ext-options" role="radiogroup" aria-label="延伸深度思考題目">${radios}</div>
         ${questionsStale && !archived ? `
@@ -11347,7 +11385,8 @@ function selectThinkExtensionQuestion(questionId) {
   const current = currentThinkExtensionRound(ext);
   if (!current || !current.questions.some((item) => item.id === questionId)) return;
   if (current.selectedQuestionId === questionId && document.getElementById("thinkExtAnswer")) return;
-  const next = { ...current, selectedQuestionId: questionId };
+  const chosen = current.questions.find((item) => item.id === questionId);
+  const next = { ...current, selectedQuestionId: questionId, selectedQuestionText: chosen ? chosen.text : "" };
   if (current.deepConclusion) next.conclusionStale = true;
   applyThinkExtension({
     ...ext,
@@ -11386,8 +11425,10 @@ async function generateThinkExtensionAsk(options = {}) {
     }
     current = {
       id: newThinkExtensionRoundId(),
+      coreThread: "",
       questions: [],
       selectedQuestionId: "",
+      selectedQuestionText: "",
       answer: "",
       answerSig: "",
       deepConclusion: "",
@@ -11405,7 +11446,7 @@ async function generateThinkExtensionAsk(options = {}) {
   renderThinkExtension();
   try {
     if (!state.user) throw new Error("請先登入，才能整理延伸深度思考。");
-    const ctx = reflectionExtensionContext(collectJournal());
+    const ctx = reflectionExtensionContext(collectJournal(), { roundId: current.id });
     ctx.roundId = current.id;
     ctx.persistedExtension = thinkExtensionFrom();
     if (options.refresh) ctx.force = true;
@@ -11443,8 +11484,10 @@ async function generateThinkExtensionAsk(options = {}) {
       upsertThinkExtensionRound(latest, {
         ...kept,
         id: current.id,
+        coreThread: String((remote && remote.coreThread) || kept.coreThread || "").replace(/\s+/g, " ").trim(),
         questions,
         selectedQuestionId: kept.questions.some((q) => q.id === kept.selectedQuestionId) ? kept.selectedQuestionId : "",
+        selectedQuestionText: kept.questions.some((q) => q.id === kept.selectedQuestionId) ? kept.selectedQuestionText : "",
         sourceSig: reflectionExtensionSourceSig(collectJournal()),
         stale: false,
       })
@@ -11501,7 +11544,7 @@ async function generateThinkExtensionClose(options = {}) {
   renderThinkExtension();
   try {
     if (!state.user) throw new Error("請先登入，才能整理這次的深度思考。");
-    const ctx = reflectionExtensionContext(collectJournal());
+    const ctx = reflectionExtensionContext(collectJournal(), { roundId: current.id });
     ctx.roundId = current.id;
     ctx.selectedQuestion = selected.text;
     ctx.selectedQuestionText = selected.text;
@@ -11528,6 +11571,8 @@ async function generateThinkExtensionClose(options = {}) {
       upsertThinkExtensionRound(latest, {
         ...kept,
         id: current.id,
+        selectedQuestionId: current.selectedQuestionId,
+        selectedQuestionText: selected.text,
         answer,
         answerSig: thinkExtensionAnswerSig(answer),
         deepConclusion,
