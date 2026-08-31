@@ -333,4 +333,18 @@ const round1 = reflectionExt.evaluateExtensionAskQuality(
 );
 assert(round1.ok, `Round 1 承接回答應通過：${round1.issues.join("；")}`);
 
+const titled = reflectionV3.normalizeReflectionQuestions([
+  {
+    id: "q1",
+    title: "你要的幸福其實很日常",
+    insight: "一起吃飯、聊天、有人幫你切水果。放在一起看，你在意的好像就是有人在身邊。",
+    question: "",
+  },
+]);
+assert(titled[0].title === "你要的幸福其實很日常", "04 title 會保留");
+assert(titled[0].text.includes("切水果"), "insight 會合成進 text");
+assert(!titled[0].question, "沒有問題時不硬補 question");
+assert(voice.userRawForPrompt("其實...\n後來還有。").includes("後來還有"), "user raw 讀省略號後面");
+assert(reflectionV3.REFLECTION_V3_SYSTEM.includes("VALUE TEST"), "04 有 value engine");
+
 console.log("ing-voice fixtures ok");

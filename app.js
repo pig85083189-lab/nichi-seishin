@@ -6127,6 +6127,30 @@ function normalizeInsightList(raw, max = 4) {
     .slice(0, max);
 }
 
+function mapInsightQuestionItems(list, prefix) {
+  const tag = prefix || "q";
+  return (Array.isArray(list) ? list : [])
+    .map((item, index) => {
+      const title = String((item && item.title) || "").replace(/\s+/g, " ").trim();
+      const insight = String((item && item.insight) || "").replace(/\s+/g, " ").trim();
+      const question = insight ? String((item && item.question) || "").replace(/\s+/g, " ").trim() : "";
+      const fallback = String((item && (item.text || (!insight && item.question))) || "").replace(/\s+/g, " ").trim();
+      const text = insight
+        ? (question && !insight.includes(question)
+            ? `${insight}${/[。！？!?]$/.test(insight) ? " " : "。"}${question}`.replace(/\s+/g, " ").trim()
+            : insight)
+        : fallback;
+      if (!text) return null;
+      const out = { id: String((item && item.id) || `${tag}${index + 1}`), text };
+      if (title) out.title = title;
+      if (insight) out.insight = insight;
+      if (question) out.question = question;
+      return out;
+    })
+    .filter(Boolean)
+    .slice(0, 3);
+}
+
 function normalizeThinkGuide(raw) {
   const data = raw && typeof raw === "object" ? raw : {};
   const rounds = (Array.isArray(data.rounds) ? data.rounds : [])
@@ -6174,15 +6198,7 @@ function normalizeThinkGuide(raw) {
     direction: improvementDirection,
     close: { coreConclusion, blindSpot, improvementDirection },
     coreQuote: String(data.coreQuote || "").replace(/\s+/g, " ").trim(),
-    questions: Array.isArray(data.questions)
-      ? data.questions
-          .map((item, index) => {
-            const text = String((item && (item.text || item.question)) || "").replace(/\s+/g, " ").trim();
-            return text ? { id: String((item && item.id) || `q${index + 1}`), text } : null;
-          })
-          .filter(Boolean)
-          .slice(0, 3)
-      : [],
+    questions: mapInsightQuestionItems(data.questions, "q"),
     sourceSig: String(data.sourceSig || "").trim(),
     generatedAt: String(data.generatedAt || "").trim(),
     extension: normalizeReflectionExtension(data.extension),
@@ -10921,6 +10937,7 @@ function renderThinkV3() {
   const questions = (guide.questions || []).map((item, index) => `
       <article class="think-v3-q">
         <p class="think-v3-q__index">0${index + 1}</p>
+        ${item.title ? `<p class="think-v3-q__title">${escapeHtml(item.title)}</p>` : ""}
         ${markableP(item.text, `think.question.${item.id || index + 1}`, "think-v3-q__text")}
       </article>`).join("");
   root.innerHTML = `
@@ -10979,12 +10996,10 @@ async function generateReflectionV3(options = {}) {
     const latest = collectJournal();
     const latestSig = reflectionV3SourceSig(latest);
     const coreQuote = String(remote.coreQuote || "").replace(/\s+/g, " ").trim();
-    const questions = Array.isArray(remote.questions)
-      ? remote.questions.map((item, index) => ({
-          id: String((item && item.id) || `q${index + 1}`),
-          text: String((item && (item.text || item.question)) || "").replace(/\s+/g, " ").trim(),
-        })).filter((item) => item.text).slice(0, 3)
-      : [];
+    const questions = mapInsightQuestionItems(
+      Array.isArray(remote.items) && remote.items.length ? remote.items : remote.questions,
+      "q"
+    );
     if (!coreQuote || questions.length < 3) throw new Error("今天的深度思考還沒整理好，請再試一次。");
     applyReflectionV3Guide({
       status: "generated",
@@ -11018,13 +11033,7 @@ function normalizeReflectionExtension(raw) {
   const src = raw && typeof raw === "object" ? raw : {};
   const rounds = (Array.isArray(src.rounds) ? src.rounds : []).slice(0, 2).map((item, index) => {
     const row = item && typeof item === "object" ? item : {};
-    const questions = (Array.isArray(row.questions) ? row.questions : [])
-      .map((q, qi) => {
-        const text = String((q && (q.text || q.question)) || "").replace(/\s+/g, " ").trim();
-        return text ? { id: String((q && q.id) || `eq${qi + 1}`), text } : null;
-      })
-      .filter(Boolean)
-      .slice(0, 3);
+    const questions = mapInsightQuestionItems(row.questions, "eq");
     const selectedQuestionId = String(row.selectedQuestionId || "");
     const selectedFromList = questions.find((item) => item.id === selectedQuestionId);
     return {
@@ -11350,6 +11359,7 @@ function renderThinkExtension() {
           <span class="think-ext-opt__mark" aria-hidden="true"></span>
           <span class="think-ext-opt__copy">
             <span class="think-ext-opt__index">0${index + 1}</span>
+            ${item.title ? `<span class="think-ext-opt__title">${escapeHtml(item.title)}</span>` : ""}
             <span class="think-ext-opt__text">${escapeHtml(item.text)}</span>
           </span>
         </label>`;
@@ -11564,12 +11574,10 @@ async function generateThinkExtensionAsk(options = {}) {
       actualModel: remote && remote._internalDebug && remote._internalDebug.model,
       failureStage: "PARSE",
     });
-    const questions = Array.isArray(remote.questions)
-      ? remote.questions.map((item, index) => ({
-          id: String((item && item.id) || `eq${index + 1}`),
-          text: String((item && (item.text || item.question)) || "").replace(/\s+/g, " ").trim(),
-        })).filter((item) => item.text).slice(0, 3)
-      : [];
+    const questions = mapInsightQuestionItems(
+      Array.isArray(remote.items) && remote.items.length ? remote.items : remote.questions,
+      "eq"
+    );
     if (questions.length < 3) throw new Error("這次沒有整理完成，再試一次。");
     const latest = thinkExtensionFrom();
     const kept = latest.rounds.find((item) => item.id === current.id) || current;
@@ -11707,7 +11715,11 @@ function normalizeAwarenessV3Bag(raw) {
   const src = raw && typeof raw === "object" ? raw : {};
   const items = (Array.isArray(src.items) ? src.items : []).map((item, index) => {
     const text = String((item && item.text) || "").replace(/\s+/g, " ").trim();
-    return text ? { id: String((item && item.id) || `a${index + 1}`), text } : null;
+    if (!text) return null;
+    const title = String((item && item.title) || "").replace(/\s+/g, " ").trim();
+    const out = { id: String((item && item.id) || `a${index + 1}`), text };
+    if (title) out.title = title;
+    return out;
   }).filter(Boolean).slice(0, 3);
   const allowed = new Set(items.map((item) => item.id));
   const cue = src.observationCue && typeof src.observationCue === "object" ? src.observationCue : {};
@@ -11997,6 +12009,7 @@ function renderAwarenessV3() {
         <button type="button" class="aware-v3-item${selected.has(item.id) ? " is-on" : ""}" data-aware-v3-id="${escapeHtml(item.id)}" role="checkbox" aria-checked="${selected.has(item.id) ? "true" : "false"}">
           <span class="aware-v3-item__box" aria-hidden="true"></span>
           <span class="aware-v3-item__copy">
+            ${item.title ? `<p class="aware-v3-item__title">${escapeHtml(item.title)}</p>` : ""}
             ${markableP(item.text, `awareness.item.${item.id}`, "aware-v3-item__text")}
           </span>
         </button>`).join("")}
@@ -12169,10 +12182,14 @@ async function generateAwarenessV3(options = {}) {
     });
     if (state.choicesToken.awareness !== token) return;
     const items = Array.isArray(remote.items)
-      ? remote.items.map((item, index) => ({
-          id: String((item && item.id) || `a${index + 1}`),
-          text: String((item && item.text) || "").replace(/\s+/g, " ").trim(),
-        })).filter((item) => item.text).slice(0, 3)
+      ? remote.items.map((item, index) => {
+          const text = String((item && item.text) || "").replace(/\s+/g, " ").trim();
+          if (!text) return null;
+          const title = String((item && item.title) || "").replace(/\s+/g, " ").trim();
+          const out = { id: String((item && item.id) || `a${index + 1}`), text };
+          if (title) out.title = title;
+          return out;
+        }).filter(Boolean).slice(0, 3)
       : [];
     if (items.length < 3) throw new Error("今天的覺察還沒整理好，請再試一次。");
     state.journalAwarenessV3 = {

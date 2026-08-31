@@ -7283,6 +7283,18 @@ textarea[hidden] + .journal-voice-hint,
   letter-spacing: 0.08em;
 }
 
+.think-v3-q__title,
+.think-ext-opt__title,
+.aware-v3-item__title {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+  color: #2c2622;
+  overflow-wrap: anywhere;
+}
+
 .think-v3-q__text {
   margin: 0;
   font-size: 15px;
