@@ -57,6 +57,9 @@ assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("不要讀過往�
 assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("ONE CORE THREAD"), "先找單一核心");
 assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("30～70"), "問題要簡潔");
 assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("NEXT LAYER"), "第二輪往下一層");
+assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("UNRESOLVED TENSION"), "第二輪先找未解張力");
+assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("PARALLEL ANGLE"), "第二輪不是平行角度");
+assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("25～60"), "第二輪問題更短");
 assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("ALREADY EXPLORED"), "第二輪先做 coverage");
 assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("user answer"), "第二輪權重含回答");
 assert(reflectionExt.REFLECTION_EXTENSION_CLOSE_SYSTEM.includes("不要讀過往日期"), "結論也只讀今天");
@@ -448,6 +451,186 @@ assert(
   round2repeat.issues.some((item) => item.includes("repeat-prior") || item.includes("repeat-answer") || item.includes("repeat-conclusion")),
   "Round 2 重問已回答內容必須 FAIL"
 );
+
+const seenValue = {
+  selectedQuestion: "如果努力沒被看見，你還能自己確認這份努力有位置嗎？",
+  answer: "即使沒有人看見，我還是知道自己的努力有價值。",
+  deepConclusion: "努力有沒有價值，這件事你其實已經能自己確認。",
+};
+const round2parallel = reflectionExt.evaluateExtensionAskQuality(
+  {
+    coreThread: "讓別人看到努力",
+    questions: [
+      { id: "eq1", text: "那你要怎麼讓別人看到你的努力？" },
+      { id: "eq2", text: "有沒有別的方法讓過程被更多人知道？" },
+      { id: "eq3", text: "你要怎麼溝通，別人才會理解你的付出？" },
+    ],
+  },
+  { context: { ...layer, priorRound: seenValue } }
+);
+assert(
+  round2parallel.issues.some((item) => item.includes("solution-jump") || item === "parallel-angle"),
+  "平行主題／解法題必須 FAIL"
+);
+
+const round2next = reflectionExt.evaluateExtensionAskQuality(
+  {
+    coreThread: "知道有價值，沒被看見時刺痛的是什麼",
+    questions: [
+      { id: "eq1", text: "如果你知道自己的努力有價值，別人沒看見時，真正刺痛你的又是什麼？" },
+      { id: "eq2", text: "「我知道有價值」和「我仍希望重要的人看見」，可以同時成立嗎？" },
+      { id: "eq3", text: "你真正想被看見的，是成果本身，還是你在這件事裡的位置？" },
+    ],
+  },
+  { context: { ...layer, priorRound: seenValue } }
+);
+assert(round2next.ok, `Round 2 未解張力應通過：${round2next.issues.join("；")}`);
+
+const ROUND2 = [
+  {
+    id: "R2A",
+    name: "關係／被看見",
+    prior: seenValue,
+    result: {
+      coreThread: "知道有價值之後，沒被看見刺痛的是什麼",
+      questions: [
+        { id: "eq1", text: "如果你知道努力有價值，沒人看見時真正刺痛的又是什麼？" },
+        { id: "eq2", text: "你仍希望被看見的，是成果被承認，還是自己在關係裡的位置？" },
+        { id: "eq3", text: "這份刺痛比較像不被理解，還是像努力沒有被放在心上？" },
+      ],
+    },
+  },
+  {
+    id: "R2B",
+    name: "居住／選擇",
+    prior: {
+      selectedQuestion: "這句只能住這裡，有沒有把省事和長期交換混在一起？",
+      answer: "其實不是完全沒有選擇，是我不想先把關係弄僵。",
+      deepConclusion: "你看見的也許不是沒有路，而是還沒準備用選擇去換關係。",
+    },
+    result: {
+      coreThread: "不想弄僵關係，和自己的空間正在被換走",
+      questions: [
+        { id: "eq1", text: "不想弄僵關係時，你其實在保護誰，又同時放下了什麼？" },
+        { id: "eq2", text: "如果關係繼續不僵，空間卻一直被換走，你比較不能接受哪一邊？" },
+        { id: "eq3", text: "這次你真正怕的，是開口後的衝突，還是自己從此更沒有位置？" },
+      ],
+    },
+  },
+  {
+    id: "R2C",
+    name: "工作／努力",
+    prior: {
+      selectedQuestion: "你比較受不了的，是品質不夠，還是又得自己一個人補完？",
+      answer: "我比較受不了的是又要自己補。標準有些是工作需要，有些是我不想看起來隨便。",
+      deepConclusion: "你卡住的不只是品質，而是自己又得把缺口補成專業的樣子。",
+    },
+    result: {
+      coreThread: "自己補完，是工作需要還是不想看起來隨便",
+      questions: [
+        { id: "eq1", text: "你自己補完時，補的是工作真的需要的，還是你不想看起來隨便？" },
+        { id: "eq2", text: "如果只補工作需要的那一段，你還能接受別人覺得你不夠細嗎？" },
+        { id: "eq3", text: "「看起來專業」對你來說，是對事情負責，還是在保護自己的位置？" },
+      ],
+    },
+  },
+  {
+    id: "R2D",
+    name: "溝通很多次",
+    prior: {
+      selectedQuestion: "還沒說出口，是在等時機，還是在等自己比較不會受傷的版本？",
+      answer: "我知道要說，可是我比較怕說了以後她用同一套方式把我推回去。",
+      deepConclusion: "你卡住的不是不知道說，而是開口後可能又回到同一種位置。",
+    },
+    result: {
+      coreThread: "開口後又被推回去，真正怕的是什麼",
+      questions: [
+        { id: "eq1", text: "你怕的是她聽不懂，還是聽懂了仍把你推回原來的位置？" },
+        { id: "eq2", text: "如果她還是用同一套方式接你，你會覺得白說，還是自己又沒站住？" },
+        { id: "eq3", text: "這次你需要的，是被理解這件事，還是開口時自己先站得住？" },
+      ],
+    },
+  },
+  {
+    id: "R2E",
+    name: "自我懷疑",
+    prior: {
+      selectedQuestion: "這份怪怪的，你比較想立刻解釋清楚，還是先讓它只是還不成形的感覺？",
+      answer: "我其實沒那麼想解釋，我比較怕自己又把平常的事想成我有問題。",
+      deepConclusion: "你已經隱約知道，這份空不一定等於你出了錯。",
+    },
+    result: {
+      coreThread: "空不一定是問題，為何仍想證明自己沒有錯",
+      questions: [
+        { id: "eq1", text: "如果你已經知道這不一定是問題，為什麼仍想先證明自己沒有錯？" },
+        { id: "eq2", text: "把平常的事想成「我有問題」，是在理解自己，還是在先責備自己？" },
+        { id: "eq3", text: "這份空若只是空，你還能允許它不立刻變成一個結論嗎？" },
+      ],
+    },
+  },
+  {
+    id: "R2F",
+    name: "positive day",
+    prior: {
+      selectedQuestion: "這頓飯裡，讓你最像自己的，是被接住，還是你自己不必用力表現？",
+      answer: "我覺得是我自己也不必用力。在他旁邊我可以很鬆。",
+      deepConclusion: "今天值得留下的，也許是你不必先證明自己也能在場。",
+    },
+    result: {
+      coreThread: "不必用力時，你真正放下的是什麼",
+      questions: [
+        { id: "eq1", text: "你說不必用力，那時你放下的是表現，還是對自己的監看？" },
+        { id: "eq2", text: "這種鬆，是因為他接住你，還是你自己也允許自己不用證明？" },
+        { id: "eq3", text: "如果沒有這頓飯，你還能在別的地方對自己這麼鬆嗎？" },
+      ],
+    },
+  },
+  {
+    id: "R2G",
+    name: "fatigue",
+    prior: {
+      selectedQuestion: "如果先承認今天就是累，你還會覺得自己應該再擠一點效率嗎？",
+      answer: "我承認今天就是累。如果還要再擠效率，身體會更回不來。",
+      deepConclusion: "你已經看見，再擠效率會把身體還能回來的力氣用掉。",
+    },
+    result: {
+      coreThread: "承認只是累之後，為何仍難允許自己停",
+      questions: [
+        { id: "eq1", text: "你已經承認今天就是累，為什麼停下來仍會覺得自己沒做夠？" },
+        { id: "eq2", text: "身體回不來時，你比較怕的是效率掉了，還是自己看起來不夠撐？" },
+        { id: "eq3", text: "若明天還很多，你要保住的是產出，還是今天說的那份力氣？" },
+      ],
+    },
+  },
+  {
+    id: "R2H",
+    name: "objective issue",
+    prior: {
+      selectedQuestion: "熱到頭昏時，你還把「應該專心」當成自己能完全控制的事嗎？",
+      answer: "我知道是冷氣的問題，可是我還是會怪自己不夠穩定。",
+      deepConclusion: "你已經看見環境是真的，卻仍用平常的自己要求自己。",
+    },
+    result: {
+      coreThread: "環境是真的，為何仍把責任收到自己身上",
+      questions: [
+        { id: "eq1", text: "你已經知道是冷氣，為什麼還是先怪自己不夠穩定？" },
+        { id: "eq2", text: "把責任收到自己身上，是在求控制，還是不習慣環境也可以是原因？" },
+        { id: "eq3", text: "如果今天真的只是熱，你還需要用「不夠穩定」來解釋自己嗎？" },
+      ],
+    },
+  },
+];
+
+ROUND2.forEach((spec) => {
+  const judged = reflectionExt.evaluateExtensionAskQuality(spec.result, {
+    context: { ...layer, priorRound: spec.prior },
+  });
+  assert(judged.ok, `${spec.id} ${spec.name} 應通過：${judged.issues.join("；")}`);
+  assert(
+    !spec.result.questions.some((item) => reflectionExt.looksSolutionJump(item.text)),
+    `${spec.id} 不該跳到解法`
+  );
+});
 
 const persistedRound = reflectionExt.normalizeReflectionExtensionRound(
   {
