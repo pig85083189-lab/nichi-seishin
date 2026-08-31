@@ -134,8 +134,8 @@ const state = {
   awarenessChoices: { sourceSig: "", options: [], selectedIds: [], generatedAt: "" },
   thinkChoices: { sourceSig: "", options: [], selectedIds: [], generatedAt: "" },
   executionChoices: { sourceSig: "", options: [], selectedId: "", selectedIds: [], custom: "", followupQuestion: "", followupPlaceholder: "", generatedAt: "", deep: { status: "", rounds: [], draftAnswer: "", refreshedAt: "", executionSummary: "", finalOptions: [], finalSelectedIds: [] } },
-  choicesBusy: { awareness: false, think: false, execution: false, executionDeep: false, awarenessCue: false },
-  choicesToken: { awareness: 0, think: 0, thinkClose: 0, execution: 0, executionDeep: 0, awarenessCue: 0 },
+  choicesBusy: { awareness: false, think: false, execution: false, executionDeep: false, awarenessCue: false, thinkExt: false },
+  choicesToken: { awareness: 0, think: 0, thinkClose: 0, execution: 0, executionDeep: 0, awarenessCue: 0, thinkExt: 0 },
   awarenessCueAttemptSig: "",
   journalUserMarks: { items: [], updatedAt: "" },
   journalManifestSentence: "",
@@ -6182,6 +6182,7 @@ function normalizeThinkGuide(raw) {
       : [],
     sourceSig: String(data.sourceSig || "").trim(),
     generatedAt: String(data.generatedAt || "").trim(),
+    extension: normalizeReflectionExtension(data.extension),
   };
 }
 
@@ -10412,7 +10413,7 @@ function syncSelectedExecutionToSidebar(bag) {
 }
 
 function setChoicesLoading(kind, loading) {
-  if (!state.choicesBusy) state.choicesBusy = { awareness: false, think: false, execution: false, executionDeep: false, awarenessCue: false };
+  if (!state.choicesBusy) state.choicesBusy = { awareness: false, think: false, execution: false, executionDeep: false, awarenessCue: false, thinkExt: false };
   state.choicesBusy[kind] = loading;
   if (kind === "awareness") {
     if (usesAwarenessV3Path()) {
@@ -10907,6 +10908,7 @@ function renderThinkV3() {
   if (!root) return;
   if (loading || !guide.coreQuote) {
     if (!loading) root.innerHTML = "";
+    renderThinkExtension();
     return;
   }
   const questions = (guide.questions || []).map((item, index) => `
@@ -10926,6 +10928,7 @@ function renderThinkV3() {
       </div>` : ""}
     </article>`;
   paintInternalModelDebug(root, state.internalModelDebug && state.internalModelDebug.think);
+  renderThinkExtension();
 }
 
 async function generateReflectionV3(options = {}) {
@@ -10998,6 +11001,459 @@ async function generateReflectionV3(options = {}) {
       state.choicesBusy.think = false;
       setChoicesLoading("think", false);
       renderThinkV3();
+    }
+  }
+}
+
+function normalizeReflectionExtension(raw) {
+  const api = reviewMergeApi();
+  if (typeof api.normalizeReflectionExtension === "function") return api.normalizeReflectionExtension(raw);
+  const src = raw && typeof raw === "object" ? raw : {};
+  const rounds = (Array.isArray(src.rounds) ? src.rounds : []).slice(0, 2).map((item, index) => {
+    const row = item && typeof item === "object" ? item : {};
+    const questions = (Array.isArray(row.questions) ? row.questions : [])
+      .map((q, qi) => {
+        const text = String((q && (q.text || q.question)) || "").replace(/\s+/g, " ").trim();
+        return text ? { id: String((q && q.id) || `eq${qi + 1}`), text } : null;
+      })
+      .filter(Boolean)
+      .slice(0, 3);
+    return {
+      id: String(row.id || `ext${index + 1}`),
+      questions,
+      selectedQuestionId: String(row.selectedQuestionId || ""),
+      answer: String(row.answer || "").trim(),
+      answerSig: String(row.answerSig || "").trim(),
+      deepConclusion: String(row.deepConclusion || "").trim(),
+      completedAt: String(row.completedAt || "").trim(),
+      sourceSig: String(row.sourceSig || "").trim(),
+      stale: Boolean(row.stale),
+      conclusionStale: Boolean(row.conclusionStale),
+    };
+  });
+  return { variant: "reflection-extension-v1", rounds };
+}
+
+function thinkExtensionFrom(guide) {
+  const data = guide || ((state.journalInsight || {}).guide || {});
+  return normalizeReflectionExtension(data.extension);
+}
+
+function isThinkExtensionRoundCompleted(round) {
+  const api = reviewMergeApi();
+  if (typeof api.isExtensionRoundCompleted === "function") return api.isExtensionRoundCompleted(round);
+  return Boolean(
+    round &&
+      String(round.deepConclusion || "").trim() &&
+      String(round.completedAt || "").trim() &&
+      String(round.selectedQuestionId || "").trim() &&
+      String(round.answer || "").replace(/\s+/g, "").trim().length >= 8
+  );
+}
+
+function thinkExtensionCompletedCount(extension) {
+  const api = reviewMergeApi();
+  if (typeof api.completedExtensionCount === "function") return api.completedExtensionCount(extension);
+  return thinkExtensionFrom(extension && extension.rounds ? { extension } : undefined).rounds.filter(isThinkExtensionRoundCompleted).length;
+}
+
+function applyThinkExtension(extension) {
+  const insight = normalizeInsight(state.journalInsight);
+  const guide = { ...(insight.guide || emptyThinkGuide()), extension: normalizeReflectionExtension(extension) };
+  insight.guide = normalizeThinkGuide(guide);
+  state.journalInsight = insight;
+  return insight;
+}
+
+function newThinkExtensionRoundId() {
+  return `ext_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function thinkExtensionAnswerSig(answer) {
+  return String(answer || "").replace(/\s+/g, " ").trim();
+}
+
+function thinkExtensionAnswerMeaningful(answer) {
+  return String(answer || "").replace(/\s+/g, "").trim().length >= 8;
+}
+
+function reflectionExtensionContext(journal) {
+  const data = journal || collectJournal();
+  const think = thinkBitsFrom(data);
+  const mind = normalizeBodyMind(data.bodyMind);
+  const ext = normalizeReflectionExtension(((data.insight && data.insight.guide) || {}).extension || thinkExtensionFrom());
+  const completed = ext.rounds.filter(isThinkExtensionRoundCompleted);
+  const prior = completed[0] || null;
+  const selected = prior && prior.questions.find((item) => item.id === prior.selectedQuestionId);
+  return {
+    thanksText: thanksTextFrom(data),
+    thanks: thanksTextFrom(data),
+    event: String(data.event || "").trim(),
+    mood: String(data.mood || "").trim(),
+    bodyMindText: mind.text,
+    bodyNote: mind.text || String(data.bodyNote || "").trim(),
+    bodyMindInsight: mind.insight,
+    bodyMindSupport: mind.support,
+    coreQuote: think.coreQuote,
+    thinkCoreQuote: think.coreQuote,
+    thinkQuestions: think.questions,
+    questions: think.questions,
+    priorRound: prior
+      ? {
+          questions: prior.questions,
+          selectedQuestion: selected ? selected.text : "",
+          selectedQuestionText: selected ? selected.text : "",
+          answer: prior.answer,
+          deepConclusion: prior.deepConclusion,
+        }
+      : null,
+    persistedExtension: ext,
+  };
+}
+
+function reflectionExtensionSourceSig(journal) {
+  const ctx = reflectionExtensionContext(journal);
+  return [
+    String(ctx.thanksText || "").replace(/\s+/g, " ").trim(),
+    String(ctx.event || "").replace(/\s+/g, " ").trim(),
+    String(ctx.mood || "").trim(),
+    String(ctx.bodyMindText || "").replace(/\s+/g, " ").trim(),
+    String(ctx.bodyMindInsight || "").replace(/\s+/g, " ").trim(),
+    String(ctx.bodyMindSupport || "").replace(/\s+/g, " ").trim(),
+    String(ctx.coreQuote || "").replace(/\s+/g, " ").trim(),
+    (ctx.thinkQuestions || []).map((item) => String((item && (item.text || item.question)) || "").replace(/\s+/g, " ").trim()).filter(Boolean).join("|"),
+  ].join("\n");
+}
+
+function currentThinkExtensionRound(extension) {
+  const ext = normalizeReflectionExtension(extension);
+  return ext.rounds.find((item) => item.questions.length && !isThinkExtensionRoundCompleted(item)) || ext.rounds[ext.rounds.length - 1] || null;
+}
+
+function selectedThinkExtensionQuestion(round) {
+  if (!round) return null;
+  return (round.questions || []).find((item) => item.id === round.selectedQuestionId) || null;
+}
+
+function flushThinkExtensionAnswer() {
+  const ta = document.getElementById("thinkExtAnswer");
+  if (!ta) return thinkExtensionFrom();
+  const ext = thinkExtensionFrom();
+  const current = currentThinkExtensionRound(ext);
+  if (!current) return ext;
+  const answer = String(ta.value || "");
+  const next = { ...current, answer };
+  if (current.deepConclusion && thinkExtensionAnswerSig(answer) !== current.answerSig) next.conclusionStale = true;
+  applyThinkExtension({ ...ext, rounds: ext.rounds.map((item) => (item.id === current.id ? next : item)) });
+  return thinkExtensionFrom();
+}
+
+function renderThinkExtension() {
+  const root = document.getElementById("thinkV3Extension");
+  if (!root) return;
+  const archived = isCurrentJournalArchived();
+  const guide = normalizeThinkGuide((state.journalInsight || {}).guide);
+  const hasLayer = guide.variant === "reflection-v3" && Boolean(guide.coreQuote) && guide.questions.length >= 3;
+  const ext = normalizeReflectionExtension(guide.extension);
+  const loading = Boolean(state.choicesBusy?.thinkExt);
+  const completedCount = ext.rounds.filter(isThinkExtensionRoundCompleted).length;
+  const incomplete = ext.rounds.find((item) => item.questions.length && !isThinkExtensionRoundCompleted(item));
+  const current = incomplete || ext.rounds[ext.rounds.length - 1] || null;
+  const sourceSig = hasLayer ? reflectionExtensionSourceSig() : "";
+  const questionsStale = Boolean(current && current.questions.length && current.sourceSig && current.sourceSig !== sourceSig);
+  if (current && questionsStale && !current.stale) {
+    applyThinkExtension({
+      ...ext,
+      rounds: ext.rounds.map((item) => (item.id === current.id ? { ...item, stale: true } : item)),
+    });
+  }
+  if (!hasLayer) {
+    root.innerHTML = "";
+    root.hidden = true;
+    return;
+  }
+  const selected = selectedThinkExtensionQuestion(current);
+  const answerValue = current ? current.answer : "";
+  const answerMeaningful = thinkExtensionAnswerMeaningful(answerValue);
+  const conclusionStale = Boolean(
+    current &&
+      current.deepConclusion &&
+      (current.conclusionStale || (answerValue && thinkExtensionAnswerSig(answerValue) !== current.answerSig))
+  );
+  const showEntry = !archived && !loading && completedCount === 0 && !(current && current.questions.length);
+  const showAgain = !archived && !loading && completedCount === 1 && !incomplete && ext.rounds.length < 2;
+  const radios = current && current.questions.length
+    ? current.questions
+        .map((item, index) => {
+          const checked = item.id === (current.selectedQuestionId || "");
+          return `
+        <label class="think-ext-opt">
+          <input type="radio" name="thinkExtQ" value="${escapeHtml(item.id)}" ${checked ? "checked" : ""} ${archived ? "disabled" : ""} />
+          <span class="think-ext-opt__mark" aria-hidden="true"></span>
+          <span class="think-ext-opt__copy">
+            <span class="think-ext-opt__index">0${index + 1}</span>
+            <span class="think-ext-opt__text">${escapeHtml(item.text)}</span>
+          </span>
+        </label>`;
+        })
+        .join("")
+    : "";
+  root.hidden = false;
+  root.innerHTML = `
+    <section class="think-ext-block">
+      ${showEntry ? `
+        <p class="think-ext-lead">想再往裡面看一點？</p>
+        <button class="body-mind-cta think-ext-cta" id="btnThinkExtStart" type="button">延伸深度思考 →</button>` : ""}
+      ${current && current.questions.length ? `
+        <p class="think-ext-kicker">延伸深度思考</p>
+        <p class="think-ext-prompt">如果想再往裡面看一點，<br />哪一題最讓你停下來？</p>
+        <div class="think-ext-options" role="radiogroup" aria-label="延伸深度思考題目">${radios}</div>
+        ${questionsStale && !archived ? `
+          <p class="think-ext-stale">前面的內容有修改，這次延伸思考是依照修改前的內容產生。</p>
+          <button class="think-ext-text-btn" id="btnThinkExtRefresh" type="button">重新整理延伸問題</button>` : ""}
+        ${current.selectedQuestionId ? `
+          <label class="think-ext-answer-label" for="thinkExtAnswer">寫下你現在真正想到的答案。</label>
+          <textarea class="textarea think-ext-answer" id="thinkExtAnswer" rows="4" ${archived ? "readonly" : ""}>${escapeHtml(answerValue)}</textarea>
+          ${!archived && answerMeaningful && !current.deepConclusion ? `
+            <button class="body-mind-cta think-ext-cta" id="btnThinkExtClose" type="button">整理這次的深度思考 →</button>` : ""}
+          ${!archived && answerMeaningful && conclusionStale ? `
+            <button class="body-mind-cta think-ext-cta" id="btnThinkExtCloseStale" type="button">回答有修改，重新整理深度結論 →</button>` : ""}` : ""}
+        ${current.deepConclusion ? `
+          <div class="think-ext-conclusion">
+            <p class="think-ext-conclusion__label">深度結論</p>
+            ${markableP(current.deepConclusion, `think.extension.${current.id}.conclusion`, "think-ext-conclusion__text")}
+          </div>` : ""}` : ""}
+      ${loading ? `
+        <div class="check-loading" id="thinkExtLoading">
+          <p class="check-loading__label">${current && current.selectedQuestionId && answerMeaningful && !showEntry ? "正在整理這次的深度思考…" : "正在整理延伸深度思考…"}</p>
+          <div class="ai-thinking__bar"><i></i></div>
+        </div>` : ""}
+      ${completedCount ? `<p class="think-ext-count">今日已完成 ${completedCount} / 2 次延伸思考</p>` : ""}
+      ${showAgain ? `<button class="think-ext-text-btn" id="btnThinkExtAgain" type="button">再延伸一次 →</button>` : ""}
+    </section>`;
+  paintInternalModelDebug(root, state.internalModelDebug && state.internalModelDebug.thinkExt);
+}
+
+function syncThinkExtAnswerChrome() {
+  const ta = document.getElementById("thinkExtAnswer");
+  if (!ta) return;
+  const ext = flushThinkExtensionAnswer();
+  const current = currentThinkExtensionRound(ext);
+  if (!current) return;
+  const meaningful = thinkExtensionAnswerMeaningful(ta.value);
+  const stale = Boolean(current.deepConclusion && (current.conclusionStale || thinkExtensionAnswerSig(ta.value) !== current.answerSig));
+  let close = document.getElementById("btnThinkExtClose");
+  let staleBtn = document.getElementById("btnThinkExtCloseStale");
+  const host = ta.parentElement;
+  if (!close && host && meaningful && !current.deepConclusion && !isCurrentJournalArchived()) {
+    close = document.createElement("button");
+    close.className = "body-mind-cta think-ext-cta";
+    close.id = "btnThinkExtClose";
+    close.type = "button";
+    close.textContent = "整理這次的深度思考 →";
+    ta.insertAdjacentElement("afterend", close);
+  }
+  if (close) close.hidden = !meaningful || Boolean(current.deepConclusion) || isCurrentJournalArchived();
+  if (!staleBtn && host && stale && !isCurrentJournalArchived()) {
+    const hint = document.createElement("p");
+    hint.className = "think-ext-stale";
+    hint.textContent = "回答有修改，重新整理深度結論 →";
+    staleBtn = document.createElement("button");
+    staleBtn.className = "body-mind-cta think-ext-cta";
+    staleBtn.id = "btnThinkExtCloseStale";
+    staleBtn.type = "button";
+    staleBtn.textContent = "重新整理深度結論 →";
+    const conclusion = host.querySelector(".think-ext-conclusion");
+    (conclusion || ta).insertAdjacentElement(conclusion ? "beforebegin" : "afterend", hint);
+    hint.insertAdjacentElement("afterend", staleBtn);
+  }
+}
+
+function selectThinkExtensionQuestion(questionId) {
+  if (isCurrentJournalArchived()) return;
+  const ext = thinkExtensionFrom();
+  const current = currentThinkExtensionRound(ext);
+  if (!current || !current.questions.some((item) => item.id === questionId)) return;
+  const next = { ...current, selectedQuestionId: questionId };
+  if (current.deepConclusion) next.conclusionStale = true;
+  applyThinkExtension({ ...ext, rounds: ext.rounds.map((item) => (item.id === current.id ? next : item)) });
+  persistJournalNow();
+  renderThinkExtension();
+}
+
+async function generateThinkExtensionAsk(options = {}) {
+  if (!options || options.confirmed !== true) return;
+  if (options.auto) return;
+  if (rejectArchivedJournalWrite(options)) return;
+  if (isCurrentJournalArchived() || state.choicesBusy?.thinkExt) return;
+  if (!ensurePlusFeature("think_ai", options)) return;
+  const journal = collectJournal();
+  const guide = normalizeThinkGuide(((journal.insight || state.journalInsight || {}).guide));
+  if (!(guide.coreQuote && guide.questions.length >= 3)) return;
+  const ext = normalizeReflectionExtension(guide.extension);
+  const completedCount = ext.rounds.filter(isThinkExtensionRoundCompleted).length;
+  const draft = ext.rounds.find((item) => !isThinkExtensionRoundCompleted(item));
+  if (!options.refresh && draft && draft.questions.length) {
+    renderThinkExtension();
+    return;
+  }
+  let current = draft;
+  if (!current) {
+    if (completedCount >= 2 || ext.rounds.length >= 2) return;
+    current = {
+      id: newThinkExtensionRoundId(),
+      questions: [],
+      selectedQuestionId: "",
+      answer: "",
+      answerSig: "",
+      deepConclusion: "",
+      completedAt: "",
+      sourceSig: "",
+      stale: false,
+      conclusionStale: false,
+    };
+    ext.rounds = ext.rounds.concat(current).slice(0, 2);
+  }
+  const token = (state.choicesToken.thinkExt || 0) + 1;
+  state.choicesToken.thinkExt = token;
+  state.choicesBusy.thinkExt = true;
+  applyThinkExtension(ext);
+  persistJournalNow();
+  renderThinkExtension();
+  try {
+    if (!state.user) throw new Error("請先登入，才能整理延伸深度思考。");
+    const ctx = reflectionExtensionContext(collectJournal());
+    ctx.roundId = current.id;
+    ctx.persistedExtension = thinkExtensionFrom();
+    if (options.refresh) ctx.force = true;
+    const remote = await postReview({
+      mode: "insight",
+      variant: "reflection-extension-v1",
+      step: "ask",
+      date: currentIso(),
+      text: ctx.event,
+      context: {
+        variant: "reflection-extension-v1",
+        step: "ask",
+        ...ctx,
+      },
+    });
+    if (state.choicesToken.thinkExt !== token) return;
+    const questions = Array.isArray(remote.questions)
+      ? remote.questions.map((item, index) => ({
+          id: String((item && item.id) || `eq${index + 1}`),
+          text: String((item && (item.text || item.question)) || "").replace(/\s+/g, " ").trim(),
+        })).filter((item) => item.text).slice(0, 3)
+      : [];
+    if (questions.length < 3) throw new Error("延伸深度思考還沒整理好，請再試一次。");
+    const latest = thinkExtensionFrom();
+    const kept = latest.rounds.find((item) => item.id === current.id) || current;
+    applyThinkExtension({
+      ...latest,
+      rounds: latest.rounds.map((item) =>
+        item.id === current.id
+          ? {
+              ...kept,
+              questions,
+              selectedQuestionId: kept.questions.some((q) => q.id === kept.selectedQuestionId)
+                ? kept.selectedQuestionId
+                : "",
+              sourceSig: reflectionExtensionSourceSig(collectJournal()),
+              stale: false,
+            }
+          : item
+      ),
+    });
+    if (!state.internalModelDebug) state.internalModelDebug = {};
+    state.internalModelDebug.thinkExt = takeInternalDebug(remote);
+    persistJournalNow();
+    renderThinkExtension();
+  } catch (error) {
+    if (state.choicesToken.thinkExt !== token) return;
+    if (isPlusRequiredError(error)) return;
+    showToast(formatApiError(error) || "延伸深度思考還沒整理好，請再試一次。");
+    renderThinkExtension();
+  } finally {
+    if (state.choicesToken.thinkExt === token) {
+      state.choicesBusy.thinkExt = false;
+      renderThinkExtension();
+    }
+  }
+}
+
+async function generateThinkExtensionClose(options = {}) {
+  if (!options || options.confirmed !== true) return;
+  if (options.auto) return;
+  if (rejectArchivedJournalWrite(options)) return;
+  if (isCurrentJournalArchived() || state.choicesBusy?.thinkExt) return;
+  if (!ensurePlusFeature("think_ai", options)) return;
+  const ext = flushThinkExtensionAnswer();
+  persistJournalNow();
+  const current = currentThinkExtensionRound(ext);
+  const selected = selectedThinkExtensionQuestion(current);
+  const ta = document.getElementById("thinkExtAnswer");
+  const answer = String((ta && ta.value) || (current && current.answer) || "");
+  if (!current || !selected || !thinkExtensionAnswerMeaningful(answer)) {
+    showToast("請先選一題，並寫下你現在真正想到的答案。");
+    return;
+  }
+  const token = (state.choicesToken.thinkExt || 0) + 1;
+  state.choicesToken.thinkExt = token;
+  state.choicesBusy.thinkExt = true;
+  renderThinkExtension();
+  try {
+    if (!state.user) throw new Error("請先登入，才能整理這次的深度思考。");
+    const ctx = reflectionExtensionContext(collectJournal());
+    ctx.roundId = current.id;
+    ctx.selectedQuestion = selected.text;
+    ctx.selectedQuestionText = selected.text;
+    ctx.answer = answer;
+    ctx.persistedExtension = thinkExtensionFrom();
+    const remote = await postReview({
+      mode: "insight",
+      variant: "reflection-extension-v1",
+      step: "close",
+      date: currentIso(),
+      text: ctx.event,
+      context: {
+        variant: "reflection-extension-v1",
+        step: "close",
+        ...ctx,
+      },
+    });
+    if (state.choicesToken.thinkExt !== token) return;
+    const deepConclusion = String(remote.deepConclusion || remote.conclusion || "").replace(/\s+/g, " ").trim();
+    if (!deepConclusion) throw new Error("這次的深度結論還沒整理好，請再試一次。");
+    const latest = thinkExtensionFrom();
+    const kept = latest.rounds.find((item) => item.id === current.id) || current;
+    applyThinkExtension({
+      ...latest,
+      rounds: latest.rounds.map((item) =>
+        item.id === current.id
+          ? {
+              ...kept,
+              answer,
+              answerSig: thinkExtensionAnswerSig(answer),
+              deepConclusion,
+              completedAt: kept.completedAt || new Date().toISOString(),
+              conclusionStale: false,
+            }
+          : item
+      ),
+    });
+    if (!state.internalModelDebug) state.internalModelDebug = {};
+    state.internalModelDebug.thinkExt = takeInternalDebug(remote);
+    persistJournalNow();
+    renderThinkExtension();
+  } catch (error) {
+    if (state.choicesToken.thinkExt !== token) return;
+    if (isPlusRequiredError(error)) return;
+    showToast(formatApiError(error) || "這次的深度結論還沒整理好，請再試一次。");
+    renderThinkExtension();
+  } finally {
+    if (state.choicesToken.thinkExt === token) {
+      state.choicesBusy.thinkExt = false;
+      renderThinkExtension();
     }
   }
 }
@@ -12842,6 +13298,7 @@ function isJournalAutosaveField(el) {
   if (!el) return false;
   if (el.classList && el.classList.contains("think-guide-answer")) return true;
   const id = String(el.id || "");
+  if (id === "thinkExtAnswer") return true;
   return /^(thanksText|thanks\d+|aware\d+|exec\d+|execNext|execFollowup|execDeepAnswer|eventText|bodyMindText|bodyNote|bodyOtherNote|body(Mood|Body|Sleep)Reason|manifestVision|manifestThink\d+|deep\d)/.test(id);
 }
 
@@ -12859,6 +13316,20 @@ function withExecDeepDraft(bag) {
 
 function withThinkGuideDraft(insight) {
   const next = normalizeInsight(insight);
+  const extTa = document.getElementById("thinkExtAnswer");
+  if (extTa) {
+    const ext = normalizeReflectionExtension((next.guide || {}).extension);
+    const current = currentThinkExtensionRound(ext);
+    if (current) {
+      const answer = String(extTa.value || "");
+      const patched = { ...current, answer };
+      if (current.deepConclusion && thinkExtensionAnswerSig(answer) !== current.answerSig) patched.conclusionStale = true;
+      next.guide = normalizeThinkGuide({
+        ...(next.guide || emptyThinkGuide()),
+        extension: { ...ext, rounds: ext.rounds.map((item) => (item.id === current.id ? patched : item)) },
+      });
+    }
+  }
   const ta = thinkV2AnswerEl() || thinkGuideBodyEl()?.querySelector(".think-guide-answer");
   if (!ta) return next;
   const guide = { ...(next.guide || emptyThinkGuide()), draftAnswer: String(ta.value || "").trim() };
@@ -12900,6 +13371,7 @@ function applyJournalArchiveLock() {
   syncThinkV3Cta();
   syncAwareV3Cta();
   syncExecV3Cta();
+  if (usesReflectionV3Path()) renderThinkExtension();
 }
 
 function openInternalResetModal() {
@@ -13935,8 +14407,9 @@ function fillJournal(journal) {
           think: data.internalModelDebug.think || null,
           awareness: data.internalModelDebug.awareness || null,
           execution: data.internalModelDebug.execution || null,
+          thinkExt: data.internalModelDebug.thinkExt || null,
         }
-      : { think: null, awareness: null, execution: null };
+      : { think: null, awareness: null, execution: null, thinkExt: null };
   state.journalExecFocus = normalizeExecFocus(data.executionFocus, data.executionCheckItems, execRawSourcesFrom(data));
   state.journalAwarenessResult = normalizeAwarenessResult(data.awarenessResult, { keepSource: true });
   state.journalAwarenessV3 = normalizeAwarenessV3Bag(data.awarenessV3);
@@ -17204,6 +17677,21 @@ function handleTodayPointerClick(event) {
     catchAsync(() => generateReflectionV3({ confirmed: true }), "今天的深度思考還沒整理好");
     return true;
   }
+  if (node.closest("#btnThinkExtStart") || node.closest("#btnThinkExtAgain")) {
+    handled();
+    catchAsync(() => generateThinkExtensionAsk({ confirmed: true }), "延伸深度思考還沒整理好");
+    return true;
+  }
+  if (node.closest("#btnThinkExtRefresh")) {
+    handled();
+    catchAsync(() => generateThinkExtensionAsk({ confirmed: true, refresh: true }), "延伸深度思考還沒整理好");
+    return true;
+  }
+  if (node.closest("#btnThinkExtClose") || node.closest("#btnThinkExtCloseStale")) {
+    handled();
+    catchAsync(() => generateThinkExtensionClose({ confirmed: true }), "這次的深度結論還沒整理好");
+    return true;
+  }
   if (node.closest("#btnThinkChoices")) {
     handled();
     setJournalFoldOpen("section-deep", true, { manual: true });
@@ -18002,6 +18490,7 @@ function bindEvents() {
         }
       }
       if (isJournalAutosaveField(target)) scheduleJournalAutosave();
+      if (id === "thinkExtAnswer") syncThinkExtAnswerChrome();
       if (id === "bodyMindText") syncBodyMindCta();
       if (usesReflectionV3Path()) syncThinkV3Cta();
       if (usesAwarenessV3Path()) syncAwareV3Cta();
@@ -18012,6 +18501,10 @@ function bindEvents() {
 
   document.getElementById("page-today")?.addEventListener("change", (event) => {
     if (isCurrentJournalArchived()) return;
+    if (event.target && event.target.matches("input[name='thinkExtQ']")) {
+      selectThinkExtensionQuestion(String(event.target.value || "").trim());
+      return;
+    }
     if (event.target && event.target.matches(".manifest-step__check")) {
       toggleManifestPlanStep(event.target.dataset.manifestStep, event.target.checked);
       return;

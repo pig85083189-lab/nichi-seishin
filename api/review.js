@@ -10,6 +10,7 @@ const insightHighlight = require("../lib/insight-highlight");
 const reviewMerge = require("../lib/review-merge");
 const thinkV2 = require("../lib/think-v2");
 const reflectionV3 = require("../lib/reflection-v3");
+const reflectionExt = require("../lib/reflection-extension");
 const awarenessV3 = require("../lib/awareness-v3");
 const executionV3 = require("../lib/execution-v3");
 const execV2 = require("../lib/exec-v2");
@@ -35,6 +36,53 @@ color 只能是下面四個，依語意決定，不要隨機。相同內容請�
 
 function withCompleteRule(system) {
   return `${system}\n\n【文字完整性】\n${textIntegrity.COMPLETE_TEXT_RULE}`;
+}
+
+async function loadPersistedJournalForDate(user, date) {
+  const iso = String(date || "").trim();
+  if (!user || !user.id || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+  try {
+    const { loadReviews, cloudStoreConfigured } = require("../lib/store");
+    if (!cloudStoreConfigured()) return null;
+    const map = await loadReviews(user.id);
+    const review = map && map[iso] ? map[iso] : null;
+    const journal = review && review.journal && typeof review.journal === "object" ? review.journal : null;
+    return journal;
+  } catch (error) {
+    console.error("loadPersistedJournalForDate:", error && error.message ? error.message : error);
+    return null;
+  }
+}
+
+function persistedExtensionFromJournal(journal) {
+  const insight = journal && journal.insight && typeof journal.insight === "object" ? journal.insight : {};
+  const guide = insight.guide && typeof insight.guide === "object" ? insight.guide : {};
+  return reflectionExt.normalizeReflectionExtension(guide.extension);
+}
+
+function clientExtensionFromBody(body) {
+  const ctx = body && body.context && typeof body.context === "object" ? body.context : {};
+  return reflectionExt.normalizeReflectionExtension(ctx.persistedExtension || ctx.extension);
+}
+
+async function enforceExtensionRoundLimit(user, body) {
+  const step = reflectionExt.reflectionExtensionStep(body);
+  const ctx = body && body.context && typeof body.context === "object" ? body.context : {};
+  const roundId = String(ctx.roundId || body.roundId || "").trim();
+  const journal = await loadPersistedJournalForDate(user, body.date);
+  const limit = reflectionExt.tighterExtensionLimit(
+    persistedExtensionFromJournal(journal),
+    clientExtensionFromBody(body)
+  );
+  const allowed =
+    step === "close"
+      ? reflectionExt.extensionCloseAllowed({ rounds: limit.rounds }, roundId) &&
+        (limit.completed < reflectionExt.REFLECTION_EXTENSION_MAX_ROUNDS ||
+          limit.rounds.some((item) => item.id === roundId && reflectionExt.isExtensionRoundCompleted(item)))
+      : reflectionExt.extensionAskAllowed({ rounds: limit.rounds }, roundId) &&
+        (limit.completed < reflectionExt.REFLECTION_EXTENSION_MAX_ROUNDS ||
+          limit.rounds.some((item) => item.id === roundId));
+  return { allowed, completed: limit.completed, step, roundId };
 }
 
 function readJsonBody(req) {
@@ -3105,6 +3153,16 @@ module.exports = async function handler(req, res) {
   delete body.userId;
   delete body.model;
   delete body.internal;
+  delete body.completedCount;
+  delete body.completedRounds;
+  if (body.context && typeof body.context === "object") {
+    delete body.context.completedCount;
+    delete body.context.completedRounds;
+    delete body.context.user_id;
+    delete body.context.userId;
+    delete body.context.model;
+    delete body.context.internal;
+  }
 
   let membershipRow = null;
   let internalUser = false;
@@ -3229,6 +3287,26 @@ module.exports = async function handler(req, res) {
         const thanks = thanksItems(ctx.thanksText || ctx.thanks);
         if (!event || !mood || !thanks.length) {
           res.status(400).json({ ok: false, error: "請先寫下今日感謝、事件，並選擇心情" });
+          return;
+        }
+      } else if (reflectionExt.isReflectionExtensionRequest(body)) {
+        const quote = String(ctx.coreQuote || ctx.thinkCoreQuote || "").trim();
+        const layerQs = Array.isArray(ctx.thinkQuestions) ? ctx.thinkQuestions : Array.isArray(ctx.questions) ? ctx.questions : [];
+        if (!quote || layerQs.length < 3) {
+          res.status(400).json({ ok: false, error: "請先完成今天的深度思考" });
+          return;
+        }
+        if (reflectionExt.reflectionExtensionStep(body) === "close") {
+          const selected = String(ctx.selectedQuestion || ctx.selectedQuestionText || "").trim();
+          const answer = String(ctx.answer || "").trim();
+          if (!selected || !reflectionExt.answerIsMeaningful(answer)) {
+            res.status(400).json({ ok: false, error: "請先選一題並寫下你的回答" });
+            return;
+          }
+        }
+        const limit = await enforceExtensionRoundLimit(user, body);
+        if (!limit.allowed) {
+          res.status(400).json({ ok: false, error: "今天的延伸思考已經完成兩次" });
           return;
         }
       } else if (isThinkGuideRequest(body) && thinkGuideStep(body) === "close") {
@@ -3371,7 +3449,19 @@ module.exports = async function handler(req, res) {
       }
       }
     } else if (mode === "insight") {
-      if (reflectionV3.isReflectionV3Request(body)) {
+      if (reflectionExt.isReflectionExtensionRequest(body)) {
+        const close = reflectionExt.reflectionExtensionStep(body) === "close";
+        messages = [
+          {
+            role: "system",
+            content: withCompleteRule(close ? reflectionExt.REFLECTION_EXTENSION_CLOSE_SYSTEM : reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM),
+          },
+          {
+            role: "user",
+            content: close ? reflectionExt.reflectionExtensionCloseUserPrompt(body) : reflectionExt.reflectionExtensionAskUserPrompt(body),
+          },
+        ];
+      } else if (reflectionV3.isReflectionV3Request(body)) {
         messages = [
           { role: "system", content: withCompleteRule(reflectionV3.REFLECTION_V3_SYSTEM) },
           { role: "user", content: reflectionV3.reflectionV3UserPrompt(body) },
@@ -3477,11 +3567,17 @@ module.exports = async function handler(req, res) {
     const aiOpts = {
       internal: internalUser,
       effort:
-        internalUser && mode === "insight" && (thinkV2.isThinkV2Request(body) || reflectionV3.isReflectionV3Request(body))
+        internalUser &&
+        mode === "insight" &&
+        (thinkV2.isThinkV2Request(body) ||
+          reflectionV3.isReflectionV3Request(body) ||
+          reflectionExt.isReflectionExtensionRequest(body))
           ? "high"
           : undefined,
       temperature:
-        mode === "insight" && reflectionV3.isReflectionV3Request(body)
+        mode === "insight" && reflectionExt.isReflectionExtensionRequest(body)
+          ? 0.45
+        : mode === "insight" && reflectionV3.isReflectionV3Request(body)
           ? 0.45
         : mode === "choices" && (awarenessV3.isAwarenessV3CueRequest(body) || awarenessV3.isAwarenessV3Request(body) || executionV3.isExecutionV3Request(body))
           ? 0.45
@@ -3525,6 +3621,10 @@ module.exports = async function handler(req, res) {
             ? 900
           : mode === "choices"
             ? 700
+          : mode === "insight" && reflectionExt.isReflectionExtensionRequest(body)
+            ? reflectionExt.reflectionExtensionStep(body) === "close"
+              ? 400
+              : 800
           : mode === "insight" && reflectionV3.isReflectionV3Request(body)
             ? 900
           : mode === "choices" && (awarenessV3.isAwarenessV3Request(body) || executionV3.isExecutionV3Request(body))
@@ -3711,6 +3811,24 @@ module.exports = async function handler(req, res) {
       return;
     }
     if (mode === "insight") {
+      if (reflectionExt.isReflectionExtensionRequest(body)) {
+        if (reflectionExt.reflectionExtensionStep(body) === "close") {
+          const closed = reflectionExt.normalizeExtensionCloseResult(data);
+          if (!closed.deepConclusion) {
+            res.status(502).json({ ok: false, error: "這次的深度結論還沒整理好，請再試一次" });
+            return;
+          }
+          res.status(200).json({ ok: true, source: getProvider(), data: closed });
+          return;
+        }
+        const asked = reflectionExt.normalizeExtensionAskResult(data);
+        if (asked.questions.length < 3) {
+          res.status(502).json({ ok: false, error: "延伸深度思考還沒整理好，請再試一次" });
+          return;
+        }
+        res.status(200).json({ ok: true, source: getProvider(), data: asked });
+        return;
+      }
       if (reflectionV3.isReflectionV3Request(body)) {
         const result = reflectionV3.normalizeReflectionV3Result(data, body.context || {});
         if (!result.coreQuote || result.questions.length < 3) {
