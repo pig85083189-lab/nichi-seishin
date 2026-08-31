@@ -39,7 +39,7 @@ assert(app.includes("function reviewIsFinalized"), "completed restore");
 assert(!app.includes("CREATE TABLE") && !html.includes("ALTER TABLE"), "CASE P：無 schema");
 assert(!/setTimeout\(\s*\(\)\s*=>\s*(hideSplash|dismissSplash)/.test(app), "不是無條件關閉");
 
-assert(html.includes("app.css?v=226"), "cache css");
-assert(html.includes("app.js?v=262"), "cache js");
+assert(html.includes("app.css?v=227"), "cache css");
+assert(html.includes("app.js?v=263"), "cache js");
 
 console.log("splash position and transition tests passed");

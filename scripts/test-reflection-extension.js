@@ -27,7 +27,9 @@ assert(app.includes("想再往裡面看一點"), "入口文案");
 assert(app.includes("延伸深度思考 →"), "入口 CTA");
 assert(app.includes("整理這次的深度思考 →"), "結論 CTA");
 assert(app.includes("再延伸一次 →"), "第二輪 CTA");
-assert(app.includes('name="thinkExtQ"'), "radio semantics");
+assert(app.includes('name="${escapeHtml(groupName)}"') || app.includes("reflection-extension-question-"), "radio name 依 round");
+assert(app.includes("data-extension-question"), "selection delegation hook");
+assert(app.includes("function syncThinkExtensionSelectionUi"), "選題只更新局部 UI");
 assert(app.includes("type=\"radio\""), "radio input");
 assert(app.includes("id=\"thinkExtAnswer\""), "選題後 textarea");
 assert(app.includes("寫下你現在真正想到的答案"), "回答提示");
@@ -427,8 +429,8 @@ const reset = internalTest.applyInternalTodayReset({
 assert(reset.journal.internalTestRuns[0].snapshot.journal.insight.guide.extension.rounds.length === 2, "internal reset snapshot 含 extension");
 assert(!reset.journal.insight, "fresh run 清空 extension");
 
-assert(html.includes("app.js?v=262"), "cache js");
-assert(html.includes("app.css?v=226"), "cache css");
+assert(html.includes("app.js?v=263"), "cache js");
+assert(html.includes("app.css?v=227"), "cache css");
 assert(html.includes("lib/review-merge.js?v=19"), "cache merge");
 
 assert(app.includes("id=\"btnThinkExtStart\""), "A: CTA id");
@@ -504,6 +506,57 @@ const saved = reviewMerge.upsertReflectionExtensionRound(dropped, {
 assert(saved.rounds.length === 1, "F: upsert 後仍是 1 round");
 assert(saved.rounds[0].questions.length === 3, "E/F: 三題寫回同一 draft");
 assert(reviewMerge.completedExtensionCount(saved) === 0, "完成數仍為 0，尚未有結論");
+
+const selectFnStart = app.indexOf("function selectThinkExtensionQuestion");
+const selectFnEnd = app.indexOf("\nasync function generateThinkExtensionAsk", selectFnStart);
+const selectFn = selectFnStart >= 0 && selectFnEnd > selectFnStart ? app.slice(selectFnStart, selectFnEnd) : "";
+assert(selectFn.includes("selectedQuestionId: questionId"), "選題只寫 selectedQuestionId");
+assert(selectFn.includes("item.id === current.id ? next : item"), "只改目前 round");
+assert(selectFn.includes("syncThinkExtensionSelectionUi()"), "選題只同步目前 round UI");
+assert(!selectFn.includes("renderThinkExtension()"), "選題不重建 extension DOM");
+assert(!selectFn.includes("renderThinkV3") && !selectFn.includes("renderThinkSection") && !selectFn.includes("fillJournal") && !selectFn.includes("loadReviewForDate"), "選題不重建今日頁");
+assert(!selectFn.includes("scrollIntoView") && !selectFn.includes("scrollTo") && !selectFn.includes(".focus("), "選題不 scroll / focus");
+assert(selectFn.includes("showHint: false"), "選題走輕量 persist");
+assert(selectFn.includes("...ext") && selectFn.includes("rounds:"), "extension 用 merge 不是整包覆寫 guide");
+
+const applyFnStart = app.indexOf("function applyThinkExtension");
+const applyFnEnd = app.indexOf("\nfunction upsertThinkExtensionRound", applyFnStart);
+const applyFn = applyFnStart >= 0 && applyFnEnd > applyFnStart ? app.slice(applyFnStart, applyFnEnd) : "";
+assert(applyFn.includes("...prevGuide"), "apply extension 保留 guide");
+assert(applyFn.includes("...prevExt"), "apply extension 保留既有 extension");
+
+const guide = {
+  variant: "reflection-v3",
+  coreQuote: "真正需要被看見的，也許不是你能不能忍受。",
+  questions: layer.thinkQuestions,
+  status: "ready",
+  extension: {
+    variant: "reflection-extension-v1",
+    rounds: [
+      {
+        id: "ext_sel",
+        questions: produced,
+        selectedQuestionId: "",
+        answer: "",
+      },
+    ],
+  },
+};
+const extBefore = reviewMerge.normalizeReflectionExtension(guide.extension);
+const extAfter = reviewMerge.normalizeReflectionExtension({
+  ...extBefore,
+  rounds: extBefore.rounds.map((item) =>
+    item.id === "ext_sel" ? { ...item, selectedQuestionId: "eq2" } : item
+  ),
+});
+const mergedGuide = { ...guide, extension: extAfter };
+assert(mergedGuide.variant === "reflection-v3", "選題後 variant 仍在");
+assert(mergedGuide.coreQuote === guide.coreQuote, "選題後 coreQuote 仍在");
+assert(mergedGuide.questions.length === 3, "選題後第一層 questions 仍在");
+assert(mergedGuide.status === "ready", "選題後 status 仍在");
+assert(mergedGuide.extension.rounds.length === 1, "選題不新增 round");
+assert(mergedGuide.extension.rounds[0].selectedQuestionId === "eq2", "只改 selectedQuestionId");
+assert(mergedGuide.extension.rounds[0].questions.length === 3, "三題仍在");
 
 assert(app.includes("reportThinkExtDebug"), "Internal debug 存在");
 assert(app.includes("這次沒有整理完成，再試一次。"), "失敗 toast");

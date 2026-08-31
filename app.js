@@ -11059,8 +11059,15 @@ function thinkExtensionCompletedCount(extension) {
 
 function applyThinkExtension(extension) {
   const insight = normalizeInsight(state.journalInsight);
-  const guide = { ...(insight.guide || emptyThinkGuide()), extension: normalizeReflectionExtension(extension) };
-  insight.guide = normalizeThinkGuide(guide);
+  const prevGuide = insight.guide || emptyThinkGuide();
+  const prevExt = normalizeReflectionExtension(prevGuide.extension);
+  insight.guide = normalizeThinkGuide({
+    ...prevGuide,
+    extension: normalizeReflectionExtension({
+      ...prevExt,
+      ...(extension && typeof extension === "object" ? extension : {}),
+    }),
+  });
   state.journalInsight = insight;
   return insight;
 }
@@ -11213,9 +11220,11 @@ function renderThinkExtension() {
     ? current.questions
         .map((item, index) => {
           const checked = item.id === (current.selectedQuestionId || "");
+          const inputId = `reflection-extension-question-${current.id}-${item.id}`;
+          const groupName = `reflection-extension-question-${current.id}`;
           return `
-        <label class="think-ext-opt">
-          <input type="radio" name="thinkExtQ" value="${escapeHtml(item.id)}" ${checked ? "checked" : ""} ${archived ? "disabled" : ""} />
+        <label class="think-ext-opt" for="${escapeHtml(inputId)}" data-extension-question="${escapeHtml(item.id)}" data-extension-round="${escapeHtml(current.id)}">
+          <input type="radio" id="${escapeHtml(inputId)}" name="${escapeHtml(groupName)}" value="${escapeHtml(item.id)}" data-extension-question="${escapeHtml(item.id)}" data-extension-round="${escapeHtml(current.id)}" ${checked ? "checked" : ""} ${archived ? "disabled" : ""} />
           <span class="think-ext-opt__mark" aria-hidden="true"></span>
           <span class="think-ext-opt__copy">
             <span class="think-ext-opt__index">0${index + 1}</span>
@@ -11239,8 +11248,11 @@ function renderThinkExtension() {
           <p class="think-ext-stale">前面的內容有修改，這次延伸思考是依照修改前的內容產生。</p>
           <button class="think-ext-text-btn" id="btnThinkExtRefresh" type="button">重新整理延伸問題</button>` : ""}
         ${current.selectedQuestionId ? `
+          <div class="think-ext-answer-wrap" id="thinkExtAnswerWrap">
           <label class="think-ext-answer-label" for="thinkExtAnswer">寫下你現在真正想到的答案。</label>
           <textarea class="textarea think-ext-answer" id="thinkExtAnswer" rows="4" ${archived ? "readonly" : ""}>${escapeHtml(answerValue)}</textarea>
+          </div>` : ""}
+        ${current.selectedQuestionId ? `
           ${!archived && answerMeaningful && !current.deepConclusion ? `
             <button class="body-mind-cta think-ext-cta" id="btnThinkExtClose" type="button">整理這次的深度思考 →</button>` : ""}
           ${!archived && answerMeaningful && conclusionStale ? `
@@ -11271,7 +11283,7 @@ function syncThinkExtAnswerChrome() {
   const stale = Boolean(current.deepConclusion && (current.conclusionStale || thinkExtensionAnswerSig(ta.value) !== current.answerSig));
   let close = document.getElementById("btnThinkExtClose");
   let staleBtn = document.getElementById("btnThinkExtCloseStale");
-  const host = ta.parentElement;
+  const host = ta.closest(".think-ext-block") || ta.parentElement;
   if (!close && host && meaningful && !current.deepConclusion && !isCurrentJournalArchived()) {
     close = document.createElement("button");
     close.className = "body-mind-cta think-ext-cta";
@@ -11296,16 +11308,54 @@ function syncThinkExtAnswerChrome() {
   }
 }
 
+function syncThinkExtensionSelectionUi() {
+  const root = document.getElementById("thinkV3Extension");
+  if (!root) return;
+  const archived = isCurrentJournalArchived();
+  const ext = thinkExtensionFrom();
+  const current = currentThinkExtensionRound(ext);
+  if (!current || !current.questions.length) return;
+  const selectedId = String(current.selectedQuestionId || "");
+  root.querySelectorAll("input[data-extension-question]").forEach((input) => {
+    input.checked = input.value === selectedId;
+  });
+  if (!selectedId) return;
+  if (document.getElementById("thinkExtAnswer")) return;
+  const options = root.querySelector(".think-ext-options");
+  if (!options) return;
+  const wrap = document.createElement("div");
+  wrap.className = "think-ext-answer-wrap";
+  wrap.id = "thinkExtAnswerWrap";
+  const label = document.createElement("label");
+  label.className = "think-ext-answer-label";
+  label.setAttribute("for", "thinkExtAnswer");
+  label.textContent = "寫下你現在真正想到的答案。";
+  const ta = document.createElement("textarea");
+  ta.className = "textarea think-ext-answer";
+  ta.id = "thinkExtAnswer";
+  ta.rows = 4;
+  ta.value = current.answer || "";
+  if (archived) ta.readOnly = true;
+  wrap.appendChild(label);
+  wrap.appendChild(ta);
+  options.insertAdjacentElement("afterend", wrap);
+}
+
 function selectThinkExtensionQuestion(questionId) {
   if (isCurrentJournalArchived()) return;
   const ext = thinkExtensionFrom();
   const current = currentThinkExtensionRound(ext);
   if (!current || !current.questions.some((item) => item.id === questionId)) return;
+  if (current.selectedQuestionId === questionId && document.getElementById("thinkExtAnswer")) return;
   const next = { ...current, selectedQuestionId: questionId };
   if (current.deepConclusion) next.conclusionStale = true;
-  applyThinkExtension({ ...ext, rounds: ext.rounds.map((item) => (item.id === current.id ? next : item)) });
-  persistJournalNow();
-  renderThinkExtension();
+  applyThinkExtension({
+    ...ext,
+    rounds: ext.rounds.map((item) => (item.id === current.id ? next : item)),
+  });
+  markJournalFoldEditing("section-deep", true);
+  persistJournalNow({ showHint: false });
+  syncThinkExtensionSelectionUi();
 }
 
 async function generateThinkExtensionAsk(options = {}) {
@@ -17688,6 +17738,7 @@ function handleTodayPointerClick(event) {
     return true;
   }
   if (isCurrentJournalArchived()) return false;
+  if (node.closest("[data-extension-question]")) return false;
 
   if (node.closest("#btnAwarenessV3")) {
     handled();
@@ -18546,8 +18597,9 @@ function bindEvents() {
 
   document.getElementById("page-today")?.addEventListener("change", (event) => {
     if (isCurrentJournalArchived()) return;
-    if (event.target && event.target.matches("input[name='thinkExtQ']")) {
-      selectThinkExtensionQuestion(String(event.target.value || "").trim());
+    const extQuestion = event.target && event.target.closest && event.target.closest("input[data-extension-question]");
+    if (extQuestion) {
+      selectThinkExtensionQuestion(String(extQuestion.value || "").trim());
       return;
     }
     if (event.target && event.target.matches(".manifest-step__check")) {
