@@ -14,6 +14,7 @@ const reflectionExt = require("../lib/reflection-extension");
 const awarenessV3 = require("../lib/awareness-v3");
 const executionV3 = require("../lib/execution-v3");
 const execV2 = require("../lib/exec-v2");
+const reflectionHistory = require("../lib/reflection-history-retrieval");
 
 const HIGHLIGHT_RULE = `【重點反白 highlights】
 從你實際生成的原文中，挑選最值得停下來看的核心片段。目的是抓重點，不是把整段塗成彩色。
@@ -3207,6 +3208,68 @@ module.exports = async function handler(req, res) {
       resetAt,
       data: { allowed: true, resetAt, date: iso, review: nextReview },
     });
+    return;
+  }
+
+  if (reflectionHistory.isHistoryRetrievalRequest(body)) {
+    if (!internalUser) {
+      res.status(403).json({ ok: false, error: "internal_required", message: "Internal retrieval requires an internal account." });
+      return;
+    }
+    const iso = String(body.date || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+      res.status(400).json({ ok: false, error: "invalid_date" });
+      return;
+    }
+    try {
+      const { loadReviews, cloudStoreConfigured } = require("../lib/store");
+      const reviews = cloudStoreConfigured() ? await loadReviews(user.id) : {};
+      const persisted = reviews && reviews[iso] && reviews[iso].journal && typeof reviews[iso].journal === "object" ? reviews[iso].journal : null;
+      const ctx = body.context && typeof body.context === "object" ? body.context : {};
+      const currentJournal =
+        ctx.journal && typeof ctx.journal === "object"
+          ? ctx.journal
+          : persisted || {
+              thanksText: ctx.thanksText || ctx.thanks || "",
+              event: ctx.event || "",
+              mood: ctx.mood || "",
+              bodyMind: { text: ctx.bodyMindText || ctx.bodyNote || "" },
+              insight: { guide: { coreQuote: ctx.coreQuote || "", questions: ctx.thinkQuestions || ctx.questions || [] } },
+            };
+      const result = await reflectionHistory.retrieveRelevantHistory({
+        reviews,
+        currentDate: iso,
+        currentJournal,
+        currentExtension: ctx.currentExtension || ctx.extension || null,
+        callAi: (messages) => callOpenAI(messages, { internal: true, temperature: 0.2, timeoutMs: 20000, maxTokens: 900 }),
+      });
+      const debug = result.debug || {};
+      res.status(200).json({
+        ok: true,
+        data: {
+          currentDate: iso,
+          candidateCount: debug.candidateCount || 0,
+          stage1Top: Array.isArray(debug.stage1Top) ? debug.stage1Top : [],
+          selectedPast: result.selectedPast || [],
+          sourceSig: debug.sourceSig || "",
+          timings: debug.timings || {},
+          payloadBytes: debug.payloadBytes || 0,
+          line: reflectionHistory.internalRetrievalLine(result.selectedPast),
+        },
+      });
+    } catch (error) {
+      console.error("history-retrieval:", error && error.message ? error.message : error);
+      res.status(200).json({
+        ok: true,
+        data: {
+          currentDate: iso,
+          candidateCount: 0,
+          stage1Top: [],
+          selectedPast: [],
+          line: reflectionHistory.internalRetrievalLine([]),
+        },
+      });
+    }
     return;
   }
 
