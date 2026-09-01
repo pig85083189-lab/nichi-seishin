@@ -28,8 +28,10 @@ assert((html.match(/id="bodyMindText"/g) || []).length === 1, "2. textarea 只�
 const visible03 = html.slice(html.indexOf("id=\"bodyMindCard\""), html.indexOf("js-legacy-body-ui"));
 assert(visible03.includes("今天有沒有哪一個瞬間"), "1. 唯一問題");
 assert(html.includes('id="btnBodyMindInsight"'), "CTA 存在");
-assert(html.includes("看看這個感受在提醒我什麼"), "CTA 文案");
-assert(html.includes("正在整理這個感受"), "loading 文案");
+assert(html.includes("從今天裡，多看見自己一點"), "CTA 文案");
+assert(html.includes("正在從今天裡多看一看"), "loading 文案");
+assert(!html.includes("看看這個感受在提醒我什麼"), "不再用舊 CTA");
+assert(!html.includes("這個瞬間在提醒我什麼"), "不再用瞬間提醒框架");
 assert(!html.includes("正在整理今天的覺察…"), "03 不用舊 loading");
 assert(!/class="journal-guide"(?![^>]*hidden)/.test(visible03), "3. 新 day 無可見 helper");
 assert(!visible03.includes("今日的心情"), "1. 新 day 不顯示重複 mood");
@@ -145,8 +147,10 @@ assert(reviewJs.includes("requireUser"), "29. Internal 仍要登入");
 
 assert(css.includes(".body-mind-insight") && css.includes("border-left: 2px solid #bca58f"), "F. editorial insight");
 assert(app.includes('kicker: "核心結論"') === true || app.includes("核心結論"), "04 close 未因 03 被拆");
-assert(app.includes('class="body-mind-insight__label">覺察</p>'), "UI 覺察標籤");
-assert(app.includes('class="body-mind-insight__label">引導</p>'), "UI 引導標籤");
+assert(app.includes('class="body-mind-insight__label">我注意到</p>'), "UI 觀察標籤");
+assert(app.includes('class="body-mind-insight__label">為什麼這樣看</p>'), "UI 說明標籤");
+assert(!app.includes('class="body-mind-insight__label">覺察</p>'), "不再用舊覺察標籤");
+assert(!app.includes('class="body-mind-insight__label">引導</p>'), "不再用舊引導標籤");
 assert(!app.includes("覺察一句話"), "不再顯示舊 insight 標籤");
 assert(!app.includes("給今天的你"), "不再顯示舊 support 標籤");
 assert(bodyMind.BODY_MIND_SYSTEM.includes("ONE CORE INSIGHT ONLY"), "只留一個核心");
@@ -156,6 +160,8 @@ assert(bodyMind.BODY_MIND_SYSTEM.includes("不要搶 06"), "引導不搶 06");
 assert(bodyMind.BODY_MIND_SYSTEM.includes("不要找問題"), "正向不硬找問題");
 assert(bodyMind.bodyMindSourceStale({ text: "舊文字", insight: "核心一句。", support: "往下看一眼。", sig: "舊文字\n事件\n心情" }, "改過的新文字"), "改字後 stale");
 assert(!bodyMind.bodyMindSourceStale({ text: "舊文字", insight: "核心一句。", support: "往下看一眼。", sig: "舊文字\n事件\n心情" }, "舊文字"), "同文不是 stale");
+assert(reviewJs.includes("runSeePipeline"), "03 走 SEE pipeline");
+assert(reviewJs.includes("runDiscoveryPipeline"), "04 discovery 仍在");
 assert(!reviewJs.includes("ANTHROPIC_INTERNAL_MODEL"), "不改 routing 常數來源");
 assert(reviewJs.includes("internal: internalUser"), "Internal routing 仍在");
 

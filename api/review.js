@@ -17,6 +17,7 @@ const execV2 = require("../lib/exec-v2");
 const reflectionHistory = require("../lib/reflection-history-retrieval");
 const insightReason = require("../lib/insight-reason");
 const insightDiscovery = require("../lib/insight-discovery");
+const bodyMindSee = require("../lib/body-mind-see");
 const insightLab = require("../lib/insight-lab");
 
 const HIGHLIGHT_RULE = `【重點反白 highlights】
@@ -3891,6 +3892,27 @@ module.exports = async function handler(req, res) {
                       : 1800
                   : 1600,
     };
+    if (mode === "bodymind") {
+      const ctx = {
+        ...(body.context && typeof body.context === "object" ? body.context : {}),
+        text,
+        bodyMindText: (body.context && body.context.bodyMindText) || text,
+      };
+      const callAi = (msgs, stage) =>
+        callOpenAI(msgs, {
+          ...aiOpts,
+          timeoutMs: internalUser ? 20000 : Math.min(Number(aiOpts.timeoutMs) || 16000, 16000),
+          maxTokens: stage === "write" ? 400 : stage === "challenge" ? 700 : 900,
+        });
+      const seen = await bodyMindSee.runSeePipeline({ callAi, ctx });
+      res.status(200).json({
+        ok: true,
+        source: getProvider(),
+        data: bodyMindSee.projectSeeOutput(seen),
+        ...(internalUser ? { _internalReason: seen.meta || {} } : {}),
+      });
+      return;
+    }
     if (mode === "insight" && thinkV2.isThinkV2Request(body) && thinkV2.shouldSkipThinkV2Ask(body)) {
       const skipped = thinkV2.normalizeThinkV2Ask({ readyToClose: true, question: "", unknown: "", unknownWouldChangeCore: false }, body);
       res.status(200).json({ ok: true, source: "local-stop", data: skipped });
@@ -4362,11 +4384,7 @@ module.exports = async function handler(req, res) {
       return;
     }
     if (mode === "bodymind") {
-      const result = bodyMind.normalizeBodyMindInsight(data);
-      if (!result.insight) {
-        res.status(502).json({ ok: false, error: "今天的覺察還沒整理好，請再試一次" });
-        return;
-      }
+      const result = bodyMindSee.projectSeeOutput(bodyMind.normalizeBodyMindInsight(data));
       res.status(200).json({ ok: true, source: getProvider(), data: result });
       return;
     }

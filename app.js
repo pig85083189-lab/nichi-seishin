@@ -6133,19 +6133,35 @@ function emptyBodyCoach() {
 function emptyBodyMind() {
   const api = reviewMergeApi();
   if (typeof api.emptyBodyMind === "function") return api.emptyBodyMind();
-  return { text: "", insight: "", support: "", generatedAt: "", sig: "" };
+  return {
+    text: "",
+    insight: "",
+    support: "",
+    generatedAt: "",
+    sig: "",
+    status: "",
+    seeType: "",
+    evidence: [],
+    confidence: "",
+  };
 }
 
 function normalizeBodyMind(raw) {
   const api = reviewMergeApi();
   if (typeof api.normalizeBodyMind === "function") return api.normalizeBodyMind(raw);
   const src = raw && typeof raw === "object" ? raw : {};
+  const status = String(src.status || "").trim().toLowerCase();
+  const confidence = String(src.confidence || "").trim().toLowerCase();
   return {
     text: String(src.text || "").replace(/\s+/g, " ").trim(),
     insight: String(src.insight || "").replace(/\s+/g, " ").trim(),
     support: String(src.support || "").replace(/\s+/g, " ").trim(),
     generatedAt: String(src.generatedAt || "").trim(),
     sig: String(src.sig || "").trim(),
+    status: status === "silence" || status === "observation" ? status : "",
+    seeType: String(src.seeType || "").trim(),
+    evidence: Array.isArray(src.evidence) ? src.evidence.map((item) => String(item || "").trim()).filter(Boolean) : [],
+    confidence: confidence === "high" || confidence === "medium" || confidence === "low" ? confidence : "",
     internalDebug: src.internalDebug && src.internalDebug.model
       ? { provider: String(src.internalDebug.provider || ""), model: String(src.internalDebug.model || "") }
       : null,
@@ -6201,7 +6217,7 @@ function syncBodyMindCta() {
   const show = !archived && (!hasResult || stale);
   btn.hidden = !show;
   btn.disabled = Boolean(state.bodyMindBusy) || archived || !ready;
-  btn.textContent = stale ? "內容有修改，重新看看 →" : "看看這個感受在提醒我什麼 →";
+  btn.textContent = stale ? "內容有修改，重新看看 →" : "從今天裡，多看見自己一點 →";
   if (!ready) showBodyMindCtaHint("");
 }
 
@@ -9743,14 +9759,15 @@ function renderBodyMindInsight(mind) {
     syncBodyMindCta();
     return;
   }
+  const silent = data.status === "silence";
   root.innerHTML = `
-    <article class="body-mind-insight">
+    <article class="body-mind-insight${silent ? " body-mind-insight--silence" : ""}">
       ${data.insight ? `<div class="body-mind-insight__line">
-        <p class="body-mind-insight__label">覺察</p>
+        ${silent ? "" : `<p class="body-mind-insight__label">我注意到</p>`}
         ${markableP(data.insight, "bodyMind.insight", "body-mind-insight__text")}
       </div>` : ""}
       ${data.support ? `<div>
-        <p class="body-mind-insight__label">引導</p>
+        ${silent ? "" : `<p class="body-mind-insight__label">為什麼這樣看</p>`}
         ${markableP(data.support, "bodyMind.support", "body-mind-insight__support")}
       </div>` : ""}
     </article>`;
@@ -9777,7 +9794,7 @@ async function generateBodyMindInsight(options = {}) {
   const liveEl = document.getElementById("bodyMindText");
   const text = String(liveEl && liveEl.value != null ? liveEl.value : "").replace(/\s+/g, " ").trim();
   if (!bodyMindTextReady(text)) {
-    showBodyMindCtaHint("再多寫一點這個瞬間，會更容易看見它在提醒你什麼。");
+    showBodyMindCtaHint("再多寫一點今天發生的事或身體感受，會更容易看見。");
     syncBodyMindCta();
     return;
   }
@@ -9825,6 +9842,10 @@ async function generateBodyMindInsight(options = {}) {
       text: currentText || text,
       insight,
       support,
+      status: String(remote.status || "").trim(),
+      seeType: String(remote.seeType || "").trim(),
+      evidence: Array.isArray(remote.evidence) ? remote.evidence : [],
+      confidence: String(remote.confidence || "").trim(),
       generatedAt: new Date().toISOString(),
       sig,
       internalDebug: takeInternalDebug(remote),
