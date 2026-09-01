@@ -3016,8 +3016,12 @@ function normalizeExecutionChoiceBag(raw, options) {
     else if (item && item.detail) next.detail = String(item.detail).trim();
     if (extras.kind) next.kind = extras.kind;
     else if (item && item.kind) next.kind = item.kind;
+    if (extras.actKind) next.actKind = extras.actKind;
+    else if (item && item.actKind) next.actKind = item.actKind;
     if (extras.horizon) next.horizon = extras.horizon;
     else if (item && item.horizon) next.horizon = item.horizon;
+    if (extras.sourceAwarenessIds) next.sourceAwarenessIds = extras.sourceAwarenessIds;
+    else if (item && Array.isArray(item.sourceAwarenessIds)) next.sourceAwarenessIds = item.sourceAwarenessIds;
     return next;
   }).filter((item) => item.text) : [];
   const optionIds = new Set(optionsList.map((item) => item.id));
@@ -3034,6 +3038,9 @@ function normalizeExecutionChoiceBag(raw, options) {
     selectedIds.push(value);
   });
   return {
+    variant: String(src.variant || "").trim(),
+    actVariant: String(src.actVariant || "").trim(),
+    status: String(src.status || "").trim(),
     sourceSig: String(src.sourceSig || "").trim(),
     options: optionsList,
     selectedId: selectedIds[0] || "",
@@ -3043,6 +3050,7 @@ function normalizeExecutionChoiceBag(raw, options) {
     followupPlaceholder: String(src.followupPlaceholder || "").trim(),
     generatedAt: String(src.generatedAt || "").trim(),
     deep: normalizeExecDeep(src.deep),
+    noActionCopy: src.noActionCopy && typeof src.noActionCopy === "object" ? src.noActionCopy : null,
   };
 }
 
@@ -3086,7 +3094,9 @@ function serializeExecutionChoiceOption(item) {
   };
   if (item && item.detail) next.detail = item.detail;
   if (item && item.kind) next.kind = item.kind;
+  if (item && item.actKind) next.actKind = item.actKind;
   if (item && item.horizon) next.horizon = item.horizon;
+  if (item && Array.isArray(item.sourceAwarenessIds)) next.sourceAwarenessIds = item.sourceAwarenessIds.slice();
   return next;
 }
 
@@ -3094,6 +3104,8 @@ function serializeExecutionChoiceBag(raw) {
   const bag = normalizeExecutionChoiceBag(raw);
   return {
     variant: bag.variant || "",
+    actVariant: bag.actVariant || "",
+    status: bag.status || "",
     sourceSig: bag.sourceSig,
     options: bag.options.map((item) => serializeExecutionChoiceOption(item)),
     selectedId: bag.selectedId,
@@ -3103,6 +3115,7 @@ function serializeExecutionChoiceBag(raw) {
     followupPlaceholder: bag.followupPlaceholder,
     generatedAt: bag.generatedAt,
     deep: normalizeExecDeep(bag.deep),
+    noActionCopy: bag.noActionCopy || null,
   };
 }
 
@@ -10952,6 +10965,8 @@ function awarenessBitsFrom(journal) {
     seen: String(result.seen || v3Selected.slice(1).join(" ") || "").trim(),
     items: v3.items,
     selectedIds: v3.selectedIds,
+    growVariant: v3.growVariant || "",
+    status: v3.status || "",
     awarenessVariant: v3.items.length ? "awareness-v3" : "",
   };
 }
@@ -12517,11 +12532,44 @@ function executionV3Context(journal) {
     awarenessSelected: aware.selected,
     awarenessSelectedIds: aware.selectedIds,
     awarenessItems: aware.items,
+    growVariant: aware.growVariant || "",
+    awarenessGrowVariant: aware.growVariant || "",
+    awarenessStatus: aware.status || "",
+    understand: (function () {
+      const guide = normalizeThinkGuide((data.insight && data.insight.guide) || (state.journalInsight && state.journalInsight.guide));
+      return guide.understand || null;
+    })(),
   };
+}
+
+function isActExecutionBag(data) {
+  const bag = data && typeof data === "object" ? data : {};
+  return bag.actVariant === "act-v1" || bag.status === "actions" || bag.status === "no-action";
+}
+
+function executionV3HasResult(data) {
+  const bag = data && typeof data === "object" ? data : {};
+  if (isActExecutionBag(bag)) return Boolean(bag.sourceSig);
+  return bag.variant === "execution-v3" && (bag.options || []).length >= 3;
 }
 
 function executionV3SourceSig(journal) {
   const ctx = executionV3Context(journal);
+  if (ctx.growVariant === "grow-v1" || ctx.awarenessStatus === "grow" || ctx.awarenessStatus === "empty") {
+    const bag = ctx.understand && typeof ctx.understand === "object" ? ctx.understand : {};
+    return [
+      "grow-v1",
+      (ctx.awarenessSelectedIds || []).join(","),
+      (ctx.awarenessSelected || []).join("|"),
+      String(bag.answer || "").replace(/\s+/g, " ").trim(),
+      String(bag.answer2 || "").replace(/\s+/g, " ").trim(),
+      String(bag.convergence || "").replace(/\s+/g, " ").trim(),
+      String(ctx.thanksText || "").replace(/\s+/g, " ").trim(),
+      String(ctx.event || "").replace(/\s+/g, " ").trim(),
+      String(ctx.mood || "").trim(),
+      String(ctx.bodyMindText || "").replace(/\s+/g, " ").trim(),
+    ].join("\n");
+  }
   return [
     (ctx.awarenessSelectedIds || []).join(","),
     (ctx.awarenessSelected || []).join("|"),
@@ -12534,10 +12582,12 @@ function executionV3SourceSig(journal) {
 
 function executionV3Ready(journal) {
   const page = journal || collectJournal();
-  const silent = thinkGuideIsSilence((page.insight && page.insight.guide) || (state.journalInsight && state.journalInsight.guide));
-  const confirmed = selectedAwarenessV3Texts((page.awarenessV3) || state.journalAwarenessV3);
-  if (silent && !confirmed.length) return false;
+  const guide = (page.insight && page.insight.guide) || (state.journalInsight && state.journalInsight.guide);
+  const silent = thinkGuideIsSilence(guide) && !isUnderstandGuide(guide);
   const data = normalizeAwarenessV3Bag((page.awarenessV3) || state.journalAwarenessV3);
+  if (isGrowAwarenessBag(data)) return awarenessV3HasResult(data) && data.selectedIds.length >= 1;
+  const confirmed = selectedAwarenessV3Texts(data);
+  if (silent && !confirmed.length) return false;
   return data.items.length >= 2 || awarenessV3Ready(page);
 }
 
@@ -12546,10 +12596,13 @@ function syncExecV3Cta() {
   const btn = document.getElementById("btnExecutionV3");
   if (!btn) return;
   const archived = isCurrentJournalArchived();
-  const silent = thinkGuideIsSilence((state.journalInsight || {}).guide);
-  const confirmed = selectedAwarenessV3Texts(state.journalAwarenessV3);
+  const guide = (state.journalInsight || {}).guide;
+  const silent = thinkGuideIsSilence(guide) && !isUnderstandGuide(guide);
+  const aware = normalizeAwarenessV3Bag(state.journalAwarenessV3);
+  const confirmed = selectedAwarenessV3Texts(aware);
+  const grow = isGrowAwarenessBag(aware);
   const bag = normalizeExecutionChoiceBag(state.executionChoices);
-  const hasResult = bag.variant === "execution-v3" && bag.options.length >= 3;
+  const hasResult = executionV3HasResult(bag);
   if (silent && !confirmed.length && !hasResult) {
     btn.hidden = true;
     showExecV3Hint("");
@@ -12560,9 +12613,10 @@ function syncExecV3Cta() {
   const show = usesExecutionV3Path() && !archived && (!hasResult || stale);
   btn.hidden = !show;
   btn.disabled = Boolean(state.choicesBusy?.execution) || archived || !ready;
-  btn.textContent = stale ? "覺察有更新，重新整理下一步 →" : "把今天的覺察變成下一步 →";
-  if (silent && !confirmed.length) showExecV3Hint("今天沒有一定要變成行動的發現。");
-  else if (!ready && show) showExecV3Hint("先看看今天真正看見了自己什麼。");
+  btn.textContent = stale ? "覺察有更新，重新整理下一步 →" : "把這份覺察帶回生活 →";
+  if (grow && !confirmed.length && show) showExecV3Hint("今天沒有一定要帶走的行動。前面的覺察如果還沒有哪一個特別像你，先不用急著替自己安排下一步。");
+  else if (silent && !confirmed.length) showExecV3Hint("今天沒有一定要變成行動的發現。");
+  else if (!ready && show) showExecV3Hint("先確認哪一個覺察最像今天的你。");
   else if (ready) showExecV3Hint("");
 }
 
@@ -12671,23 +12725,53 @@ function renderExecutionV3() {
   if (loader) loader.hidden = !loading;
   syncExecV3Cta();
   if (!root) return;
-  if (loading || bag.variant !== "execution-v3" || bag.options.length < 3) {
+  const act = isActExecutionBag(bag);
+  if (loading || !executionV3HasResult(bag) || (!act && (bag.variant !== "execution-v3" || bag.options.length < 3))) {
     if (!loading) root.innerHTML = "";
     return;
   }
+  if (act && !bag.options.length) {
+    const copy = bag.noActionCopy && typeof bag.noActionCopy === "object" ? bag.noActionCopy : {};
+    root.innerHTML = `
+      <article class="exec-v3-empty">
+        <p class="think-v3-quote__text">${escapeHtml(copy.line1 || "這個覺察現在不用急著變成任務。")}</p>
+        <p class="think-v3-why">${escapeHtml(copy.line2 || "你已經在做了。今天先把這份改變記住，就很好。")}</p>
+      </article>`;
+    paintInternalModelDebug(root, state.internalModelDebug && state.internalModelDebug.execution);
+    return;
+  }
   const selected = new Set(bag.selectedIds);
+  const groups = [
+    { kind: "ACTION_NOW", label: "⚡ 今天可以先做" },
+    { kind: "PRACTICE", label: "🌱 接下來可以慢慢練習" },
+    { kind: "OBSERVE", label: "👀 可以先觀察" },
+  ];
+  const used = new Set();
+  const sections = act
+    ? groups.map((group) => {
+        const items = bag.options.filter((item) => item.actKind === group.kind);
+        items.forEach((item) => used.add(item.id));
+        if (!items.length) return "";
+        return `<div class="exec-v3-group"><p class="exec-v3-group__label">${group.label}</p><div class="exec-v3-list">${items.map((item) => execV3ItemHtml(item, selected)).join("")}</div></div>`;
+      }).join("") + (bag.options.some((item) => !used.has(item.id))
+        ? `<div class="exec-v3-list">${bag.options.filter((item) => !used.has(item.id)).map((item) => execV3ItemHtml(item, selected)).join("")}</div>`
+        : "")
+    : `<div class="exec-v3-list">${bag.options.map((item) => execV3ItemHtml(item, selected)).join("")}</div>`;
   root.innerHTML = `
-    <div class="exec-v3-list">
-      ${bag.options.map((item) => `
+    ${sections}
+    ${act ? `<p class="exec-v3-pick">哪一個你想帶去做／練習？</p>` : ""}`;
+  paintInternalModelDebug(root, state.internalModelDebug && state.internalModelDebug.execution);
+}
+
+function execV3ItemHtml(item, selected) {
+  return `
         <button type="button" class="exec-v3-item${selected.has(item.id) ? " is-on" : ""}" data-choice-id="${escapeHtml(item.id)}" data-choice-kind="execution" role="checkbox" aria-checked="${selected.has(item.id) ? "true" : "false"}">
           <span class="exec-v3-item__box" aria-hidden="true"></span>
           <span class="exec-v3-item__copy">
             ${markableP(item.text, `exec.item.${item.id}.title`, "exec-v3-item__title")}
             ${item.detail ? markableP(item.detail, `exec.item.${item.id}.detail`, "exec-v3-item__detail") : ""}
           </span>
-        </button>`).join("")}
-    </div>`;
-  paintInternalModelDebug(root, state.internalModelDebug && state.internalModelDebug.execution);
+        </button>`;
 }
 
 function toggleAwarenessV3(id) {
@@ -12877,14 +12961,15 @@ async function generateExecutionV3(options = {}) {
     return;
   }
   if (!executionV3Ready(journal)) {
-    showExecV3Hint("先看看今天真正看見了自己什麼。");
+    const grow = isGrowAwarenessBag(normalizeAwarenessV3Bag(journal.awarenessV3 || state.journalAwarenessV3));
+    showExecV3Hint(grow ? "先確認哪一個覺察最像今天的你。" : "先看看今天真正看見了自己什麼。");
     syncExecV3Cta();
     return;
   }
   if (!ensurePlusFeature("execution_ai", options)) return;
   const sig = executionV3SourceSig(journal);
   const current = normalizeExecutionChoiceBag(state.executionChoices);
-  if (current.variant === "execution-v3" && current.options.length >= 3 && current.sourceSig === sig && !options.force) {
+  if (executionV3HasResult(current) && current.sourceSig === sig && !options.force) {
     renderExecutionV3();
     return;
   }
@@ -12905,15 +12990,30 @@ async function generateExecutionV3(options = {}) {
     });
     if (state.choicesToken.execution !== token) return;
     const actions = Array.isArray(remote.actions)
-      ? remote.actions.map((item, index) => ({
-          id: String((item && item.id) || `e${index + 1}`),
-          text: String((item && (item.title || item.text)) || "").replace(/\s+/g, " ").trim(),
-          detail: String((item && item.detail) || "").replace(/\s+/g, " ").trim(),
-        })).filter((item) => item.text).slice(0, 3)
+      ? remote.actions.map((item, index) => {
+          const text = String((item && (item.title || item.text)) || "").replace(/\s+/g, " ").trim();
+          if (!text) return null;
+          const next = {
+            id: String((item && item.id) || `e${index + 1}`),
+            text,
+            detail: String((item && item.detail) || "").replace(/\s+/g, " ").trim(),
+          };
+          if (item && item.kind) next.kind = String(item.kind || "").trim();
+          if (item && item.actKind) next.actKind = String(item.actKind || "").trim();
+          if (Array.isArray(item && item.sourceAwarenessIds)) next.sourceAwarenessIds = item.sourceAwarenessIds;
+          return next;
+        }).filter(Boolean).slice(0, 3)
       : [];
-    if (actions.length < 3) throw new Error("今天的下一步還沒整理好，請再試一次。");
+    const act = remote.actVariant === "act-v1" || remote.status === "actions" || remote.status === "no-action" || remote.status === "blocked";
+    if (act && remote.blocked) {
+      showExecV3Hint("今天沒有一定要帶走的行動。前面的覺察如果還沒有哪一個特別像你，先不用急著替自己安排下一步。");
+      return;
+    }
+    if (!act && actions.length < 3) throw new Error("今天的下一步還沒整理好，請再試一次。");
     state.executionChoices = serializeExecutionChoiceBag({
       variant: "execution-v3",
+      actVariant: act ? "act-v1" : "",
+      status: act ? (actions.length ? "actions" : "no-action") : "",
       sourceSig: sig,
       options: actions,
       selectedIds: [],
@@ -12922,6 +13022,7 @@ async function generateExecutionV3(options = {}) {
       followupQuestion: "",
       followupPlaceholder: "",
       generatedAt: new Date().toISOString(),
+      noActionCopy: remote.noActionCopy || null,
       deep: { status: "", rounds: [], draftAnswer: "", refreshedAt: "", executionSummary: "", finalOptions: [], finalSelectedIds: [] },
     });
     if (!state.internalModelDebug) state.internalModelDebug = {};

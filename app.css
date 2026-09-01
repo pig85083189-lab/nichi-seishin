@@ -7637,6 +7637,33 @@ textarea[hidden] + .journal-voice-hint,
   margin-top: 8px;
 }
 
+.exec-v3-group {
+  margin: 18px 0 0;
+}
+
+.exec-v3-group__label {
+  margin: 0 0 8px;
+  color: #806d5e;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.exec-v3-pick {
+  margin: 14px 0 0;
+  color: #8a7a6e;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.exec-v3-empty {
+  margin: 16px 0 0;
+}
+
+.exec-v3-empty .think-v3-why {
+  margin-top: 8px;
+}
+
 .aware-v3-cta,
 .exec-v3-cta {
   margin-top: 0;

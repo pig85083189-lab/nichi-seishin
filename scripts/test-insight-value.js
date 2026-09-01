@@ -32,9 +32,9 @@ const REFERENCE_CTX = {
   bodyMindText: "心情很好，可是身體比較累。",
 };
 
-assert(html.includes("app.js?v=283"), "cache app.js");
-assert(html.includes("app.css?v=236"), "cache css");
-assert(html.includes("lib/review-merge.js?v=28"), "cache merge");
+assert(html.includes("app.js?v=284"), "cache app.js");
+assert(html.includes("app.css?v=237"), "cache css");
+assert(html.includes("lib/review-merge.js?v=29"), "cache merge");
 assert(!html.includes("CREATE TABLE") && !app.includes("ALTER TABLE"), "zero schema");
 
 const raw = voice.userRawForPrompt(GRANDMA);

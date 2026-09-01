@@ -13,7 +13,7 @@ const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const reviewJs = fs.readFileSync(path.join(root, "api/review.js"), "utf8");
 
 assert(html.includes('id="btnExecutionV3"'), "06 V3 CTA 存在");
-assert(html.includes("把今天的覺察變成下一步"), "06 CTA 文案");
+assert(html.includes("把這份覺察帶回生活"), "06 CTA 文案");
 assert(app.includes("function generateExecutionV3"), "V3 generate 存在");
 assert(app.includes('variant: "execution-v3"'), "request 帶 execution-v3");
 assert(app.includes("generateExecutionV3({ confirmed: true })"), "只有 CTA confirmed 才生成");
