@@ -7622,6 +7622,21 @@ textarea[hidden] + .journal-voice-hint,
   line-height: 1.7;
 }
 
+.aware-v3-pick {
+  margin: 14px 0 0;
+  color: #8a7a6e;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.aware-v3-empty {
+  margin: 16px 0 0;
+}
+
+.aware-v3-empty .think-v3-why {
+  margin-top: 8px;
+}
+
 .aware-v3-cta,
 .exec-v3-cta {
   margin-top: 0;

@@ -13,7 +13,7 @@ const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const reviewJs = fs.readFileSync(path.join(root, "api/review.js"), "utf8");
 
 assert(html.includes('id="btnAwarenessV3"'), "05 V3 CTA 存在");
-assert(html.includes("看看今天真正看見了自己什麼"), "05 CTA 文案");
+assert(html.includes("看看今天可以帶走的覺察"), "05 CTA 文案");
 assert(app.includes("function generateAwarenessV3"), "V3 generate 存在");
 assert(app.includes('variant: "awareness-v3"'), "request 帶 awareness-v3");
 assert(app.includes("generateAwarenessV3({ confirmed: true })"), "只有 CTA confirmed 才生成");
@@ -230,7 +230,7 @@ const css = fs.readFileSync(path.join(root, "app.css"), "utf8");
 assert(css.includes("#section-aware.is-aware-v3 .journal-split--aware"), "CSS 強制藏左右兩欄");
 assert(css.includes("#section-aware.is-aware-v3 #btnAwarePrompts"), "CSS 強制藏開始今天的覺察");
 assert((html.match(/id="btnAwarenessV3"/g) || []).length === 1, "V3 只有一個 generation CTA");
-assert(html.includes("看看今天真正看見了自己什麼"), "唯一 CTA 文案");
+assert(html.includes("看看今天可以帶走的覺察"), "唯一 CTA 文案");
 assert(!html.includes("✦ 開始今天的覺察") || html.includes('id="btnAwarePrompts"'), "legacy CTA 仍在 HTML 供 Quick");
 assert(!awarenessV3.AWARENESS_V3_SYSTEM.includes("再多看自己一點"), "05 generation prompt 未改");
 assert(!/function renderAwarenessObservationCueHtml[\s\S]{0,1200}textarea/.test(app), "cue 沒有 textarea");

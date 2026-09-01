@@ -6576,6 +6576,14 @@ function isUnderstandGuide(guide) {
   return Boolean(bag.stage || bag.focus || bag.whyWorthThinking || bag.convergence);
 }
 
+function understandIsComplete(guide) {
+  const data = normalizeThinkGuide(guide);
+  const bag = data.understand && typeof data.understand === "object" ? data.understand : {};
+  const stage = String(bag.stage || "").trim();
+  if (stage === "asked1" || stage === "asked2") return false;
+  return stage === "converged" || stage === "stop";
+}
+
 function thinkV2Closed(guide) {
   const data = normalizeThinkGuide(guide);
   if (data.variant !== "think-v2") return false;
@@ -12276,6 +12284,8 @@ function normalizeAwarenessV3Bag(raw) {
     const title = String((item && item.title) || "").replace(/\s+/g, " ").trim();
     const out = { id: String((item && item.id) || `a${index + 1}`), text };
     if (title) out.title = title;
+    if (item && item.type) out.type = String(item.type || "").trim();
+    if (item && item.maturity) out.maturity = String(item.maturity || "").trim();
     return out;
   }).filter(Boolean).slice(0, 3);
   const allowed = new Set(items.map((item) => item.id));
@@ -12283,6 +12293,8 @@ function normalizeAwarenessV3Bag(raw) {
   const cueText = String(cue.text || "").replace(/\s+/g, " ").trim();
   return {
     variant: "awareness-v3",
+    growVariant: String(src.growVariant || "").trim(),
+    status: String(src.status || "").trim(),
     sourceSig: String(src.sourceSig || "").trim(),
     items,
     selectedIds: (Array.isArray(src.selectedIds) ? src.selectedIds : []).filter((id) => allowed.has(id)),
@@ -12294,7 +12306,19 @@ function normalizeAwarenessV3Bag(raw) {
           generatedAt: String(cue.generatedAt || "").trim(),
         }
       : null,
+    emptyCopy: src.emptyCopy && typeof src.emptyCopy === "object" ? src.emptyCopy : null,
   };
+}
+
+function isGrowAwarenessBag(data) {
+  const bag = data && typeof data === "object" ? data : {};
+  return bag.growVariant === "grow-v1" || bag.status === "grow" || bag.status === "empty";
+}
+
+function awarenessV3HasResult(data) {
+  const bag = data && typeof data === "object" ? data : {};
+  if (isGrowAwarenessBag(bag)) return Boolean(bag.sourceSig);
+  return (bag.items || []).length >= 2;
 }
 
 function selectedAwarenessV3Texts(raw) {
@@ -12309,6 +12333,7 @@ function awarenessV3Context(journal) {
   const data = journal || collectJournal();
   const think = thinkBitsFrom(data);
   const mind = normalizeBodyMind(data.bodyMind);
+  const guide = normalizeThinkGuide((data.insight && data.insight.guide) || (state.journalInsight && state.journalInsight.guide));
   return {
     thanksText: thanksTextFrom(data),
     thanks: thanksTextFrom(data),
@@ -12321,11 +12346,25 @@ function awarenessV3Context(journal) {
     coreQuote: think.coreQuote,
     thinkCoreQuote: think.coreQuote,
     thinkQuestions: think.questions,
+    understand: guide.understand || null,
   };
 }
 
 function awarenessV3SourceSig(journal) {
   const ctx = awarenessV3Context(journal);
+  const bag = ctx.understand && typeof ctx.understand === "object" ? ctx.understand : null;
+  if (bag && bag.stage) {
+    return [
+      String(ctx.thanksText || "").replace(/\s+/g, " ").trim(),
+      String(ctx.event || "").replace(/\s+/g, " ").trim(),
+      String(ctx.mood || "").trim(),
+      String(ctx.bodyMindText || "").replace(/\s+/g, " ").trim(),
+      String(bag.stage || "").trim(),
+      String(bag.answer || "").replace(/\s+/g, " ").trim(),
+      String(bag.answer2 || "").replace(/\s+/g, " ").trim(),
+      String(bag.convergence || bag.focus || "").replace(/\s+/g, " ").trim(),
+    ].join("\n");
+  }
   return [
     String(ctx.thanksText || "").replace(/\s+/g, " ").trim(),
     String(ctx.event || "").replace(/\s+/g, " ").trim(),
@@ -12340,9 +12379,13 @@ function awarenessV3SourceSig(journal) {
 
 function awarenessV3Ready(journal) {
   const data = journal || collectJournal();
-  if (thinkGuideIsSilence((data.insight && data.insight.guide) || (state.journalInsight && state.journalInsight.guide))) return false;
+  const guide = (data.insight && data.insight.guide) || (state.journalInsight && state.journalInsight.guide);
   const ctx = awarenessV3Context(data);
-  return Boolean(thanksFilled(data) && ctx.event && ctx.mood && bodyMindTextReady(ctx.bodyMindText) && String(ctx.coreQuote || "").trim());
+  const base = Boolean(thanksFilled(data) && ctx.event && ctx.mood && bodyMindTextReady(ctx.bodyMindText));
+  if (!base) return false;
+  if (isUnderstandGuide(guide)) return understandIsComplete(guide);
+  if (thinkGuideIsSilence(guide)) return false;
+  return Boolean(String(ctx.coreQuote || "").trim());
 }
 
 function usesAwarenessV3Path(journal) {
@@ -12435,9 +12478,11 @@ function syncAwareV3Cta() {
   const btn = document.getElementById("btnAwarenessV3");
   if (!btn) return;
   const archived = isCurrentJournalArchived();
-  const silent = thinkGuideIsSilence((state.journalInsight || {}).guide);
+  const guide = (state.journalInsight || {}).guide;
+  const silent = thinkGuideIsSilence(guide) && !isUnderstandGuide(guide);
+  const waitingUnderstand = isUnderstandGuide(guide) && !understandIsComplete(guide);
   const data = normalizeAwarenessV3Bag(state.journalAwarenessV3);
-  const hasResult = data.items.length >= 2;
+  const hasResult = awarenessV3HasResult(data);
   if (silent && !hasResult) {
     btn.hidden = true;
     showAwareV3Hint("");
@@ -12447,9 +12492,10 @@ function syncAwareV3Cta() {
   const stale = hasResult && data.sourceSig && data.sourceSig !== awarenessV3SourceSig();
   const show = usesAwarenessV3Path() && !archived && (!hasResult || stale);
   btn.hidden = !show;
-  btn.disabled = Boolean(state.choicesBusy?.awareness) || archived || !ready || silent;
-  btn.textContent = stale ? "前面的內容有修改，重新看看 →" : "看看今天真正看見了自己什麼 →";
+  btn.disabled = Boolean(state.choicesBusy?.awareness) || archived || !ready || silent || waitingUnderstand;
+  btn.textContent = stale ? "前面的內容有修改，重新看看 →" : "看看今天可以帶走的覺察 →";
   if (silent) showAwareV3Hint("今天沒有一定要再整理的覺察。");
+  else if (waitingUnderstand && show) showAwareV3Hint("先把今天的深度思考走完，再來看可以帶走的覺察。");
   else if (!ready && show) showAwareV3Hint("先把今日感謝、事件、身心覺察和深度思考整理好。");
   else if (ready) showAwareV3Hint("");
 }
@@ -12576,8 +12622,18 @@ function renderAwarenessV3() {
   if (loader) loader.hidden = !loading;
   syncAwareV3Cta();
   if (!root) return;
-  if (loading || data.items.length < 2) {
+  if (loading || !awarenessV3HasResult(data)) {
     if (!loading) root.innerHTML = "";
+    return;
+  }
+  const grow = isGrowAwarenessBag(data);
+  if (grow && !data.items.length) {
+    root.innerHTML = `
+      <article class="aware-v3-empty">
+        <p class="think-v3-quote__text">今天真正重要的，你其實已經在前面的思考裡看見了。</p>
+        <p class="think-v3-why">不用為了多一個答案，再替自己加一個標籤。</p>
+      </article>`;
+    paintInternalModelDebug(root, state.internalModelDebug && state.internalModelDebug.awareness);
     return;
   }
   const selected = new Set(data.selectedIds);
@@ -12592,9 +12648,10 @@ function renderAwarenessV3() {
           </span>
         </button>`).join("")}
     </div>
-    ${renderAwarenessObservationCueHtml(data)}`;
+    ${grow ? `<p class="aware-v3-pick">哪一個最像今天的你？</p>` : renderAwarenessObservationCueHtml(data)}`;
   paintInternalModelDebug(root, state.internalModelDebug && state.internalModelDebug.awareness);
   if (
+    !grow &&
     !state.journalHydrating &&
     !isCurrentJournalArchived() &&
     !state.choicesBusy?.awarenessCue &&
@@ -12731,19 +12788,20 @@ async function generateAwarenessV3(options = {}) {
   if (isCurrentJournalArchived() || state.choicesBusy?.awareness) return;
   pinAwareFold();
   const journal = collectJournal();
-  if (thinkGuideIsSilence((journal.insight && journal.insight.guide) || (state.journalInsight && state.journalInsight.guide))) {
+  const guide = (journal.insight && journal.insight.guide) || (state.journalInsight && state.journalInsight.guide);
+  if (thinkGuideIsSilence(guide) && !isUnderstandGuide(guide)) {
     syncAwareV3Cta();
     return;
   }
   if (!awarenessV3Ready(journal)) {
-    showAwareV3Hint("先把今日感謝、事件、身心覺察和深度思考整理好。");
+    showAwareV3Hint(isUnderstandGuide(guide) && !understandIsComplete(guide) ? "先把今天的深度思考走完，再來看可以帶走的覺察。" : "先把今日感謝、事件、身心覺察和深度思考整理好。");
     syncAwareV3Cta();
     return;
   }
   if (!ensurePlusFeature("awareness_ai", options)) return;
   const sig = awarenessV3SourceSig(journal);
   const current = normalizeAwarenessV3Bag(state.journalAwarenessV3);
-  if (current.items.length >= 2 && current.sourceSig === sig && !options.force) {
+  if (awarenessV3HasResult(current) && current.sourceSig === sig && !options.force) {
     renderAwarenessV3();
     return;
   }
@@ -12770,18 +12828,23 @@ async function generateAwarenessV3(options = {}) {
           const title = String((item && item.title) || "").replace(/\s+/g, " ").trim();
           const out = { id: String((item && item.id) || `a${index + 1}`), text };
           if (title) out.title = title;
+          if (item && item.type) out.type = String(item.type || "").trim();
+          if (item && item.maturity) out.maturity = String(item.maturity || "").trim();
           return out;
         }).filter(Boolean).slice(0, 3)
       : [];
-    if (items.length < 2) throw new Error("今天的覺察還沒整理好，請再試一次。");
+    const grow = isGrowAwarenessBag(remote);
+    if (!grow && items.length < 2) throw new Error("今天的覺察還沒整理好，請再試一次。");
     state.journalAwarenessV3 = {
       variant: "awareness-v3",
-      status: "generated",
+      growVariant: grow ? "grow-v1" : "",
+      status: grow ? (items.length ? "grow" : "empty") : "generated",
       sourceSig: sig,
       items,
       selectedIds: [],
       generatedAt: new Date().toISOString(),
       observationCue: null,
+      emptyCopy: remote.emptyCopy || null,
     };
     state.awarenessCueAttemptSig = "";
     if (!state.internalModelDebug) state.internalModelDebug = {};
@@ -15330,7 +15393,7 @@ function fillJournal(journal) {
   applyJournalArchiveLock();
   if (usesAwarenessV3Path(data) && !isCurrentJournalArchived()) {
     const bag = normalizeAwarenessV3Bag(state.journalAwarenessV3);
-    if (bag.selectedIds.length >= 1 && !observationCueMatchesBag(bag)) {
+    if (!isGrowAwarenessBag(bag) && bag.selectedIds.length >= 1 && !observationCueMatchesBag(bag)) {
       scheduleAwarenessObservationCue();
     }
   }

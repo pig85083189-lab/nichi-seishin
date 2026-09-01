@@ -183,7 +183,7 @@ assert(html.includes("id=\"bodyMindText\""), "03 新版只有主 textarea");
 assert(html.includes("js-legacy-body-ui") && html.includes("hidden"), "舊 03 mood／身體選項改為隱藏相容");
 assert(deepFold.includes("這件事還可以怎麼理解。"), "04 收合說明：UNDERSTAND");
 assert(!deepFold.includes("勾選即可"), "04 收合不混操作說明");
-assert(awareFold.includes("經過今天這些事情，我看見了自己什麼。"), "05 收合說明：看見自己");
+assert(awareFold.includes("今天，你可以帶走哪些覺察？"), "05 收合說明：帶走覺察");
 assert(!awareFold.includes("勾選即可"), "05 收合不混操作說明");
 assert(execFold.includes("把今天的覺察，變成真正做得到的下一步。"), "06 收合說明");
 assert(!execFold.includes("完成會同步到側邊欄"), "06 收合不寫系統同步");

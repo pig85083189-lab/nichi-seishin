@@ -34,8 +34,8 @@ assert(!fs.existsSync(path.join(root, "api/insight-lab.js")), "api/insight-lab.j
 assert(!vercel.includes("api/insight-lab.js"), "vercel.json has no insight-lab function");
 assert(/"api\/review\.js"[\s\S]{0,80}"maxDuration": 60/.test(vercel), "review maxDuration stays 60");
 
-assert(html.includes("app.js?v=282"), "cache app.js");
-assert(html.includes("app.css?v=235"), "cache css");
+assert(html.includes("app.js?v=283"), "cache app.js");
+assert(html.includes("app.css?v=236"), "cache css");
 assert(html.includes('id="insightLabLink"'), "sidebar Insight Lab");
 assert(html.includes("Internal"), "Internal badge");
 assert(html.includes('data-page="lab"'), "lab page");

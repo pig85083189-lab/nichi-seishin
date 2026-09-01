@@ -18,6 +18,7 @@ const reflectionHistory = require("../lib/reflection-history-retrieval");
 const insightReason = require("../lib/insight-reason");
 const insightDiscovery = require("../lib/insight-discovery");
 const insightUnderstand = require("../lib/insight-understand");
+const insightGrow = require("../lib/insight-grow");
 const bodyMindSee = require("../lib/body-mind-see");
 const insightLab = require("../lib/insight-lab");
 
@@ -4054,6 +4055,27 @@ module.exports = async function handler(req, res) {
           : internalUser
             ? { _internalReason: meta }
             : {}),
+      });
+      return;
+    }
+    if (
+      mode === "choices" &&
+      awarenessV3.isAwarenessV3Request(body) &&
+      !awarenessV3.isAwarenessV3CueRequest(body) &&
+      insightGrow.shouldRunGrow(body.context)
+    ) {
+      const callAi = (msgs, stage) =>
+        callOpenAI(msgs, {
+          ...aiOpts,
+          timeoutMs: internalUser ? 26000 : Math.min(Number(aiOpts.timeoutMs) || 22000, 22000),
+          maxTokens: stage === "write" ? 700 : 1200,
+        });
+      const grown = await insightGrow.runGrowPipeline({ callAi, ctx: body.context || {} });
+      res.status(200).json({
+        ok: true,
+        source: getProvider(),
+        data: grown,
+        ...(internalUser ? { _internalReason: grown.meta || {} } : {}),
       });
       return;
     }
