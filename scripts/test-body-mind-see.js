@@ -153,7 +153,7 @@ assert(bodyMind.BODY_MIND_SYSTEM.includes("2～4") || bodyMind.BODY_MIND_SYSTEM.
   });
   assert(writerLocked.status === "observation", `J writer reject still keeps core: ${writerLocked.status}`);
   assert(!/潛意識|依附|創傷/.test(`${writerLocked.insight}${writerLocked.support}`), "J final output has no new psych meaning");
-  assert(/停一下|手機/.test(writerLocked.insight), "J falls back to approved observation");
+  assert(/衝動|節奏|延後/.test(writerLocked.insight), "J falls back to approved observation");
 
   const parroted = await bodyMindSee.runSeePipeline({
     ctx: fx.A.ctx,
