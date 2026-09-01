@@ -79,7 +79,7 @@ assert(reviewJs.includes("isHistoryRetrievalRequest"), "retrieval 走獨立 inte
 assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("TODAY FIRST"), "Round 1 今天優先");
 assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("HISTORICAL VALUE CHECK"), "歷史要再過 value gate");
 assert(reflectionExt.REFLECTION_EXTENSION_CLOSE_SYSTEM.includes("不要讀過往日期"), "結論仍不讀歷史");
-assert(html.includes("app.js?v=276"), "cache js");
+assert(html.includes("app.js?v=277"), "cache js");
 assert(html.includes("lib/review-merge.js?v=25"), "cache merge");
 assert(app.includes("document.getElementById(\"thinkExtAnswer\")"), "close 讀 current textarea");
 assert(app.includes("今日已完成"), "完成次數文案");
@@ -742,7 +742,7 @@ const reset = internalTest.applyInternalTodayReset({
 assert(reset.journal.internalTestRuns[0].snapshot.journal.insight.guide.extension.rounds.length === 2, "internal reset snapshot 含 extension");
 assert(!reset.journal.insight, "fresh run 清空 extension");
 
-assert(html.includes("app.js?v=276"), "cache js");
+assert(html.includes("app.js?v=277"), "cache js");
 assert(html.includes("app.css?v=231"), "cache css");
 assert(html.includes("lib/review-merge.js?v=25"), "cache merge");
 

@@ -280,7 +280,7 @@ assert(!reviewMerge.extensionDailyLimitReached(reloadProd.guide.extension), "rel
 assert(/\.think-ext-text-btn\s*\{[^}]*min-height:\s*44px/.test(css), "再延伸一次 touch target");
 assert(!/#page-today[\s\S]{0,80}\.think-ext-text-btn[\s\S]{0,80}pointer-events:\s*none/.test(css), "再延伸一次沒有 pointer-events none");
 
-assert(html.includes("app.js?v=276"), "cache app.js");
+assert(html.includes("app.js?v=277"), "cache app.js");
 assert(html.includes("lib/review-merge.js?v=25"), "cache review-merge");
 
 console.log("extension-round2 tests passed");

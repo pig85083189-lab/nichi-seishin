@@ -1,5 +1,5 @@
 const { requireUser, bearerToken } = require("../lib/auth");
-const { ensureTrial, effectivePlanFromRow, supabaseAdminConfigured, isInternal } = require("../lib/supabase");
+const { ensureTrial, effectivePlanFromRow, supabaseAdminConfigured, isInternal, isInternalUser } = require("../lib/supabase");
 const bodyMind = require("../lib/body-mind");
 const { featureForReviewRequest, enforcePlusEntitlement } = require("../lib/entitlement");
 const { getApiKey, getModel, getProvider, internalDebugMeta, usesClaude, callOpenAI } = require("../lib/openai");
@@ -16,6 +16,7 @@ const executionV3 = require("../lib/execution-v3");
 const execV2 = require("../lib/exec-v2");
 const reflectionHistory = require("../lib/reflection-history-retrieval");
 const insightReason = require("../lib/insight-reason");
+const insightLab = require("../lib/insight-lab");
 
 const HIGHLIGHT_RULE = `【重點反白 highlights】
 從你實際生成的原文中，挑選最值得停下來看的核心片段。目的是抓重點，不是把整段塗成彩色。
@@ -3186,6 +3187,47 @@ function normalizePromptsResult(raw, kind = "core") {
   return { awareness, execution, deep };
 }
 
+async function handleInsightLabRequest(res, body) {
+  const action = String((body && body.action) || "run").trim().toLowerCase();
+  if (action === "probe") {
+    res.status(200).json({
+      ok: true,
+      lab: true,
+      openai: require("../lib/openai").openaiAvailable(),
+      fixtures: insightLab.listFixtures(),
+    });
+    return;
+  }
+  if (action === "reveal") {
+    const revealed = insightLab.revealLab(body && body.seal);
+    if (!revealed) {
+      res.status(400).json({ ok: false, error: "無法顯示對照" });
+      return;
+    }
+    res.status(200).json({ ok: true, data: revealed });
+    return;
+  }
+  if (action !== "run") {
+    res.status(400).json({ ok: false, error: "unknown_action" });
+    return;
+  }
+  const result = await insightLab.runLabExperiment({
+    raw: body && body.raw,
+    fixtureId: body && body.fixtureId,
+  });
+  res.status(200).json({
+    ok: true,
+    data: {
+      version: result.version,
+      fingerprint: result.fingerprint,
+      fixtureId: result.fixtureId,
+      latencyMs: result.latencyMs,
+      slots: result.slots,
+      seal: result.seal,
+    },
+  });
+}
+
 function setCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -3258,6 +3300,23 @@ module.exports = async function handler(req, res) {
     } catch (error) {
       console.error("ensureTrial in review:", error && error.message ? error.message : error);
     }
+  }
+
+  if (String(body.mode || "") === "insight-lab") {
+    let allowed = internalUser;
+    if (!allowed) allowed = await isInternalUser(user.id, user.email);
+    if (!allowed) {
+      res.status(403).json({ ok: false, error: "internal_required", message: "Insight Lab is internal only." });
+      return;
+    }
+    try {
+      await handleInsightLabRequest(res, body);
+    } catch (error) {
+      const status = Number(error && error.status) || 500;
+      const message = String((error && error.message) || "Insight Lab 失敗").slice(0, 180);
+      res.status(status).json({ ok: false, error: message });
+    }
+    return;
   }
 
   if (String(body.mode || "") === "internal-reset-today") {

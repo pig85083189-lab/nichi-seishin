@@ -457,11 +457,11 @@ async function runInsightLab() {
   renderInsightLab();
   try {
     const response = await fetchWithTimeout(
-      `${location.origin}/api/insight-lab`,
+      `${location.origin}/api/review`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "run", date, fixtureId, raw: fixtureId ? undefined : raw }),
+        body: JSON.stringify({ mode: "insight-lab", action: "run", date, fixtureId, raw: fixtureId ? undefined : raw }),
       },
       59000
     );
@@ -506,11 +506,11 @@ async function submitInsightLabVote(event) {
   const whyOther = String(document.getElementById("labOther")?.value || "").trim();
   try {
     const response = await fetchWithTimeout(
-      `${location.origin}/api/insight-lab`,
+      `${location.origin}/api/review`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "reveal", seal: exp.seal }),
+        body: JSON.stringify({ mode: "insight-lab", action: "reveal", seal: exp.seal }),
       },
       12000
     );

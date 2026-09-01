@@ -11,14 +11,29 @@ const root = path.join(__dirname, "..");
 const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
 const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const css = fs.readFileSync(path.join(root, "app.css"), "utf8");
-const api = fs.readFileSync(path.join(root, "api/insight-lab.js"), "utf8");
 const lab = fs.readFileSync(path.join(root, "lib/insight-lab.js"), "utf8");
+const vercel = fs.readFileSync(path.join(root, "vercel.json"), "utf8");
 const openaiSrc = fs.readFileSync(path.join(root, "lib/openai.js"), "utf8");
 const review = fs.readFileSync(path.join(root, "api/review.js"), "utf8");
 const v3 = fs.readFileSync(path.join(root, "lib/insight-reason.js"), "utf8");
 const bodyMind = fs.readFileSync(path.join(root, "lib/body-mind.js"), "utf8");
 
-assert(html.includes("app.js?v=276"), "cache app.js");
+function listApiFunctions(dir) {
+  const out = [];
+  for (const name of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, name.name);
+    if (name.isDirectory()) out.push(...listApiFunctions(full));
+    else if (name.isFile() && /\.(js|ts)$/.test(name.name)) out.push(full);
+  }
+  return out;
+}
+
+const apiFiles = listApiFunctions(path.join(root, "api"));
+assert(apiFiles.length === 12, `serverless function count ${apiFiles.length}`);
+assert(!fs.existsSync(path.join(root, "api/insight-lab.js")), "api/insight-lab.js removed");
+assert(!vercel.includes("api/insight-lab.js"), "vercel.json has no insight-lab function");
+
+assert(html.includes("app.js?v=277"), "cache app.js");
 assert(html.includes("app.css?v=231"), "cache css");
 assert(html.includes('id="insightLabLink"'), "sidebar Insight Lab");
 assert(html.includes("Internal"), "Internal badge");
@@ -28,17 +43,22 @@ assert(html.includes("hidden"), "lab link starts hidden");
 assert(app.includes("function syncInsightLabLink"), "internal link sync");
 assert(app.includes('page === "lab" && !isInternalMembership()'), "non-internal cannot stay on lab");
 assert(app.includes("writeLabExperiment"), "local experiment persist");
-assert(app.includes("/api/insight-lab"), "lab API");
+assert(app.includes('mode: "insight-lab"') && app.includes("/api/review"), "lab posts to /api/review");
+assert(!app.includes("/api/insight-lab"), "frontend no longer uses /api/insight-lab");
 assert(!/function runInsightLab[\s\S]{0,1200}journalInsight\s*=/.test(app), "lab run does not write journal.insight");
 assert(!/function submitInsightLabVote[\s\S]{0,900}journalInsight\s*=/.test(app), "vote does not write journal.insight");
 assert(app.includes("cloudStoreKey(\"insightLab\")") || app.includes('cloudStoreKey("insightLab")'), "lab storage isolated");
 assert(!app.includes("CLOUD_STORE_NAMES = [") || !/CLOUD_STORE_NAMES = \[[^\]]+insightLab/.test(app), "lab not in cloud journal stores");
 
-assert(api.includes("isInternalUser"), "server uses isInternalUser");
-assert(api.includes("status(403)"), "normal user 403");
-assert(!/console\.log/.test(api), "API no console.log");
+const labGate = review.indexOf('body.mode || "") === "insight-lab"');
+const pipeline = review.indexOf("runReasonWritePipeline");
+assert(labGate >= 0, "review hosts insight-lab mode");
+assert(pipeline > labGate, "Lab gate is before formal 04 pipeline");
+assert(review.includes("isInternalUser"), "server uses isInternalUser");
+assert(review.includes("Insight Lab is internal only."), "normal user 403");
+assert(review.includes("handleInsightLabRequest"), "reuses Lab handler");
+assert(review.slice(labGate, labGate + 900).includes("return;"), "Lab early return");
 assert(!/console\.log/.test(lab), "lib no console.log");
-assert(!/thanksText|USER RAW|bodyMindText/.test(api.split("handler")[1] || api) || !/console\.log\([^)]*thanksText/.test(api), "no USER RAW logs");
 
 assert(openaiSrc.includes("if (usesClaude() && !wantsOpenAI(opts)) return callClaude"), "default routing still Claude first");
 assert(openai.LAB_GPT_MODEL === "gpt-5.6-sol", "Lab GPT model pinned server-side");
@@ -57,7 +77,6 @@ assert(labPayload.reasoning_effort === "high", "payload.reasoning_effort = high"
 assert(!("reasoning" in labPayload), "Chat Completions does not send reasoning:{}");
 assert(app.includes("reasoning effort"), "reveal shows reasoning effort");
 assert(review.includes("runReasonWritePipeline"), "production 04 pipeline untouched");
-assert(!review.includes("insight-lab"), "review API does not host Lab");
 assert(v3.includes("REASONING_SYSTEM"), "4B-2.7 reasoning still in place");
 assert(bodyMind.includes("BODY_MIND_SYSTEM") || bodyMind.includes("身心"), "03 untouched");
 

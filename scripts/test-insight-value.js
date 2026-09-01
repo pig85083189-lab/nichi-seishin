@@ -32,7 +32,7 @@ const REFERENCE_CTX = {
   bodyMindText: "心情很好，可是身體比較累。",
 };
 
-assert(html.includes("app.js?v=276"), "cache app.js");
+assert(html.includes("app.js?v=277"), "cache app.js");
 assert(html.includes("app.css?v=231"), "cache css");
 assert(html.includes("lib/review-merge.js?v=25"), "cache merge");
 assert(!html.includes("CREATE TABLE") && !app.includes("ALTER TABLE"), "zero schema");
