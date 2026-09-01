@@ -6540,10 +6540,12 @@ function normalizeThinkGuide(raw) {
     status: String(data.status || "").trim(),
     direction: improvementDirection,
     close: { coreConclusion, blindSpot, improvementDirection },
-    coreQuote: String(data.coreQuote || "").replace(/\s+/g, " ").trim(),
+    coreQuote: String(data.coreQuote || (data.discovery && data.discovery.statement) || "").replace(/\s+/g, " ").trim(),
     questions: mapInsightQuestionItems(data.questions, "q"),
     sourceSig: String(data.sourceSig || "").trim(),
     generatedAt: String(data.generatedAt || "").trim(),
+    discovery: data.discovery && typeof data.discovery === "object" ? data.discovery : null,
+    knownByUser: Array.isArray(data.knownByUser) ? data.knownByUser : [],
     extension: normalizeReflectionExtension(data.extension),
   };
   delete next.retrieval;
@@ -6565,8 +6567,8 @@ function thinkV2Closed(guide) {
 function thinkGuideDone(guide) {
   const data = normalizeThinkGuide(guide);
   if (data.variant === "reflection-v3") {
-    if (data.status === "empty" && data.sourceSig) return true;
-    return Boolean(data.coreQuote || (data.questions && data.questions.length >= 1));
+    if ((data.status === "empty" || data.status === "silence") && data.sourceSig) return true;
+    return Boolean(data.coreQuote || (data.questions && data.questions.length >= 1) || (data.discovery && data.discovery.statement));
   }
   if (data.variant === "think-v2") return thinkV2Closed(data);
   const answered = data.rounds.filter((item) => item.answer).length >= 3;
@@ -10893,8 +10895,10 @@ function thinkBitsFrom(journal) {
     blindSpot: String((guide.close && guide.close.blindSpot) || "").trim(),
     improvementDirection: String((guide.close && guide.close.improvementDirection) || guide.direction || "").trim(),
     thinkVariant: isV2 ? "think-v2" : isV3 ? "reflection-v3" : "",
-    coreQuote: String(guide.coreQuote || "").trim(),
+    coreQuote: String(guide.coreQuote || (guide.discovery && guide.discovery.statement) || "").trim(),
     questions: Array.isArray(guide.questions) ? guide.questions : [],
+    status: String(guide.status || "").trim(),
+    discovery: guide.discovery && typeof guide.discovery === "object" ? guide.discovery : null,
   };
 }
 
@@ -11186,8 +11190,6 @@ function reflectionV3SourceSig(journal) {
     String(ctx.event || "").replace(/\s+/g, " ").trim(),
     String(ctx.mood || "").trim(),
     String(ctx.bodyMindText || "").replace(/\s+/g, " ").trim(),
-    String(ctx.bodyMindInsight || "").replace(/\s+/g, " ").trim(),
-    String(ctx.bodyMindSupport || "").replace(/\s+/g, " ").trim(),
   ].join("\n");
 }
 
@@ -11201,10 +11203,30 @@ function reflectionV3Ready(journal) {
   );
 }
 
+function thinkGuideIsSilence(guide) {
+  const data = normalizeThinkGuide(guide);
+  if (data.variant !== "reflection-v3") return false;
+  if (data.status === "silence") return true;
+  return data.status === "empty" && !data.coreQuote && !(data.discovery && data.discovery.statement);
+}
+
+function thinkGuideHas04Result(guide) {
+  const data = normalizeThinkGuide(guide);
+  if (data.variant !== "reflection-v3" || !data.sourceSig) return false;
+  return Boolean(
+    data.coreQuote ||
+      data.status === "empty" ||
+      data.status === "silence" ||
+      data.status === "discovery" ||
+      (data.questions && data.questions.length >= 1) ||
+      (data.discovery && data.discovery.statement)
+  );
+}
+
 function reflectionV3Stale(guide, journal) {
   const data = normalizeThinkGuide(guide);
   if (data.variant !== "reflection-v3" || !data.sourceSig) return false;
-  if (!(data.coreQuote || data.status === "empty" || data.questions.length >= 1)) return false;
+  if (!(data.coreQuote || data.status === "empty" || data.status === "silence" || data.questions.length >= 1 || (data.discovery && data.discovery.statement))) return false;
   return data.sourceSig !== reflectionV3SourceSig(journal);
 }
 
@@ -11242,7 +11264,7 @@ function syncThinkV3Cta() {
   const archived = isCurrentJournalArchived();
   const ready = reflectionV3Ready();
   const guide = normalizeThinkGuide((state.journalInsight || {}).guide);
-  const hasResult = guide.variant === "reflection-v3" && guide.sourceSig && (guide.coreQuote || guide.status === "empty" || guide.questions.length >= 1);
+  const hasResult = thinkGuideHas04Result(guide);
   const stale = hasResult && reflectionV3Stale(guide);
   const show = usesReflectionV3Path() && !archived && (!hasResult || stale);
   btn.hidden = !show;
@@ -11256,8 +11278,8 @@ function applyReflectionV3Guide(patch) {
   const insight = normalizeInsight(state.journalInsight);
   const next = { ...(insight.guide || emptyThinkGuide()), ...patch, variant: "reflection-v3" };
   insight.guide = normalizeThinkGuide(next);
-  if (next.coreQuote) {
-    insight.title = insight.title || "今日核心金句";
+  if (next.coreQuote && next.status !== "silence") {
+    insight.title = insight.title || "今日發現";
     insight.conclusion = next.coreQuote;
     insight.psychology = next.coreQuote;
   }
@@ -11276,26 +11298,39 @@ function renderThinkV3() {
   syncAwareV3Cta();
   syncExecV3Cta();
   if (!root) return;
-  if (loading || !guide.coreQuote) {
+  if (loading || !thinkGuideHas04Result(guide)) {
     if (!loading) root.innerHTML = "";
     renderThinkExtension();
     return;
   }
-  const questions = (guide.questions || []).map((item, index) => `
-      <article class="think-v3-q">
-        <p class="think-v3-q__index">0${index + 1}</p>
-        ${item.title ? `<p class="think-v3-q__title">${escapeHtml(item.title)}</p>` : ""}
-        ${markableP(item.text, `think.question.${item.id || index + 1}`, "think-v3-q__text")}
-      </article>`).join("");
+  if (thinkGuideIsSilence(guide)) {
+    root.innerHTML = `
+    <article class="think-v3-result">
+      <p class="think-v3-kicker">今天有什麼是你可能還沒看見的？</p>
+      <div class="think-v3-quote think-v3-quote--silence">
+        <p class="think-v3-quote__text">今天沒有一定要再解讀的地方。</p>
+        <p class="think-v3-why">有些日子，好好經歷與記下來，就已經足夠了。</p>
+      </div>
+    </article>`;
+    paintInternalModelDebug(root, state.internalModelDebug && state.internalModelDebug.think);
+    renderThinkExtension();
+    return;
+  }
+  const discovery = guide.discovery && typeof guide.discovery === "object" ? guide.discovery : null;
+  const statement = String((discovery && discovery.statement) || guide.coreQuote || "").trim();
+  const why = String((discovery && discovery.why) || "").trim();
+  const question = String((discovery && discovery.question) || ((guide.questions || [])[0] && (guide.questions[0].question || "")) || "").trim();
   root.innerHTML = `
     <article class="think-v3-result">
+      <p class="think-v3-kicker">今天有什麼是你可能還沒看見的？</p>
       <div class="think-v3-quote">
-        <p class="think-v3-quote__label">今日核心金句</p>
-        ${markableP(guide.coreQuote, "think.coreQuote", "think-v3-quote__text")}
+        <p class="think-v3-quote__label">我注意到一件事</p>
+        ${markableP(statement, "think.coreQuote", "think-v3-quote__text")}
       </div>
-      ${questions ? `<div class="think-v3-list">
-        <p class="think-v3-list__label">深度反思</p>
-        ${questions}
+      ${why ? `<p class="think-v3-why-label">我為什麼這樣看</p><p class="think-v3-why">${escapeHtml(why)}</p>` : ""}
+      ${question ? `<div class="think-v3-list">
+        <p class="think-v3-list__label">如果你想再往下看</p>
+        ${markableP(question, `think.question.${(guide.questions[0] && guide.questions[0].id) || "q1"}`, "think-v3-q__text")}
       </div>` : ""}
     </article>`;
   paintInternalModelDebug(root, state.internalModelDebug && state.internalModelDebug.think);
@@ -11317,7 +11352,7 @@ async function generateReflectionV3(options = {}) {
   if (!ensurePlusFeature("think_ai", options)) return;
   const sig = reflectionV3SourceSig(journal);
   const current = normalizeThinkGuide((state.journalInsight || {}).guide);
-  if (current.variant === "reflection-v3" && current.sourceSig === sig && (current.coreQuote || current.status === "empty" || current.questions.length >= 1) && !options.force) {
+  if (current.variant === "reflection-v3" && current.sourceSig === sig && thinkGuideHas04Result(current) && !options.force) {
     renderThinkV3();
     return;
   }
@@ -11342,29 +11377,33 @@ async function generateReflectionV3(options = {}) {
     if (state.choicesToken.think !== token) return;
     const latest = collectJournal();
     const latestSig = reflectionV3SourceSig(latest);
-    const coreQuote = String(remote.coreQuote || "").replace(/\s+/g, " ").trim();
+    const coreQuote = String(remote.coreQuote || (remote.discovery && remote.discovery.statement) || "").replace(/\s+/g, " ").trim();
     const questions = mapInsightQuestionItems(
       Array.isArray(remote.items) && remote.items.length ? remote.items : remote.questions,
       "q"
     );
-    if (remote && remote.status === "empty") {
+    if (remote && (remote.status === "empty" || remote.status === "silence" || (!remote.discovery && !coreQuote))) {
       applyReflectionV3Guide({
-        status: "empty",
+        status: "silence",
         sourceSig: sig,
         coreQuote: "",
         questions: [],
+        discovery: null,
+        knownByUser: Array.isArray(remote.knownByUser) ? remote.knownByUser : [],
         generatedAt: new Date().toISOString(),
       });
       persistJournalQuietly();
       renderThinkV3();
       return;
     }
-    if (!coreQuote && questions.length < 1) throw new Error("今天的深度思考還沒整理好，請再試一次。");
+    if (!coreQuote) throw new Error("今天的深度思考還沒整理好，請再試一次。");
     applyReflectionV3Guide({
-      status: "generated",
+      status: "discovery",
       sourceSig: sig,
       coreQuote,
       questions,
+      discovery: remote.discovery,
+      knownByUser: Array.isArray(remote.knownByUser) ? remote.knownByUser : [],
       generatedAt: new Date().toISOString(),
     });
     if (!state.internalModelDebug) state.internalModelDebug = {};
@@ -12141,8 +12180,10 @@ function awarenessV3SourceSig(journal) {
 }
 
 function awarenessV3Ready(journal) {
-  const ctx = awarenessV3Context(journal);
-  return Boolean(thanksFilled(journal || collectJournal()) && ctx.event && ctx.mood && bodyMindTextReady(ctx.bodyMindText) && String(ctx.coreQuote || "").trim());
+  const data = journal || collectJournal();
+  if (thinkGuideIsSilence((data.insight && data.insight.guide) || (state.journalInsight && state.journalInsight.guide))) return false;
+  const ctx = awarenessV3Context(data);
+  return Boolean(thanksFilled(data) && ctx.event && ctx.mood && bodyMindTextReady(ctx.bodyMindText) && String(ctx.coreQuote || "").trim());
 }
 
 function usesAwarenessV3Path(journal) {
@@ -12235,15 +12276,22 @@ function syncAwareV3Cta() {
   const btn = document.getElementById("btnAwarenessV3");
   if (!btn) return;
   const archived = isCurrentJournalArchived();
-  const ready = awarenessV3Ready();
+  const silent = thinkGuideIsSilence((state.journalInsight || {}).guide);
   const data = normalizeAwarenessV3Bag(state.journalAwarenessV3);
   const hasResult = data.items.length >= 2;
+  if (silent && !hasResult) {
+    btn.hidden = true;
+    showAwareV3Hint("");
+    return;
+  }
+  const ready = awarenessV3Ready();
   const stale = hasResult && data.sourceSig && data.sourceSig !== awarenessV3SourceSig();
   const show = usesAwarenessV3Path() && !archived && (!hasResult || stale);
   btn.hidden = !show;
-  btn.disabled = Boolean(state.choicesBusy?.awareness) || archived || !ready;
+  btn.disabled = Boolean(state.choicesBusy?.awareness) || archived || !ready || silent;
   btn.textContent = stale ? "前面的內容有修改，重新看看 →" : "看看今天真正看見了自己什麼 →";
-  if (!ready && show) showAwareV3Hint("先把今日感謝、事件、身心覺察和深度思考整理好。");
+  if (silent) showAwareV3Hint("今天沒有一定要再整理的覺察。");
+  else if (!ready && show) showAwareV3Hint("先把今日感謝、事件、身心覺察和深度思考整理好。");
   else if (ready) showAwareV3Hint("");
 }
 
@@ -12280,8 +12328,12 @@ function executionV3SourceSig(journal) {
 }
 
 function executionV3Ready(journal) {
-  const data = normalizeAwarenessV3Bag((journal && journal.awarenessV3) || state.journalAwarenessV3);
-  return data.items.length >= 2 || awarenessV3Ready(journal);
+  const page = journal || collectJournal();
+  const silent = thinkGuideIsSilence((page.insight && page.insight.guide) || (state.journalInsight && state.journalInsight.guide));
+  const confirmed = selectedAwarenessV3Texts((page.awarenessV3) || state.journalAwarenessV3);
+  if (silent && !confirmed.length) return false;
+  const data = normalizeAwarenessV3Bag((page.awarenessV3) || state.journalAwarenessV3);
+  return data.items.length >= 2 || awarenessV3Ready(page);
 }
 
 function syncExecV3Cta() {
@@ -12289,15 +12341,23 @@ function syncExecV3Cta() {
   const btn = document.getElementById("btnExecutionV3");
   if (!btn) return;
   const archived = isCurrentJournalArchived();
-  const ready = executionV3Ready();
+  const silent = thinkGuideIsSilence((state.journalInsight || {}).guide);
+  const confirmed = selectedAwarenessV3Texts(state.journalAwarenessV3);
   const bag = normalizeExecutionChoiceBag(state.executionChoices);
   const hasResult = bag.variant === "execution-v3" && bag.options.length >= 3;
+  if (silent && !confirmed.length && !hasResult) {
+    btn.hidden = true;
+    showExecV3Hint("");
+    return;
+  }
+  const ready = executionV3Ready();
   const stale = hasResult && bag.sourceSig && bag.sourceSig !== executionV3SourceSig();
   const show = usesExecutionV3Path() && !archived && (!hasResult || stale);
   btn.hidden = !show;
   btn.disabled = Boolean(state.choicesBusy?.execution) || archived || !ready;
   btn.textContent = stale ? "覺察有更新，重新整理下一步 →" : "把今天的覺察變成下一步 →";
-  if (!ready && show) showExecV3Hint("先看看今天真正看見了自己什麼。");
+  if (silent && !confirmed.length) showExecV3Hint("今天沒有一定要變成行動的發現。");
+  else if (!ready && show) showExecV3Hint("先看看今天真正看見了自己什麼。");
   else if (ready) showExecV3Hint("");
 }
 
@@ -12512,6 +12572,10 @@ async function generateAwarenessV3(options = {}) {
   if (isCurrentJournalArchived() || state.choicesBusy?.awareness) return;
   pinAwareFold();
   const journal = collectJournal();
+  if (thinkGuideIsSilence((journal.insight && journal.insight.guide) || (state.journalInsight && state.journalInsight.guide))) {
+    syncAwareV3Cta();
+    return;
+  }
   if (!awarenessV3Ready(journal)) {
     showAwareV3Hint("先把今日感謝、事件、身心覺察和深度思考整理好。");
     syncAwareV3Cta();
@@ -12586,6 +12650,10 @@ async function generateExecutionV3(options = {}) {
   if (isCurrentJournalArchived() || state.choicesBusy?.execution) return;
   setJournalFoldOpen("section-exec", true, { manual: true });
   const journal = collectJournal();
+  if (thinkGuideIsSilence((journal.insight && journal.insight.guide) || (state.journalInsight && state.journalInsight.guide)) && !selectedAwarenessV3Texts(journal.awarenessV3 || state.journalAwarenessV3).length) {
+    syncExecV3Cta();
+    return;
+  }
   if (!executionV3Ready(journal)) {
     showExecV3Hint("先看看今天真正看見了自己什麼。");
     syncExecV3Cta();

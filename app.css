@@ -7242,12 +7242,39 @@ textarea[hidden] + .journal-voice-hint,
   display: none;
 }
 
+.think-v3-kicker {
+  margin: 18px 0 0;
+  color: #806d5e;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
 .think-v3-quote {
   margin: 18px 0 0;
   padding: 14px 16px 15px;
   background: rgba(251, 247, 242, 0.45);
   border-left: 2px solid #bca58f;
   border-radius: 0 8px 8px 0;
+}
+
+.think-v3-quote--silence {
+  background: transparent;
+}
+
+.think-v3-why-label {
+  margin: 16px 0 6px;
+  color: #806d5e;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.think-v3-why {
+  margin: 0;
+  color: #3b322c;
+  font-size: 15px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
 }
 
 .think-v3-quote__label,
@@ -9286,6 +9313,8 @@ summary [data-user-mark-field] {
   .page--lab,
   .lab-card,
   .lab-vote,
+  .think-v3-kicker,
+  .think-v3-why,
   .aware-v3,
   .aware-v3-list,
   .aware-v3-item,

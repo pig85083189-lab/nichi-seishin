@@ -16,6 +16,7 @@ const executionV3 = require("../lib/execution-v3");
 const execV2 = require("../lib/exec-v2");
 const reflectionHistory = require("../lib/reflection-history-retrieval");
 const insightReason = require("../lib/insight-reason");
+const insightDiscovery = require("../lib/insight-discovery");
 const insightLab = require("../lib/insight-lab");
 
 const HIGHLIGHT_RULE = `【重點反白 highlights】
@@ -3909,6 +3910,24 @@ module.exports = async function handler(req, res) {
           maxTokens: stage === "write" ? 800 : 1600,
           _retried: stage === "reason-retry",
         });
+      if (kind === "layer") {
+        const discovered = await insightDiscovery.runDiscoveryPipeline({ callAi, ctx });
+        const result = {
+          status: discovered.status || "silence",
+          discovery: discovered.discovery || null,
+          knownByUser: discovered.knownByUser || [],
+          coreQuote: discovered.coreQuote || "",
+          questions: discovered.questions || [],
+          sourceSig: discovered.sourceSig || reflectionV3.reflectionV3SourceSig(ctx),
+        };
+        res.status(200).json({
+          ok: true,
+          source: getProvider(),
+          data: result,
+          ...(internalUser ? { _internalReason: discovered.meta || {} } : {}),
+        });
+        return;
+      }
       const pipeline = await insightReason.runReasonWritePipeline({
         callAi,
         ctx,
@@ -3917,30 +3936,9 @@ module.exports = async function handler(req, res) {
           { role: "system", content: withCompleteRule(insightReason.REASONING_SYSTEM) },
           { role: "user", content: insightReason.reasoningUserPrompt(body, kind) },
         ],
-        writeSystem: withCompleteRule(
-          kind === "extension" ? reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM : reflectionV3.REFLECTION_V3_SYSTEM
-        ),
+        writeSystem: withCompleteRule(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM),
       });
       const meta = pipeline.meta || {};
-      if (kind === "layer") {
-        const gated = pipeline.empty
-          ? { coreQuote: "", questions: [], sourceSig: reflectionV3.reflectionV3SourceSig(ctx) }
-          : reflectionV3.gateReflectionV3Result(pipeline.written, ctx);
-        const empty = !gated.coreQuote && !(gated.questions && gated.questions.length);
-        const result = {
-          coreQuote: gated.coreQuote || "",
-          questions: gated.questions || [],
-          sourceSig: gated.sourceSig,
-          ...(empty ? { status: "empty" } : {}),
-        };
-        res.status(200).json({
-          ok: true,
-          source: getProvider(),
-          data: result,
-          ...(internalUser ? { _internalReason: meta } : {}),
-        });
-        return;
-      }
       const retrieval = round1History && round1History.retrieval ? round1History.retrieval : { sourceSig: "", selectedPast: [] };
       if (pipeline.empty) {
         res.status(502).json({ ok: false, error: "延伸深度思考還沒整理好，請再試一次" });

@@ -32,8 +32,8 @@ const REFERENCE_CTX = {
   bodyMindText: "心情很好，可是身體比較累。",
 };
 
-assert(html.includes("app.js?v=279"), "cache app.js");
-assert(html.includes("app.css?v=233"), "cache css");
+assert(html.includes("app.js?v=280"), "cache app.js");
+assert(html.includes("app.css?v=234"), "cache css");
 assert(html.includes("lib/review-merge.js?v=25"), "cache merge");
 assert(!html.includes("CREATE TABLE") && !app.includes("ALTER TABLE"), "zero schema");
 
@@ -244,7 +244,7 @@ const takeaway = reflectionExt.evaluateExtensionCloseQuality(
 );
 assert(takeaway.ok, `可帶走的發現應通過：${takeaway.issues.join("；")}`);
 
-assert(app.includes("think-v3-q__title"), "04 UI 有 title");
+assert(app.includes("think-v3-kicker") && app.includes("我注意到一件事"), "04 UI 有 discovery heading");
 assert(app.includes("think-ext-opt__title"), "extension UI 有 title");
 assert(app.includes("aware-v3-item__title"), "05 UI 有 title");
 assert(css.includes(".think-v3-q__title"), "title 樣式存在");
@@ -395,16 +395,15 @@ const awareKeep = awarenessV3.normalizeAwarenessV3Result(
 );
 assert(awareKeep.items.length === 2, `05 gate 應丟掉空話、留下 2 句：${awareKeep.items.length}`);
 
-assert(reviewJs.includes("runReasonWritePipeline"), "04/extension 走 reasoning pipeline");
-assert(reviewJs.includes("insightReason.REASONING_SYSTEM"), "Call 1 是 Reasoning Engine");
-assert(reviewJs.includes('stage === "write"'), "Call 2 是 Mentor Writer");
-assert(reviewJs.includes("gateReflectionV3Result"), "Writer 輸出仍過 value gate");
+assert(reviewJs.includes("runDiscoveryPipeline"), "04 first layer is Discovery Engine");
+assert(reviewJs.includes("runReasonWritePipeline"), "extension still uses reason pipeline");
+assert(reviewJs.includes("insightReason.REASONING_SYSTEM"), "extension Reasoning Engine 仍在");
+assert(reviewJs.includes('stage === "write"'), "Writer stage 仍在");
 assert(reviewJs.includes("gateAwarenessV3Result"), "05 production 必須執行 value gate");
 assert(reviewJs.includes("awarenessV3ValueGateRetryPrompt"), "05 fail 只 regen 一次");
-assert(reviewJs.includes('status: "empty"'), "0 pass 允許 empty fallback");
+assert(reviewJs.includes("silence"), "04 silence is formal");
 assert(!reviewJs.includes("result.questions.length < 3"), "04 不再為湊 3 把垃圾放行");
-assert(app.includes("if (questions.length < 1)"), "04/extension 允許 1 題");
-assert(app.includes('remote && remote.status === "empty"'), "client 接受 0-item empty");
+assert(app.includes("thinkGuideIsSilence") && app.includes('status: "silence"'), "client accepts silence");
 assert(voice.VALUE_ENGINE_BLOCK.includes("想睡 → 累"), "prompt 有 trivial kill-list");
 assert(!voice.VALUE_ENGINE_BLOCK.includes("不代表身體就不需要休息"), "不再把想睡不衝突當好例子");
 assert(insightReason.REASONING_SYSTEM.includes("不要寫 title"), "Reasoning 不寫文案");
