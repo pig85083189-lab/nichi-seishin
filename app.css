@@ -8700,8 +8700,41 @@ summary [data-user-mark-field] {
 }
 
 @media (max-width: 430px) {
+  .page--lab,
+  .lab-toolbar,
+  .lab-card,
+  .lab-vote,
+  .lab-reveal {
+    min-width: 0;
+    max-width: 100%;
+  }
   .lab-card {
     padding: 14px 12px;
+  }
+}
+
+@media (max-width: 390px) {
+  .page--lab,
+  .lab-toolbar,
+  .lab-card,
+  .lab-vote,
+  .lab-reveal {
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 375px) {
+  .page--lab,
+  .lab-toolbar,
+  .lab-card,
+  .lab-vote,
+  .lab-reveal {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .lab-card {
+    padding: 12px 10px;
   }
 }
 

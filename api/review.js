@@ -3199,7 +3199,7 @@ async function handleInsightLabRequest(res, body) {
     return;
   }
   if (action === "reveal") {
-    const revealed = insightLab.revealLab(body && body.seal);
+    const revealed = insightLab.revealLab(body && body.seal, body && body.branchSeals);
     if (!revealed) {
       res.status(400).json({ ok: false, error: "無法顯示對照" });
       return;
@@ -3207,25 +3207,47 @@ async function handleInsightLabRequest(res, body) {
     res.status(200).json({ ok: true, data: revealed });
     return;
   }
-  if (action !== "run") {
-    res.status(400).json({ ok: false, error: "unknown_action" });
+  if (action === "start") {
+    const plan = insightLab.planLabExperiment({
+      raw: body && body.raw,
+      fixtureId: body && body.fixtureId,
+    });
+    res.status(200).json({
+      ok: true,
+      data: {
+        version: plan.version,
+        fingerprint: plan.fingerprint,
+        fixtureId: plan.fixtureId,
+        slots: plan.slots,
+        seal: plan.seal,
+      },
+    });
     return;
   }
-  const result = await insightLab.runLabExperiment({
-    raw: body && body.raw,
-    fixtureId: body && body.fixtureId,
-  });
-  res.status(200).json({
-    ok: true,
-    data: {
-      version: result.version,
-      fingerprint: result.fingerprint,
-      fixtureId: result.fixtureId,
-      latencyMs: result.latencyMs,
-      slots: result.slots,
-      seal: result.seal,
-    },
-  });
+  if (action === "run") {
+    const result = await insightLab.runLabSlot({
+      seal: body && body.seal,
+      slot: body && body.slot,
+      continueToken: body && body.continueToken,
+    });
+    res.status(200).json({
+      ok: true,
+      data: result.done
+        ? {
+            slot: result.slot,
+            done: true,
+            result: result.result,
+            branchSeal: result.branchSeal,
+          }
+        : {
+            slot: result.slot,
+            done: false,
+            continueToken: result.continueToken,
+          },
+    });
+    return;
+  }
+  res.status(400).json({ ok: false, error: "unknown_action" });
 }
 
 function setCors(res) {
@@ -3269,6 +3291,8 @@ module.exports = async function handler(req, res) {
   delete body.internal;
   delete body.forceProvider;
   delete body.provider;
+  delete body.pipeline;
+  delete body.branch;
   delete body.completedCount;
   delete body.completedRounds;
   delete body.selectedPast;

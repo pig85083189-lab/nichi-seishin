@@ -446,10 +446,47 @@ function renderLabReveal(exp) {
     .map((row) => {
       const debug = row.debug || {};
       const scores = row.scores || {};
-      return `<p>版本 ${escapeLab(row.slot)} 實際：${escapeLab(row.label || row.pipeline)}<br />provider ${escapeLab(debug.provider)} · model ${escapeLab(debug.model)} · reasoning effort ${escapeLab(debug.reasoningEffort || "—")} · pipeline ${escapeLab(debug.pipeline)} · ${Number(debug.latencyMs || 0)}ms · calls ${Number(debug.callCount || 0)} · tokens ${Number((debug.usage && debug.usage.total) || 0)}${debug.failed ? ` · failed ${escapeLab(debug.error)}` : ""}</p>
+      const usage = debug.usage || {};
+      return `<p>版本 ${escapeLab(row.slot)} 實際：${escapeLab(row.label || row.pipeline)}<br />provider ${escapeLab(debug.provider)} · model ${escapeLab(debug.model)} · reasoning effort ${escapeLab(debug.reasoningEffort || "—")} · pipeline ${escapeLab(debug.pipeline)} · stage ${escapeLab(debug.stage || "—")} · ${Number(debug.latencyMs || 0)}ms · calls ${Number(debug.callCount || 0)} · completion ${Number(debug.completionTokens || usage.completionTokens || usage.output || 0)} · reasoning ${Number(debug.reasoningTokens || usage.reasoningTokens || usage.reasoning || 0)} · tokens ${Number(usage.total || 0)}${debug.httpStatus != null ? ` · http ${escapeLab(debug.httpStatus)}` : ""}${debug.finishReason || debug.stopReason ? ` · stop ${escapeLab(debug.finishReason || debug.stopReason)}` : ""}${debug.errorCode ? ` · code ${escapeLab(debug.errorCode)}` : ""}${debug.failed ? ` · failed ${escapeLab(debug.error)}` : ""}</p>
       <p class="lab-scores">Novelty ${scores.novelty ?? "—"} · Evidence ${scores.evidence ?? "—"} · Usefulness ${scores.usefulness ?? "—"} · Human ${scores.human ?? "—"} · Non-paraphrase ${scores.nonParaphrase ?? "—"}</p>`;
     })
     .join("");
+}
+
+async function postInsightLab(body, timeoutMs) {
+  const response = await fetchWithTimeout(
+    `${location.origin}/api/review`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "insight-lab", ...body }),
+    },
+    timeoutMs
+  );
+  const payload = await response.json().catch(() => ({}));
+  return { response, payload };
+}
+
+async function runInsightLabSlot(seal, slot) {
+  let continueToken = "";
+  for (let i = 0; i < 6; i += 1) {
+    const { response, payload } = await postInsightLab(
+      { action: "run", seal, slot, continueToken: continueToken || undefined },
+      59000
+    );
+    if (response.status === 403) {
+      const error = new Error("沒有 Internal 權限");
+      error.status = 403;
+      throw error;
+    }
+    if (!response.ok || !payload.ok || !payload.data) {
+      throw new Error(payload.error || `HTTP ${response.status}`);
+    }
+    if (payload.data.done) return payload.data;
+    continueToken = payload.data.continueToken || "";
+    if (!continueToken) throw new Error("Lab slot 未完成");
+  }
+  throw new Error("Lab slot 未完成");
 }
 
 async function runInsightLab() {
@@ -467,30 +504,53 @@ async function runInsightLab() {
   writeLabExperiment({ date, fixtureId, running: true, slots: [], vote: "", reasons: [], revealed: null });
   renderInsightLab();
   try {
-    const response = await fetchWithTimeout(
-      `${location.origin}/api/review`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "insight-lab", action: "run", date, fixtureId, raw: fixtureId ? undefined : raw }),
-      },
-      59000
+    const started = await postInsightLab(
+      { action: "start", date, fixtureId, raw: fixtureId ? undefined : raw },
+      15000
     );
-    const payload = await response.json().catch(() => ({}));
-    if (response.status === 403) {
+    if (started.response.status === 403) {
       writeLabExperiment({ date, fixtureId, error: "沒有 Internal 權限", slots: [] });
       renderInsightLab();
       return;
     }
-    if (!response.ok || !payload.ok || !payload.data) {
-      throw new Error(payload.error || `HTTP ${response.status}`);
+    if (!started.response.ok || !started.payload.ok || !started.payload.data) {
+      throw new Error(started.payload.error || `HTTP ${started.response.status}`);
     }
+    const plan = started.payload.data;
+    const keys = (Array.isArray(plan.slots) ? plan.slots : []).map((row) => row && row.key).filter(Boolean);
+    const parts = await Promise.all(
+      keys.map(async (slot) => {
+        try {
+          return await runInsightLabSlot(plan.seal, slot);
+        } catch (error) {
+          if (error && error.status === 403) throw error;
+          return {
+            slot,
+            done: true,
+            result: {
+              key: slot,
+              hasInsight: false,
+              failed: true,
+              items: [{ hasInsight: false, title: "", insight: "", question: null }],
+            },
+            branchSeal: "",
+          };
+        }
+      })
+    );
+    const slots = keys.map((key) => {
+      const part = parts.find((item) => item && (item.slot === key || (item.result && item.result.key === key)));
+      return part && part.result
+        ? part.result
+        : { key, hasInsight: false, failed: true, items: [{ hasInsight: false, title: "", insight: "", question: null }] };
+    });
     writeLabExperiment({
       date,
       fixtureId,
-      fingerprint: payload.data.fingerprint,
-      slots: payload.data.slots,
-      seal: payload.data.seal,
+      fingerprint: plan.fingerprint,
+      slots,
+      seal: plan.seal,
+      branchSeals: parts.map((item) => item && item.branchSeal).filter(Boolean),
       vote: "",
       reasons: [],
       whyOther: "",
@@ -521,7 +581,7 @@ async function submitInsightLabVote(event) {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "insight-lab", action: "reveal", seal: exp.seal }),
+        body: JSON.stringify({ mode: "insight-lab", action: "reveal", seal: exp.seal, branchSeals: exp.branchSeals || [] }),
       },
       12000
     );

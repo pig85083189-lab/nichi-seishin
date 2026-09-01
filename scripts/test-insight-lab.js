@@ -32,9 +32,10 @@ const apiFiles = listApiFunctions(path.join(root, "api"));
 assert(apiFiles.length === 12, `serverless function count ${apiFiles.length}`);
 assert(!fs.existsSync(path.join(root, "api/insight-lab.js")), "api/insight-lab.js removed");
 assert(!vercel.includes("api/insight-lab.js"), "vercel.json has no insight-lab function");
+assert(/"api\/review\.js"[\s\S]{0,80}"maxDuration": 60/.test(vercel), "review maxDuration stays 60");
 
-assert(html.includes("app.js?v=278"), "cache app.js");
-assert(html.includes("app.css?v=232"), "cache css");
+assert(html.includes("app.js?v=279"), "cache app.js");
+assert(html.includes("app.css?v=233"), "cache css");
 assert(html.includes('id="insightLabLink"'), "sidebar Insight Lab");
 assert(html.includes("Internal"), "Internal badge");
 assert(html.includes('data-page="lab"'), "lab page");
@@ -59,6 +60,12 @@ const runFn = app.slice(app.indexOf("async function runInsightLab"), app.indexOf
 assert(runFn.includes("getReview("), "lab run reads getReview");
 assert(!runFn.includes("state.reviews"), "lab run does not use state.reviews");
 assert(!runFn.includes("saveReviews") && !runFn.includes("upsertReview"), "lab run does not mutate reviews");
+assert(runFn.includes('action: "start"'), "lab starts experiment first");
+assert(runFn.includes("runInsightLabSlot"), "lab runs slots independently");
+assert(runFn.includes("Promise.all"), "A/B/C client requests can run in parallel");
+assert(!runFn.includes('action: "run", date'), "lab no longer sends one all-in-one run");
+assert(!app.includes("forceProvider"), "client never sends forceProvider");
+assert(!runFn.includes("pipeline:"), "client run does not choose pipeline");
 assert(app.includes('if (state.page === "lab") renderInsightLab()'), "cloud hydrate refreshes lab options");
 assert(!/days\.map[\s\S]{0,120}\|\| `<option value="\$\{currentIso\(\)\}"/.test(app), "empty today is not forced into the date select");
 
@@ -69,6 +76,10 @@ assert(pipeline > labGate, "Lab gate is before formal 04 pipeline");
 assert(review.includes("isInternalUser"), "server uses isInternalUser");
 assert(review.includes("Insight Lab is internal only."), "normal user 403");
 assert(review.includes("handleInsightLabRequest"), "reuses Lab handler");
+assert(review.includes("planLabExperiment"), "review hosts start");
+assert(review.includes("runLabSlot"), "review hosts per-slot run");
+assert(!review.includes("runLabExperiment"), "review no longer runs A/B/C in one request");
+assert(review.includes("delete body.pipeline"), "review drops client pipeline");
 assert(review.slice(labGate, labGate + 900).includes("return;"), "Lab early return");
 assert(!/console\.log/.test(lab), "lib no console.log");
 
@@ -76,17 +87,38 @@ assert(openaiSrc.includes("if (usesClaude() && !wantsOpenAI(opts)) return callCl
 assert(openai.LAB_GPT_MODEL === "gpt-5.6-sol", "Lab GPT model pinned server-side");
 assert(openai.getModel({ forceProvider: "openai", lab: true }) === "gpt-5.6-sol", "lab force GPT");
 assert(insightLab.LAB_GPT_EFFORT === "high", "Lab GPT effort is high");
+assert(insightLab.LAB_A_REASON_TIMEOUT === 26000, "Current Reason timeout matches formal Internal 04");
+assert(insightLab.LAB_A_WRITE_TIMEOUT === 26000, "Current Writer timeout matches formal Internal 04");
+assert(insightLab.LAB_CLAUDE_TIMEOUT === 26000, "Council Claude per-call timeout is 26s");
+assert(insightLab.LAB_GPT_MAX_COMPLETION_TOKENS === 25000, "GPT completion budget follows official reasoning reserve");
 assert(insightLab.gptOpts().effort === "high", "B/C gptOpts effort high");
 assert(insightLab.gptOpts().effort !== "medium", "B/C not default medium");
+assert(insightLab.gptOpts().maxTokens === 25000, "B default maxTokens is 25000");
+assert(insightLab.gptOpts({ maxTokens: 800 }).maxTokens === 800, "explicit override still works");
 const gptReq = insightLab.labGptRequestConfig();
 assert(gptReq.endpoint === "https://api.openai.com/v1/chat/completions", "Chat Completions endpoint");
 assert(gptReq.model === "gpt-5.6-sol", "request model sol");
 assert(gptReq.reasoningEffortField === "reasoning_effort", "Chat Completions field name");
 assert(gptReq.reasoningEffort === "high", "request reasoning_effort high");
+assert(gptReq.maxCompletionTokens === 25000, "request max_completion_tokens is 25000");
 assert(gptReq.hasNestedReasoningObject === false, "not Responses reasoning object");
 const labPayload = openai.buildOpenAIPayload([{ role: "user", content: "x" }], insightLab.gptOpts(), "gpt-5.6-sol");
 assert(labPayload.reasoning_effort === "high", "payload.reasoning_effort = high");
+assert(labPayload.max_completion_tokens === 25000, "payload.max_completion_tokens is 25000 not 700");
+assert(labPayload.max_completion_tokens !== 700, "no 700 token ceiling");
 assert(!("reasoning" in labPayload), "Chat Completions does not send reasoning:{}");
+const criticPayload = openai.buildOpenAIPayload([{ role: "user", content: "x" }], insightLab.gptOpts(), "gpt-5.6-sol");
+assert(criticPayload.max_completion_tokens === 25000, "Critic shares the same high+JSON budget");
+const usageChat = openai.normalizeUsage({
+  prompt_tokens: 10,
+  completion_tokens: 900,
+  completion_tokens_details: { reasoning_tokens: 820 },
+  total_tokens: 910,
+});
+assert(usageChat.reasoning === 820 && usageChat.reasoningTokens === 820, "Chat Completions reasoning_tokens mapped");
+assert(usageChat.output === 900 && usageChat.completionTokens === 900, "completion_tokens mapped");
+assert(!lab.includes("Promise.all([\n    runCurrent"), "server no longer Promise.all three pipelines in one handler");
+assert(css.includes("max-width: 375px") && css.includes("max-width: 390px") && css.includes("max-width: 430px"), "lab overflow breakpoints");
 assert(app.includes("reasoning effort"), "reveal shows reasoning effort");
 assert(review.includes("runReasonWritePipeline"), "production 04 pipeline untouched");
 assert(v3.includes("REASONING_SYSTEM"), "4B-2.7 reasoning still in place");
@@ -270,8 +302,15 @@ function mockCallAi(overrides = {}) {
   assert(gptCalls.every((item) => item.effort === "high"), "B and C critic use high, not medium");
   const gptHidden = revealed.hidden.find((row) => row.pipeline === "gpt");
   const councilHidden = revealed.hidden.find((row) => row.pipeline === "council");
+  const currentHidden = revealed.hidden.find((row) => row.pipeline === "current");
   assert(gptHidden.debug.reasoningEffort === "high", "B reveal effort high");
   assert(String(councilHidden.debug.reasoningEffort).includes("high"), "C reveal includes high");
+  assert(currentHidden.debug.stages.includes("current:reason") && currentHidden.debug.stages.includes("current:write"), "Current Reason/Writer stages recorded");
+  assert(councilHidden.debug.stages.includes("council-analyst"), "Council analyst stage");
+  assert(councilHidden.debug.stages.includes("council-critic"), "Council critic stage");
+  assert(councilHidden.debug.stages.includes("council-mentor"), "Council mentor stage");
+  assert("finishReason" in gptHidden.debug && "errorCode" in gptHidden.debug, "reveal debug includes finish/error fields");
+  assert("reasoningTokens" in gptHidden.debug, "reveal debug includes reasoning token budget");
 
   const emptyGpt = await insightLab.runLabExperiment({
     fixtureId: "fx-sparse",
@@ -303,6 +342,53 @@ function mockCallAi(overrides = {}) {
   const councilRow = insightLab.revealLab(councilFail.seal).hidden.find((row) => row.pipeline === "council");
   assert(councilRow.debug.failed, "council partial critic failure");
   assert(councilRow.debug.error.includes("critic"), "does not fake council from A");
+  assert(councilRow.debug.stage === "council-critic", "council failure stage is critic");
+  assert(councilRow.debug.stages.includes("council-analyst"), "analyst completed before critic failed");
+  assert(!councilRow.debug.stages.includes("council-mentor"), "mentor did not run after critic fail");
+
+  const stepPlan = insightLab.planLabExperiment({ fixtureId: "fx-baby", rand: () => 0.1 });
+  const stepCurrent = insightLab.revealLab(stepPlan.seal, []).mapping.find((row) => row.pipeline === "current").slot;
+  const firstStep = await insightLab.runLabSlot({ seal: stepPlan.seal, slot: stepCurrent, callAi: mockCallAi() });
+  assert(firstStep.done === false && firstStep.continueToken, "Current first request is Reason only, not 78s full pipeline");
+  assert(!firstStep.result, "unfinished Current request exposes no public card yet");
+
+  const plan = insightLab.planLabExperiment({ fixtureId: "fx-baby", rand: () => 0 });
+  assert(plan.slots.every((row) => row.key && !row.pipeline && !row.model), "start slots have no branch identity");
+  assert(!JSON.stringify(plan.slots).includes("current") && !JSON.stringify(plan.slots).includes("gpt"), "start does not leak pipelines");
+  const mapping = insightLab.revealLab(plan.seal, []).mapping;
+  const currentSlot = mapping.find((row) => row.pipeline === "current").slot;
+  const hijack = await insightLab.runLabSlotUntilDone({
+    seal: plan.seal,
+    slot: currentSlot,
+    pipeline: "gpt",
+    forceProvider: "openai",
+    model: "gpt-5.6-sol",
+    callAi: mockCallAi({ capture }),
+  });
+  const hijackBranch = insightLab.unsealPayload(hijack.branchSeal);
+  assert(hijackBranch.pipeline === "current", "client cannot pick provider/model/pipeline");
+  assert(hijack.result && !JSON.stringify(hijack.result).includes("Current ING"), "slot result stays blind");
+
+  const isolatedPlan = insightLab.planLabExperiment({ fixtureId: "fx-baby", rand: () => 0.4 });
+  const isolatedMap = insightLab.revealLab(isolatedPlan.seal, []).mapping;
+  const isoGpt = isolatedMap.find((row) => row.pipeline === "gpt").slot;
+  const isoCurrent = isolatedMap.find((row) => row.pipeline === "current").slot;
+  const isoCouncil = isolatedMap.find((row) => row.pipeline === "council").slot;
+  const [isoFail, isoOk, isoCouncilOk] = await Promise.all([
+    insightLab.runLabSlotUntilDone({ seal: isolatedPlan.seal, slot: isoGpt, callAi: mockCallAi({ failGpt: true }) }),
+    insightLab.runLabSlotUntilDone({ seal: isolatedPlan.seal, slot: isoCurrent, callAi: mockCallAi() }),
+    insightLab.runLabSlotUntilDone({ seal: isolatedPlan.seal, slot: isoCouncil, callAi: mockCallAi() }),
+  ]);
+  assert(isoFail.result.failed, "GPT branch can fail alone");
+  assert(!isoOk.result.failed && isoOk.result.hasInsight, "Current ING still completes");
+  assert(!isoCouncilOk.result.failed, "Council still completes");
+  const isoReveal = insightLab.revealLab(isolatedPlan.seal, [isoFail.branchSeal, isoOk.branchSeal, isoCouncilOk.branchSeal]);
+  assert(isoReveal.hidden.find((row) => row.pipeline === "current").debug.stage.includes("current"), "Current stage visible after reveal");
+  assert(isoReveal.hidden.find((row) => row.pipeline === "council").debug.stages.join(" ").includes("council-analyst"), "Council analyst identifiable");
+  assert(isoReveal.hidden.find((row) => row.pipeline === "council").debug.stages.includes("council-critic"), "Council critic identifiable");
+  assert(isoReveal.hidden.find((row) => row.pipeline === "council").debug.stages.includes("council-mentor"), "Council mentor identifiable");
+  const dbgDump = JSON.stringify(isoReveal.hidden.map((row) => row.debug));
+  assert(!dbgDump.includes(babyThanks), "debug does not persist USER RAW");
 
   const notes = insightLab.fixtureNotes("fx-baby", [{ hasInsight: true, title: "幸福", insight: "你很重視幸福。陪伴讓你覺得幸福。", question: "你是不是很珍惜 Baby？" }]);
   assert(notes.badHits.length >= 2, "fixture evaluator catches paraphrase");
