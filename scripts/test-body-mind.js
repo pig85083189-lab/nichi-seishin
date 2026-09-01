@@ -161,7 +161,8 @@ assert(bodyMind.BODY_MIND_SYSTEM.includes("不要找問題"), "正向不硬找�
 assert(bodyMind.bodyMindSourceStale({ text: "舊文字", insight: "核心一句。", support: "往下看一眼。", sig: "舊文字\n事件\n心情" }, "改過的新文字"), "改字後 stale");
 assert(!bodyMind.bodyMindSourceStale({ text: "舊文字", insight: "核心一句。", support: "往下看一眼。", sig: "舊文字\n事件\n心情" }, "舊文字"), "同文不是 stale");
 assert(reviewJs.includes("runSeePipeline"), "03 走 SEE pipeline");
-assert(reviewJs.includes("runDiscoveryPipeline"), "04 discovery 仍在");
+assert(reviewJs.includes("runUnderstandPipeline"), "04 UNDERSTAND 在");
+assert(fs.existsSync(path.join(root, "lib/insight-discovery.js")), "discovery 未刪");
 assert(!reviewJs.includes("ANTHROPIC_INTERNAL_MODEL"), "不改 routing 常數來源");
 assert(reviewJs.includes("internal: internalUser"), "Internal routing 仍在");
 

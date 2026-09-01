@@ -34,8 +34,8 @@ assert(!fs.existsSync(path.join(root, "api/insight-lab.js")), "api/insight-lab.j
 assert(!vercel.includes("api/insight-lab.js"), "vercel.json has no insight-lab function");
 assert(/"api\/review\.js"[\s\S]{0,80}"maxDuration": 60/.test(vercel), "review maxDuration stays 60");
 
-assert(html.includes("app.js?v=281"), "cache app.js");
-assert(html.includes("app.css?v=234"), "cache css");
+assert(html.includes("app.js?v=282"), "cache app.js");
+assert(html.includes("app.css?v=235"), "cache css");
 assert(html.includes('id="insightLabLink"'), "sidebar Insight Lab");
 assert(html.includes("Internal"), "Internal badge");
 assert(html.includes('data-page="lab"'), "lab page");
@@ -120,7 +120,8 @@ assert(usageChat.output === 900 && usageChat.completionTokens === 900, "completi
 assert(!lab.includes("Promise.all([\n    runCurrent"), "server no longer Promise.all three pipelines in one handler");
 assert(css.includes("max-width: 375px") && css.includes("max-width: 390px") && css.includes("max-width: 430px"), "lab overflow breakpoints");
 assert(app.includes("reasoning effort"), "reveal shows reasoning effort");
-assert(review.includes("runDiscoveryPipeline"), "formal 04 layer uses Discovery Engine");
+assert(review.includes("runUnderstandPipeline"), "formal 04 layer uses UNDERSTAND");
+assert(fs.existsSync(path.join(root, "lib/insight-discovery.js")), "discovery guards retained");
 assert(review.includes("runReasonWritePipeline"), "extension / lab current still can use reason pipeline");
 assert(v3.includes("REASONING_SYSTEM"), "4B-2.7 reasoning still in place");
 assert(bodyMind.includes("BODY_MIND_SYSTEM") || bodyMind.includes("身心"), "03 untouched");

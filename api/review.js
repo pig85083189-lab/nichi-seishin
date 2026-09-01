@@ -17,6 +17,7 @@ const execV2 = require("../lib/exec-v2");
 const reflectionHistory = require("../lib/reflection-history-retrieval");
 const insightReason = require("../lib/insight-reason");
 const insightDiscovery = require("../lib/insight-discovery");
+const insightUnderstand = require("../lib/insight-understand");
 const bodyMindSee = require("../lib/body-mind-see");
 const insightLab = require("../lib/insight-lab");
 
@@ -94,6 +95,38 @@ function journalFromExtensionContext(ctx) {
       },
     },
   };
+}
+
+async function attachUnderstandHistory(user, body) {
+  const empty = { retrieved: [], used: [], retrieval: { sourceSig: "", selectedPast: [] }, timings: { retrievalMs: 0 } };
+  if (insightUnderstand.understandStep(body) !== "open") return empty;
+  const started = Date.now();
+  try {
+    const { loadReviews, cloudStoreConfigured } = require("../lib/store");
+    const reviews = user && user.id && cloudStoreConfigured() ? await loadReviews(user.id) : {};
+    if (!body.context || typeof body.context !== "object") body.context = {};
+    const result = await reflectionHistory.retrieveRelevantHistory({
+      reviews,
+      currentDate: String(body.date || "").trim(),
+      currentJournal: journalFromExtensionContext(body.context),
+    });
+    const enriched = reflectionHistory.snippetsForSelectedPast(reviews, result.selectedPast || []);
+    const gated = insightUnderstand.understandGatePast(enriched);
+    return {
+      retrieved: gated.retrieved,
+      used: gated.used,
+      retrieval: { sourceSig: (result.debug && result.debug.sourceSig) || "", selectedPast: gated.used },
+      timings: {
+        retrievalMs: Date.now() - started,
+        extractMs: result.debug && result.debug.timings ? result.debug.timings.extractMs : 0,
+        stage1Ms: result.debug && result.debug.timings ? result.debug.timings.stage1Ms : 0,
+        stage2Ms: result.debug && result.debug.timings ? result.debug.timings.stage2Ms : 0,
+      },
+    };
+  } catch (error) {
+    console.error("understand history:", error && error.message ? error.message : error);
+    return { ...empty, timings: { retrievalMs: Date.now() - started } };
+  }
 }
 
 async function attachRound1RelevantHistory(user, body) {
@@ -3933,20 +3966,45 @@ module.exports = async function handler(req, res) {
           _retried: stage === "reason-retry",
         });
       if (kind === "layer") {
-        const discovered = await insightDiscovery.runDiscoveryPipeline({ callAi, ctx });
+        stripRound1HistorySpoof(body);
+        const step = insightUnderstand.understandStep(body);
+        let understandHistory = { retrieved: [], used: [], timings: {} };
+        if (step === "open") understandHistory = await attachUnderstandHistory(user, body);
+        const understood = await insightUnderstand.runUnderstandPipeline({
+          callAi,
+          ctx,
+          step,
+          prior: ctx.understand || ctx.priorUnderstand || null,
+          usedPast: step === "open" ? understandHistory.used : null,
+        });
         const result = {
-          status: discovered.status || "silence",
-          discovery: discovered.discovery || null,
-          knownByUser: discovered.knownByUser || [],
-          coreQuote: discovered.coreQuote || "",
-          questions: discovered.questions || [],
-          sourceSig: discovered.sourceSig || reflectionV3.reflectionV3SourceSig(ctx),
+          status: understood.status || "silence",
+          understand: understood.understand || null,
+          discovery: understood.discovery || null,
+          knownByUser: understood.knownByUser || [],
+          coreQuote: understood.coreQuote || "",
+          questions: understood.questions || [],
+          sourceSig: understood.sourceSig || reflectionV3.reflectionV3SourceSig(ctx),
         };
         res.status(200).json({
           ok: true,
           source: getProvider(),
           data: result,
-          ...(internalUser ? { _internalReason: discovered.meta || {} } : {}),
+          ...(internalUser
+            ? {
+                _internalReason: understood.meta || {},
+                ...(understandHistory.used && understandHistory.used.length
+                  ? {
+                      _internalRetrieval: {
+                        count: (understandHistory.retrieved || []).length,
+                        usedCount: (understandHistory.used || []).length,
+                        references: understandHistory.used,
+                        timings: understandHistory.timings || {},
+                      },
+                    }
+                  : {}),
+              }
+            : {}),
         });
         return;
       }

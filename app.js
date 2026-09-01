@@ -6562,10 +6562,18 @@ function normalizeThinkGuide(raw) {
     generatedAt: String(data.generatedAt || "").trim(),
     discovery: data.discovery && typeof data.discovery === "object" ? data.discovery : null,
     knownByUser: Array.isArray(data.knownByUser) ? data.knownByUser : [],
+    understand: data.understand && typeof data.understand === "object" ? data.understand : null,
     extension: normalizeReflectionExtension(data.extension),
   };
   delete next.retrieval;
   return next;
+}
+
+function isUnderstandGuide(guide) {
+  const data = normalizeThinkGuide(guide);
+  const bag = data.understand && typeof data.understand === "object" ? data.understand : null;
+  if (!bag) return false;
+  return Boolean(bag.stage || bag.focus || bag.whyWorthThinking || bag.convergence);
 }
 
 function thinkV2Closed(guide) {
@@ -6584,7 +6592,7 @@ function thinkGuideDone(guide) {
   const data = normalizeThinkGuide(guide);
   if (data.variant === "reflection-v3") {
     if ((data.status === "empty" || data.status === "silence") && data.sourceSig) return true;
-    return Boolean(data.coreQuote || (data.questions && data.questions.length >= 1) || (data.discovery && data.discovery.statement));
+    return Boolean(data.coreQuote || data.status === "understand" || (data.questions && data.questions.length >= 1) || (data.discovery && data.discovery.statement) || isUnderstandGuide(data));
   }
   if (data.variant === "think-v2") return thinkV2Closed(data);
   const answered = data.rounds.filter((item) => item.answer).length >= 3;
@@ -11228,6 +11236,7 @@ function thinkGuideIsSilence(guide) {
   const data = normalizeThinkGuide(guide);
   if (data.variant !== "reflection-v3") return false;
   if (data.status === "silence") return true;
+  if (data.understand && data.understand.stage === "stop" && !data.coreQuote) return true;
   return data.status === "empty" && !data.coreQuote && !(data.discovery && data.discovery.statement);
 }
 
@@ -11239,15 +11248,17 @@ function thinkGuideHas04Result(guide) {
       data.status === "empty" ||
       data.status === "silence" ||
       data.status === "discovery" ||
+      data.status === "understand" ||
       (data.questions && data.questions.length >= 1) ||
-      (data.discovery && data.discovery.statement)
+      (data.discovery && data.discovery.statement) ||
+      isUnderstandGuide(data)
   );
 }
 
 function reflectionV3Stale(guide, journal) {
   const data = normalizeThinkGuide(guide);
   if (data.variant !== "reflection-v3" || !data.sourceSig) return false;
-  if (!(data.coreQuote || data.status === "empty" || data.status === "silence" || data.questions.length >= 1 || (data.discovery && data.discovery.statement))) return false;
+  if (!(data.coreQuote || data.status === "empty" || data.status === "silence" || data.status === "understand" || data.questions.length >= 1 || (data.discovery && data.discovery.statement) || isUnderstandGuide(data))) return false;
   return data.sourceSig !== reflectionV3SourceSig(journal);
 }
 
@@ -11325,14 +11336,21 @@ function renderThinkV3() {
     return;
   }
   if (thinkGuideIsSilence(guide)) {
+    const understandStop = isUnderstandGuide(guide);
     root.innerHTML = `
     <article class="think-v3-result">
-      <p class="think-v3-kicker">今天有什麼是你可能還沒看見的？</p>
+      <p class="think-v3-kicker">${understandStop ? "這次我想陪你看的是" : "今天有什麼是你可能還沒看見的？"}</p>
       <div class="think-v3-quote think-v3-quote--silence">
-        <p class="think-v3-quote__text">今天沒有一定要再解讀的地方。</p>
-        <p class="think-v3-why">有些日子，好好經歷與記下來，就已經足夠了。</p>
+        <p class="think-v3-quote__text">${understandStop ? "今天這件事，你其實已經想得滿清楚了。" : "今天沒有一定要再解讀的地方。"}</p>
+        <p class="think-v3-why">${understandStop ? "沒有一定要再往下挖的地方，先這樣就很好。" : "有些日子，好好經歷與記下來，就已經足夠了。"}</p>
       </div>
     </article>`;
+    paintInternalModelDebug(root, state.internalModelDebug && state.internalModelDebug.think);
+    renderThinkExtension();
+    return;
+  }
+  if (isUnderstandGuide(guide)) {
+    root.innerHTML = renderUnderstandV3(guide);
     paintInternalModelDebug(root, state.internalModelDebug && state.internalModelDebug.think);
     renderThinkExtension();
     return;
@@ -11356,6 +11374,43 @@ function renderThinkV3() {
     </article>`;
   paintInternalModelDebug(root, state.internalModelDebug && state.internalModelDebug.think);
   renderThinkExtension();
+}
+
+function renderUnderstandV3(guide) {
+  const bag = (guide && guide.understand) || {};
+  const archived = isCurrentJournalArchived();
+  const focus = String(bag.focus || guide.coreQuote || "").trim();
+  const why = String(bag.whyWorthThinking || "").trim();
+  const pastNote = String(bag.pastNote || "").trim();
+  const stage = String(bag.stage || "");
+  const liveQuestion = stage === "asked2" ? String(bag.question2 || "").trim() : String(bag.question || "").trim();
+  const shownAnswer = String(bag.answer || "").trim();
+  const shownAnswer2 = String(bag.answer2 || "").trim();
+  const convergence = String(bag.convergence || "").trim();
+  const waiting = (stage === "asked1" || stage === "asked2") && liveQuestion && !archived;
+  const draft = String(bag.draftAnswer || "").trim();
+  return `
+    <article class="think-v3-result think-v3-result--understand">
+      <p class="think-v3-kicker">這次我想陪你看的是</p>
+      <div class="think-v3-quote">
+        ${markableP(focus, "think.coreQuote", "think-v3-quote__text")}
+      </div>
+      ${why ? `<p class="think-v3-why">${escapeHtml(why)}</p>` : ""}
+      ${pastNote ? `<p class="think-v3-past">${escapeHtml(pastNote)}</p>` : ""}
+      ${shownAnswer ? `<p class="think-v3-user-answer">${escapeHtml(shownAnswer)}</p>` : ""}
+      ${shownAnswer2 ? `<p class="think-v3-user-answer">${escapeHtml(shownAnswer2)}</p>` : ""}
+      ${waiting ? `<div class="think-v3-ask">
+        <p class="think-v3-list__label">想留一個問題給你</p>
+        ${markableP(liveQuestion, `think.question.${stage === "asked2" ? "q2" : "q1"}`, "think-v3-q__text")}
+        <label class="think-ext-answer-label" for="thinkUnderstandAnswer">寫下你現在想到的。</label>
+        <textarea class="textarea think-ext-answer" id="thinkUnderstandAnswer" rows="4">${escapeHtml(draft)}</textarea>
+        <button class="body-mind-cta think-v3-answer-cta" id="btnUnderstandAnswer" type="button">回覆後再想想 →</button>
+      </div>` : ""}
+      ${convergence ? `<div class="think-v3-converge">
+        <p class="think-v3-list__label">這次你真正看見的</p>
+        ${markableP(convergence, "think.convergence", "think-v3-quote__text")}
+      </div>` : ""}
+    </article>`;
 }
 
 async function generateReflectionV3(options = {}) {
@@ -11403,13 +11458,14 @@ async function generateReflectionV3(options = {}) {
       Array.isArray(remote.items) && remote.items.length ? remote.items : remote.questions,
       "q"
     );
-    if (remote && (remote.status === "empty" || remote.status === "silence" || (!remote.discovery && !coreQuote))) {
+    if (remote && (remote.status === "empty" || remote.status === "silence" || (!remote.understand && !remote.discovery && !coreQuote))) {
       applyReflectionV3Guide({
         status: "silence",
         sourceSig: sig,
         coreQuote: "",
         questions: [],
         discovery: null,
+        understand: remote.understand || { variant: "understand-v1", stage: "stop" },
         knownByUser: Array.isArray(remote.knownByUser) ? remote.knownByUser : [],
         generatedAt: new Date().toISOString(),
       });
@@ -11417,13 +11473,14 @@ async function generateReflectionV3(options = {}) {
       renderThinkV3();
       return;
     }
-    if (!coreQuote) throw new Error("今天的深度思考還沒整理好，請再試一次。");
+    if (!coreQuote && !(remote.understand && remote.understand.stage === "stop")) throw new Error("今天的深度思考還沒整理好，請再試一次。");
     applyReflectionV3Guide({
-      status: "discovery",
+      status: remote.status === "understand" ? "understand" : remote.understand ? "understand" : "discovery",
       sourceSig: sig,
       coreQuote,
       questions,
       discovery: remote.discovery,
+      understand: remote.understand || null,
       knownByUser: Array.isArray(remote.knownByUser) ? remote.knownByUser : [],
       generatedAt: new Date().toISOString(),
     });
@@ -11436,6 +11493,87 @@ async function generateReflectionV3(options = {}) {
     if (state.choicesToken.think !== token) return;
     if (isPlusRequiredError(error)) return;
     showToast(formatApiError(error) || "今天的深度思考還沒整理好，請再試一次。");
+    renderThinkV3();
+  } finally {
+    if (state.choicesToken.think === token) {
+      state.choicesBusy.think = false;
+      setChoicesLoading("think", false);
+      renderThinkV3();
+    }
+  }
+}
+
+function flushUnderstandAnswer() {
+  const ta = document.getElementById("thinkUnderstandAnswer");
+  if (!ta) return normalizeThinkGuide((state.journalInsight || {}).guide);
+  const guide = normalizeThinkGuide((state.journalInsight || {}).guide);
+  if (!guide.understand) return guide;
+  applyReflectionV3Guide({
+    ...guide,
+    understand: { ...guide.understand, draftAnswer: String(ta.value || "") },
+  });
+  return normalizeThinkGuide((state.journalInsight || {}).guide);
+}
+
+async function generateUnderstandAnswer(options = {}) {
+  if (!options || options.confirmed !== true) return;
+  if (rejectArchivedJournalWrite(options)) return;
+  if (isCurrentJournalArchived() || state.choicesBusy?.think) return;
+  const journal = collectJournal();
+  const guide = flushUnderstandAnswer();
+  const bag = guide.understand || {};
+  const answer = String(bag.draftAnswer || "").trim();
+  if (answer.replace(/\s+/g, "").length < 4) {
+    showThinkV3Hint("先寫下一點你現在想到的。");
+    return;
+  }
+  if (!ensurePlusFeature("think_ai", options)) return;
+  const token = (state.choicesToken.think || 0) + 1;
+  state.choicesToken.think = token;
+  state.choicesBusy.think = true;
+  setChoicesLoading("think", true);
+  renderThinkV3();
+  try {
+    if (!state.user) throw new Error("請先登入，才能繼續今天的深度思考。");
+    const ctx = reflectionV3Context(journal);
+    const remote = await postReview({
+      mode: "insight",
+      variant: "reflection-v3",
+      step: "understand-answer",
+      date: currentIso(),
+      text: ctx.event,
+      context: {
+        variant: "reflection-v3",
+        understandStep: "answer",
+        ...ctx,
+        userAnswer: answer,
+        understand: bag,
+      },
+    });
+    if (state.choicesToken.think !== token) return;
+    const coreQuote = String(remote.coreQuote || (remote.understand && remote.understand.convergence) || (remote.understand && remote.understand.focus) || "").replace(/\s+/g, " ").trim();
+    const questions = mapInsightQuestionItems(
+      Array.isArray(remote.items) && remote.items.length ? remote.items : remote.questions,
+      "q"
+    );
+    applyReflectionV3Guide({
+      status: remote.status || "understand",
+      sourceSig: guide.sourceSig || reflectionV3SourceSig(journal),
+      coreQuote: coreQuote || guide.coreQuote,
+      questions,
+      discovery: remote.discovery,
+      understand: remote.understand || bag,
+      knownByUser: Array.isArray(remote.knownByUser) ? remote.knownByUser : guide.knownByUser,
+      generatedAt: new Date().toISOString(),
+    });
+    if (!state.internalModelDebug) state.internalModelDebug = {};
+    state.internalModelDebug.think = takeInternalDebug(remote);
+    persistJournalQuietly();
+    renderThinkV3();
+  } catch (error) {
+    if (state.choicesToken.think !== token) return;
+    if (isPlusRequiredError(error)) return;
+    showToast(formatApiError(error) || "這次的思考還沒整理好，請再試一次。");
     renderThinkV3();
   } finally {
     if (state.choicesToken.think === token) {
@@ -11733,7 +11871,7 @@ function renderThinkExtension() {
   if (!root) return;
   const archived = isCurrentJournalArchived();
   const guide = normalizeThinkGuide((state.journalInsight || {}).guide);
-  const hasLayer = guide.variant === "reflection-v3" && Boolean(guide.coreQuote) && guide.questions.length >= 1;
+  const hasLayer = guide.variant === "reflection-v3" && Boolean(guide.coreQuote) && guide.questions.length >= 1 && !isUnderstandGuide(guide);
   const ext = normalizeReflectionExtension(guide.extension);
   const loading = Boolean(state.choicesBusy?.thinkExt);
   const completedRounds = ext.rounds.filter(isThinkExtensionRoundCompleted);
@@ -14006,7 +14144,7 @@ function isJournalAutosaveField(el) {
   if (!el) return false;
   if (el.classList && el.classList.contains("think-guide-answer")) return true;
   const id = String(el.id || "");
-  if (id === "thinkExtAnswer") return true;
+  if (id === "thinkExtAnswer" || id === "thinkUnderstandAnswer") return true;
   return /^(thanksText|thanks\d+|aware\d+|exec\d+|execNext|execFollowup|execDeepAnswer|eventText|bodyMindText|bodyNote|bodyOtherNote|body(Mood|Body|Sleep)Reason|manifestVision|manifestThink\d+|deep\d)/.test(id);
 }
 
@@ -18386,6 +18524,11 @@ function handleTodayPointerClick(event) {
     catchAsync(() => generateReflectionV3({ confirmed: true }), "今天的深度思考還沒整理好");
     return true;
   }
+  if (node.closest("#btnUnderstandAnswer")) {
+    handled();
+    catchAsync(() => generateUnderstandAnswer({ confirmed: true }), "這次的思考還沒整理好");
+    return true;
+  }
   if (node.closest("#btnThinkExtStart")) {
     handled();
     reportThinkExtDebug({ extensionClick: true, handlerEntered: true, failureStage: "CLICK" });
@@ -19207,6 +19350,7 @@ function bindEvents() {
       }
       if (isJournalAutosaveField(target)) scheduleJournalAutosave();
       if (id === "thinkExtAnswer") syncThinkExtAnswerChrome();
+      if (id === "thinkUnderstandAnswer") flushUnderstandAnswer();
       if (id === "bodyMindText") syncBodyMindCta();
       if (usesReflectionV3Path()) syncThinkV3Cta();
       if (usesAwarenessV3Path()) syncAwareV3Cta();

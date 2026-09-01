@@ -21,10 +21,10 @@ function walk(dir) {
 }
 walk(path.join(root, "api"));
 assert(apiFiles.length === 12, `function count ${apiFiles.length}`);
-assert(review.includes("runDiscoveryPipeline"), "review hosts discovery engine");
+assert(fs.existsSync(path.join(root, "lib/insight-discovery.js")), "discovery engine file retained");
 assert(!review.includes("api/insight-lab.js"), "no extra lab function");
 assert(app.includes("thinkGuideIsSilence"), "05/06 silence gate");
-assert(html.includes("今天有什麼是你可能還沒看見的"), "04 copy");
+assert(html.includes("這件事還可以怎麼理解"), "04 UNDERSTAND copy");
 
 const baby = insightDiscovery.QUALITY_FIXTURES.A;
 const known = insightDiscovery.buildKnownByUser(insightDiscovery.trustRaw(baby.raw));

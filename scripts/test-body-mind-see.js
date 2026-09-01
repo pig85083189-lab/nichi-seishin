@@ -17,8 +17,8 @@ const discoverySrc = fs.readFileSync(path.join(root, "lib/insight-discovery.js")
 
 assert(review.includes("runSeePipeline"), "API 03 uses SEE pipeline");
 assert(review.includes("skipWriterIfReadable: true"), "03 skips writer only when core is already readable");
-assert(review.includes("runDiscoveryPipeline"), "04 discovery not removed");
-assert(html.includes("今天有什麼是你可能還沒看見的"), "04 copy unchanged");
+assert(fs.existsSync(path.join(root, "lib/insight-discovery.js")), "04 discovery guards retained");
+assert(html.includes("從今天裡，多看見自己一點"), "03 SEE copy stays on 03");
 assert(html.includes("從今天裡，多看見自己一點"), "03 SEE CTA");
 assert(!html.includes("這個瞬間在提醒我什麼"), "retired 03 framing");
 assert(!discoverySrc.includes("bodyMind.insight") && !discoverySrc.includes("bodyMindInsight"), "trustRaw never reads 03 AI");

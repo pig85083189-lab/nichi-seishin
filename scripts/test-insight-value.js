@@ -32,9 +32,9 @@ const REFERENCE_CTX = {
   bodyMindText: "心情很好，可是身體比較累。",
 };
 
-assert(html.includes("app.js?v=281"), "cache app.js");
-assert(html.includes("app.css?v=234"), "cache css");
-assert(html.includes("lib/review-merge.js?v=26"), "cache merge");
+assert(html.includes("app.js?v=282"), "cache app.js");
+assert(html.includes("app.css?v=235"), "cache css");
+assert(html.includes("lib/review-merge.js?v=27"), "cache merge");
 assert(!html.includes("CREATE TABLE") && !app.includes("ALTER TABLE"), "zero schema");
 
 const raw = voice.userRawForPrompt(GRANDMA);
@@ -395,7 +395,8 @@ const awareKeep = awarenessV3.normalizeAwarenessV3Result(
 );
 assert(awareKeep.items.length === 2, `05 gate 應丟掉空話、留下 2 句：${awareKeep.items.length}`);
 
-assert(reviewJs.includes("runDiscoveryPipeline"), "04 first layer is Discovery Engine");
+assert(reviewJs.includes("runUnderstandPipeline"), "04 first layer is UNDERSTAND");
+assert(fs.existsSync(path.join(root, "lib/insight-discovery.js")), "discovery guards retained");
 assert(reviewJs.includes("runReasonWritePipeline"), "extension still uses reason pipeline");
 assert(reviewJs.includes("insightReason.REASONING_SYSTEM"), "extension Reasoning Engine 仍在");
 assert(reviewJs.includes('stage === "write"'), "Writer stage 仍在");

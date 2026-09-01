@@ -7270,11 +7270,29 @@ textarea[hidden] + .journal-voice-hint,
 }
 
 .think-v3-why {
-  margin: 0;
+  margin: 16px 0 0;
   color: #3b322c;
   font-size: 15px;
   line-height: 1.75;
   overflow-wrap: anywhere;
+}
+
+.think-v3-past,
+.think-v3-user-answer {
+  margin: 18px 0 0;
+  color: #5c5148;
+  font-size: 14px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+.think-v3-ask,
+.think-v3-converge {
+  margin: 22px 0 0;
+}
+
+.think-v3-answer-cta {
+  margin-top: 14px;
 }
 
 .think-v3-quote__label,

@@ -181,7 +181,7 @@ assert(bodyFold.includes("身心覺察"), "03 標題");
 assert(bodyFold.includes("hidden"), "03 收合說明已隱藏");
 assert(html.includes("id=\"bodyMindText\""), "03 新版只有主 textarea");
 assert(html.includes("js-legacy-body-ui") && html.includes("hidden"), "舊 03 mood／身體選項改為隱藏相容");
-assert(deepFold.includes("今天真正值得重新思考的是什麼。"), "04 收合說明：重新思考");
+assert(deepFold.includes("這件事還可以怎麼理解。"), "04 收合說明：UNDERSTAND");
 assert(!deepFold.includes("勾選即可"), "04 收合不混操作說明");
 assert(awareFold.includes("經過今天這些事情，我看見了自己什麼。"), "05 收合說明：看見自己");
 assert(!awareFold.includes("勾選即可"), "05 收合不混操作說明");

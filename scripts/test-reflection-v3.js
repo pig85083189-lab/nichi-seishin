@@ -17,7 +17,7 @@ assert(html.includes('id="btnReflectionV3"'), "V3 CTA 存在");
 assert(html.includes("看看今天真正值得想的是什麼"), "V3 CTA 文案");
 assert(html.includes("id=\"thinkV3Card\""), "V3 容器存在");
 assert(html.includes("js-legacy-think-ui"), "legacy 04 UI 仍在可隱藏");
-assert(html.includes("今天真正值得重新思考的是什麼"), "04 fold 文案已換成重新思考");
+assert(html.includes("這件事還可以怎麼理解"), "04 fold 文案是 UNDERSTAND");
 assert(app.includes('"thinkQuestions", "deepPromptLoading"'), "V3 會關掉訪談殘件");
 assert(app.includes("function generateReflectionV3"), "V3 generate 存在");
 assert(app.includes('variant: "reflection-v3"'), "request 帶 reflection-v3");
