@@ -36,7 +36,7 @@ assert(html.includes("今天，你可以帶走哪些覺察？"), "new-day 05 lea
 assert(html.includes("看看今天可以帶走的覺察"), "new-day 05 CTA");
 assert(app.includes("哪一個最像今天的你？"), "selection prompt");
 assert(app.includes("前面的思考裡，有一個地方值得你確認一下。"), "05 confirmation bridge copy");
-assert(app.includes("今天沒有一定要帶走的行動。"), "stop-heavy 06 copy");
+assert(app.includes("先完成並確認 05 覺察，才能整理下一步。"), "06 waits for USER_CONFIRMED");
 assert(app.includes("前面的內容先停在這裡也可以。"), "stop-heavy 06 line2");
 assert(app.includes("不用為了多一個答案，再替自己加一個標籤。"), "warm empty");
 assert(app.includes("isGrowAwarenessBag"), "grow bag helper");

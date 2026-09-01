@@ -12626,7 +12626,7 @@ function syncExecV3Cta() {
   btn.disabled = Boolean(state.choicesBusy?.execution) || archived || !ready;
   btn.textContent = stale ? "覺察有更新，重新整理下一步 →" : "把這份覺察帶回生活 →";
   if (stopHeavy) showExecV3Hint("");
-  else if (grow && !confirmed.length && show) showExecV3Hint("今天沒有一定要帶走的行動。前面的覺察如果還沒有哪一個特別像你，先不用急著替自己安排下一步。");
+  else if (grow && !confirmed.length && show) showExecV3Hint("先完成並確認 05 覺察，才能整理下一步。");
   else if (silent && !confirmed.length) showExecV3Hint("今天沒有一定要變成行動的發現。");
   else if (!ready && show) showExecV3Hint("先確認哪一個覺察最像今天的你。");
   else if (ready) showExecV3Hint("");
@@ -13032,7 +13032,7 @@ async function generateExecutionV3(options = {}) {
       : [];
     const act = remote.actVariant === "act-v1" || remote.status === "actions" || remote.status === "no-action" || remote.status === "blocked";
     if (act && remote.blocked) {
-      showExecV3Hint("今天沒有一定要帶走的行動。前面的覺察如果還沒有哪一個特別像你，先不用急著替自己安排下一步。");
+      showExecV3Hint("先完成並確認 05 覺察，才能整理下一步。");
       return;
     }
     if (!act && actions.length < 3) throw new Error("今天的下一步還沒整理好，請再試一次。");
