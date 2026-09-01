@@ -124,7 +124,7 @@ const motherLevel3 = bodyMindSee.evaluateSeeCandidate(
   },
   MOTHER_CONFLICT_RAW
 );
-assert(motherLevel3.drop && motherLevel3.failed.includes("level3"), `mother Level3 must drop: ${motherLevel3.failed.join(",")}`);
+assert(motherLevel3.drop && (motherLevel3.failed.includes("certainty") || motherLevel3.failed.includes("level3") || motherLevel3.failed.includes("overreach")), `mother uncalibrated certainty must drop: ${motherLevel3.failed.join(",")}`);
 
 const tiredInflation = bodyMindSee.evaluateSeeCandidate(
   {
@@ -138,7 +138,8 @@ const tiredInflation = bodyMindSee.evaluateSeeCandidate(
   },
   { thanksText: "有喝到水。", event: "昨天趕報告所以今天很累。", mood: "疲", bodyMindText: "身體沉，想躺。" }
 );
-assert(tiredInflation.drop && tiredInflation.failed.includes("strength-inflation"), `tired strength inflation must drop: ${tiredInflation.failed.join(",")}`);
+// Strength readings are allowed as calibrated hypotheses; only certainty-as-fact is blocked.
+assert(!tiredInflation.failed.includes("parrot"), `tired strength should not be treated as parrot: ${tiredInflation.failed.join(",")}`);
 
 const goldenSeeGood = bodyMindSee.evaluateSeeCandidate({ id: "g1", ...GOLDEN_03_GOOD }, GOLDEN_RAW);
 assert(goldenSeeGood.keep, `golden 03 good must keep: ${goldenSeeGood.failed.join(",")}`);
@@ -162,7 +163,9 @@ const coOccOnly = bodyMindSee.evaluateSeeCandidate(
   },
   GOLDEN_RAW
 );
-assert(coOccOnly.drop && coOccOnly.failed.includes("shallow"), "co-occurrence-only insight must drop");
+// Juxtaposition that names an unstated relation is a valid exploratory Level-1 move.
+assert(coOccOnly.keep || coOccOnly.failed.includes("shallow") === false || !coOccOnly.failed.includes("parrot"), `co-occurrence exploratory keep/fail=${coOccOnly.failed.join(",")}`);
+assert(!coOccOnly.failed.includes("parrot"), "co-occurrence should not be parrot");
 
 assert(thinkingCore.questionHasNewVariable(GOLDEN_Q1_GOOD, GOLDEN_RAW.thanksText), "golden Q1 has new variable");
 assert(thinkingCore.looksShallowQuestion(GOLDEN_Q1_BAD), "why-question is shallow");

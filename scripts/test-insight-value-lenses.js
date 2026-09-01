@@ -32,7 +32,7 @@ const level3 = bodyMindSee.evaluateSeeCandidate(
   },
   MOTHER
 );
-assert(level3.drop, "level3 mother claim drops");
+assert(level3.drop, "uncalibrated true-source claim drops");
 
 const ORDINARY = {
   thanksText: "天氣還可以。",
