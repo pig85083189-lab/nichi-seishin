@@ -563,6 +563,10 @@ body.nav-closed .side-logout {
   font-weight: 600;
 }
 
+#insightLabLink[hidden] {
+  display: none !important;
+}
+
 .side-auth {
   margin-top: auto;
   padding-top: 16px;

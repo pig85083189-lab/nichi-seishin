@@ -34,11 +34,12 @@ assert(!fs.existsSync(path.join(root, "api/insight-lab.js")), "api/insight-lab.j
 assert(!vercel.includes("api/insight-lab.js"), "vercel.json has no insight-lab function");
 
 assert(html.includes("app.js?v=277"), "cache app.js");
-assert(html.includes("app.css?v=231"), "cache css");
+assert(html.includes("app.css?v=232"), "cache css");
 assert(html.includes('id="insightLabLink"'), "sidebar Insight Lab");
 assert(html.includes("Internal"), "Internal badge");
 assert(html.includes('data-page="lab"'), "lab page");
 assert(html.includes("hidden"), "lab link starts hidden");
+assert(/#insightLabLink\[hidden\]\s*\{\s*display:\s*none\s*!important;/.test(css), "hidden Lab link beats .side-item display");
 
 assert(app.includes("function syncInsightLabLink"), "internal link sync");
 assert(app.includes('page === "lab" && !isInternalMembership()'), "non-internal cannot stay on lab");

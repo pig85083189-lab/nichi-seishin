@@ -33,7 +33,7 @@ const REFERENCE_CTX = {
 };
 
 assert(html.includes("app.js?v=277"), "cache app.js");
-assert(html.includes("app.css?v=231"), "cache css");
+assert(html.includes("app.css?v=232"), "cache css");
 assert(html.includes("lib/review-merge.js?v=25"), "cache merge");
 assert(!html.includes("CREATE TABLE") && !app.includes("ALTER TABLE"), "zero schema");
 
