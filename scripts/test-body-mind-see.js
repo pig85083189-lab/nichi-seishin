@@ -163,14 +163,20 @@ assert(bodyMind.BODY_MIND_SYSTEM.includes("2～4") || bodyMind.BODY_MIND_SYSTEM.
       return { insight: fx.A.candidate.statement, support: fx.A.candidate.whyItMatters };
     },
   });
-  assert(parroted.status === "silence", `A pipeline silence not parrot: ${parroted.status} ${parroted.insight}`);
+  assert(parroted.status === "observation", `A parrot candidate drops but fallback may still give distinction: ${parroted.status}`);
+  assert(!/你今天的疲累可能和昨天晚睡有關/.test(parroted.insight), "A must not ship parrot candidate verbatim");
+  assert(!/看得滿清楚|暫時沒有看到需要再被解讀/.test(`${parroted.insight}${parroted.support}`), "A must not use stock silence");
 
   const ordinary = await bodyMindSee.runSeePipeline({
     ctx: fx.E.ctx,
     callAi: async () => ({ candidates: [] }),
   });
-  assert(ordinary.status === "silence", "E empty candidates is warm silence");
-  assert(ordinary.insight === bodyMind.SEE_SILENCE_COPY.insight, "E uses product silence copy");
+  assert(ordinary.status === "observation" || ordinary.status === "silence", `E fallback or sparse: ${ordinary.status}`);
+  if (ordinary.status === "silence") {
+    assert(ordinary.insight === bodyMind.SEE_SPARSE_COPY.insight, "E sparse uses neutral copy");
+  } else {
+    assert(!/看得滿清楚|暫時沒有看到需要再被解讀/.test(`${ordinary.insight}${ordinary.support}`), "E must not use stock already-clear copy");
+  }
 
   const connected = await bodyMindSee.runSeePipeline({
     ctx: fx.B.ctx,
@@ -217,13 +223,17 @@ assert(bodyMind.BODY_MIND_SYSTEM.includes("2～4") || bodyMind.BODY_MIND_SYSTEM.
     ctx: fx.P4.ctx,
     callAi: async () => ({ candidates: [] }),
   });
-  assert(seededP4.status === "silence", "P4 unrelated goods still silence");
+  assert(seededP4.status === "observation", `P4 unrelated goods may still get ordinary-life lens: ${seededP4.status}`);
+  assert(!/生活的熱愛|都指向你/.test(`${seededP4.insight}${seededP4.support}`), "P4 must not force fake common thread");
 
   const seededP5 = await bodyMindSee.runSeePipeline({
     ctx: fx.P5.ctx,
     callAi: async () => ({ candidates: [] }),
   });
-  assert(seededP5.status === "silence", "P5 explicit cause does not seed parrot");
+  assert(seededP5.status === "observation" || seededP5.status === "silence", `P5 explicit cause: ${seededP5.status}`);
+  if (seededP5.status === "observation") {
+    assert(!/都是因為一直有人陪我/.test(seededP5.insight), "P5 must not parrot explicit causal conclusion");
+  }
 
   console.log("body-mind SEE fixtures A-J and P1-P5 passed");
 })().catch((error) => {

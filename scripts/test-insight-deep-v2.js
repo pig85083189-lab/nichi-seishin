@@ -89,6 +89,57 @@ const GOLDEN_06_BAD = {
   sourceAwarenessIds: ["a1"],
 };
 
+const MOTHER_CONFLICT_RAW = {
+  thanksText: "",
+  event: "今天跟我媽吵了一架，因為她覺得我常常跟我男友吵架，所以她覺得影響到她的心情了，讓我感覺她好像有拋棄我的感覺。",
+  mood: "難過",
+  bodyMindText: "胸口很悶，說完還是有點空空的。",
+};
+
+const motherConflict = bodyMindSee.evaluateSeeCandidate(
+  {
+    id: "m1",
+    type: "CONTRAST",
+    statement: "有一個角度是：媽媽說的是她的心情被影響，而你心裡接住的，可能是另一種被拋下的感覺。",
+    evidence: ["她覺得影響到她的心情了", "讓我感覺她好像有拋棄我的感覺"],
+    newInformation: "對方在說什麼，和這對我意味著什麼，可能是兩件事",
+    whyItMatters: "分開看這兩層，不一定是在替誰辯護，而是先看見自己為什麼會這麼痛。",
+    alternative: "也可能她並沒有那個意思。",
+    confidence: "medium",
+    fallbackLens: true,
+  },
+  MOTHER_CONFLICT_RAW
+);
+assert(motherConflict.keep, `mother-conflict regression must keep: ${motherConflict.failed.join(",")}`);
+
+const motherLevel3 = bodyMindSee.evaluateSeeCandidate(
+  {
+    id: "m3",
+    type: "UNNOTICED_NEED",
+    statement: "妳感到被看見的需要落空了——那份『我也在乎妳』沒有被聽到，才是胸口悶、空空的真實來源。",
+    evidence: ["讓我感覺她好像有拋棄我的感覺", "胸口很悶"],
+    newInformation: "真實來源是被看見的需要",
+    whyItMatters: "真正原因是需要沒有被聽到。",
+    confidence: "high",
+  },
+  MOTHER_CONFLICT_RAW
+);
+assert(motherLevel3.drop && motherLevel3.failed.includes("level3"), `mother Level3 must drop: ${motherLevel3.failed.join(",")}`);
+
+const tiredInflation = bodyMindSee.evaluateSeeCandidate(
+  {
+    id: "t-inf",
+    type: "UNRECOGNIZED_STRENGTH",
+    statement: "即使很累，妳依然有照顧自己的能力。",
+    evidence: ["昨天趕報告所以今天很累", "有喝到水"],
+    newInformation: "疲憊中仍照顧自己",
+    whyItMatters: "疲憊不等於無能為力。",
+    confidence: "medium",
+  },
+  { thanksText: "有喝到水。", event: "昨天趕報告所以今天很累。", mood: "疲", bodyMindText: "身體沉，想躺。" }
+);
+assert(tiredInflation.drop && tiredInflation.failed.includes("strength-inflation"), `tired strength inflation must drop: ${tiredInflation.failed.join(",")}`);
+
 const goldenSeeGood = bodyMindSee.evaluateSeeCandidate({ id: "g1", ...GOLDEN_03_GOOD }, GOLDEN_RAW);
 assert(goldenSeeGood.keep, `golden 03 good must keep: ${goldenSeeGood.failed.join(",")}`);
 assert(!thinkingCore.looksLabelOnly(GOLDEN_03_GOOD.statement, GOLDEN_03_GOOD.whyItMatters), "golden 03 is not label-only");
@@ -202,15 +253,27 @@ const JOURNEYS = [
     id: "J2",
     label: "ordinary day",
     raw: { thanksText: "天氣還可以。", event: "上班、開會、回家。", mood: "平", bodyMindText: "還好。" },
-    expect: { silence: true },
-    canned: { see: "", q1: "", grow: "", act: null },
+    expect: { see: "interpretation", valueFirst: true },
+    seeRange: /節奏|放在一起|留意|普通|流動/,
+    canned: {
+      see: "如果把今天寫下的幾段放在一起看，妳特別留意的，好像是生活如何在不同節奏之間切換。",
+      q1: "",
+      grow: "",
+      act: null,
+    },
   },
   {
     id: "J3",
     label: "tired day",
     raw: { thanksText: "有喝到水。", event: "昨天趕報告所以今天很累。", mood: "疲", bodyMindText: "身體沉，想躺。" },
-    expect: { silence: true },
-    canned: { see: "", q1: "", grow: "", act: null },
+    expect: { see: "interpretation", valueFirst: true },
+    seeRange: /知道|身體|原因|累/,
+    canned: {
+      see: "妳好像已經知道今天為什麼會這樣；同時身體留下的，可能是另一個訊號：現在需要的，也許不只是把原因想清楚。",
+      q1: "",
+      grow: "",
+      act: null,
+    },
   },
   {
     id: "J4",
@@ -389,7 +452,11 @@ for (const row of JOURNEYS) {
   });
   if (row.expect.silence) {
     assert(!canned.see || thinkingCore.looksLabelOnly(canned.see, ""), `${row.id} silence fixture should not ship a shallow insight`);
-    grades.push({ id: row.id, grade: "A", why: "honest silence / already-clear; no fake depth" });
+    grades.push({ id: row.id, grade: "A", why: "sparse / already-clear; no fake depth" });
+    continue;
+  }
+  if (row.expect.valueFirst && !canned.see) {
+    grades.push({ id: row.id, grade: "B", why: "value-first journey may use fallback lens" });
     continue;
   }
   if (row.seeRange) {
@@ -398,7 +465,11 @@ for (const row of JOURNEYS) {
   if (row.q1Range) {
     assert(row.q1Range.test(canned.q1), `${row.id} q1 misses semantic range`);
   }
-  const newInterp = thinkingCore.hasInterpretiveMove(canned.see) || thinkingCore.hasInterpretiveMove(canned.convergence) || thinkingCore.hasInterpretiveMove(canned.grow);
+  const newInterp =
+    thinkingCore.hasInterpretiveMove(canned.see) ||
+    thinkingCore.hasInterpretiveMove(canned.convergence) ||
+    thinkingCore.hasInterpretiveMove(canned.grow) ||
+    (row.expect.valueFirst && require("../lib/insight-value-lenses").candidateAddsNovelValue(canned.see, row.raw));
   assert(newInterp, `${row.id} must create a new interpretation/reframe`);
   grades.push({ id: row.id, grade: "A", why: "canned journey has new interpretation and passes hard gates" });
 }
