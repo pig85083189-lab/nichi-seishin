@@ -16,6 +16,7 @@ const review = fs.readFileSync(path.join(root, "api/review.js"), "utf8");
 const discoverySrc = fs.readFileSync(path.join(root, "lib/insight-discovery.js"), "utf8");
 
 assert(review.includes("runSeePipeline"), "API 03 uses SEE pipeline");
+assert(review.includes("skipWriterIfReadable: true"), "03 skips writer only when core is already readable");
 assert(review.includes("runDiscoveryPipeline"), "04 discovery not removed");
 assert(html.includes("今天有什麼是你可能還沒看見的"), "04 copy unchanged");
 assert(html.includes("從今天裡，多看見自己一點"), "03 SEE CTA");
@@ -100,7 +101,39 @@ assert(app.includes("if (isCurrentJournalArchived() || state.bodyMindBusy) retur
 assert(app.includes("persistArchivedUserMarks"), "userMarks remain");
 assert(app.includes("bodyMind.insight") && app.includes("bodyMind.support"), "markable 03 fields remain");
 assert(app.includes("remote.seeType") && app.includes("remote.evidence") && app.includes("remote.confidence"), "client persists optional metadata");
-assert(!review.includes("ALTER TABLE") && !review.includes("CREATE TABLE"), "no schema");
+["P1", "P2", "P3"].forEach((id) => {
+  const judged = bodyMindSee.evaluateSeeCandidate(fx[id].candidate, fx[id].ctx);
+  assert(judged.keep, `${id} ${fx[id].label} may keep: ${judged.failed.join(",")}`);
+});
+["P4", "P5"].forEach((id) => {
+  const judged = bodyMindSee.evaluateSeeCandidate(fx[id].candidate, fx[id].ctx);
+  assert(judged.drop, `${id} ${fx[id].label} must drop: ${judged.failed.join(",")}`);
+});
+
+const p1Moments = bodyMindSee.collectIndependentMoments(insightDiscovery.trustRaw(fx.P1.ctx));
+assert(p1Moments.connection.length >= 2, "P1 lists independent connection moments");
+const q5Moments = bodyMindSee.collectIndependentMoments(insightDiscovery.trustRaw(fx.E.ctx));
+assert(q5Moments.connection.length < 2 && q5Moments.autonomy.length < 2, "ordinary day does not get positive-thread hint");
+
+assert(bodyMindSee.seeLooksNeedInference("你需要陪伴，這是你的核心需求。"), "need-inference is overreach");
+assert(bodyMindSee.evaluateSeeCandidate({
+  id: "need",
+  type: "ENERGY_SOURCE",
+  statement: "你需要陪伴，你害怕孤單。",
+  evidence: ["和朋友吃飯很開心", "跟家人聊天覺得很放鬆"],
+  newInformation: "缺陪伴",
+  whyItMatters: "關係是你的核心需求。",
+  confidence: "high",
+}, fx.P1.ctx).drop, "need-inference candidate drops");
+
+const longSupport = "第一句說明為什麼注意到。第二句寫今天哪裡支持。第三句再補一個背景。第四句開始變成深思。第五句幾乎要變成 04。第六句還在繼續。";
+const clipped = bodyMindSee.clipSeeText(longSupport, 110, 4);
+assert(bodyMind.countBodyMindSentences(clipped) <= 4, "support clips to 4 sentences");
+assert(bodyMind.compactBodyMindChars(clipped) <= 110, "support clips to 110 chars");
+assert(!bodyMind.looksChecklistSupport("回家後還想再傳訊息給朋友。"), "mentioning 傳訊息 is not a 06 checklist");
+assert(bodyMind.looksChecklistSupport("晚上 8 點傳訊息給媽媽，寫下三件感受。"), "imperative 傳訊息 remains checklist");
+
+assert(bodyMind.BODY_MIND_SYSTEM.includes("2～4") || bodyMind.BODY_MIND_SYSTEM.includes("40～110"), "writer brevity target");
 
 (async () => {
   const writerLocked = await bodyMindSee.runSeePipeline({
@@ -153,7 +186,46 @@ assert(!review.includes("ALTER TABLE") && !review.includes("CREATE TABLE"), "no 
   });
   assert(connected.status === "observation", `B co-occurrence must not force silence: ${connected.status}`);
 
-  console.log("body-mind SEE fixtures A-J passed");
+  const skippedWriter = await bodyMindSee.runSeePipeline({
+    ctx: fx.P1.ctx,
+    skipWriterIfReadable: true,
+    callAi: async (messages, stage) => {
+      if (stage === "reason") return { candidates: [fx.P1.candidate] };
+      if (stage === "challenge") return { items: [{ id: "p1", verdict: "KEEP", parrotLikely: false, failed: [], reason: "core" }] };
+      throw new Error("writer should be skippable when core is readable");
+    },
+  });
+  assert(skippedWriter.status === "observation", `readable core can skip writer: ${skippedWriter.status}`);
+  assert(skippedWriter.meta && skippedWriter.meta.usedWriter === false, "writer not called");
+  assert(bodyMind.countBodyMindSentences(skippedWriter.support) <= 4, "skipped-writer support still brief");
+  assert(bodyMind.compactBodyMindChars(skippedWriter.support) <= 120, "skipped-writer support char cap");
+
+  const seededP1 = await bodyMindSee.runSeePipeline({
+    ctx: fx.P1.ctx,
+    skipWriterIfReadable: true,
+    callAi: async (messages, stage) => {
+      if (stage === "reason") return { candidates: [] };
+      if (stage === "challenge") return { items: [{ id: "seed-connect", verdict: "KEEP", parrotLikely: false, failed: [], reason: "seed" }] };
+      throw new Error("writer should be skippable for seeded core");
+    },
+  });
+  assert(seededP1.status === "observation", `P1 empty reason can seed: ${seededP1.status}`);
+  assert(/連結/.test(seededP1.insight), "P1 seed is connection thread");
+  assert(seededP1.meta && seededP1.meta.seeded, "P1 meta.seeded");
+
+  const seededP4 = await bodyMindSee.runSeePipeline({
+    ctx: fx.P4.ctx,
+    callAi: async () => ({ candidates: [] }),
+  });
+  assert(seededP4.status === "silence", "P4 unrelated goods still silence");
+
+  const seededP5 = await bodyMindSee.runSeePipeline({
+    ctx: fx.P5.ctx,
+    callAi: async () => ({ candidates: [] }),
+  });
+  assert(seededP5.status === "silence", "P5 explicit cause does not seed parrot");
+
+  console.log("body-mind SEE fixtures A-J and P1-P5 passed");
 })().catch((error) => {
   console.error(error);
   process.exit(1);

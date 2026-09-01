@@ -3904,7 +3904,7 @@ module.exports = async function handler(req, res) {
           timeoutMs: internalUser ? 20000 : Math.min(Number(aiOpts.timeoutMs) || 16000, 16000),
           maxTokens: stage === "write" ? 400 : stage === "challenge" ? 700 : 900,
         });
-      const seen = await bodyMindSee.runSeePipeline({ callAi, ctx });
+      const seen = await bodyMindSee.runSeePipeline({ callAi, ctx, skipWriterIfReadable: true });
       res.status(200).json({
         ok: true,
         source: getProvider(),

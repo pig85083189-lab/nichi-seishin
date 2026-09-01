@@ -155,7 +155,7 @@ assert(!app.includes("覺察一句話"), "不再顯示舊 insight 標籤");
 assert(!app.includes("給今天的你"), "不再顯示舊 support 標籤");
 assert(bodyMind.BODY_MIND_SYSTEM.includes("ONE CORE INSIGHT ONLY"), "只留一個核心");
 assert(bodyMind.BODY_MIND_SYSTEM.includes("25～55"), "覺察字數上限");
-assert(bodyMind.BODY_MIND_SYSTEM.includes("30～70"), "引導字數上限");
+assert(bodyMind.BODY_MIND_SYSTEM.includes("40～110") || bodyMind.BODY_MIND_SYSTEM.includes("2～4"), "support 篇幅上限");
 assert(bodyMind.BODY_MIND_SYSTEM.includes("不要搶 06"), "引導不搶 06");
 assert(bodyMind.BODY_MIND_SYSTEM.includes("不要找問題"), "正向不硬找問題");
 assert(bodyMind.bodyMindSourceStale({ text: "舊文字", insight: "核心一句。", support: "往下看一眼。", sig: "舊文字\n事件\n心情" }, "改過的新文字"), "改字後 stale");
