@@ -30,8 +30,19 @@ const baby = insightDiscovery.QUALITY_FIXTURES.A;
 const known = insightDiscovery.buildKnownByUser(insightDiscovery.trustRaw(baby.raw));
 assert(known.some((item) => /幸福/.test(item.text)), "KNOWN locks stated happiness");
 assert(known.some((item) => /聊/.test(item.text)), "KNOWN locks more talk");
-assert(known.some((item) => item.kind === "link"), "KNOWN locks user-made link");
+assert(!known.some((item) => item.kind === "link"), "Baby A co-occurrence is not a KNOWN link");
+assert(!JSON.stringify(known).includes("同一段把對話與幸福"), "no fact-co-occurrence link");
 assert(!JSON.stringify(known).includes("選擇權"), "03 AI never enters KNOWN");
+
+const explicitRaw = insightDiscovery.trustRaw({
+  thanksText: "跟 Baby 多聊天讓我覺得幸福。",
+  event: "今天很開心。",
+  mood: "開心",
+  bodyMindText: "身體還好。",
+});
+const explicitKnown = insightDiscovery.buildKnownByUser(explicitRaw);
+assert(explicitKnown.some((item) => item.kind === "link"), "explicit 讓我覺得 becomes KNOWN link");
+assert(insightDiscovery.hasExplicitConnectionLanguage(explicitRaw.thanksText), "explicit connection language detected");
 
 const poisoned = insightDiscovery.trustRaw({
   ...baby.raw,
@@ -173,6 +184,140 @@ mark("A", aBads.every((row) => row.drop), `BAD dropped ${aBads.filter((row) => r
 
   const sig = reflectionV3.reflectionV3SourceSig({ ...baby.raw, bodyMindInsight: "AI 假設" });
   assert(!sig.includes("AI 假設"), "04 sourceSig is USER RAW only");
+
+  const noteRaw = insightDiscovery.trustRaw({
+    thanksText: "今天沒有一直滑手機，下午把抽屜清完了。",
+    event: "清抽屜時找到去年寫給自己的紙條，上面寫「少一點證明給別人看」。我當下停了一下，後來把那張紙夾回手帳。晚上本來想再改一版履歷，最後沒改。",
+    mood: "平靜",
+    bodyMindText: "清東西的時候手很忙，但肩膀比這週前幾天鬆。",
+  });
+  const noteKnown = insightDiscovery.buildKnownByUser(noteRaw);
+  assert(!noteKnown.some((item) => item.kind === "link"), "note × resume co-occurrence is not KNOWN connection");
+  const noteDiscovery = "你下午剛重新看到「少一點證明給別人看」，晚上原本想再改履歷，最後卻停下來了。這兩件事放在一起看，值得注意。";
+  assert(!insightDiscovery.parrotLikely(noteDiscovery, noteKnown, noteRaw), "juxtaposition is not parrot");
+  assert(
+    !insightDiscovery.looksExactKnown(noteDiscovery, noteKnown, noteRaw),
+    "A and B in RAW does not make the relationship known"
+  );
+  assert(
+    insightDiscovery.looksExactKnown("手在忙，但肩膀比這週前幾天鬆。", noteKnown, noteRaw),
+    "user-written 但 contrast stays KNOWN"
+  );
+
+  const bowlRaw = insightDiscovery.trustRaw({
+    thanksText: "至少今天把話講完了。",
+    event: "我知道我生氣不是因為碗，是因為每次都要我先開口。",
+    mood: "鬆一點",
+    bodyMindText: "胸口沒那麼緊了。",
+  });
+  const bowlKnown = insightDiscovery.buildKnownByUser(bowlRaw);
+  assert(bowlKnown.some((item) => item.kind === "link"), "explicit 不是因為／是因為 is KNOWN");
+  const bowlRestate = insightDiscovery.evaluateBadStatement("你真正生氣的是每次都要你先開口。", bowlRaw);
+  assert(bowlRestate.drop, "explicit-cause restatement still DROP");
+
+  const bossRaw = insightDiscovery.trustRaw({
+    thanksText: "還是有把報告交出去。",
+    event: "主管當眾改了我的數字，我當下沒說話，下午一直在重做表。下班前他又說其實早上那版就可以。我回家後一直想他到底要怎樣。",
+    mood: "悶",
+    bodyMindText: "太陽穴一直跳，肩膀往耳朵縮。",
+  });
+  const bossKnown = insightDiscovery.buildKnownByUser(bossRaw);
+  const bossOverreach = {
+    id: "c1",
+    type: "CONTRAST",
+    statement: "主管的兩個指令完全相反，但妳的身體反應沒有隨著他的後半句其實可以而鬆開，身體已經進入無法預測他的警報狀態。",
+    evidence: ["主管當眾改了我的數字", "下班前他又說其實早上那版就可以", "我回家後一直想他到底要怎樣"],
+    newInformation: "身體沒有因為其實可以而解除警報",
+    whyItMatters: "這暗示她進入了無法預測他的狀態",
+    confidence: "high",
+  };
+  const salvagedBoss = insightDiscovery.salvageCore(bossOverreach, bossKnown, bossRaw, {});
+  assert(salvagedBoss, "Case 02 addon overreach salvages core");
+  assert(!/警報|無法預測|解除警報/.test(`${salvagedBoss.statement} ${salvagedBoss.whyItMatters}`), "salvage strips body-alarm addon");
+
+  const writerCore = {
+    statement: "你說工作是為了生活品質，但自願加班到十一點，也連續三次放同事鴿子。",
+    whyItMatters: "嘴上的理由和實際把時間給誰，現在對不上。",
+    newInformation: "價值說法與行為落差",
+  };
+  assert(
+    insightDiscovery.writerIntroducesMeaning(writerCore, {
+      statement: writerCore.statement,
+      why: "這個落差本身在耗能。不是工作累，而是自我欺騙在消耗你。",
+    }),
+    "Writer 自我欺騙 is new meaning"
+  );
+
+  const writerLocked = await insightDiscovery.runDiscoveryPipeline({
+    ctx: {
+      thanksText: "我一直跟自己說這份工作是為了生活品質。",
+      event: "又自願加班到十一點。同事傳訊約週末爬山，我回他下次一定去，但其實已經第三次這樣回了。",
+      mood: "疲憊",
+      bodyMindText: "眼睛乾，脖子硬。",
+    },
+    callAi: async (messages, stage) => {
+      if (stage === "reason") {
+        return {
+          candidates: [
+            {
+              id: "w1",
+              type: "CONTRAST",
+              statement: "你說工作是為了生活品質，但自願加班到十一點，也連續三次放同事鴿子。",
+              evidence: ["我一直跟自己說這份工作是為了生活品質", "又自願加班到十一點", "已經第三次這樣回了"],
+              newInformation: "價值說法與行為落差",
+              whyItMatters: "嘴上的理由和實際把時間給誰，現在對不上。",
+              confidence: "high",
+            },
+          ],
+        };
+      }
+      if (stage === "challenge") return { items: [{ id: "w1", verdict: "KEEP", parrotLikely: false, failed: [], reason: "core" }] };
+      return {
+        statement: "你說工作是為了生活品質，但行動在縮水生活品質。",
+        why: "不是工作累，而是自我欺騙在消耗你。",
+        question: null,
+      };
+    },
+  });
+  assert(writerLocked.status === "discovery", "writer reject still keeps core");
+  assert(!/自我欺騙/.test(`${writerLocked.discovery.statement} ${writerLocked.discovery.why}`), "final output has no 自我欺騙");
+
+  const noteKept = await insightDiscovery.runDiscoveryPipeline({
+    ctx: noteRaw,
+    callAi: async (messages, stage) => {
+      if (stage === "reason") {
+        return {
+          candidates: [
+            {
+              id: "n1",
+              type: "CONNECTION",
+              statement: noteDiscovery,
+              evidence: ["少一點證明給別人看", "晚上本來想再改一版履歷，最後沒改"],
+              newInformation: "這兩件事的關係她還沒明說",
+              whyItMatters: "放在一起看，好像有個值得注意的地方。",
+              confidence: "high",
+            },
+          ],
+        };
+      }
+      if (stage === "challenge") {
+        return {
+          items: [
+            {
+              id: "n1",
+              verdict: "DROP",
+              parrotLikely: true,
+              failed: ["known", "paraphrase", "parrot"],
+              reason: "A and B both exist in RAW",
+            },
+          ],
+        };
+      }
+      return { statement: noteDiscovery, why: "放在一起看，好像有個值得注意的地方。", question: null };
+    },
+  });
+  assert(noteKept.status === "discovery", `co-occurrence must not force silence: ${noteKept.status}`);
+  assert(noteKept.discovery && noteKept.discovery.type === "CONNECTION", "Case 09 direction stays CONNECTION");
 
   console.log("insight discovery fixtures", JSON.stringify(fixtureResults));
   console.log("insight discovery tests passed");
