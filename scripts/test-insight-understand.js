@@ -266,6 +266,116 @@ function scriptedAi(reason, write) {
   const oQ = insightUnderstand.evaluateQuestion(fx.O.rejectQuestion, fx.A.raw);
   assert(oQ.leading && oQ.drop, "O｜誘導題必須拒絕");
 
+  const j2Raw = {
+    thanksText: "工作還在，報告最後還是交出去了。",
+    event: "主管下午突然把需求改掉，要我重做一版。我當下就不舒服，其實已經知道自己不太想重做，最後還是立刻答應了。",
+    mood: "悶",
+    bodyMindText: "肩膀一下子緊起來，胃也有點沉。答應完更緊。",
+  };
+  const j2Ans = await insightUnderstand.runUnderstandPipeline({
+    step: "answer",
+    ctx: {
+      ...j2Raw,
+      userAnswer: "我想先說明天早上再補，可是當下還是答應了。有點怕他覺得我不配合。",
+      understand: {
+        stage: "asked1",
+        focus: "知道不太想，和最後還是答應之間的距離。",
+        whyWorthThinking: "你已經看見自己的不舒服。",
+        question: "當你說立刻答應的時候，是什麼讓你在那一刻選擇了答應？",
+      },
+    },
+    prior: {
+      stage: "asked1",
+      focus: "知道不太想，和最後還是答應之間的距離。",
+      whyWorthThinking: "你已經看見自己的不舒服。",
+      question: "當你說立刻答應的時候，是什麼讓你在那一刻選擇了答應？",
+    },
+    callAi: scriptedAi({
+      revised: true,
+      enough: false,
+      question2: "當你想說『明天早上再補』的時候，你有沒有真的開口考慮過說出來？還是那個念頭一出現，『怕他覺得我不配合』就立刻蓋過去了，還是有別的原因？",
+      convergence: "這是在躲避感覺本身，而不是在評估拒絕的後果。",
+      status: "ask2",
+    }),
+  });
+  assert(j2Ans.understand.stage === "converged", "J2｜Q1 已足夠則不准 Q2");
+  assert(!j2Ans.understand.question2, "J2｜禁止重複拆答案的 Q2");
+  assert(!/躲避感覺|逃避感覺/.test(j2Ans.understand.convergence), "J2｜不可把怕不配合升級成躲避感覺");
+  assert(/不配合/.test(j2Ans.understand.convergence), "J2｜收斂必須跟著 USER ANSWER");
+
+  const j4 = await insightUnderstand.runUnderstandPipeline({
+    ctx: {
+      thanksText: "還有家可以回。",
+      event: "媽媽又提起要我搬出去。這次我有說我想再想一週，沒有立刻答應。心裡同時想著她的負擔、我的房租、還有現在工作還不穩。",
+      mood: "忐忑",
+      bodyMindText: "胸口緊，但把「再想一週」說完之後有鬆一點。",
+    },
+    usedPast: [],
+    callAi: scriptedAi({
+      stop: false,
+      focus: { statement: "這跟你平常立刻答應不太一樣。", source: "growth", whyWorthThinking: "這跟你平常立刻答應不太一樣。不是把它當成又來一次。" },
+      past: { use: false },
+      possibilities: [{ id: "A", text: "你開始能停下來。" }, { id: "B", text: "今天剛好有空間。" }, { id: "C", text: "只是想再想一週。" }],
+      question: null,
+      status: "stop",
+    }),
+  });
+  assert(!/平常/.test(`${j4.understand.focus} ${j4.understand.whyWorthThinking} ${j4.understand.convergence}`), "J4｜無歷史不可寫平常立刻答應");
+  assert(/這次|沒有立刻/.test(`${j4.understand.focus} ${j4.understand.whyWorthThinking} ${j4.understand.convergence}`), "J4｜改寫成今天觀察");
+
+  const j10 = await insightUnderstand.runUnderstandPipeline({
+    ctx: fx.F.raw,
+    usedPast: [],
+    callAi: scriptedAi({
+      stop: false,
+      focus: { statement: "朋友沒回訊息，胸口空空的", source: "raw", whyWorthThinking: "這是今天真實發生的事。你已經看清楚了：沒有回應 → 難過 → 身體感受到空。" },
+      past: { use: false },
+      possibilities: [],
+      question: null,
+      status: "stop",
+    }),
+  });
+  assert(j10.status === "silence" || j10.understand.stage === "stop", "J10｜薄而含糊不可假裝收斂");
+
+  const j7Snippets = retrieval.snippetsForSelectedPast(reviewsFor(fx.D.past), [
+    { date: fx.D.past.date, score: 4, connectionType: "same-situation", provenance: { userRaw: true, userConfirmed: false, aiHypothesis: false } },
+  ]);
+  const j7 = await insightUnderstand.runUnderstandPipeline({
+    ctx: {
+      thanksText: "今天有先問一句，沒有立刻開做。",
+      event: "同事臨時丟一份報告，要我今晚弄完。我這次先問「今晚一定要嗎，還是明天早上也可以？」沒有立刻開始做。",
+      mood: "定",
+      bodyMindText: "問之前肩膀緊，問完比較穩，還沒收到回覆。",
+    },
+    usedPast: insightUnderstand.understandGatePast(j7Snippets).used,
+    callAi: scriptedAi({
+      stop: false,
+      focus: { statement: "在肩膀緊的當下停下來問了一句", source: "see-hypothesis", whyWorthThinking: "這不是小事。" },
+      past: { use: false },
+      possibilities: [{ id: "A", text: "你開始有選擇。" }, { id: "B", text: "今天剛好。" }, { id: "C", text: "期限本來就鬆。" }],
+      question: null,
+      status: "stop",
+    }),
+  });
+  assert(j7.understand.past && j7.understand.past.used, "J7｜有效歷史改變反應不可默默丟掉");
+  assert(!j7.understand.pastDrop, "J7｜使用歷史時沒有 drop");
+
+  const dropPast = insightUnderstand.understandGatePast(j7Snippets).used;
+  const dropped = await insightUnderstand.runUnderstandPipeline({
+    ctx: fx.E.raw,
+    usedPast: dropPast,
+    callAi: scriptedAi({
+      stop: false,
+      focus: { statement: "你第一次把想說的話先寫下來再傳。", source: "growth", whyWorthThinking: "這不是普通的傳訊息。" },
+      past: { use: false },
+      possibilities: [{ id: "A", text: "整理思路" }, { id: "B", text: "敢說" }, { id: "C", text: "剛好有空間" }],
+      question: "先寫下來再傳，對你來說比較接近整理思路，還是讓自己敢說，或有別的原因？",
+      status: "ask",
+    }),
+  });
+  assert(!dropped.understand.past || !dropped.understand.past.used, "不相干歷史可以不用");
+  assert(dropped.understand.pastDrop && dropped.understand.pastDrop.reason, "J7-drop｜不用時必須留下原因");
+
   const merged = reviewMerge.mergeJournalObjects(
     { insight: { guide: { variant: "reflection-v3", status: "understand", sourceSig: "a", coreQuote: "焦點", understand: { variant: "understand-v1", stage: "asked1", focus: "焦點" } } } },
     { insight: { guide: { variant: "reflection-v3", status: "understand", sourceSig: "a", coreQuote: "焦點", questions: [{ id: "q1", text: "問句" }] } } }

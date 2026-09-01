@@ -35,6 +35,9 @@ assert(!review.includes("CREATE TABLE") && !review.includes("ALTER TABLE"), "zer
 assert(html.includes("今天，你可以帶走哪些覺察？"), "new-day 05 lead");
 assert(html.includes("看看今天可以帶走的覺察"), "new-day 05 CTA");
 assert(app.includes("哪一個最像今天的你？"), "selection prompt");
+assert(app.includes("前面的思考裡，有一個地方值得你確認一下。"), "05 confirmation bridge copy");
+assert(app.includes("今天沒有一定要帶走的行動。"), "stop-heavy 06 copy");
+assert(app.includes("前面的內容先停在這裡也可以。"), "stop-heavy 06 line2");
 assert(app.includes("不用為了多一個答案，再替自己加一個標籤。"), "warm empty");
 assert(app.includes("isGrowAwarenessBag"), "grow bag helper");
 assert(app.includes("!isGrowAwarenessBag(bag)"), "new-day grow skips observation cue");
@@ -246,6 +249,42 @@ function ctxOf(row) {
     ctx: ctxOf({ ...fx.F, raw: BASE, understand: { stage: "converged", focus: "臨時變動", convergence: "消耗" } }),
   });
   assert(!parrotOnly.items.length && parrotOnly.status === "empty", "只剩 03 複述時正確停止");
+
+  const j9 = await insightGrow.runGrowPipeline({
+    callAi: async () => ({
+      stop: false,
+      candidates: [{ id: "a1", type: "ALREADY_DONE", title: "我看見自己說yes的真實原因", text: "害怕被評價不配合，所以選擇留下來。這個看見已經發生。", whyCarry: "標籤", evidence: ["RAW"] }],
+    }),
+    ctx: {
+      thanksText: "還能把事情做完。",
+      event: "主管臨時改工作，我不舒服。我很清楚是怕他覺得我不配合，所以才留下來。原因我已經知道了，今天不想再分析。",
+      mood: "悶",
+      bodyMindText: "肩膀緊，但我已經知道為什麼答應，沒有要再問自己為什麼。",
+      understand: { stage: "stop", whyWorthThinking: "今天這件事，你其實已經想得滿清楚了。" },
+    },
+  });
+  assert(j9.status === "empty" && !j9.items.length, "J9｜已清楚不可再貼 ALREADY_DONE");
+
+  const j6 = await insightGrow.runGrowPipeline({
+    callAi: async () => ({ stop: true, candidates: [] }),
+    ctx: {
+      thanksText: "今天有停下來，沒有立刻把自己交出去。",
+      event: "朋友傳訊要我現在出門吃飯。以前這種臨時邀約我會立刻說好。今天我先說今晚想休息。",
+      mood: "安定",
+      bodyMindText: "說出口前胸口還是緊，說完之後比較鬆。",
+      bodyMindInsight: "你在胸口還緊的時候，就說出了自己想休息的需要。",
+      understand: {
+        stage: "converged",
+        focus: "說出口前胸口還是緊，說完之後比較鬆。",
+        answer: "比較像終於講出來了，不是焦慮消失。",
+        past: { used: true, date: "2026-05-03", similarity: "都是臨時邀約", difference: "上次立刻答應", change: "反應時間提早了" },
+        convergence: "不是你變敢了，而是開始能聽見自己真的想要什麼。",
+      },
+    },
+  });
+  assert(j6.items.length === 1 && j6.items[0].bridge, "J6｜05 empty 時可出 confirmation bridge");
+  assert(insightGrow.confirmationOf(j6, "u1") === "AI_SUGGESTED", "J6｜bridge 未勾選不是 USER_CONFIRMED");
+  assert(insightGrow.confirmationOf({ ...j6, selectedIds: ["u1"] }, "u1") === "USER_CONFIRMED", "J6｜勾選後才是 USER_CONFIRMED");
 
   console.log("insight grow fixtures A–T passed");
 })().catch((error) => {

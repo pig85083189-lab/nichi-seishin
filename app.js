@@ -12301,6 +12301,7 @@ function normalizeAwarenessV3Bag(raw) {
     if (title) out.title = title;
     if (item && item.type) out.type = String(item.type || "").trim();
     if (item && item.maturity) out.maturity = String(item.maturity || "").trim();
+    if (item && item.bridge) out.bridge = true;
     return out;
   }).filter(Boolean).slice(0, 3);
   const allowed = new Set(items.map((item) => item.id));
@@ -12591,6 +12592,15 @@ function executionV3Ready(journal) {
   return data.items.length >= 2 || awarenessV3Ready(page);
 }
 
+function shouldShowStopHeavyExecEnding(journal) {
+  const page = journal || collectJournal();
+  const aware = normalizeAwarenessV3Bag((page.awarenessV3) || state.journalAwarenessV3);
+  const bag = normalizeExecutionChoiceBag((page.executionChoices) || state.executionChoices);
+  if (!isGrowAwarenessBag(aware) || !awarenessV3HasResult(aware)) return false;
+  if (executionV3HasResult(bag)) return false;
+  return (aware.selectedIds || []).length === 0;
+}
+
 function syncExecV3Cta() {
   lockNewDayExecUi();
   const btn = document.getElementById("btnExecutionV3");
@@ -12610,11 +12620,13 @@ function syncExecV3Cta() {
   }
   const ready = executionV3Ready();
   const stale = hasResult && bag.sourceSig && bag.sourceSig !== executionV3SourceSig();
-  const show = usesExecutionV3Path() && !archived && (!hasResult || stale);
+  const stopHeavy = shouldShowStopHeavyExecEnding();
+  const show = usesExecutionV3Path() && !archived && (!hasResult || stale) && !stopHeavy;
   btn.hidden = !show;
   btn.disabled = Boolean(state.choicesBusy?.execution) || archived || !ready;
   btn.textContent = stale ? "覺察有更新，重新整理下一步 →" : "把這份覺察帶回生活 →";
-  if (grow && !confirmed.length && show) showExecV3Hint("今天沒有一定要帶走的行動。前面的覺察如果還沒有哪一個特別像你，先不用急著替自己安排下一步。");
+  if (stopHeavy) showExecV3Hint("");
+  else if (grow && !confirmed.length && show) showExecV3Hint("今天沒有一定要帶走的行動。前面的覺察如果還沒有哪一個特別像你，先不用急著替自己安排下一步。");
   else if (silent && !confirmed.length) showExecV3Hint("今天沒有一定要變成行動的發現。");
   else if (!ready && show) showExecV3Hint("先確認哪一個覺察最像今天的你。");
   else if (ready) showExecV3Hint("");
@@ -12691,6 +12703,7 @@ function renderAwarenessV3() {
     return;
   }
   const selected = new Set(data.selectedIds);
+  const bridged = grow && data.items.length === 1 && data.items.some((item) => item.bridge);
   root.innerHTML = `
     <div class="aware-v3-list">
       ${data.items.map((item) => `
@@ -12702,7 +12715,7 @@ function renderAwarenessV3() {
           </span>
         </button>`).join("")}
     </div>
-    ${grow ? `<p class="aware-v3-pick">哪一個最像今天的你？</p>` : renderAwarenessObservationCueHtml(data)}`;
+    ${bridged ? `<p class="aware-v3-pick">前面的思考裡，有一個地方值得你確認一下。</p>` : grow ? `<p class="aware-v3-pick">哪一個最像今天的你？</p>` : renderAwarenessObservationCueHtml(data)}`;
   paintInternalModelDebug(root, state.internalModelDebug && state.internalModelDebug.awareness);
   if (
     !grow &&
@@ -12726,8 +12739,17 @@ function renderExecutionV3() {
   syncExecV3Cta();
   if (!root) return;
   const act = isActExecutionBag(bag);
-  if (loading || !executionV3HasResult(bag) || (!act && (bag.variant !== "execution-v3" || bag.options.length < 3))) {
-    if (!loading) root.innerHTML = "";
+  if (loading) return;
+  if (shouldShowStopHeavyExecEnding() && !executionV3HasResult(bag)) {
+    root.innerHTML = `
+      <article class="exec-v3-empty">
+        <p class="think-v3-quote__text">今天沒有一定要帶走的行動。</p>
+        <p class="think-v3-why">前面的內容先停在這裡也可以。</p>
+      </article>`;
+    return;
+  }
+  if (!executionV3HasResult(bag) || (!act && (bag.variant !== "execution-v3" || bag.options.length < 3))) {
+    root.innerHTML = "";
     return;
   }
   if (act && !bag.options.length) {
@@ -12786,6 +12808,7 @@ function toggleAwarenessV3(id) {
   state.journalAwarenessV3 = data;
   renderAwarenessV3();
   persistJournalQuietly();
+  renderExecutionV3();
   syncExecV3Cta();
   if (!isCurrentJournalArchived()) scheduleAwarenessObservationCue();
   return data;
@@ -12914,6 +12937,7 @@ async function generateAwarenessV3(options = {}) {
           if (title) out.title = title;
           if (item && item.type) out.type = String(item.type || "").trim();
           if (item && item.maturity) out.maturity = String(item.maturity || "").trim();
+          if (item && item.bridge) out.bridge = true;
           return out;
         }).filter(Boolean).slice(0, 3)
       : [];
@@ -12935,6 +12959,7 @@ async function generateAwarenessV3(options = {}) {
     state.internalModelDebug.awareness = takeInternalDebug(remote);
     persistJournalQuietly();
     renderAwarenessV3();
+    renderExecutionV3();
     syncExecV3Cta();
   } catch (error) {
     if (state.choicesToken.awareness !== token) return;
@@ -12945,6 +12970,7 @@ async function generateAwarenessV3(options = {}) {
     if (state.choicesToken.awareness === token) {
       state.choicesBusy.awareness = false;
       renderAwarenessV3();
+      renderExecutionV3();
     }
   }
 }
