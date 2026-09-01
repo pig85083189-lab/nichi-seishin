@@ -262,7 +262,7 @@ assert(app.includes("questions: prevGuide.questions"), "applyThinkExtension pres
 assert(app.includes("sourceSig: prevGuide.sourceSig"), "applyThinkExtension preserve sourceSig");
 assert(app.includes("delete next.retrieval"), "04 normalize 不把 retrieval 留在 guide root");
 
-assert(html.includes("app.js?v=277"), "cache app.js");
+assert(html.includes("app.js?v=278"), "cache app.js");
 assert(html.includes("lib/review-merge.js?v=25"), "cache review-merge");
 
 console.log("reflection-flow-gating tests passed");

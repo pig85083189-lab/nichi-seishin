@@ -74,7 +74,7 @@ const CASES = {
   }),
 };
 
-assert(html.includes("app.js?v=277"), "cache app");
+assert(html.includes("app.js?v=278"), "cache app");
 assert(!app.includes("正在搜尋你的歷史紀錄"), "loading 不暴露 retrieval");
 assert(!app.includes("找到 3 筆歷史"), "一般 UI 不暴露 retrieval");
 assert(app.includes("internal-retrieval-debug"), "internal 才顯示 retrieval 筆數");

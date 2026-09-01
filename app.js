@@ -326,13 +326,22 @@ function labHasRaw(raw) {
   return Boolean(String((raw && (raw.thanksText || raw.event || raw.bodyMindText)) || "").trim());
 }
 
+function labReviewHasUserRaw(review) {
+  return labHasRaw(labRawFromJournal(review && review.journal));
+}
+
 function labDayOptions() {
-  const reviews = state.reviews && typeof state.reviews === "object" ? state.reviews : {};
+  const reviews = getReviews();
+  const todayIso = currentIso();
   const days = Object.keys(reviews)
-    .filter((iso) => /^\d{4}-\d{2}-\d{2}$/.test(iso) && labHasRaw(labRawFromJournal(reviews[iso] && reviews[iso].journal)))
+    .filter((iso) => /^\d{4}-\d{2}-\d{2}$/.test(iso))
+    .filter((iso) => {
+      const review = reviews[iso];
+      if (!labReviewHasUserRaw(review)) return false;
+      return reviewIsFinalized(review) || iso === todayIso;
+    })
     .sort()
     .reverse();
-  const todayIso = currentIso();
   if (!days.includes(todayIso) && labHasRaw(labRawFromJournal(collectJournal()))) days.unshift(todayIso);
   return days;
 }
@@ -363,7 +372,7 @@ function renderInsightLab() {
   }
   const days = labDayOptions();
   const exp = readLabExperiment() || {};
-  const selected = exp.date || days[0] || currentIso();
+  const selected = days.includes(exp.date) ? exp.date : days[0] || "";
   const fixtureId = exp.fixtureId || "";
   const slots = Array.isArray(exp.slots) ? exp.slots : [];
   const voted = Boolean(exp.vote);
@@ -372,7 +381,7 @@ function renderInsightLab() {
       <label>
         <span class="sr-only">選擇日期</span>
         <select id="labDate">
-          ${days.map((iso) => `<option value="${iso}" ${iso === selected ? "selected" : ""}>${iso}</option>`).join("") || `<option value="${currentIso()}">${currentIso()}</option>`}
+          ${days.map((iso) => `<option value="${iso}" ${iso === selected ? "selected" : ""}>${iso}</option>`).join("")}
         </select>
       </label>
       <label>
@@ -447,8 +456,10 @@ async function runInsightLab() {
   if (!isInternalMembership()) return;
   const date = String(document.getElementById("labDate")?.value || currentIso()).trim();
   const fixtureId = String(document.getElementById("labFixture")?.value || "").trim();
-  const review = (state.reviews && state.reviews[date]) || (date === currentIso() ? { journal: collectJournal() } : null);
-  const raw = fixtureId ? {} : labRawFromJournal(review && review.journal);
+  const stored = getReview(date);
+  let journal = stored && stored.journal;
+  if ((!journal || !labHasRaw(labRawFromJournal(journal))) && date === currentIso()) journal = collectJournal();
+  const raw = fixtureId ? {} : labRawFromJournal(journal);
   if (!fixtureId && !labHasRaw(raw)) {
     showToast("這天沒有 01～03 原文");
     return;
@@ -3219,6 +3230,7 @@ function refreshCloudViews(options = {}) {
     renderTasks();
     renderManifests();
     renderHistory();
+    if (state.page === "lab") renderInsightLab();
     if (state.page === "report") renderReport();
   } catch (error) {
     console.error("[進行式 ING] 雲端資料畫面重整失敗", error && error.message ? error.message : error);
