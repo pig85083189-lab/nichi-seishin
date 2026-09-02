@@ -6278,6 +6278,15 @@ textarea[hidden] + .journal-voice-hint,
   white-space: pre-wrap;
 }
 
+.body-mind-insight--format .body-mind-insight__theme {
+  font-size: 17px;
+}
+
+.body-mind-insight__support--pre {
+  white-space: pre-wrap;
+  line-height: 1.8;
+}
+
 .body-coach .conclusion-callout {
   margin: 0 0 22px;
 }

@@ -3051,6 +3051,7 @@ function normalizeExecutionChoiceBag(raw, options) {
     generatedAt: String(src.generatedAt || "").trim(),
     deep: normalizeExecDeep(src.deep),
     noActionCopy: src.noActionCopy && typeof src.noActionCopy === "object" ? src.noActionCopy : null,
+    leadIn: String(src.leadIn || "").replace(/\s+/g, " ").trim(),
   };
 }
 
@@ -3116,6 +3117,7 @@ function serializeExecutionChoiceBag(raw) {
     generatedAt: bag.generatedAt,
     deep: normalizeExecDeep(bag.deep),
     noActionCopy: bag.noActionCopy || null,
+    leadIn: bag.leadIn || "",
   };
 }
 
@@ -6168,7 +6170,11 @@ function normalizeBodyMind(raw) {
   return {
     text: String(src.text || "").replace(/\s+/g, " ").trim(),
     insight: String(src.insight || "").replace(/\s+/g, " ").trim(),
-    support: String(src.support || "").replace(/\s+/g, " ").trim(),
+    support: String(src.support || "")
+      .replace(/\r\n/g, "\n")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim(),
     generatedAt: String(src.generatedAt || "").trim(),
     sig: String(src.sig || "").trim(),
     status: status === "silence" || status === "observation" ? status : "",
@@ -9789,17 +9795,30 @@ function renderBodyMindInsight(mind) {
     return;
   }
   const silent = data.status === "silence";
-  root.innerHTML = `
-    <article class="body-mind-insight${silent ? " body-mind-insight--silence" : ""}">
-      ${data.insight ? `<div class="body-mind-insight__line">
-        ${silent ? "" : `<p class="body-mind-insight__label">我注意到</p>`}
-        ${markableP(data.insight, "bodyMind.insight", "body-mind-insight__text")}
-      </div>` : ""}
-      ${data.support ? `<div>
-        ${silent ? "" : `<p class="body-mind-insight__label">為什麼這樣看</p>`}
-        ${markableP(data.support, "bodyMind.support", "body-mind-insight__support")}
-      </div>` : ""}
-    </article>`;
+  const formatted = /【核心結論】|【今日金句】|^主題[：:]/.test(`${data.insight || ""}\n${data.support || ""}`);
+  if (formatted && !silent) {
+    root.innerHTML = `
+      <article class="body-mind-insight body-mind-insight--format">
+        ${data.insight ? `<div class="body-mind-insight__line">
+          ${markableP(data.insight, "bodyMind.insight", "body-mind-insight__text body-mind-insight__theme")}
+        </div>` : ""}
+        ${data.support ? `<div class="body-mind-insight__format">
+          ${markableHtml("div", data.support, "bodyMind.support", "body-mind-insight__support body-mind-insight__support--pre")}
+        </div>` : ""}
+      </article>`;
+  } else {
+    root.innerHTML = `
+      <article class="body-mind-insight${silent ? " body-mind-insight--silence" : ""}">
+        ${data.insight ? `<div class="body-mind-insight__line">
+          ${silent ? "" : `<p class="body-mind-insight__label">我注意到</p>`}
+          ${markableP(data.insight, "bodyMind.insight", "body-mind-insight__text")}
+        </div>` : ""}
+        ${data.support ? `<div>
+          ${silent ? "" : `<p class="body-mind-insight__label">為什麼這樣看</p>`}
+          ${markableP(data.support, "bodyMind.support", "body-mind-insight__support")}
+        </div>` : ""}
+      </article>`;
+  }
   paintInternalModelDebug(root, data.internalDebug);
   syncBodyMindCta();
 }
@@ -12696,8 +12715,8 @@ function renderAwarenessV3() {
   if (grow && !data.items.length) {
     root.innerHTML = `
       <article class="aware-v3-empty">
-        <p class="think-v3-quote__text">今天真正重要的，你其實已經在前面的思考裡看見了。</p>
-        <p class="think-v3-why">不用為了多一個答案，再替自己加一個標籤。</p>
+        <p class="think-v3-quote__text">今天不一定要再多加一個覺察標籤。</p>
+        <p class="think-v3-why">前面若已有一個真正像你的地方，先停在那裡就好。</p>
       </article>`;
     paintInternalModelDebug(root, state.internalModelDebug && state.internalModelDebug.awareness);
     return;
@@ -12764,14 +12783,15 @@ function renderExecutionV3() {
   }
   const selected = new Set(bag.selectedIds);
   const groups = [
-    { kind: "ACTION_NOW", label: "⚡ 今天可以先做" },
-    { kind: "PRACTICE", label: "🌱 接下來可以慢慢練習" },
-    { kind: "OBSERVE", label: "👀 可以先觀察" },
+    { kind: "ACTION_NOW", label: "行動 1｜今天／下次當下可做的一小步" },
+    { kind: "PRACTICE", label: "行動 2｜接下來可以慢慢練習的方式" },
+    { kind: "OBSERVE", label: "行動 3｜觀察、記錄或事前準備", also: ["NOTICE", "TEST", "PREPARE", "RECORD", "APPRECIATE"] },
   ];
   const used = new Set();
   const sections = act
     ? groups.map((group) => {
-        const items = bag.options.filter((item) => item.actKind === group.kind);
+        const kinds = new Set([group.kind].concat(group.also || []));
+        const items = bag.options.filter((item) => kinds.has(item.actKind || item.kind));
         items.forEach((item) => used.add(item.id));
         if (!items.length) return "";
         return `<div class="exec-v3-group"><p class="exec-v3-group__label">${group.label}</p><div class="exec-v3-list">${items.map((item) => execV3ItemHtml(item, selected)).join("")}</div></div>`;
@@ -12780,6 +12800,7 @@ function renderExecutionV3() {
         : "")
     : `<div class="exec-v3-list">${bag.options.map((item) => execV3ItemHtml(item, selected)).join("")}</div>`;
   root.innerHTML = `
+    ${act && bag.leadIn ? `<p class="exec-v3-lead">${escapeHtml(bag.leadIn)}</p>` : ""}
     ${sections}
     ${act ? `<p class="exec-v3-pick">哪一個你想帶去做／練習？</p>` : ""}`;
   paintInternalModelDebug(root, state.internalModelDebug && state.internalModelDebug.execution);
@@ -13036,6 +13057,7 @@ async function generateExecutionV3(options = {}) {
       return;
     }
     if (!act && actions.length < 3) throw new Error("今天的下一步還沒整理好，請再試一次。");
+    if (act && remote.status === "actions" && actions.length !== 3) throw new Error("今天的下一步還沒整理好，請再試一次。");
     state.executionChoices = serializeExecutionChoiceBag({
       variant: "execution-v3",
       actVariant: act ? "act-v1" : "",
@@ -13049,6 +13071,7 @@ async function generateExecutionV3(options = {}) {
       followupPlaceholder: "",
       generatedAt: new Date().toISOString(),
       noActionCopy: remote.noActionCopy || null,
+      leadIn: remote.leadIn || "",
       deep: { status: "", rounds: [], draftAnswer: "", refreshedAt: "", executionSummary: "", finalOptions: [], finalSelectedIds: [] },
     });
     if (!state.internalModelDebug) state.internalModelDebug = {};

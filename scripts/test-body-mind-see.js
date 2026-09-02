@@ -133,7 +133,8 @@ assert(bodyMind.compactBodyMindChars(clipped) <= 110, "support clips to 110 char
 assert(!bodyMind.looksChecklistSupport("回家後還想再傳訊息給朋友。"), "mentioning 傳訊息 is not a 06 checklist");
 assert(bodyMind.looksChecklistSupport("晚上 8 點傳訊息給媽媽，寫下三件感受。"), "imperative 傳訊息 remains checklist");
 
-assert(bodyMind.BODY_MIND_SYSTEM.includes("2～4") || bodyMind.BODY_MIND_SYSTEM.includes("40～110"), "writer brevity target");
+assert(bodyMind.BODY_MIND_SYSTEM.includes("theme") && bodyMind.BODY_MIND_SYSTEM.includes("conclusion"), "writer structured SEE format");
+assert(bodyMind.BODY_MIND_SYSTEM.includes("溫柔") || bodyMind.BODY_MIND_SYSTEM.includes("感恩清單"), "writer tone / gratitude rules");
 
 (async () => {
   const writerLocked = await bodyMindSee.runSeePipeline({
@@ -203,8 +204,8 @@ assert(bodyMind.BODY_MIND_SYSTEM.includes("2～4") || bodyMind.BODY_MIND_SYSTEM.
   });
   assert(skippedWriter.status === "observation", `readable core can skip writer: ${skippedWriter.status}`);
   assert(skippedWriter.meta && skippedWriter.meta.usedWriter === false, "writer not called");
-  assert(bodyMind.countBodyMindSentences(skippedWriter.support) <= 4, "skipped-writer support still brief");
-  assert(bodyMind.compactBodyMindChars(skippedWriter.support) <= 120, "skipped-writer support char cap");
+  assert(/【核心結論】|【今日金句】|^主題[：:]/.test(`${skippedWriter.insight}\n${skippedWriter.support}`), "skipped-writer still emits SEE format");
+  assert(/【一、/.test(skippedWriter.support), "skipped-writer has section body");
 
   const seededP1 = await bodyMindSee.runSeePipeline({
     ctx: fx.P1.ctx,

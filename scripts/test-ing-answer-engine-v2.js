@@ -78,6 +78,7 @@ assert(!insightGrow.shouldRunGrow(stopCtx), "explicit stop prevents entering 05"
   const focus = answerEngine.integratedUnderstandFocus(cases[2]);
   assert(focus && /感謝、今天發生的事，和身體/.test(focus.statement), "04 can carry generic integrated context forward");
   assert(!insightUnderstand.looksNoUnknownLeft(cases[2]), "integrated unresolved input is not prematurely closed");
+  assert(answerEngine.ANSWER_ENGINE_VERSION === "ing-answer-engine-v3", "engine advanced to v3 with compatible helpers");
 
   console.log("ING answer-engine v2 generalization and safety regression passed");
 })().catch((error) => {

@@ -24,7 +24,7 @@ const fx = answerEngine.ING_EVAL_001;
 const raw = fx.raw;
 
 assert(fs.existsSync(path.join(root, "lib/ing-answer-engine.js")), "answer-engine module present");
-assert(answerEngine.ANSWER_ENGINE_VERSION === "ing-answer-engine-v2", "engine version");
+assert(answerEngine.ANSWER_ENGINE_VERSION === "ing-answer-engine-v3", "engine version");
 assert(answerEngine.hasThanksEventBody(raw), "EVAL-001 has thanks+event+body");
 
 const seed = answerEngine.gratitudeCareVsRejectionSeed(raw);
