@@ -10,7 +10,8 @@ function assert(cond, message) {
 }
 
 assert(voice.GLOBAL_VOICE_BLOCK.includes("白話優先"), "global voice 存在");
-assert(bodyMind.BODY_MIND_SYSTEM.includes("白話優先"), "03 接上 voice");
+assert(bodyMind.BODY_MIND_SYSTEM.includes("Return JSON") || bodyMind.BODY_MIND_SYSTEM.includes("JSON"), "03 tech JSON scaffold");
+assert(!/白話優先|不要太文青/.test(bodyMind.BODY_MIND_SYSTEM), "03 content voice cleared");
 assert(reflectionV3.REFLECTION_V3_SYSTEM.includes("前因"), "04 要求前因");
 assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("你剛剛說了什麼"), "Round 1 承接回答");
 assert(reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("progressive depth") || reflectionExt.REFLECTION_EXTENSION_ASK_SYSTEM.includes("NEXT LAYER"), "Round 2 往下一層");
@@ -57,17 +58,16 @@ const CASE1_GOOD = bodyMind.evaluateBodyMindQuality(
   },
   { text: "今天明明很多人陪我，但還是有點孤單。" }
 );
-assert(CASE1_GOOD.ok, `CASE 1 白話應通過：${CASE1_GOOD.issues.join("；")}`);
+assert(CASE1_GOOD.ok, `CASE 1 shape ok：${CASE1_GOOD.issues.join("；")}`);
 
-const CASE1_BAD = bodyMind.evaluateBodyMindQuality(
+const CASE1_MISSING = bodyMind.evaluateBodyMindQuality(
   {
-    insight: "你正在經歷外在陪伴與內在情感需求之間的落差。",
+    insight: "",
     support: "你需要學會先滿足自己的深層需求。",
   },
   { text: "今天明明很多人陪我，但還是有點孤單。" }
 );
-assert(!CASE1_BAD.ok, "CASE 1 診斷／抽象詞必須 FAIL");
-assert(CASE1_BAD.issues.some((item) => item === "overpsych" || item === "jargon"), "CASE 1 抽象詞被擋");
+assert(!CASE1_MISSING.ok && CASE1_MISSING.issues.includes("missing-insight"), "CASE 1 missing insight fails shape");
 
 const CASE2_GOOD = reflectionV3.evaluateReflectionV3Quality(
   {
@@ -169,17 +169,16 @@ const CASE5_GOOD = bodyMind.evaluateBodyMindQuality(
   },
   { text: "今天肩頸很痠，可能昨天運動太多。" }
 );
-assert(CASE5_GOOD.ok, `CASE 5 身體不心理化應通過：${CASE5_GOOD.issues.join("；")}`);
+assert(CASE5_GOOD.ok, `CASE 5 shape ok：${CASE5_GOOD.issues.join("；")}`);
 
-const CASE5_BAD = bodyMind.evaluateBodyMindQuality(
+const CASE5_SHAPE = bodyMind.evaluateBodyMindQuality(
   {
     insight: "肩頸痠痛說明你承受太多壓力。",
     support: "你需要先處理內心的焦慮。",
   },
   { text: "今天肩頸很痠，可能昨天運動太多。" }
 );
-assert(!CASE5_BAD.ok, "CASE 5 把身體心理化必須 FAIL");
-assert(CASE5_BAD.issues.includes("physical-psychologized") || CASE5_BAD.issues.includes("overpsych"), "CASE 5 心理化被擋");
+assert(CASE5_SHAPE.ok, "CASE 5 content gate cleared — shape still ok with insight+support");
 
 const CASE6_PROMPT = reflectionExt.formatRound1PastBlock([
   {

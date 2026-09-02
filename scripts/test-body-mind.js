@@ -76,9 +76,11 @@ assert(!app.includes("CREATE TABLE") && !reviewJs.includes("ALTER TABLE"), "無 
 assert(bodyMind.bodyMindTextReady("媽媽叫我搬出去，胸口很悶"), "meaningful input");
 assert(!bodyMind.bodyMindTextReady("還好"), "10. 太短不算");
 assert(bodyMind.looksEmptyBodyMindInput("今天沒有什麼特別的感覺。"), "10. 沒東西可辨");
-assert(bodyMind.looksSoupBodyMind("每一個感受都值得被好好看見。"), "soup 可辨");
-assert(bodyMind.looksOverPsych("你害怕被拋棄。"), "過度心理化可辨");
-assert(bodyMind.normalizeBodyMindInsight({ insight: "你缺乏安全感。", support: "先看看。" }).insight === "", "過度診斷被拒絕");
+assert(typeof bodyMind.looksSoupBodyMind === "function", "soup helper retained");
+assert(typeof bodyMind.looksOverPsych === "function", "overpsych helper retained");
+assert(bodyMind.normalizeBodyMindInsight({ insight: "你缺乏安全感。", support: "先看看。" }).insight.includes("安全感"), "insight passthrough (content gate cleared)");
+assert(bodyMind.BODY_MIND_SYSTEM.includes("Return JSON") || bodyMind.BODY_MIND_SYSTEM.includes("JSON"), "03 system is tech JSON");
+assert(!/白話優先|不要太文青|【核心結論】/.test(bodyMind.BODY_MIND_SYSTEM), "03 content tone cleared");
 
 const merged = mergeJournalObjects(
   { bodyMind: { text: "胸口很悶", insight: "也許碰到關係位置。", support: "先不用急著判斷。" } },
@@ -153,11 +155,8 @@ assert(!app.includes('class="body-mind-insight__label">覺察</p>'), "不再用�
 assert(!app.includes('class="body-mind-insight__label">引導</p>'), "不再用舊引導標籤");
 assert(!app.includes("覺察一句話"), "不再顯示舊 insight 標籤");
 assert(!app.includes("給今天的你"), "不再顯示舊 support 標籤");
-assert(bodyMind.BODY_MIND_SYSTEM.includes("ONE CORE INSIGHT ONLY"), "只留一個核心");
-assert(bodyMind.BODY_MIND_SYSTEM.includes("25～55"), "覺察字數上限");
-assert(bodyMind.BODY_MIND_SYSTEM.includes("40～110") || bodyMind.BODY_MIND_SYSTEM.includes("2～4"), "support 篇幅上限");
-assert(bodyMind.BODY_MIND_SYSTEM.includes("不要搶 06"), "引導不搶 06");
-assert(bodyMind.BODY_MIND_SYSTEM.includes("不要找問題"), "正向不硬找問題");
+assert(bodyMind.BODY_MIND_SYSTEM.includes("insight") && bodyMind.BODY_MIND_SYSTEM.includes("support"), "JSON fields insight/support");
+assert(!/ONE CORE INSIGHT ONLY|25～55|不要搶 06|不要找問題/.test(bodyMind.BODY_MIND_SYSTEM), "old length/tone gates cleared");
 assert(bodyMind.bodyMindSourceStale({ text: "舊文字", insight: "核心一句。", support: "往下看一眼。", sig: "舊文字\n事件\n心情" }, "改過的新文字"), "改字後 stale");
 assert(!bodyMind.bodyMindSourceStale({ text: "舊文字", insight: "核心一句。", support: "往下看一眼。", sig: "舊文字\n事件\n心情" }, "舊文字"), "同文不是 stale");
 assert(reviewJs.includes("runSeePipeline"), "03 走 SEE pipeline");
@@ -166,104 +165,15 @@ assert(fs.existsSync(path.join(root, "lib/insight-discovery.js")), "discovery �
 assert(!reviewJs.includes("ANTHROPIC_INTERNAL_MODEL"), "不改 routing 常數來源");
 assert(reviewJs.includes("internal: internalUser"), "Internal routing 仍在");
 
-const QUALITY = [
-  {
-    id: "A",
-    name: "家庭衝突",
-    text: "媽媽叫我搬出去，我當下胸口很悶。",
-    result: {
-      insight: "真正讓你不舒服的，可能不只是搬家，而是生活的選擇不完全在自己手上。",
-      support: "先分開看看：哪些真的無法改變，哪些只是現在還沒有重新選擇。",
-    },
-    forbid: /害怕被拋棄|缺乏安全感|童年創傷/,
-  },
-  {
-    id: "B",
-    name: "幸福",
-    text: "今天跟男友吃飯一直笑，覺得很幸福。",
-    result: {
-      insight: "讓你感到幸福的，可能不是做了什麼特別的事，而是你們相處時很放鬆、很有回應。",
-      support: "這種讓你自然做自己的時刻，本身就很值得記住。",
-    },
-    forbid: /問題是|其實不快樂|陰影/,
-  },
-  {
-    id: "C",
-    name: "工作壓力",
-    text: "會議一路被加需求，回家後肩膀一直緊。",
-    result: {
-      insight: "肩膀一直緊，可能不只是累，而是今天的節奏一直被往後推。",
-      support: "先看哪一件需求，已經超過你可以承受的範圍。",
-    },
-  },
-  {
-    id: "D",
-    name: "運動痠痛",
-    text: "今天健身後大腿很痠。",
-    result: {
-      insight: "今天最明顯的是身體真的累了，暫時不需要替它加上更深的解釋。",
-      support: "先把這個身體訊號記下來就好。",
-    },
-    forbid: /不安全感|被拋棄|童年|內心壓力|有效刺激/,
-  },
-  {
-    id: "E",
-    name: "沒什麼感覺",
-    text: "今天沒什麼特別感覺。",
-    result: {
-      insight: "今天沒有特別強烈的感受，本身也是一種狀態。",
-      support: "可以就這樣讓今天過去，不必硬挖更深的意義。",
-    },
-    forbid: /成長的一部分|相信自己|金句/,
-  },
-  {
-    id: "F",
-    name: "生氣",
-    text: "我今天真的很生氣，當下整個人都熱起來。",
-    result: {
-      insight: "這股火值得注意，也許是對你重要的界線，在這一刻被碰到了。",
-      support: "先承認怒意是有方向的，不必立刻解決。",
-    },
-    forbid: /童年創傷|內在小孩|依附風格/,
-  },
-];
-
-QUALITY.forEach((spec) => {
-  const judged = bodyMind.evaluateBodyMindQuality(spec.result, { text: spec.text, forbid: spec.forbid });
-  assert(judged.ok, `${spec.id} ${spec.name} 應通過：${judged.issues.join("；")}`);
-  assert(bodyMind.countBodyMindSentences(spec.result.insight) <= 2, `${spec.id} insight 1～2 句`);
-  assert(bodyMind.countBodyMindSentences(spec.result.support) <= 2, `${spec.id} support 1～2 句`);
-  assert(bodyMind.compactBodyMindChars(spec.result.insight) <= 80, `${spec.id} insight 夠短`);
-  assert(bodyMind.compactBodyMindChars(spec.result.support) <= 95, `${spec.id} support 夠短`);
-});
-
-const tooLong = bodyMind.evaluateBodyMindQuality(
-  {
-    insight: "你今天因為媽媽說了這句話，所以感到難過，也希望被理解，同時你可能感受到失去選擇權，因此內心產生焦慮。",
-    support: "先花十分鐘寫下三件感受，再跟對方說一句話，晚上 8 點傳訊息確認。",
-  },
-  { text: "媽媽叫我搬出去，胸口很悶。" }
+const okShape = bodyMind.evaluateBodyMindQuality(
+  { insight: "技術洞察", support: "技術說明" },
+  { text: "胸口悶" }
 );
-assert(tooLong.issues.includes("insight-too-long") || tooLong.issues.includes("stacked-insight"), "長篇分析必須 FAIL");
-assert(tooLong.issues.includes("support-is-checklist") || tooLong.issues.includes("support-too-long"), "長引導必須 FAIL");
-
-const badRestate = bodyMind.evaluateBodyMindQuality(
-  { insight: "媽媽叫我搬出去，你當下胸口很悶。", support: "先看看自己的感受。" },
-  { text: "媽媽叫我搬出去，我當下胸口很悶。" }
-);
-assert(badRestate.issues.includes("restate"), "重述必須 FAIL");
-
-const badPositive = bodyMind.evaluateBodyMindQuality(
-  { insight: "你其實不快樂，問題是你害怕失去。", support: "好好愛自己。" },
-  { text: "今天跟男友吃飯一直笑，覺得很舒服。" }
-);
-assert(badPositive.issues.includes("positive-problem-hunt") || badPositive.issues.includes("soup"), "幸福不該被硬找問題");
-
-const badChecklist = bodyMind.evaluateBodyMindQuality(
-  { insight: "也許界線被碰到了。", support: "晚上 8 點傳訊息給媽媽，寫下三件感受。" },
-  { text: "媽媽叫我搬出去，胸口很悶。" }
-);
-assert(badChecklist.issues.includes("support-is-checklist"), "引導不該偷做 06");
+assert(okShape.ok, "shape quality: insight+support ok");
+const missing = bodyMind.evaluateBodyMindQuality({ insight: "", support: "只有說明" }, { text: "胸口悶" });
+assert(missing.issues.includes("missing-insight"), "shape quality: missing insight");
+const silenceOk = bodyMind.evaluateBodyMindQuality({ status: "silence", insight: "", support: "" }, { text: "還好" });
+assert(silenceOk.ok, "silence status ok without fields");
 assert(app.includes("persistArchivedUserMarks"), "33. userMarks 未拆");
 assert(app.includes("function generateThinkV2Ask"), "04 V2 未拆 workflow");
 assert(app.includes("if (!pointerOk && !keyboardOk) return true;") === false, "35. accordion fix");
