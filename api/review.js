@@ -21,6 +21,7 @@ const insightUnderstand = require("../lib/insight-understand");
 const insightGrow = require("../lib/insight-grow");
 const insightAct = require("../lib/insight-act");
 const bodyMindSee = require("../lib/body-mind-see");
+const aiV2See = require("../lib/ai-v2/see");
 const insightLab = require("../lib/insight-lab");
 
 const HIGHLIGHT_RULE = `【重點反白 highlights】
@@ -3933,6 +3934,32 @@ module.exports = async function handler(req, res) {
         text,
         bodyMindText: (body.context && body.context.bodyMindText) || text,
       };
+      const wantSeeV2 = internalUser && String(body.engine || "").trim().toLowerCase() === "v2";
+      if (wantSeeV2) {
+        const callAi = (msgs, stage) =>
+          callOpenAI(msgs, {
+            ...aiOpts,
+            timeoutMs: internalUser ? 20000 : Math.min(Number(aiOpts.timeoutMs) || 16000, 16000),
+            maxTokens: stage === "see" ? 1400 : 900,
+          });
+        const seenV2 = await aiV2See.runSeeV2({ callAi, ctx });
+        const seeMeta = seenV2 && seenV2.meta && typeof seenV2.meta === "object" ? seenV2.meta : {};
+        const seePublic = {
+          insight: seenV2 && seenV2.insight,
+          support: seenV2 && seenV2.support,
+          status: seenV2 && seenV2.status,
+          seeType: seenV2 && seenV2.seeType,
+          evidence: seenV2 && seenV2.evidence,
+          confidence: seenV2 && seenV2.confidence,
+        };
+        res.status(200).json({
+          ok: true,
+          source: getProvider(),
+          data: seePublic,
+          ...(internalUser ? { _internalReason: seeMeta } : {}),
+        });
+        return;
+      }
       const callAi = (msgs, stage) =>
         callOpenAI(msgs, {
           ...aiOpts,

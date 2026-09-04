@@ -9910,6 +9910,8 @@ async function generateBodyMindInsight(options = {}) {
       mode: "bodymind",
       date: currentIso(),
       text,
+      // Internal-only: opt into AI Engine V2 SEE. Normal users omit this and stay on legacy.
+      ...(isInternalMembership() ? { engine: "v2" } : {}),
       context: {
         bodyMindText: text,
         event: journal.event,
@@ -9920,8 +9922,18 @@ async function generateBodyMindInsight(options = {}) {
     });
     if (state.bodyMindToken !== token) return;
     const currentText = String(document.getElementById("bodyMindText")?.value || "").replace(/\s+/g, " ").trim();
-    const insight = String(remote.insight || "").replace(/\s+/g, " ").trim();
-    const support = String(remote.support || "").replace(/\s+/g, " ").trim();
+    // Preserve intentional line breaks for V2 formatted SEE (【今日金句】 + numbered reflections).
+    // Do not flatten support/insight to a single line — normalizeBodyMind already soft-normalizes newlines.
+    const insight = String(remote.insight || "")
+      .replace(/\r\n/g, "\n")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+    const support = String(remote.support || "")
+      .replace(/\r\n/g, "\n")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
     if (!insight) throw new Error("今天的覺察還沒整理好，請再試一次。");
     const matches = currentText === text;
     const next = normalizeBodyMind({
