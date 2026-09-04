@@ -1728,6 +1728,18 @@ async function postAiApi(url, body, timeoutMs = 28000) {
   if (!payload.data || typeof payload.data !== "object") {
     throw new Error("雲端回傳格式不完整");
   }
+  // Internal diagnostics only: retain structural pipeline traces before returning data.
+  // Do NOT merge _internalReason into data (keeps journal/sync/public payload clean).
+  if (isInternalMembership() && payload._internalReason && typeof payload._internalReason === "object") {
+    try {
+      const api = internalTestApi();
+      if (typeof api.retainPipelineTraceFromReason === "function") {
+        api.retainPipelineTraceFromReason(payload._internalReason);
+      }
+    } catch (_err) {
+      /* diagnostic retention must never break AI responses */
+    }
+  }
   if (payload._internalDebug && payload.data && typeof payload.data === "object") {
     payload.data._internalDebug = payload._internalDebug;
   }
