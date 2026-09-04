@@ -3940,11 +3940,14 @@ module.exports = async function handler(req, res) {
           maxTokens: stage === "write" ? 400 : stage === "challenge" ? 700 : 900,
         });
       const seen = await bodyMindSee.runSeePipeline({ callAi, ctx, skipWriterIfReadable: true });
+      const seeMeta = seen && seen.meta && typeof seen.meta === "object" ? seen.meta : {};
+      const seePublic = bodyMindSee.projectSeeOutput(seen);
+      if (seePublic && seePublic._boundary) delete seePublic._boundary;
       res.status(200).json({
         ok: true,
         source: getProvider(),
-        data: bodyMindSee.projectSeeOutput(seen),
-        ...(internalUser ? { _internalReason: seen.meta || {} } : {}),
+        data: seePublic,
+        ...(internalUser ? { _internalReason: seeMeta } : {}),
       });
       return;
     }
@@ -3988,13 +3991,14 @@ module.exports = async function handler(req, res) {
           questions: understood.questions || [],
           sourceSig: understood.sourceSig || reflectionV3.reflectionV3SourceSig(ctx),
         };
+        const understandMeta = understood.meta && typeof understood.meta === "object" ? understood.meta : {};
         res.status(200).json({
           ok: true,
           source: getProvider(),
           data: result,
           ...(internalUser
             ? {
-                _internalReason: understood.meta || {},
+                _internalReason: understandMeta,
                 ...(understandHistory.used && understandHistory.used.length
                   ? {
                       _internalRetrieval: {
@@ -4072,11 +4076,14 @@ module.exports = async function handler(req, res) {
           maxTokens: stage === "write" ? 700 : 1200,
         });
       const grown = await insightGrow.runGrowPipeline({ callAi, ctx: body.context || {} });
+      const growMeta = grown && grown.meta && typeof grown.meta === "object" ? grown.meta : {};
+      const growPublic = { ...(grown || {}) };
+      delete growPublic.meta;
       res.status(200).json({
         ok: true,
         source: getProvider(),
-        data: grown,
-        ...(internalUser ? { _internalReason: grown.meta || {} } : {}),
+        data: growPublic,
+        ...(internalUser ? { _internalReason: growMeta } : {}),
       });
       return;
     }
@@ -4088,11 +4095,14 @@ module.exports = async function handler(req, res) {
           maxTokens: 800,
         });
       const acted = await insightAct.runActPipeline({ callAi, ctx: body.context || {} });
+      const actMeta = acted && acted.meta && typeof acted.meta === "object" ? acted.meta : {};
+      const actPublic = { ...(acted || {}) };
+      delete actPublic.meta;
       res.status(200).json({
         ok: true,
         source: getProvider(),
-        data: acted,
-        ...(internalUser ? { _internalReason: acted.meta || {} } : {}),
+        data: actPublic,
+        ...(internalUser ? { _internalReason: actMeta } : {}),
       });
       return;
     }
