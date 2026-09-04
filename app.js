@@ -6196,6 +6196,24 @@ function bodyMindTextReady(text) {
   return String(text || "").replace(/\s+/g, "").trim().length >= 6;
 }
 
+/** 03 SEE may run from today's 01/02/mood context; optional 03 textarea alone also works. */
+function bodyMindSeeReady(journal) {
+  const data = journal || collectJournal();
+  if (thanksFilled(data) && String(data.event || "").trim() && data.mood) return true;
+  const bodyText =
+    collectBodyMindText() ||
+    String((data.bodyMind && data.bodyMind.text) || data.bodyNote || "").trim();
+  return bodyMindTextReady(bodyText);
+}
+
+/** 04/05 need SEE layer: successful 03 result, or optional bodyMind textarea text. */
+function bodyMindSeeLayerReady(journal) {
+  const data = journal || collectJournal();
+  const mind = normalizeBodyMind((data && data.bodyMind) || state.journalBodyMind);
+  if (hasBodyMindResult(mind)) return true;
+  return bodyMindTextReady(mind.text || collectBodyMindText() || (data && data.bodyNote) || "");
+}
+
 function collectBodyMindText() {
   return String(document.getElementById("bodyMindText")?.value || "").replace(/\s+/g, " ").trim();
 }
@@ -6229,7 +6247,8 @@ function syncBodyMindCta() {
   if (ta) ta.readOnly = archived;
   if (!btn) return;
   const text = collectBodyMindText();
-  const ready = bodyMindTextReady(text);
+  const journal = collectJournal();
+  const ready = bodyMindSeeReady(journal);
   const mind = normalizeBodyMind(state.journalBodyMind);
   const hasResult = hasBodyMindResult(mind);
   const stale = hasResult && bodyMindSourceStale(mind, text);
@@ -6237,7 +6256,9 @@ function syncBodyMindCta() {
   btn.hidden = !show;
   btn.disabled = Boolean(state.bodyMindBusy) || archived || !ready;
   btn.textContent = stale ? "內容有修改，重新看看 →" : "從今天裡，多看見自己一點 →";
-  if (!ready) showBodyMindCtaHint("");
+  if (archived) showBodyMindCtaHint("");
+  else if (!ready) showBodyMindCtaHint("請先寫下今日感謝、事件，並選擇心情。");
+  else showBodyMindCtaHint("");
 }
 
 function normalizeBodyGroup(group) {
@@ -9837,12 +9858,18 @@ function setBodyMindLoading(loading) {
 async function generateBodyMindInsight(options = {}) {
   if (!options || options.confirmed !== true) return;
   if (options.auto) return;
-  if (rejectArchivedJournalWrite(options)) return;
-  if (isCurrentJournalArchived() || state.bodyMindBusy) return;
+  if (rejectArchivedJournalWrite(options) || isCurrentJournalArchived()) {
+    showToast("今天已完成的復盤只能查看。");
+    return;
+  }
+  if (state.bodyMindBusy) return;
   const liveEl = document.getElementById("bodyMindText");
   const text = String(liveEl && liveEl.value != null ? liveEl.value : "").replace(/\s+/g, " ").trim();
-  if (!bodyMindTextReady(text)) {
-    showBodyMindCtaHint("再多寫一點今天發生的事或身體感受，會更容易看見。");
+  const journalPreview = collectJournal();
+  journalPreview.bodyMind = normalizeBodyMind({ ...(journalPreview.bodyMind || emptyBodyMind()), text });
+  if (!bodyMindSeeReady(journalPreview)) {
+    showBodyMindCtaHint("請先寫下今日感謝、事件，並選擇心情。");
+    showToast("請先寫下今日感謝、事件，並選擇心情。");
     syncBodyMindCta();
     return;
   }
@@ -11265,12 +11292,13 @@ function reflectionV3SourceSig(journal) {
 }
 
 function reflectionV3Ready(journal) {
-  const ctx = reflectionV3Context(journal);
+  const data = journal || collectJournal();
+  const ctx = reflectionV3Context(data);
   return Boolean(
-    thanksFilled(journal || collectJournal()) &&
+    thanksFilled(data) &&
       String(ctx.event || "").trim() &&
       ctx.mood &&
-      bodyMindTextReady(ctx.bodyMindText)
+      bodyMindSeeLayerReady(data)
   );
 }
 
@@ -12416,7 +12444,7 @@ function awarenessV3Ready(journal) {
   const data = journal || collectJournal();
   const guide = (data.insight && data.insight.guide) || (state.journalInsight && state.journalInsight.guide);
   const ctx = awarenessV3Context(data);
-  const base = Boolean(thanksFilled(data) && ctx.event && ctx.mood && bodyMindTextReady(ctx.bodyMindText));
+  const base = Boolean(thanksFilled(data) && ctx.event && ctx.mood && bodyMindSeeLayerReady(data));
   if (!base) return false;
   if (isUnderstandGuide(guide)) return understandIsComplete(guide);
   if (thinkGuideIsSilence(guide)) return false;
