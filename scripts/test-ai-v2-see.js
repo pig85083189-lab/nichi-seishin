@@ -285,9 +285,105 @@ jobs.push(
   })
 );
 
+const GOLDEN_THANKS = `我想感謝自己，今天雖然事情很多，還是有把該完成的事情一件一件做好。
+
+我想感謝身邊的人，在我需要幫忙的時候願意支持我。
+
+我想感謝今天發生的一些事情，讓我重新去想自己到底在意的是什麼。`;
+
+const GOLDEN_EVENT = `今天跟一個很熟的人聊天，他無意間說了一句
+「妳現在做得很好啊，感覺什麼事情都很順」。
+
+我知道他沒有惡意，但聽到的當下其實有一點說不上來的感覺。
+
+因為我突然想到，很多人看到的好像都是最後的結果，
+可是其實中間有很多壓力、懷疑自己的時候，
+還有很多事情是我自己慢慢撐過來的。
+
+但我也發現自己很矛盾，
+一方面希望自己的努力可以被看見，
+一方面又會覺得，
+我做這些事情本來就不是為了證明給別人看。
+
+所以我也不知道為什麼那句話會讓我特別有感。`;
+
+const GOLDEN_MODEL = {
+  status: "observation",
+  coreQuote: "我不是需要別人證明我做得很好，我只是也希望有人看見，我是怎麼一路走到這裡的。",
+  reflections: [
+    "聽到「妳現在很順」時會說不上來，不是因為對方惡意，而是那句話碰到了：別人看見結果，妳記得過程。",
+    "這裡其實有兩件事被混在一起：希望努力被看見，和「不是為了證明給別人看才努力」。兩者可以同時成立。",
+    "妳感謝自己把事情一件件做完，也感謝有人願意支持——今天在意的不只是被誇，而是這些支撐有沒有被理解。",
+  ],
+  optionalNewAngle:
+    "換個角度看，「感覺什麼事情都很順」不一定是在否定妳過去的辛苦；有一個可能是：別人看見的「順」，正是妳已經把很多壓力消化成現在看起來的穩定。",
+  evidence: ["感覺什麼事情都很順", "希望自己的努力可以被看見", "不是為了證明給別人看"],
+};
+
+jobs.push(
+  check("Thinking Tools live inside SEE_SYSTEM as optional lenses (one-call)", () => {
+    const sys = seeV2.SEE_SYSTEM;
+    [
+      "REALITY CHECK",
+      "REFRAME LENS",
+      "GUT DECODE",
+      "THOUGHT ORGANIZER",
+      "DECISION MIRROR",
+      "ROOT QUESTION",
+      "RISK SCAN",
+      "NEXT MOVE",
+    ].forEach((name) => assert.ok(sys.includes(name), `missing lens ${name}`));
+    assert.ok(sys.includes("不要每次全用") || sys.includes("不是必做步驟"));
+    assert.ok(sys.includes("不要對使用者說出工具名稱"));
+    assert.ok(sys.includes("NEW ANGLE"));
+    assert.ok(sys.includes("POSSIBILITY ≠ 刪除") || sys.includes("POSSIBILITY"));
+    assert.ok(sys.includes("整份一起看"));
+  })
+);
+
+jobs.push(
+  check("Golden Test — empty 03 + deep contradiction journal maps to valuable SEE", async () => {
+    let calls = 0;
+    const out = await seeV2.runSeeV2({
+      ctx: {
+        thanksText: GOLDEN_THANKS,
+        event: GOLDEN_EVENT,
+        mood: "複雜",
+        bodyMindText: "",
+      },
+      callAi: async () => {
+        calls += 1;
+        return GOLDEN_MODEL;
+      },
+    });
+    assert.strictEqual(calls, 1, "still exactly one model call");
+    assert.strictEqual(out.status, "observation");
+    assert.strictEqual(out.meta.inputSources.bodyMind, false);
+    assert.strictEqual(out.meta.inputSources.thanks, true);
+    assert.strictEqual(out.meta.inputSources.event, true);
+    assert.ok(out.meta.hasNewAngle);
+    assert.ok(out.meta.reflectionCount >= 3);
+    assert.ok(out.insight.includes("【今日金句】"));
+    assert.ok(/看見|一路|證明|努力/.test(out.insight));
+    assert.ok(!/所有努力都不會白費|相信自己就會發光|堅持就是成功/.test(out.insight));
+    assert.ok(/有一個可能|換個角度看|也許/.test(out.support));
+    assert.ok(/兩件|同時|看見|結果|過程|順/.test(out.support));
+    assert.ok(!/REALITY CHECK|GUT DECODE|THOUGHT ORGANIZER/.test(`${out.insight}\n${out.support}`));
+    // Expose for review printout
+    global.__ING_V2_GOLDEN_OUTPUT__ = { insight: out.insight, support: out.support, meta: out.meta };
+  })
+);
+
 Promise.all(jobs)
   .then(() => {
     console.log("\nALL AI V2 SEE FIXTURES PASSED");
+    if (global.__ING_V2_GOLDEN_OUTPUT__) {
+      console.log("\n===== GOLDEN TEST OUTPUT =====");
+      console.log(global.__ING_V2_GOLDEN_OUTPUT__.insight);
+      console.log("");
+      console.log(global.__ING_V2_GOLDEN_OUTPUT__.support);
+      console.log("===== END GOLDEN TEST OUTPUT =====\n");
+    }
   })
   .catch((err) => {
     console.error("\nFAIL", err && err.stack ? err.stack : err);
